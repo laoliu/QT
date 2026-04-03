@@ -10,10 +10,13 @@
     "format": "oxfmt --check .",
     "format:fix": "oxfmt --write .",
     "test": "vitest run",
-    "dev": "pnpm openclaw gateway run --bind loopback --port 18789 --force"
+    "dev": "pnpm openclaw gateway run --bind loopback --port 18889 --force",
+    "gateway:up": "QT_GATEWAY_PORT=18889 ./scripts/gateway-up.sh",
+    "gateway:down": "QT_GATEWAY_PORT=18889 ./scripts/gateway-down.sh",
+    "gateway:up:prod": "QT_GATEWAY_PORT=18789 ./scripts/gateway-up.sh",
+    "gateway:down:prod": "QT_GATEWAY_PORT=18789 ./scripts/gateway-down.sh"
   },
   "devDependencies": {
-    "openclaw": "latest",
     "typescript": "^5.8.0",
     "vitest": "^3.1.0"
   }

@@ -103,20 +103,22 @@ export type MarketType =
 
 **实现的提供商**：
 
-| 提供商               | 类型          | 支持市场          | 实现位置                              |
-| -------------------- | ------------- | ----------------- | ------------------------------------- |
-| **AKShare**          | Python Bridge | A股、期货、基金   | `data_providers/akshare_provider.py`  |
-| **Tushare**          | Python Bridge | A股               | `data_providers/tushare_provider.py`  |
-| **Yahoo Finance**    | Python Bridge | 美股、港股、加密  | `data_providers/yfinance_provider.py` |
-| **Options Provider** | Python Bridge | ETF/指数/商品期权 | `data_providers/options_provider.py`  |
-| **QMT (Windows)**    | HTTP Bridge   | A股、期货         | `data_providers/qmt_provider.ts`      |
-| **Mock/Demo**        | 本地生成      | 所有市场          | `market-data-provider.ts` L312        |
+| 提供商               | 类型          | 支持市场             | 实现位置                              |
+| -------------------- | ------------- | -------------------- | ------------------------------------- |
+| **AKShare**          | Python Bridge | A股、期货、基金      | `data_providers/akshare_provider.py`  |
+| **Tushare**          | Python Bridge | A股                  | `data_providers/tushare_provider.py`  |
+| **Yahoo Finance**    | Python Bridge | 美股、港股、加密     | `data_providers/yfinance_provider.py` |
+| **Options Provider** | Python Bridge | ETF/指数/商品期权    | `data_providers/options_provider.py`  |
+| **Financial**        | Python Bridge | 财务报表数据         | `data_providers/financial_provider.py`|
+| **Sector Data**      | Python Bridge | 板块分类与热点追踪   | `data_providers/sector_data.py`       |
+| **QMT (Windows)**    | HTTP Bridge   | A股、期货            | `data_providers/qmt_provider.ts`      |
+| **Mock/Demo**        | 本地生成      | 所有市场             | `market-data-provider.ts`             |
 
 ---
 
 ## 指标库完整清单
 
-### 📊 已实现的指标（共 16 个）
+### 📊 已实现的指标（共 15 个）
 
 所有指标位于：`src/engine/strategies/indicators.ts`
 
@@ -330,7 +332,7 @@ export function rollingHighLow(
 
 #### I. 辅助函数
 
-**16. getCloses - 提取收盘价**
+**getCloses - 提取收盘价**
 
 ```typescript
 export function getCloses(ctx: BuiltinStrategyContext): number[];
@@ -573,17 +575,10 @@ export function myIndicator(bars: KlineBar[], period: number, otherParam?: numbe
 2️⃣ **在 `indicators.ts` 末尾导出**
 
 ```typescript
-// 已在 index.ts 中导出
 export { myIndicator };
 ```
 
-3️⃣ **在 `index.ts` 中注册**
-
-```typescript
-export { myIndicator } from "./indicators.js";
-```
-
-4️⃣ **在策略中使用**
+3️⃣ **在策略中使用**
 
 ```typescript
 import { myIndicator, getCloses } from "./indicators.js";
@@ -619,7 +614,7 @@ export function myStrategy(): BuiltinStrategy {
 ```typescript
 export function newStrategy(param1 = 10, param2 = 20): BuiltinStrategy {
   let smaFast: number[] = [];
-  let smaSllow: number[] = [];
+  let smaSlow: number[] = [];
 
   return {
     name: `NewStrategy(${param1},${param2})`,
@@ -652,7 +647,7 @@ export function newStrategy(param1 = 10, param2 = 20): BuiltinStrategy {
 **方式 B：Python 策略（复杂逻辑）**
 
 ```python
-# extensions/quant-trading/python/strategies/my_strategy.py
+# python/strategies/my_strategy.py
 
 from live_engine import LiveStrategyBase
 
@@ -776,7 +771,7 @@ export type KlineInterval =
 **添加新的 Python 模块**：
 
 ```
-extensions/quant-trading/python/
+python/
 ├── strategies/
 │   ├── my_strategy.py      # 新策略
 │   └── __init__.py
@@ -840,25 +835,27 @@ liveEngine.start();
 | 类别       | 数量   | 关键指标                 |
 | ---------- | ------ | ------------------------ |
 | **趋势**   | 3      | SMA, EMA, MACD           |
-| **波动率** | 4      | BB, ATR, KDJ, Stochastic |
+| **波动率** | 3      | BB, ATR, KDJ/Stochastic  |
 | **动量**   | 3      | RSI, ROC, Williams %R    |
 | **方向**   | 2      | DMI/ADX, CCI             |
 | **成交量** | 1      | OBV                      |
-| **复合**   | 1      | Ichimoku, Parabolic SAR  |
-| **总计**   | **16** | 覆盖 90% 常用指标        |
+| **复合**   | 2      | Ichimoku, Parabolic SAR  |
+| **辅助**   | 1      | rollingHighLow           |
+| **总计**   | **15** | 覆盖 90% 常用指标        |
 
-### 策略库完整性
+### 策略库完整性（52 个内置策略）
 
-| 类别         | 数量    | 示例                               |
-| ------------ | ------- | ---------------------------------- |
-| **基础策略** | 8       | DualMA, MACD, BBands, RSI+         |
-| **高阶组合** | 7       | Composite, Gated, TrendCombo       |
-| **CTA 策略** | 35+     | TurtleBreakout, RBreaker, Ichimoku |
-| **总计**     | **50+** | 覆盖主流交易风格                   |
+| 类别                | 数量    | 文件               | 示例策略                                        |
+| ------------------- | ------- | ------------------ | ----------------------------------------------- |
+| **基础策略**        | 9       | `basic.ts`         | DualMA, MomentumBreakout, MeanReversion, RSI    |
+| **高阶组合**        | 8       | `advanced.ts`      | Composite, Gated, Scored, TrendCombo            |
+| **CTA 趋势**       | 8       | `cta-trend.ts`     | TurtleBreakout, DualThrust, MacdTrend           |
+| **CTA 通道**       | 5       | `cta-channel.ts`   | RBreaker, Aberration, TtmSqueeze, DmiAdx        |
+| **CTA 指标**       | 12      | `cta-indicator.ts` | VolatilityTarget, GridTrading, Ichimoku, KDJ    |
+| **CTA 形态**       | 10      | `cta-pattern.ts`   | RangeBreakout, DoubleBottom, StochasticRsi      |
+| **总计**            | **52**  |                    | 覆盖主流交易风格                                |
 
 ---
-
-## 快速参考
 
 ### 性能优化策略
 
@@ -905,6 +902,5 @@ test("sma should return NaN for initial period", () => {
 
 ---
 
-**文档版本**: 2026-03-26  
-**项目**: OpenClaw Quant-Trading v1.0  
-**维护**: 参考 `.agents/skills/` 和 `AGENTS.md` 获取最新信息
+**文档版本**: 2026-04-03
+**项目**: OpenClaw Quant-Trading v1.0

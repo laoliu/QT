@@ -5,60 +5,141 @@
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│  OpenClaw Gateway (Node.js / TypeScript)                          │
-│                                                                   │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  quant-trading extension                                    │  │
-│  │                                                             │  │
-│  │  AI Tools:          Commands:        Services:              │  │
-│  │  • market_data      /quote           DataSyncService        │  │
-│  │  • stock_screen     /screen          SignalMonitorService   │  │
-│  │  • backtest         /backtest        PnlMonitorService      │  │
-│  │  • portfolio        /portfolio       OptionsMonitorService  │  │
-│  │  • trading_signal   /signal                                 │  │
-│  │  • risk_analysis                     HTTP:                  │  │
-│  │  • options_data     /期权链           /quant/dashboard       │  │
-│  │  • options_strategy /期权行情         /quant/api/portfolio   │  │
-│  │  • options_trading  /希腊值                                  │  │
-│  │                                                             │  │
-│  │  Engine Layer:                                              │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │  │
-│  │  │ Builtin (TS) │  │  Backtrader  │  │    VNPy      │     │  │
-│  │  │  轻量回测    │  │  (Python)    │  │  (Python)    │     │  │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘     │  │
-│  │                                                             │  │
-│  │  ┌──────────────┐  ┌───────────────────────────┐           │  │
-│  │  │ Greeks Engine │  │ Options Strategy Engine   │           │  │
-│  │  │  BSM + BAW   │  │ (payoff/scenario/compare) │           │  │
-│  │  └──────────────┘  └───────────────────────────┘           │  │
-│  │                                                             │  │
-│  │  Data Layer:                                                │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │  │
-│  │  │ AKShare  │  │ Tushare  │  │  Demo    │                 │  │
-│  │  │ (Python) │  │ (Python) │  │  (内置)   │                 │  │
-│  │  └──────────┘  └──────────┘  └──────────┘                 │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  Channels: Discord / Telegram / Web / WeChat / ...               │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  OpenClaw Gateway (Node.js / TypeScript)                                │
+│                                                                         │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │  quant-trading extension (46 AI Tools · 60+ Services · 52 策略)   │  │
+│  │                                                                   │  │
+│  │  AI Tools:               Commands:         Services:              │  │
+│  │  • market_data           /quote             DataSyncService       │  │
+│  │  • stock_screen          /screen            SignalMonitor         │  │
+│  │  • backtest              /backtest          PnlMonitor            │  │
+│  │  • portfolio             /portfolio         OptionsMonitor        │  │
+│  │  • trading_signal        /signal            LiveEngine            │  │
+│  │  • risk_analysis         /期权链             TickIngressService    │  │
+│  │  • fund_flow             /期权行情           TickStrategyService   │  │
+│  │  • sector_analysis       /希腊值             PriceAlertService     │  │
+│  │  • dragon_tiger                             TaskScheduler         │  │
+│  │  • lianban_analysis      CLI:               ReceiverService       │  │
+│  │  • options_data          quant backtest      BreakoutMonitor      │  │
+│  │  • options_strategy      quant data          + 45 more...         │  │
+│  │  • options_trading       quant portfolio                          │  │
+│  │  • live_trading          quant live         HTTP:                  │  │
+│  │  • strategy_router                          /quant/dashboard      │  │
+│  │  • chip_accumulation     Broker:            /quant/api/portfolio  │  │
+│  │  • institutional_flow    QMT (real)         /quant/admin/*        │  │
+│  │  • + 29 more...          Paper (sim)        /quant/data-bridge    │  │
+│  │                                                                   │  │
+│  │  Engine Layer:                                                    │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │  │
+│  │  │ Builtin (TS) │  │  Backtrader  │  │ Live Engine  │            │  │
+│  │  │ 52 内置策略   │  │  (Python)    │  │ (实盘交易)    │            │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘            │  │
+│  │                                                                   │  │
+│  │  ┌──────────────┐  ┌───────────────────────────┐                 │  │
+│  │  │ Greeks Engine │  │ Options Strategy Engine   │                 │  │
+│  │  │  BSM + BAW   │  │ (payoff/scenario/compare) │                 │  │
+│  │  └──────────────┘  └───────────────────────────┘                 │  │
+│  │                                                                   │  │
+│  │  Data Layer:                                                      │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │  │
+│  │  │ AKShare  │ │ Tushare  │ │ YFinance │ │  Demo    │            │  │
+│  │  │ (Python) │ │ (Python) │ │ (Python) │ │  (内置)   │            │  │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘            │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  Channels: Discord / Telegram / Web / WeChat / ...                     │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Features
 
-### AI Tools (通过对话调用)
+### AI Tools (通过对话调用，共 46 个)
 
-| Tool               | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| `market_data`      | 获取实时行情、历史K线、搜索标的                 |
-| `stock_screen`     | 条件筛选（PE、PB、ROE、市值等）                 |
-| `backtest`         | 策略回测（内置引擎 + backtrader）               |
-| `portfolio`        | 模拟组合管理（买入、卖出、持仓查看）            |
-| `trading_signal`   | 查询策略生成的交易信号                          |
-| `risk_analysis`    | 风险分析（VaR、回撤、夏普、波动率）             |
-| `options_data`     | 期权链、合约行情、IV曲面、希腊值计算            |
-| `options_strategy` | 期权策略推荐、损益分析、情景模拟、策略对比      |
-| `options_trading`  | 期权下单（买开/卖开/买平/卖平）、持仓、风控摘要 |
+#### 核心分析
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `market_data`            | 获取实时行情、历史K线、搜索标的                 |
+| `stock_screen`           | 条件筛选（PE、PB、ROE、市值等）                 |
+| `stock_recommend`        | 智能选股推荐                                    |
+| `backtest`               | 策略回测（内置引擎 + backtrader）               |
+| `portfolio`              | 模拟组合管理（买入、卖出、持仓查看）            |
+| `portfolio_backtest`     | 组合级回测                                      |
+| `portfolio_rebalance`    | 组合再平衡                                      |
+| `trading_signal`         | 查询策略生成的交易信号                          |
+| `risk_analysis`          | 风险分析（VaR、回撤、夏普、波动率）             |
+| `data_analysis`          | 通用数据分析                                    |
+| `data_cache`             | 数据缓存管理                                    |
+
+#### 策略管理
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `strategy_router`        | 智能策略路由与推荐                              |
+| `strategy_composer`      | 策略组合与编排                                  |
+| `strategy_optimizer`     | 策略参数优化                                    |
+| `strategy_explorer`      | 策略探索与发现                                  |
+| `strategy_health`        | 策略运行健康度监控                              |
+| `custom_strategy`        | 自定义策略创建                                  |
+
+#### 交易执行
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `live_trading`           | 实盘交易（QMT/Paper broker）                    |
+| `conditional_order`      | 条件单（触价/追踪止损）                         |
+| `dca_schedule`           | 定投计划管理                                    |
+| `breakout_monitor`       | 突破形态监控                                    |
+| `position_sizing`        | 仓位管理与计算                                  |
+| `price_alert`            | 价格预警                                        |
+| `scheduled_task`         | 定时任务管理                                    |
+
+#### 期权交易
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `options_data`           | 期权链、合约行情、IV曲面、希腊值计算            |
+| `options_strategy`       | 期权策略推荐、损益分析、情景模拟、策略对比      |
+| `options_trading`        | 期权下单（买开/卖开/买平/卖平）、持仓、风控摘要 |
+| `stochastic_pricing`     | 随机定价与蒙特卡洛风险模拟                      |
+| `futures_straddle`       | 期货套利策略                                    |
+
+#### 市场研判
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `sector_analysis`        | 板块分析与热点追踪                              |
+| `fund_flow`              | 资金流向分析                                    |
+| `dragon_tiger`           | 龙虎榜数据分析                                  |
+| `lianban_analysis`       | 连板股分析                                      |
+| `chip_accumulation`      | 主力吸筹检测                                    |
+| `institutional_flow`     | 机构持仓变动                                    |
+| `correlation_analysis`   | 标的相关性分析                                  |
+| `macro_data`             | 宏观经济数据                                    |
+| `earnings_calendar`      | 财报日历                                        |
+| `social_sentiment`       | 舆情分析                                        |
+| `news_summary`           | 新闻摘要                                        |
+| `polymarket_odds`        | 预测市场赔率                                    |
+
+#### 投资分析
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `value_investing`        | 价值投资分析                                    |
+| `tech_moat`              | 技术壁垒评估                                    |
+| `cfo_assistant`          | CFO财务分析助手                                 |
+| `financial_calculator`   | 估值计算器                                      |
+| `performance_attribution`| 绩效归因分析                                    |
+
+#### 个人管理
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `watchlist`              | 自选股管理                                      |
+| `favorites`              | 股票收藏                                        |
+| `trade_journal`          | 交易笔记                                        |
 
 ### Chat Commands (快捷命令)
 
@@ -79,17 +160,41 @@
 openclaw quant backtest dual-ma-crossover -s 2024-01-01 -e 2025-01-01 --symbols 600519
 openclaw quant data fetch --symbol 600519
 openclaw quant portfolio show
+openclaw quant live status
 ```
 
-### Built-in Strategies (内置策略)
+### Built-in Strategies (52 个内置策略)
 
-1. **双均线交叉** (`dual-ma-crossover`) — 快慢均线金叉买入，死叉卖出
-2. **动量突破** (`momentum-breakout`) — N日高点突破买入
-3. **均值回归** (`mean-reversion`) — 布林带上下轨交易
+#### 基础策略（9 个）
+
+| 策略 ID               | 名称         | 核心指标               |
+| --------------------- | ------------ | ---------------------- |
+| `dual-ma-crossover`   | 双均线交叉   | SMA 金叉/死叉          |
+| `momentum-breakout`   | 动量突破     | N日最高价突破          |
+| `mean-reversion`      | 均值回归     | 布林带上下轨           |
+| `rsi-filter`          | RSI 过滤     | RSI 超买超卖           |
+| `rsi-enhanced`        | RSI 增强     | RSI + SMA 确认         |
+| `macd-confirmation`   | MACD 确认    | MACD 交叉              |
+| `macd-divergence`     | MACD 背离    | MACD 顶底背离          |
+| `volume-confirmation` | 量价确认     | OBV + SMA              |
+| `t0-day-trading`      | T+0 日内     | 多指标日内交易         |
+
+#### 高阶组合策略（8 个）
+
+Composite、Gated、Scored、TrendCombo、EnhancedComposite、RsiMacd、T0Enhanced、MarketRegime
+
+#### CTA 策略（35 个）
+
+- **趋势类** (8)：TurtleBreakout、DualThrust、EMA带状跟踪、MacdTrend、Keltner通道 ...
+- **通道类** (5)：RBreaker、Aberration、TtmSqueeze、DmiAdx、ParabolicSar
+- **指标类** (12)：VolatilityTarget、GridTrading、Ichimoku、KDJ、MeanReversionZScore ...
+- **形态类** (10)：RangeBreakout、DoubleBottom、StochasticRsi、BollingerBandwidth ...
+
+> 详细策略清单见 [docs/INDICATORS_MATRIX.md](docs/INDICATORS_MATRIX.md)
 
 ### Backtrader Integration (Python 引擎)
 
-支持将 backtrader Python 策略直接接入，实现如截图中所述的 **年化476%，回撤6.61%** 等高级策略回测。
+支持将 backtrader Python 策略直接接入。另有 24 个 Python 实盘策略（含连板、网格、配对交易、QMT 数据桥等）。
 
 ### Options (期权交易)
 
@@ -177,7 +282,7 @@ openclaw quant portfolio show
 ### 2. Install Python dependencies (for backtrader/akshare)
 
 ```bash
-pip install -r extensions/quant-trading/python/requirements.txt
+pip install -r python/requirements.txt
 ```
 
 ### 3. (Optional) Configure Tushare
@@ -330,66 +435,135 @@ pnpm install && pnpm build
 ## File Structure
 
 ```
-extensions/quant-trading/
-├── index.ts                        # Plugin entry point
+quant-trading/
+├── index.ts                        # Plugin entry point (46 tools registered)
 ├── package.json
 ├── openclaw.plugin.json            # Plugin metadata & config schema
 ├── README.md
+├── docs/
+│   ├── ARCHITECTURE_ANALYSIS.md    # 深度架构分析
+│   ├── ARCHITECTURE_DIAGRAMS.md    # 11 张 Mermaid 架构图
+│   ├── INDICATORS_MATRIX.md        # 指标应用矩阵 & 52 策略完整清单
+│   └── FAVORITES_UI_GUIDE.md       # 收藏功能 UI 指南
 ├── src/
 │   ├── types.ts                    # Core type definitions
+│   ├── config-validator.ts         # Plugin config validation
 │   ├── bridge/
-│   │   └── python-bridge.ts        # Node→Python subprocess bridge
+│   │   ├── python-bridge.ts        # Node→Python subprocess bridge
+│   │   ├── persistent-python.ts    # Persistent Python process
+│   │   └── windows-bridge-client.ts # Windows QMT bridge
 │   ├── data/
-│   │   └── market-data-provider.ts # Data provider abstraction (含期权数据)
+│   │   └── market-data-provider.ts # Data provider abstraction
 │   ├── engine/
 │   │   ├── builtin-engine.ts       # Lightweight TS backtest engine
 │   │   ├── backtrader-engine.ts    # Backtrader Python bridge
-│   │   ├── strategy-registry.ts    # Strategy management
 │   │   ├── live-engine.ts          # Live trading engine
-│   │   └── strategy-definitions.ts # Built-in strategy definitions (含期权策略)
-│   ├── tools/
-│   │   ├── market-data.ts          # AI tool: market data
-│   │   ├── backtest.ts             # AI tool: backtesting
-│   │   ├── portfolio.ts            # AI tool: portfolio mgmt
-│   │   ├── stock-screen.ts         # AI tool: stock screening
-│   │   ├── trading-signal.ts       # AI tool: signal queries
-│   │   ├── risk-analysis.ts        # AI tool: risk metrics
-│   │   ├── options-data.ts         # AI tool: 期权数据 (链/行情/IV/Greeks)
-│   │   ├── options-strategy.ts     # AI tool: 期权策略 (推荐/损益/情景)
-│   │   └── options-trading.ts      # AI tool: 期权交易 (下单/持仓/风控)
+│   │   ├── strategy-registry.ts    # Strategy management
+│   │   ├── strategy-definitions.ts # 52 built-in strategy definitions
+│   │   ├── dynamic-composer.ts     # Dynamic strategy composition
+│   │   ├── rule-strategy.ts        # Rule-based strategy builder
+│   │   ├── tick-aggregator.ts      # Tick → Bar aggregation
+│   │   ├── tick-feature-store.ts   # Tick feature extraction
+│   │   └── strategies/             # Indicator & strategy implementations
+│   │       ├── indicators.ts       # 15 technical indicators
+│   │       ├── basic.ts            # 9 basic strategies
+│   │       ├── advanced.ts         # 8 advanced strategies
+│   │       ├── cta-trend.ts        # 8 CTA trend strategies
+│   │       ├── cta-channel.ts      # 5 CTA channel strategies
+│   │       ├── cta-indicator.ts    # 12 CTA indicator strategies
+│   │       └── cta-pattern.ts      # 10 CTA pattern strategies
+│   ├── tools/                      # 46 AI-callable tool implementations
+│   │   ├── market-data.ts          # 行情数据
+│   │   ├── stock-screen.ts         # 选股筛选
+│   │   ├── backtest.ts             # 策略回测
+│   │   ├── portfolio.ts            # 投资组合
+│   │   ├── live-trading.ts         # 实盘交易
+│   │   ├── options-data.ts         # 期权数据
+│   │   ├── fund-flow.ts            # 资金流向
+│   │   ├── sector-analysis.ts      # 板块分析
+│   │   ├── dragon-tiger.ts         # 龙虎榜
+│   │   ├── strategy-router.ts      # 策略路由
+│   │   └── ... (36 more tools)
 │   ├── broker/
 │   │   ├── adapter.ts              # Broker adapter interface
-│   │   ├── paper-broker.ts         # Paper trading broker (支持期权)
-│   │   └── qmt-broker.ts           # QMT real broker (支持期权)
+│   │   ├── paper-broker.ts         # Paper trading broker
+│   │   ├── qmt-broker.ts           # QMT real broker
+│   │   └── remote-qmt-broker.ts    # Remote QMT via HTTP
 │   ├── commands/
-│   │   └── index.ts                # Chat commands (/quote, /期权链, etc.)
-│   ├── services/
-│   │   ├── data-sync.ts            # Background data sync
-│   │   ├── signal-monitor.ts       # Background signal monitoring
-│   │   ├── pnl-monitor.ts          # P&L monitoring
-│   │   ├── risk-gate.ts            # Pre-trade risk checks (含期权规则)
-│   │   ├── options-monitor.ts      # Background 期权风控 (到期/Greeks/指派)
-│   │   └── order-manager.ts        # Order lifecycle management
+│   │   ├── commands.ts             # Chat commands (/quote, /期权链, etc.)
+│   │   └── categories.ts           # Command categories
+│   ├── services/                   # 60+ background services
+│   │   ├── data-sync.ts            # 数据同步
+│   │   ├── signal-monitor.ts       # 信号监控
+│   │   ├── pnl-monitor.ts          # 盈亏监控
+│   │   ├── options-monitor.ts      # 期权风控
+│   │   ├── order-manager.ts        # 订单管理
+│   │   ├── risk-gate.ts            # 交易前风控
+│   │   ├── tick-ingress-service.ts  # Tick 数据接入
+│   │   ├── tick-strategy-service.ts # Tick 策略执行
+│   │   ├── task-scheduler.ts       # 定时任务调度
+│   │   ├── event-bus.ts            # 事件总线
+│   │   ├── data-warehouse.ts       # 数据仓库
+│   │   ├── sqlite-storage.ts       # SQLite 持久化
+│   │   └── ... (50+ more services)
 │   ├── cli/
-│   │   ├── backtest-cli.ts         # CLI: openclaw quant backtest
-│   │   ├── data-cli.ts             # CLI: openclaw quant data
-│   │   └── portfolio-cli.ts        # CLI: openclaw quant portfolio
-│   └── http/
-│       ├── dashboard.ts            # Web dashboard endpoint
-│       └── portfolio-api.ts        # REST API for portfolio
+│   │   ├── backtest-cli.ts         # openclaw quant backtest
+│   │   ├── data-cli.ts             # openclaw quant data
+│   │   ├── portfolio-cli.ts        # openclaw quant portfolio
+│   │   └── live-cli.ts             # openclaw quant live
+│   ├── http/
+│   │   ├── routes.ts               # Route registration
+│   │   ├── admin-routes.ts         # Admin API endpoints
+│   │   ├── dashboard.ts            # Web dashboard
+│   │   ├── portfolio-api.ts        # Portfolio REST API
+│   │   ├── data-bridge-api.ts      # Data bridge API
+│   │   ├── trading-bridge-api.ts   # Trading bridge API
+│   │   └── auth-middleware.ts      # Authentication
+│   ├── e2e/                        # End-to-end tests
+│   └── utils/
+│       ├── async-mutex.ts          # Async mutex
+│       └── number-utils.ts         # Number utilities
 ├── scripts/
 │   ├── export-bundle.sh            # 导出配置+数据+代码为迁移包
 │   └── import-bundle.sh            # 从迁移包导入配置+数据+代码
 └── python/
     ├── requirements.txt            # Python dependencies
-    ├── engines/
+    ├── engines/                    # 48 Python 分析引擎
     │   ├── backtrader_engine.py    # Backtrader strategy runner
     │   ├── greeks_engine.py        # BSM/BAW 定价 + Greeks 计算
-    │   └── option_strategy_engine.py  # 期权策略推荐/损益/情景/对比
+    │   ├── option_strategy_engine.py # 期权策略推荐/损益/情景/对比
+    │   ├── screener_engine.py      # 选股引擎
+    │   ├── fund_flow.py            # 资金流向分析
+    │   ├── dragon_tiger.py         # 龙虎榜分析
+    │   ├── sector_analysis.py      # 板块分析
+    │   ├── live_engine.py          # 实盘策略引擎
+    │   ├── monte_carlo_engine.py   # 蒙特卡洛模拟
+    │   └── ... (39 more engines)
+    ├── strategies/                 # 24 Python 实盘策略
+    │   ├── BRIDGE.py               # QMT 策略桥接
+    │   ├── RECEIVER.py             # 信号接收器
+    │   ├── turtle_strategy.py      # 海龟策略
+    │   ├── grid_strategy.py        # 网格策略
+    │   ├── pair_trading_strategy.py # 配对交易
+    │   └── ... (19 more strategies)
     ├── brokers/
-    │   └── qmt_broker.py           # QMT broker Python bridge
-    └── data_providers/
-        ├── akshare_provider.py     # AKShare data provider
-        ├── tushare_provider.py     # Tushare data provider
-        └── options_provider.py     # 期权数据 provider (AKShare)
+    │   └── qmt_broker.py           # QMT broker bridge
+    ├── data_providers/
+    │   ├── akshare_provider.py     # AKShare (A股/期货/基金)
+    │   ├── tushare_provider.py     # Tushare (A股)
+    │   ├── yfinance_provider.py    # Yahoo Finance (美股/港股)
+    │   ├── options_provider.py     # 期权数据
+    │   ├── financial_provider.py   # 财务报表数据
+    │   ├── sector_data.py          # 板块分类数据
+    │   └── provider_factory.py     # 数据源工厂
+    └── screeners/                  # 选股脚本
 ```
+
+## Documentation
+
+| 文档 | 说明 |
+| ---- | ---- |
+| [docs/ARCHITECTURE_ANALYSIS.md](docs/ARCHITECTURE_ANALYSIS.md) | 深度架构分析：数据源、15 个指标、策略处理、扩展指南 |
+| [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) | 11 张 Mermaid 架构图：插件机制、时序、状态机、排障 |
+| [docs/INDICATORS_MATRIX.md](docs/INDICATORS_MATRIX.md) | 指标应用矩阵、52 个策略完整清单、参数速查 |
+| [docs/FAVORITES_UI_GUIDE.md](docs/FAVORITES_UI_GUIDE.md) | 收藏功能 UI 指南 |

@@ -1,6 +1,6 @@
 # OpenClaw Quant-Trading - 指标应用矩阵
 
-## 💡 指标速查表
+## 指标速查表
 
 ### 按交易风格分类
 
@@ -11,32 +11,35 @@
 | **SMA**           | 50, 200  | 趋势识别清晰，容易实现 | `dualMaCrossover`                  |
 | **EMA**           | 12, 26   | 对近期价格敏感         | `MACD`, `ctaMacdTrend`             |
 | **MACD**          | 12,26,9  | 双重确认（线+直方图）  | `macdConfirmation`, `ctaMacdTrend` |
-| **Parabolic SAR** | 0.02步长 | 自适应跟踪止损         | `ctaTrendFollowing`                |
+| **Parabolic SAR** | 0.02步长 | 自适应跟踪止损         | `ctaTrendFollowing`, `ctaParabolicSar` |
 
 #### 🔄 均值回归（Mean Reversion）
 
-| 指标                | 周期   | 用途                  | 使用例                     |
-| ------------------- | ------ | --------------------- | -------------------------- |
-| **Bollinger Bands** | 20, 2σ | 上下轨反向交易        | `meanReversion`            |
-| **RSI**             | 14     | 超买(>70)/超卖(<30)   | `rsiFilter`, `rsiEnhanced` |
-| **Williams %R**     | 14     | 超买(>-20)/超卖(<-80) | `ctaWilliamsR`             |
-| **CCI**             | 20     | 周期顶底识别          | `ctaCciDivergence`         |
+| 指标                | 周期   | 用途                  | 使用例                                  |
+| ------------------- | ------ | --------------------- | --------------------------------------- |
+| **Bollinger Bands** | 20, 2σ | 上下轨反向交易        | `meanReversion`, `ctaBollingerBreakout` |
+| **RSI**             | 14     | 超买(>70)/超卖(<30)   | `rsiFilter`, `rsiEnhanced`              |
+| **Williams %R**     | 14     | 超买(>-20)/超卖(<-80) | `ctaWilliamsR`                          |
+| **CCI**             | 20     | 周期顶底识别          | `ctaCciDivergence`                      |
+| **Z-Score**         | 20     | 统计极端识别          | `ctaMeanReversionZScore`                |
 
 #### 🎯 突破动量（Breakout Momentum）
 
-| 指标               | 参数 | 特点          | 使用例              |
-| ------------------ | ---- | ------------- | ------------------- |
-| **rollingHighLow** | 20   | N日最高价突破 | `momentumBreakout`  |
-| **破裂检测**       | 动态 | Donchian通道  | `ctaTurtleBreakout` |
-| **ATR**            | 14   | 波动率确认    | `ctaDualThrust`     |
+| 指标               | 参数 | 特点          | 使用例                                    |
+| ------------------ | ---- | ------------- | ----------------------------------------- |
+| **rollingHighLow** | 20   | N日最高价突破 | `momentumBreakout`, `ctaDonchianMidReversion` |
+| **破裂检测**       | 动态 | Donchian通道  | `ctaTurtleBreakout`, `ctaRangeBreakout`   |
+| **ATR**            | 14   | 波动率确认    | `ctaDualThrust`, `ctaAtrTrailing`         |
 
 #### 📊 综合确认（Multi-Signal）
 
-| 指标组合      | 用途          | 策略                        |
-| ------------- | ------------- | --------------------------- |
-| **SMA + RSI** | 趋势+动量确认 | `rsiEnhanced`               |
-| **MACD + BB** | 趋势+范围确认 | `enhancedCompositeStrategy` |
-| **DMI + ATR** | 方向+波动度   | `ctaDmiAdx`                 |
+| 指标组合              | 用途           | 策略                                          |
+| --------------------- | -------------- | --------------------------------------------- |
+| **SMA + RSI**         | 趋势+动量确认  | `rsiEnhanced`, `rsiMacdCombined`              |
+| **MACD + BB**         | 趋势+范围确认  | `enhancedCompositeStrategy`, `compositeStrategy` |
+| **DMI + ATR**         | 方向+波动度    | `ctaDmiAdx`                                   |
+| **Stochastic + RSI**  | 双维度超买超卖 | `ctaStochasticRsi`                            |
+| **Multi-MA**          | 多均线收敛     | `ctaMultiMaConvergence`                       |
 
 ---
 
@@ -97,13 +100,14 @@ Parabolic    ✓    ✓    ✓✓   ✓    △
 | **RSI**            | O(n)       | O(n)       | Wilder 平滑    |
 | **ATR**            | O(n)       | O(n)       | EMA(TR)        |
 | **DMI/ADX**        | O(n)       | O(n)       | Wilder 平滑    |
-| **rollingHighLow** | O(n)       | O(n)       | 单调队列       |
-| **CCI**            | O(n²)      | O(n)       | 需要均值偏差   |
+| **CCI**            | O(n²)     | O(n)       | 需要均值偏差   |
 | **OBV**            | O(n)       | O(n)       | 单次遍历       |
 | **Williams %R**    | O(n)       | O(n)       | 单调队列       |
+| **ROC**            | O(n)       | O(n)       | 单次遍历       |
 | **Ichimoku**       | O(n)       | O(n)       | 多个滑动窗口   |
 | **Stochastic**     | O(n)       | O(n)       | KDJ 架构       |
 | **Parabolic SAR**  | O(n)       | O(n)       | 状态机         |
+| **rollingHighLow** | O(n)       | O(n)       | 单调队列       |
 
 ---
 
@@ -132,7 +136,7 @@ Parabolic    ✓    ✓    ✓✓   ✓    △
 │ 2. 价格触及 BB 下轨        │ ← 统计极端
 │ 3. 收盘价 < SMA(20)        │ ← 下方买入
 └─────────────────────────────┘
-推荐策略: meanReversion, enhancedCompositeStrategy
+推荐策略: meanReversion, enhancedCompositeStrategy, ctaMeanReversionZScore
 ```
 
 #### Breakout（突破突进）
@@ -144,7 +148,7 @@ Parabolic    ✓    ✓    ✓✓   ✓    △
 │ 2. Volume > Avg Volume     │ ← 成交量加大
 │ 3. ATR 作为止损距离        │ ← N×ATR 止损
 └─────────────────────────────┘
-推荐策略: momentumBreakout, ctaTurtleBreakout
+推荐策略: momentumBreakout, ctaTurtleBreakout, ctaRangeBreakout
 ```
 
 ### 头寸退出
@@ -155,6 +159,7 @@ Parabolic    ✓    ✓    ✓✓   ✓    △
 SMA 死叉:        快线下穿慢线
 MACD 背离:       收盘创新高，MACD 不创新高
 Parabolic SAR:  SAR 反转信号
+Chandelier:     ctaChandelierExit ATR 跟踪止损
 ```
 
 #### 极值回收
@@ -199,7 +204,7 @@ Ichimoku 出云:   跌出云层退出
 }
 ```
 
-#### 长期交易（Position)
+#### 长期交易（Position）
 
 ```typescript
 {
@@ -246,19 +251,19 @@ Ichimoku 出云:   跌出云层退出
 
 ```typescript
 // ❌ 错误
-const rsi = rsi(closes, 14);
-if (rsi[i] > 70) {
+const rsiVals = rsi(closes, 14);
+if (rsiVals[i] > 70) {
   /* ... */
 } // 前 14 个数据是 NaN!
 
 // ✅ 正确
-const rsi = rsi(closes, 14);
-if (!Number.isNaN(rsi[i]) && rsi[i] > 70) {
+const rsiVals = rsi(closes, 14);
+if (!Number.isNaN(rsiVals[i]) && rsiVals[i] > 70) {
   /* ... */
 }
 
-// 或使用 try 检查
-if (i >= 14 && rsi[i] > 70) {
+// 或使用索引检查
+if (i >= 14 && rsiVals[i] > 70) {
   /* ... */
 }
 ```
@@ -291,10 +296,10 @@ MACD(12, 26, 9); // 标准配置
 ```typescript
 // ❌ 使用昨日指标
 const i = ctx.index;
-const signal = sma[i - 1]; // 落后 1 bar!
+const signal = smaValues[i - 1]; // 落后 1 bar!
 
 // ✅ 使用当日指标
-const signal = sma[i]; // 即时
+const signal = smaValues[i]; // 即时
 // 但要知道：指标本身就有延迟（SMA 落后趋势）
 ```
 
@@ -310,6 +315,92 @@ const signal = sma[i]; // 即时
 - [ ] 参数热身期是否足够（最少 slowPeriod 或 senkouBPeriod）
 - [ ] 是否有重复计算的指标
 - [ ] 市场限制（T+1、持仓限制）是否已考虑
+
+---
+
+## 📚 完整策略清单
+
+### 基础策略（9 个） — `basic.ts`
+
+| 策略 ID | 名称 | 核心指标 |
+| ------- | ---- | -------- |
+| `dualMaCrossover` | 双均线交叉 | SMA |
+| `momentumBreakout` | 动量突破 | rollingHighLow |
+| `meanReversion` | 均值回归 | BB |
+| `rsiFilter` | RSI 过滤 | RSI |
+| `rsiEnhanced` | RSI 增强 | RSI + SMA |
+| `macdConfirmation` | MACD 确认 | MACD |
+| `macdDivergence` | MACD 背离 | MACD |
+| `volumeConfirmation` | 量价确认 | OBV + SMA |
+| `t0DayTrading` | T+0 日内 | 多指标 |
+
+### 高阶组合策略（8 个） — `advanced.ts`
+
+| 策略 ID | 名称 | 核心特点 |
+| ------- | ---- | -------- |
+| `compositeStrategy` | 多信号投票 | ≥2/3 共识 |
+| `gatedStrategy` | 门控策略 | BB 门 + 趋势确认 |
+| `trendComboStrategy` | 趋势组合 | OR 逻辑 |
+| `scoredStrategy` | 评分策略 | 加权仓位 |
+| `enhancedCompositeStrategy` | 增强组合 | 多门控 + 风控 |
+| `rsiMacdCombined` | RSI+MACD | 多条件 |
+| `t0EnhancedStrategy` | 增强日内 | T+0 增强 |
+| `detectMarketRegime` | 市场状态 | 波动率检测 |
+
+### CTA 趋势策略（8 个） — `cta-trend.ts`
+
+| 策略 ID | 名称 | 核心指标 |
+| ------- | ---- | -------- |
+| `ctaTrendFollowing` | EMA 带状跟踪 | EMA Ribbon |
+| `ctaDualThrust` | Dual Thrust | ATR 突破 |
+| `spreadArbitrage` | 套利策略 | 价差 |
+| `ctaTurtleBreakout` | 海龟策略 | Donchian |
+| `ctaMacdTrend` | MACD 趋势 | MACD |
+| `ctaRsiReversal` | RSI 反转 | RSI |
+| `ctaBollingerBreakout` | BB 突破 | BB |
+| `ctaKeltnerChannel` | Keltner 通道 | EMA + ATR |
+
+### CTA 通道策略（5 个） — `cta-channel.ts`
+
+| 策略 ID | 名称 | 核心指标 |
+| ------- | ---- | -------- |
+| `ctaRBreaker` | R-Breaker | 支撑阻力 |
+| `ctaAberration` | Aberration | BB |
+| `ctaTtmSqueeze` | TTM Squeeze | BB + Keltner |
+| `ctaDmiAdx` | DMI/ADX | DMI |
+| `ctaParabolicSar` | SAR 跟踪 | Parabolic SAR |
+
+### CTA 指标策略（12 个） — `cta-indicator.ts`
+
+| 策略 ID | 名称 | 核心指标 |
+| ------- | ---- | -------- |
+| `ctaVolatilityTarget` | 波动率目标 | ATR |
+| `ctaMomentumRotation` | 动量轮动 | ROC |
+| `ctaWilliamsR` | Williams %R | Williams %R |
+| `ctaObvTrend` | OBV 趋势 | OBV |
+| `ctaIchimoku` | 一目均衡图 | Ichimoku |
+| `ctaKdj` | KDJ 随机 | Stochastic |
+| `ctaMeanReversionZScore` | Z-Score 回归 | Z-Score |
+| `ctaGridTrading` | 网格交易 | 价格网格 |
+| `ctaMultiMaConvergence` | 多均线收敛 | Multi-SMA |
+| `ctaDonchianMidReversion` | Donchian 中线 | rollingHighLow |
+| `ctaPivotPoint` | 枢轴点 | Pivot |
+| `ctaChandelierExit` | 吊灯止损 | ATR |
+
+### CTA 形态策略（10 个） — `cta-pattern.ts`
+
+| 策略 ID | 名称 | 核心指标 |
+| ------- | ---- | -------- |
+| `ctaRangeBreakout` | 日内突破 | 区间突破 |
+| `ctaVwapReversion` | VWAP 回归 | VWAP |
+| `ctaDoubleBottom` | 双底形态 | 形态识别 |
+| `ctaRocMomentum` | ROC 动量 | ROC |
+| `ctaCciDivergence` | CCI 背离 | CCI |
+| `ctaEmaCrossover` | EMA 交叉 | EMA |
+| `ctaAtrTrailing` | ATR 跟踪 | ATR |
+| `ctaStochasticRsi` | 随机RSI | Stochastic + RSI |
+| `ctaMacdHistogramReversal` | MACD柱反转 | MACD |
+| `ctaBollingerBandwidth` | BB带宽挤压 | BB Bandwidth |
 
 ---
 
@@ -399,6 +490,6 @@ export function tripleSignalStrategy(): BuiltinStrategy {
 
 ---
 
-**最后更新**: 2026-03-26  
-**覆盖指标**: 16 个核心指标  
-**推荐策略**: 50+ 内置策略
+**文档版本**: 2026-04-03
+**覆盖指标**: 15 个核心指标
+**内置策略**: 52 个（9 基础 + 8 高阶 + 8 CTA趋势 + 5 CTA通道 + 12 CTA指标 + 10 CTA形态）

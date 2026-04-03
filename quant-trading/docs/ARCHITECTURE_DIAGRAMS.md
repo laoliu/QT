@@ -206,16 +206,18 @@ flowchart LR
   API --> QT
   QT --> REG
 
-  subgraph Tools[AI Tools 层]
+  subgraph Tools[AI Tools 层 — 51+ 工具]
     T1[market_data / stock_screen]
-    T2[backtest / strategy_*]
+    T2[backtest / strategy_* / strategy_router]
     T3[portfolio / live_trading / conditional_order]
-    T4[options_* / risk_analysis]
-    T5[fund_flow / sector_* / sentiment]
+    T4[options_* / risk_analysis / stochastic_pricing]
+    T5[fund_flow / sector_* / sentiment / dragon_tiger]
     T6[data_cache / scheduled_task / price_alert]
+    T7[watchlist / favorites / trade_journal]
+    T8[macro_data / earnings_calendar / institutional_flow]
   end
 
-  subgraph Services[后台服务层]
+  subgraph Services[后台服务层 — 60+ 服务]
     S1[LiveEngine]
     S2[DataSyncService]
     S3[SignalMonitor / PnLMonitor]
@@ -225,6 +227,7 @@ flowchart LR
     S7[PriceAlertService]
     S8[TaskScheduler]
     S9[ReceiverService]
+    S10[45+ 其他服务\nStores/Monitors/Validators]
   end
 
   subgraph Storage[状态与存储]
@@ -642,4 +645,5 @@ flowchart LR
 
 ---
 
-_本文件由 GitHub Copilot 辅助生成，基于 2026-03-26 版本代码分析。_
+**文档版本**: 2026-04-03
+**项目**: OpenClaw Quant-Trading v1.0

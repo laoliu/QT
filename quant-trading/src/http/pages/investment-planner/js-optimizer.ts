@@ -346,7 +346,8 @@ function showStrategyDetail(idx){
   var detail=r.backtestDetail;
   if(detail&&detail.equityCurve&&detail.equityCurve.length>1){
     setTimeout(function(){
-      drawEquityCurve('sd-equity-canvas',detail.equityCurve,[{label:label,color:'#58a6ff'}],_dailyPickState.input?_dailyPickState.input.initialCapital:500000);
+      var cap=_dailyPickState.input?_dailyPickState.input.initialCapital:500000;
+      drawStockBtEquityCurve('sd-equity-canvas',detail.equityCurve,detail.trades||[],cap,label);
     },50);
   }else{
     var ec=document.getElementById('sd-equity-canvas');

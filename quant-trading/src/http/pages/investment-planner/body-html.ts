@@ -1003,6 +1003,10 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-divergence" checked style="vertical-align:middle;margin-right:4px">MACD背离</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="volume-confirmation" checked style="vertical-align:middle;margin-right:4px">成交量确认</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="gated" checked style="vertical-align:middle;margin-right:4px">条件门控</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="scored" checked style="vertical-align:middle;margin-right:4px">加权仓位</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="mean-reversion" checked style="vertical-align:middle;margin-right:4px">均值回归</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-confirmation" checked style="vertical-align:middle;margin-right:4px">MACD确认</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-kdj" checked style="vertical-align:middle;margin-right:4px">KDJ随机</label>
         <span id="dp-composed-strategies"></span>
       </div>
       <div class="form-row">

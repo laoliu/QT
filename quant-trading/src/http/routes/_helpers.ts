@@ -63,6 +63,10 @@ export const DAILY_PICK_STRATEGIES = [
   "macd-divergence",
   "volume-confirmation",
   "gated",
+  "scored",
+  "mean-reversion",
+  "macd-confirmation",
+  "cta-kdj",
 ] as const;
 
 export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
@@ -86,6 +90,10 @@ export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
   "macd-divergence": "MACD背离",
   "volume-confirmation": "成交量确认",
   gated: "条件门控",
+  scored: "加权仓位",
+  "mean-reversion": "均值回归",
+  "macd-confirmation": "MACD确认",
+  "cta-kdj": "KDJ随机",
 };
 
 export const CTA_SCREEN_STRATEGY_MAP: Record<string, string> = {
@@ -102,6 +110,10 @@ export const CTA_SCREEN_STRATEGY_MAP: Record<string, string> = {
   "macd-divergence": "mixed",
   "volume-confirmation": "momentum",
   gated: "mixed",
+  scored: "mixed",
+  "mean-reversion": "swing",
+  "macd-confirmation": "mixed",
+  "cta-kdj": "swing",
 };
 
 // ── Tick strategy helpers ────────────────────────────────────────

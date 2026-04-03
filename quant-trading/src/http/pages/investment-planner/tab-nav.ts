@@ -59,6 +59,11 @@ export const TAB_NAV_SCRIPT = `
     /* update body class for styling */
     document.body.classList.remove('mode-paper','mode-live');
     document.body.classList.add('mode-'+mode);
+    /* update nav-guide visibility */
+    var gp=document.querySelector('.nav-guide-paper');
+    var gl=document.querySelector('.nav-guide-live');
+    if(gp)gp.style.display=mode==='paper'?'':'none';
+    if(gl)gl.style.display=mode==='live'?'':'none';
   }
   window._applyViewMode=applyViewMode;
 

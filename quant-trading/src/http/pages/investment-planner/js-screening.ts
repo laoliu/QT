@@ -3,7 +3,7 @@ export function getScreeningJs(): string {
   return `
 function refreshPortfolio(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('portfolio-kpis').innerHTML=kpiHtml('⚠️','请先生成投资计划');
+    document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
     return;
   }
   toast('🔄 刷新持仓行情…');
@@ -390,7 +390,7 @@ function loadScreenerHistory(){
 /* ══════ REBALANCE ══════ */
 function runRebalance(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    toast('⚠️ 请先生成投资计划');return;
+    toast('⚠️ 请先生成投资计划');_activateTab('plan');history.pushState(null,null,'#plan');return;
   }
   var btn=document.getElementById('btn-rebalance');
   btn.disabled=true;btn.textContent='⏳ 正在分析…';
@@ -481,7 +481,7 @@ function renderRebalance(d){
 /* ══════ SIGNALS ══════ */
 function loadSignals(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('signal-kpis').innerHTML=kpiHtml('⚠️','请先生成投资计划并刷新持仓');
+    document.getElementById('signal-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划并刷新持仓</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
     return;
   }
   // Refresh portfolio to get latest signals
@@ -535,7 +535,7 @@ function loadSignals(){
 /* ══════ MILESTONES ══════ */
 function loadMilestones(){
   if(!currentPlan||!currentPlan.milestones){
-    document.getElementById('milestone-kpis').innerHTML=kpiHtml('⚠️','请先生成投资计划');
+    document.getElementById('milestone-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
     return;
   }
   var plan=currentPlan.plan;

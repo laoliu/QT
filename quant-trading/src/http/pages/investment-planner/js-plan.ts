@@ -155,7 +155,7 @@ function updatePlanVersionBadge(){
 }
 
 function planStocksToRecommend(){
-  if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){toast('⚠️ 请先生成投资计划');return}
+  if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){toast('⚠️ 请先生成投资计划');_activateTab('plan');history.pushState(null,null,'#plan');return}
   var codes=currentPlan.portfolio.map(function(p){return p.symbol}).join(',');
   document.getElementById('rec-symbols').value=codes;
   localStorage.setItem('openclaw-rec-symbols',codes);

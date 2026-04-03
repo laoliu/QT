@@ -13,6 +13,18 @@ header h1{font-size:18px;font-weight:600}
 .mode-select option{background:var(--bg2);color:var(--text)}
 .mode-paper .mode-select{border-color:var(--green);color:var(--green)}
 .mode-live .mode-select{border-color:var(--red);color:var(--red)}
+.nav-guide{margin-bottom:16px}
+.nav-guide-paper,.nav-guide-live{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:10px}
+.nav-guide-title{font-size:14px;font-weight:600;display:block;margin-bottom:10px}
+.nav-guide-btns{display:flex;gap:10px;flex-wrap:wrap}
+.nav-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;transition:all .2s;font-weight:500}
+.nav-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+.nav-btn-sim{border-color:rgba(210,153,34,.3)}
+.nav-btn-sim:hover{border-color:#d29922;color:#d29922;background:rgba(210,153,34,.1)}
+.nav-btn-live{border-color:rgba(63,185,80,.3)}
+.nav-btn-live:hover{border-color:#3fb950;color:#3fb950;background:rgba(63,185,80,.1)}
+.mode-paper .nav-guide-live{display:none}
+.mode-live .nav-guide-paper{display:none}
 .tabs{display:flex;gap:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;align-items:flex-end}
 .tab-group{display:flex;gap:0;align-items:flex-end;position:relative}
 .tab-group+.tab-group{margin-left:2px}

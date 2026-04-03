@@ -8,6 +8,11 @@ header h1{font-size:18px;font-weight:600}
 .header-right{display:flex;align-items:center;gap:12px;font-size:13px}
 .header-right a{color:var(--accent);text-decoration:none}
 .header-right a:hover{text-decoration:underline}
+.mode-select{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;outline:none;transition:border-color .2s}
+.mode-select:focus{border-color:var(--accent)}
+.mode-select option{background:var(--bg2);color:var(--text)}
+.mode-paper .mode-select{border-color:var(--green);color:var(--green)}
+.mode-live .mode-select{border-color:var(--red);color:var(--red)}
 .tabs{display:flex;gap:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:0 12px;overflow-x:auto;align-items:flex-end}
 .tab-group{display:flex;gap:0;align-items:flex-end;position:relative}
 .tab-group+.tab-group{margin-left:2px}

@@ -11,17 +11,20 @@ export function getPlannerBodyHtml(b: string): string {
 <header>
   <h1>📈 投资规划系统</h1>
   <div class="header-right">
-    <span id="global-mode-badge" style="font-size:12px;padding:2px 10px;border-radius:10px;font-weight:600;display:none"></span>
+    <select id="global-mode-select" class="mode-select">
+      <option value="paper">🟢 模拟盘</option>
+      <option value="live">🔴 实盘</option>
+    </select>
     <a href="${b}/quant/dashboard/ui">📊 交易仪表盘</a>
     <span style="color:var(--text-dim)" id="clock"></span>
   </div>
 </header>
 <div class="tabs">
-  <div class="tab-group">
+  <div class="tab-group" data-mode="shared">
     <span class="tab-group-label">规划</span>
     <div class="tab active" data-tab="plan">📋 制定计划</div>
   </div>
-  <div class="tab-group">
+  <div class="tab-group" data-mode="paper">
     <span class="tab-group-label">研究 · 模拟</span>
     <div class="tab tab-sim" data-tab="screen">🔍 选股筛选</div>
     <div class="tab tab-sim" data-tab="institution">🏦 机构行为</div>
@@ -30,7 +33,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-sim" data-tab="pf-backtest">📊 持仓回测</div>
     <div class="tab tab-sim" data-tab="portfolio">💼 模拟持仓</div>
   </div>
-  <div class="tab-group">
+  <div class="tab-group" data-mode="live">
     <span class="tab-group-label">实盘 · 操作</span>
     <div class="tab tab-live" data-tab="recommend">🎯 建仓推荐</div>
     <div class="tab tab-live" data-tab="rebalance">⚖️ 调仓建议</div>

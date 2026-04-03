@@ -98,33 +98,32 @@ function loadComposedStrategies(){
   }).catch(function(){/* compositions not available */});
 }
 
-/* ══════ GLOBAL MODE INDICATOR ══════ */
+/* ══════ VIEW MODE SELECTOR (combo box) ══════ */
 var _cachedBrokerMode=null;
 function refreshGlobalMode(){
   api('/quant/admin/api/engine-status').then(function(d){
     var isLive=d.brokerType&&d.brokerType!=='paper';
     _cachedBrokerMode=isLive?d.brokerType:'paper';
-    var badge=document.getElementById('global-mode-badge');
-    if(badge){
-      badge.style.display='inline-block';
-      if(isLive){
-        badge.style.background='rgba(248,81,73,.15)';
-        badge.style.color='var(--red)';
-        badge.style.border='1px solid var(--red)';
-        badge.textContent='⚠ 实盘模式 ('+(_cachedBrokerMode||'live')+')';
-      }else{
-        badge.style.background='rgba(13,148,136,.12)';
-        badge.style.color='var(--green)';
-        badge.style.border='1px solid var(--green)';
-        badge.textContent='🟢 模拟模式';
-      }
-    }
     updateRebalanceModeHint(isLive,d.brokerType);
-  }).catch(function(){
-    var badge=document.getElementById('global-mode-badge');
-    if(badge)badge.style.display='none';
-  });
+  }).catch(function(){});
 }
+
+/* ── mode combo handler ── */
+(function(){
+  var sel=document.getElementById('global-mode-select');
+  if(sel){
+    sel.addEventListener('change',function(){
+      var mode=sel.value;
+      localStorage.setItem('qt-view-mode',mode);
+      if(window._applyViewMode)window._applyViewMode(mode);
+      /* load data for the default tab of this mode */
+      var activeTab=document.querySelector('.tab.active');
+      if(activeTab)_onTabDataLoad(activeTab.dataset.tab);
+      refreshGlobalMode();
+    });
+  }
+})();
+
 function updateRebalanceModeHint(isLive,brokerType){
   var el=document.getElementById('rebalance-mode-hint');
   if(!el)return;

@@ -98,7 +98,7 @@ describe("PriceAlertService", () => {
   });
 
   it("repeating alert stays active after trigger", async () => {
-    const service = new PriceAlertService();
+    const service = new PriceAlertService({ repeatCooldownMs: 0 });
     service.setQuoteFn(async () => ({ price: 2100, changePct: 1.5, volume: 50000 }));
 
     service.addAlert({

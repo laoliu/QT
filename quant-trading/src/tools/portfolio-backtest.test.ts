@@ -2,6 +2,8 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 /**
  * Tests for the portfolio_backtest AI tool.
  */
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createPortfolioBacktestTool } from "./portfolio-backtest.js";
 
@@ -29,7 +31,11 @@ function fakeApi(): OpenClawPluginApi {
 }
 
 describe("portfolio_backtest tool", () => {
-  const tool = createPortfolioBacktestTool(fakeApi(), { dataProvider: "demo" });
+  // Use a temp dataDir so tests don't pick up real ~/.openclaw portfolio
+  const tool = createPortfolioBacktestTool(fakeApi(), {
+    dataProvider: "demo",
+    dataDir: path.join(os.tmpdir(), `qt-test-${Date.now()}`),
+  } as never);
 
   it("should have correct name and description", () => {
     expect(tool.name).toBe("portfolio_backtest");

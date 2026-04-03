@@ -125,6 +125,7 @@ canvas{width:100%!important;height:100%!important}
             <th>夏普比率</th>
             <th>胜率</th>
             <th>交易次数</th>
+            <th>综合分</th>
           </tr>
         </thead>
         <tbody id="comparison-tbody"></tbody>
@@ -295,6 +296,7 @@ function renderResults(data){
     row+='<td>'+fmt(r.sharpeRatio)+'</td>';
     row+='<td>'+fmt(r.winRate)+'%</td>';
     row+='<td>'+(r.totalTrades||0)+'</td>';
+    row+='<td style="font-weight:600;color:var(--yellow,#e3b341)">'+fmt(r.compositeScore)+'</td>';
     row+='</tr>';
     tbody.innerHTML+=row;
   });

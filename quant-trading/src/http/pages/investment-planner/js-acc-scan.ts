@@ -13,7 +13,7 @@ function detectAccumulation(){
   document.getElementById('acc-scan-results').style.display='none';
   document.getElementById('acc-top3-results').style.display='none';
   document.getElementById('acc-detail').style.display='none';
-  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'detect',symbol:symbol,lookback:lookback,as_of_date:asOfDate})})
+  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'detect',symbol:symbol,lookback:lookback,as_of_date:asOfDate}),_timeout:60000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🔍 检测吸筹';
       if(d.error){document.getElementById('acc-status').textContent='❌ '+d.error;return;}
@@ -35,7 +35,7 @@ function detailAccumulation(){
   document.getElementById('acc-result').style.display='none';
   document.getElementById('acc-top3-results').style.display='none';
   document.getElementById('acc-detail').style.display='none';
-  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'detail',symbol:symbol,lookback:lookback,as_of_date:asOfDate})})
+  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'detail',symbol:symbol,lookback:lookback,as_of_date:asOfDate}),_timeout:60000})
     .then(function(d){
       if(d.error){document.getElementById('acc-status').textContent='❌ '+d.error;return;}
       renderAccResult(d);
@@ -59,7 +59,7 @@ function scanAccumulation(){
   document.getElementById('acc-scan-results').style.display='none';
   document.getElementById('acc-top3-results').style.display='none';
   document.getElementById('acc-detail').style.display='none';
-  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'scan',symbols:symbols,lookback:lookback,min_confidence:minScore,as_of_date:asOfDate})})
+  api('/quant/admin/api/chip-accumulation',{method:'POST',body:JSON.stringify({action:'scan',symbols:symbols,lookback:lookback,min_confidence:minScore,as_of_date:asOfDate}),_timeout:120000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🔎 批量扫描';
       if(d.error){document.getElementById('acc-status').textContent='❌ '+d.error;return;}
@@ -90,7 +90,7 @@ function scanAccumulationTop3(opts){
   document.getElementById('acc-result').style.display='none';
   document.getElementById('acc-top3-results').style.display='none';
   document.getElementById('acc-detail').style.display='none';
-  api('/quant/admin/api/chip-accumulation/top3',{method:'POST',body:JSON.stringify({symbols:symbols,lookback:lookback,min_confidence:minScore,evaluate_count:20,as_of_date:asOfDate,pre_accum_days:thresholds.pre_accum_days,pre_accum_count_min:thresholds.pre_accum_count_min,pre_accum_volume_ratio:thresholds.pre_accum_volume_ratio,rush_change_pct:thresholds.rush_change_pct,rush_volume_ratio:thresholds.rush_volume_ratio,rush_turnover_pct:thresholds.rush_turnover_pct,pre_surge_chip_min:thresholds.pre_surge_chip_min,pre_surge_volume_price_min:thresholds.pre_surge_volume_price_min,pre_surge_turnover_min:thresholds.pre_surge_turnover_min})})
+  api('/quant/admin/api/chip-accumulation/top3',{method:'POST',body:JSON.stringify({symbols:symbols,lookback:lookback,min_confidence:minScore,evaluate_count:20,as_of_date:asOfDate,pre_accum_days:thresholds.pre_accum_days,pre_accum_count_min:thresholds.pre_accum_count_min,pre_accum_volume_ratio:thresholds.pre_accum_volume_ratio,rush_change_pct:thresholds.rush_change_pct,rush_volume_ratio:thresholds.rush_volume_ratio,rush_turnover_pct:thresholds.rush_turnover_pct,pre_surge_chip_min:thresholds.pre_surge_chip_min,pre_surge_volume_price_min:thresholds.pre_surge_volume_price_min,pre_surge_turnover_min:thresholds.pre_surge_turnover_min}),_timeout:300000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🏆 复合前三';
       if(d.error){document.getElementById('acc-status').textContent='❌ '+d.error;return;}

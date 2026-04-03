@@ -47,7 +47,7 @@ function runSingleBacktest(){
   document.getElementById('bt-single-results').style.display='none';
   document.getElementById('bt-compare-results').style.display='none';
   document.getElementById('bt-multi-period-results').style.display='none';
-  api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(p)}).then(function(d){
+  api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(p),_timeout:120000}).then(function(d){
     setBtLoading(false);
     if(d.error){toast('❌ '+d.error);return;}
     renderSingleBacktest(d);
@@ -61,7 +61,7 @@ function runCompareBacktest(){
   document.getElementById('bt-single-results').style.display='none';
   document.getElementById('bt-compare-results').style.display='none';
   document.getElementById('bt-multi-period-results').style.display='none';
-  api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(p)}).then(function(d){
+  api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(p),_timeout:120000}).then(function(d){
     setBtLoading(false);
     if(d.error){toast('❌ '+d.error);return;}
     renderCompareBacktest(d);
@@ -246,7 +246,7 @@ function runMultiPeriodBacktest(){
       stamp_tax:p.stamp_tax,
       symbols:p.symbols
     };
-    api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(body)}).then(function(d){
+    api('/quant/admin/api/backtest',{method:'POST',body:JSON.stringify(body),_timeout:120000}).then(function(d){
       allResults.push({period:period,data:d});
       runNext(idx+1);
     }).catch(function(){

@@ -31,6 +31,7 @@ import { getInstPresetsJs } from "./js-inst-presets.js";
 import { getInstitutionJs } from "./js-institution.js";
 import { getOptimizerJs } from "./js-optimizer.js";
 import { getPlanJs } from "./js-plan.js";
+import { getPortfolioBacktestJs } from "./js-portfolio-backtest.js";
 import { getScreeningJs } from "./js-screening.js";
 import { getStateJs } from "./js-state.js";
 import { getTabInitJs } from "./js-tab-init.js";
@@ -57,5 +58,6 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getDailyPickJs(),
     getEngineJs(),
     getAccScanJs(),
+    getPortfolioBacktestJs(),
   ].join("\n");
 }

@@ -38,7 +38,7 @@ function generatePlan(){
     composed_strategy_id:composedId
   };
 
-  api('/quant/admin/api/investment-plan',{method:'POST',body:JSON.stringify(body)}).then(function(d){
+  api('/quant/admin/api/investment-plan',{method:'POST',body:JSON.stringify(body),_timeout:60000}).then(function(d){
     btn.disabled=false;btn.textContent='🎯 生成投资计划';
     currentPlan=d;
     currentPlanVersion=null;

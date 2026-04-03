@@ -168,6 +168,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
             sharpeRatio: r.sharpeRatio,
             winRate: r.winRate,
             totalTrades: r.totalTrades,
+            compositeScore: r.compositeScore,
           })),
           bestStrategy: batchResult.bestStrategy,
           totalRuns: batchResult.totalRuns,

@@ -361,7 +361,7 @@ function fetchInstitutionMoat(symbol,name){
   symbol=String(symbol||'').trim();
   if(!symbol)return Promise.resolve({score:null,grade:'',confidenceLevel:''});
   if(institutionMoatCache[symbol])return Promise.resolve(institutionMoatCache[symbol]);
-  return api('/quant/admin/api/tech-moat',{method:'POST',body:JSON.stringify({symbol:symbol,company_name:name||''})}).then(function(d){
+  return api('/quant/admin/api/tech-moat',{method:'POST',body:JSON.stringify({symbol:symbol,company_name:name||''}),_timeout:60000}).then(function(d){
     var value={
       score:d&&d.moatScore!=null?Number(d.moatScore):null,
       grade:String(d&&d.moatGrade||''),
@@ -819,7 +819,7 @@ function scanInstitutionActivity(){
   persistInstitutionThresholds(body,presetKey);
   setInstitutionPresetLabel(presetKey);
   if(symbols.length)body.symbols=symbols;
-  api('/quant/admin/api/institution-activity/scan',{method:'POST',body:JSON.stringify(body)}).then(function(d){
+  api('/quant/admin/api/institution-activity/scan',{method:'POST',body:JSON.stringify(body),_timeout:360000}).then(function(d){
     btn.disabled=false;btn.textContent='🔎 扫描机构行为';
     institutionScanCache=d;
     currentInstitutionTop3HistoryId=null;
@@ -930,6 +930,7 @@ function loadInstitutionDetail(symbol){
   document.getElementById('inst-detail-empty').scrollIntoView({behavior:'smooth',block:'start'});
   api('/quant/admin/api/institution-activity/detail',{
     method:'POST',
+    _timeout:60000,
     body:JSON.stringify({
       symbol:symbol,
       as_of_date:dateVal,

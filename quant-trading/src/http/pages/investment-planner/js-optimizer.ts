@@ -32,7 +32,7 @@ function runOptimizer(){
   };
   if(endVal)body.end_date=endVal;
 
-  api('/quant/admin/api/optimize-pool',{method:'POST',body:JSON.stringify(body)})
+  api('/quant/admin/api/optimize-pool',{method:'POST',body:JSON.stringify(body),_timeout:600000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🔬 开始寻优（约3-8分钟）';
       if(d.error){statusEl.textContent='寻优失败: '+d.error;toast('❌ '+d.error);return;}

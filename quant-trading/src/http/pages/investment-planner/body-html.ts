@@ -26,6 +26,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-sim" data-tab="institution">🏦 机构行为</div>
     <div class="tab tab-sim" data-tab="accumulation">🧲 主力吸筹</div>
     <div class="tab tab-sim" data-tab="backtest">🧪 策略回测</div>
+    <div class="tab tab-sim" data-tab="pf-backtest">📊 持仓回测</div>
     <div class="tab tab-sim" data-tab="portfolio">💼 模拟持仓</div>
   </div>
   <div class="tab-group">
@@ -1292,6 +1293,88 @@ export function getPlannerBodyHtml(b: string): string {
           </table>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Portfolio Backtest Tab ═══ -->
+<div class="tab-content" id="tab-pf-backtest">
+  <div class="card" style="margin-bottom:14px">
+    <h3>📊 持仓策略回测</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px">输入已持有的股票，用多种策略组合回测，对比不同策略的盈利表现</p>
+
+    <!-- 参数设置区 -->
+    <div class="pbt-form-section">
+      <h4>⚙️ 回测参数</h4>
+      <div class="pbt-input-group">
+        <div class="pbt-field" style="grid-column:span 2">
+          <label>股票代码 <span style="font-size:10px;opacity:.7">逗号分隔</span></label>
+          <input type="text" id="pbt-symbols" placeholder="600519,000858,300750" title="逗号分隔多只股票代码">
+        </div>
+        <div class="pbt-field">
+          <label>起始日期</label>
+          <input type="text" id="pbt-start" placeholder="YYYY-MM-DD">
+        </div>
+        <div class="pbt-field">
+          <label>结束日期</label>
+          <input type="text" id="pbt-end" placeholder="YYYY-MM-DD">
+        </div>
+        <div class="pbt-field">
+          <label>初始资金</label>
+          <input type="number" id="pbt-capital" value="100000">
+        </div>
+        <div class="pbt-period-btns">
+          <button class="btn btn-sm" onclick="setPbtPeriod(3)">近3月</button>
+          <button class="btn btn-sm" onclick="setPbtPeriod(6)">近半年</button>
+          <button class="btn btn-sm active" onclick="setPbtPeriod(12)">近1年</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 策略选择区 -->
+    <div class="pbt-form-section">
+      <h4>📋 选择策略 <span style="font-size:11px;color:var(--text-dim);font-weight:normal;margin-left:4px">(点击选中/取消，至少选1个)</span>
+        <span style="flex:1"></span>
+        <input type="text" class="pbt-search" id="pbt-search" placeholder="🔍 搜索策略..." oninput="pbtFilterStrategies(this.value)">
+      </h4>
+      <div id="pbt-strategy-chips"></div>
+    </div>
+
+    <div class="pbt-actions">
+      <button class="btn btn-primary" id="btn-pbt-run" onclick="runPortfolioBacktest()">🚀 开始回测</button>
+      <button class="btn btn-sm" onclick="pbtSelectAll()">全选</button>
+      <button class="btn btn-sm" onclick="pbtClearAll()">清除</button>
+      <button class="btn btn-sm" onclick="pbtSelectRecommended()">⭐ 推荐组合</button>
+      <span id="pbt-selected-count" style="font-size:11px;color:var(--text-dim)"></span>
+      <span style="flex:1"></span>
+      <span id="pbt-status" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+    <div class="pbt-hint">
+      💡 回测基于<strong>日K线数据</strong>，包含真实A股费率：佣金万3、印花税万5、过户费万0.2、滑点千1。多只股票时资金等权分配。
+    </div>
+  </div>
+
+  <div id="pbt-results" style="display:none">
+    <div class="kpi-row" id="pbt-kpis"></div>
+    <div class="card" style="margin-bottom:14px">
+      <h3>📊 策略对比排名</h3>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+        📐 <strong>综合评分公式</strong>：总收益×1.0 + 年化收益×0.35 + 夏普比率×12 + 胜率×0.28 + min(盈亏比,4)×4 − 最大回撤×0.85 + min(交易次数,120)×0.03
+      </div>
+      <div style="overflow-x:auto">
+        <table id="pbt-comparison-table">
+          <thead><tr><th>排名</th><th>策略</th><th title="综合评分 = 总收益×1.0 + 年化收益×0.35 + 夏普比率×12 + 胜率×0.28 + min(盈亏比,4)×4 − 最大回撤×0.85 + min(交易次数,120)×0.03">综合评分 ⓘ</th><th>总收益</th><th>年化收益</th><th>最终市值</th><th>盈亏</th><th>最大回撤</th><th>夏普比率</th><th>胜率</th><th>交易次数</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="pbt-best-card" style="display:none;margin-bottom:14px">
+      <h3>🏆 最优策略推荐</h3>
+      <div id="pbt-best-content"></div>
+    </div>
+    <div class="card" id="pbt-failed-card" style="display:none">
+      <h3>⚠️ 失败的策略</h3>
+      <div id="pbt-failed-content"></div>
     </div>
   </div>
 </div>

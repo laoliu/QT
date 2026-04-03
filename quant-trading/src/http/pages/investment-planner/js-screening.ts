@@ -7,7 +7,7 @@ function refreshPortfolio(){
     return;
   }
   toast('🔄 刷新持仓行情…');
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan})}).then(function(d){
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan}),_timeout:60000}).then(function(d){
     var s=d.summary;
     document.getElementById('portfolio-kpis').innerHTML=[
       kpiHtml('¥'+numInt(s.totalCost),'总成本'),
@@ -74,7 +74,7 @@ function runScreening(){
     top_n:Number(document.getElementById('screen-top-n').value)||20
   };
 
-  api('/quant/admin/api/investment-screen',{method:'POST',body:JSON.stringify(body)}).then(function(d){
+  api('/quant/admin/api/investment-screen',{method:'POST',body:JSON.stringify(body),_timeout:120000}).then(function(d){
     el.innerHTML='<span style="color:var(--green)">✅ 筛选完成 ('+esc(d.strategy)+' / '+esc(d.riskProfile)+')</span>';
     renderScreenResults(d);
     // Cache results so browser back restores them
@@ -241,7 +241,7 @@ function runRebalance(){
     newCandidates:symVal?symVal.split(',').map(function(s){return s.trim()}).filter(Boolean):[]
   };
 
-  api('/quant/admin/api/rebalance',{method:'POST',body:JSON.stringify(body)})
+  api('/quant/admin/api/rebalance',{method:'POST',body:JSON.stringify(body),_timeout:60000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🔄 生成调仓建议';
       if(d.error){statusEl.textContent='分析失败: '+d.error;toast('❌ '+d.error);return;}
@@ -320,7 +320,7 @@ function loadSignals(){
     return;
   }
   // Refresh portfolio to get latest signals
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan})}).then(function(d){
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan}),_timeout:60000}).then(function(d){
     var signals=d.signals||[];
     document.getElementById('signal-kpis').innerHTML=[
       kpiHtml(signals.length,'当前信号'),

@@ -98,7 +98,37 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .acc-top3-help-table th{color:var(--text-dim);font-weight:500;text-align:left;background:rgba(128,128,128,.08)}
 .acc-top3-help-table tr.current{background:rgba(88,166,255,.12)}
 .acc-top3-help-table tr.current td:first-child{color:var(--accent);font-weight:600}
-@media(max-width:700px){.cards{grid-template-columns:1fr}.kpi-row{flex-direction:column}.bt-compare-grid{grid-template-columns:1fr}}
+/* ── Strategy chips ── */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:5px 12px;border-radius:16px;font-size:12px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;user-select:none;transition:all .15s;line-height:1.4}
+.chip:hover{border-color:var(--accent);background:rgba(88,166,255,.08)}
+.chip.selected{background:rgba(88,166,255,.18);border-color:var(--accent);color:var(--accent);font-weight:500}
+.chip .chip-tag{font-size:10px;padding:1px 5px;border-radius:8px;background:rgba(188,140,255,.15);color:var(--purple);margin-left:2px}
+.chip.chip-rec::before{content:'★';margin-right:2px;font-size:10px;color:var(--yellow)}
+
+/* ── Strategy category group ── */
+.strat-group{margin-bottom:14px}
+.strat-group-title{font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center;gap:6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.strat-group-title .strat-group-icon{font-size:14px}
+.strat-group-title .strat-group-count{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--bg3);color:var(--text-dim)}
+.strat-group-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0}
+
+/* ── Portfolio backtest form improvements ── */
+.pbt-form-section{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.pbt-form-section h4{font-size:13px;margin:0 0 10px;display:flex;align-items:center;gap:6px}
+.pbt-input-group{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:end}
+.pbt-input-group .pbt-field{display:flex;flex-direction:column;gap:3px}
+.pbt-input-group .pbt-field label{font-size:11px;color:var(--text-dim)}
+.pbt-input-group .pbt-field input{width:100%}
+.pbt-period-btns{display:flex;gap:4px;align-items:center;margin-top:auto}
+.pbt-period-btns .btn{padding:3px 10px;font-size:11px;border-radius:12px}
+.pbt-period-btns .btn.active{background:rgba(88,166,255,.2);border-color:var(--accent);color:var(--accent)}
+.pbt-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.pbt-actions .btn-primary{padding:7px 20px;font-size:13px;border-radius:8px;font-weight:600}
+.pbt-hint{font-size:12px;color:var(--text-dim);margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:6px;border-left:3px solid var(--yellow);line-height:1.6}
+.pbt-search{background:var(--bg3);border:1px solid var(--border);border-radius:16px;padding:4px 12px;font-size:12px;color:var(--text);width:200px;transition:border-color .15s}
+.pbt-search:focus{border-color:var(--accent);outline:none}
+.up{color:var(--green)}.down{color:var(--red)}
+@media(max-width:700px){.cards{grid-template-columns:1fr}.kpi-row{flex-direction:column}.bt-compare-grid{grid-template-columns:1fr}.pbt-input-group{grid-template-columns:1fr}}
 @media(max-width:700px){.acc-top3-help-panel{left:auto;right:0;min-width:280px}}
 @media(prefers-reduced-motion:reduce){.acc-top3-help-panel{transition:none;transform:none}.acc-top3-help-panel.is-open{transform:none}}
 `;

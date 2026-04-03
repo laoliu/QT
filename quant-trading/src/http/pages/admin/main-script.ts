@@ -281,9 +281,25 @@ function ackAllAlerts(){api('/quant/api/alerts/acknowledge',{method:'POST',body:
 function clearAlerts(){if(!confirm('确认清空所有告警？'))return;api('/quant/api/alerts',{method:'DELETE'}).then(function(){toast('✅ 已清空');loadAlerts()})}
 
 /* ══════ TRADING ══════ */
+var adminViewMode = '';
+function switchAdminViewMode(mode){
+  adminViewMode = mode;
+  var sel=document.getElementById('adminModeSwitch');
+  if(sel){sel.style.background=mode==='live'?'rgba(63,185,80,0.15)':'rgba(210,153,34,0.15)';sel.style.color=mode==='live'?'#3fb950':'#d29922'}
+  loadTrading();
+}
+function adminModeParam(prefix){
+  if(!adminViewMode) return '';
+  return (prefix?'&':'?')+'mode='+adminViewMode;
+}
 function loadTrading(){
-  var tc=document.getElementById('trading-summary-cards');tc.innerHTML='';
-  api('/quant/api/portfolio').then(function(portfolio){
+  // Inject mode switcher if not present
+  var tc=document.getElementById('trading-summary-cards');
+  if(!document.getElementById('adminModeSwitch')){
+    tc.insertAdjacentHTML('beforebegin','<div style="margin-bottom:12px"><select id="adminModeSwitch" onchange="switchAdminViewMode(this.value)" style="padding:4px 12px;border-radius:6px;font-size:13px;font-weight:600;background:rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3);cursor:pointer"><option value="">当前模式</option><option value="paper">🟡 模拟盘</option><option value="live">🟢 实盘</option></select></div>');
+  }
+  tc.innerHTML='';
+  api('/quant/api/portfolio'+adminModeParam(false)).then(function(portfolio){
     if(portfolio&&portfolio.data){
       var p=portfolio.data;
       tc.innerHTML='<div class="kpi-row">'+[
@@ -300,7 +316,7 @@ function loadTrading(){
       }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无持仓</td></tr>';
     }
   }).catch(function(){});
-  api('/quant/api/orders').then(function(o){
+  api('/quant/api/orders'+adminModeParam(false)).then(function(o){
     var orders=o.data||o.orders||[];
     document.querySelector('#orders-table tbody').innerHTML=orders.slice(0,50).map(function(od){
       return '<tr><td style="white-space:nowrap">'+fmtTime(od.createdAt)+'</td><td>'+esc(od.symbol)+'</td><td>'+esc(od.direction)+'</td>'+
@@ -309,7 +325,7 @@ function loadTrading(){
         '<td>'+(od.status==='pending'?'<button class="btn btn-sm btn-danger" onclick="cancelOrder(\\''+esc(od.id)+'\\')">撤单</button>':'')+'</td></tr>';
     }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无委托</td></tr>';
   }).catch(function(){});
-  api('/quant/api/signals?limit=30').then(function(s){
+  api('/quant/api/signals?limit=30'+adminModeParam(true)).then(function(s){
     var sigs=s.data||s.signals||[];
     document.querySelector('#signals-table tbody').innerHTML=sigs.map(function(sg){
       return '<tr><td style="white-space:nowrap">'+fmtTime(sg.timestamp)+'</td><td>'+esc(sg.symbol)+'</td>'+

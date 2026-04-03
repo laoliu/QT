@@ -272,12 +272,44 @@ const quantTradingPlugin = {
     const logStore = new LogStore({ maxEntries: 2000 });
     api.logger = wrapLoggerWithStore(api.logger, logStore);
 
-    // ── Equity History (daily snapshots) ─────────────────────────
-    const equityHistory = new EquityHistory({
+    // ── Equity History (daily snapshots, separate for paper / live) ─
+    const equityHistoryPaper = new EquityHistory({
+      dataDir: config.dataDir ?? undefined,
+      maxSnapshots: 2000,
+      mode: "paper",
+    });
+    const equityHistoryLive = new EquityHistory({
+      dataDir: config.dataDir ?? undefined,
+      maxSnapshots: 2000,
+      mode: "live",
+    });
+    // Legacy file (no suffix) — load once for migration, then read-only
+    const equityHistoryLegacy = new EquityHistory({
       dataDir: config.dataDir ?? undefined,
       maxSnapshots: 2000,
     });
-    void equityHistory.load().then(() => equityHistory.startAutoSave(60_000));
+    void Promise.all([
+      equityHistoryPaper.load(),
+      equityHistoryLive.load(),
+      equityHistoryLegacy.load(),
+    ]).then(() => {
+      equityHistoryPaper.startAutoSave(60_000);
+      equityHistoryLive.startAutoSave(60_000);
+      // Migrate legacy data: if legacy has data but both new files are empty,
+      // copy legacy snapshots into paper history (sensible default)
+      if (equityHistoryLegacy.count > 0 && equityHistoryPaper.count === 0 && equityHistoryLive.count === 0) {
+        for (const snap of equityHistoryLegacy.getAll()) {
+          equityHistoryPaper.addSnapshot(snap);
+        }
+      }
+    });
+    // Active equity history — resolved dynamically based on current broker mode
+    const getActiveEquityHistory = () => {
+      const bt = liveEngine.broker?.brokerType;
+      return bt && bt !== "paper" ? equityHistoryLive : equityHistoryPaper;
+    };
+    // Alias for backward compat — routes and services that just need "the current one"
+    const equityHistory = equityHistoryPaper;
 
     // ── Benchmark Service ────────────────────────────────────────
     const benchmarkService = new BenchmarkService(config);
@@ -478,7 +510,8 @@ const quantTradingPlugin = {
 
     // Wire LiveEngine account sync to equity history + event bus
     liveEngine.setAccountSyncCallback((account, positions) => {
-      const snap = equityHistory.record(account, positions);
+      const activeEH = getActiveEquityHistory();
+      const snap = activeEH.record(account, positions);
       eventBus.emit("equity", {
         date: snap.date,
         equity: snap.equity,
@@ -1208,6 +1241,8 @@ const quantTradingPlugin = {
       backtestStore,
       eventBus,
       equityHistory,
+      equityHistoryPaper,
+      equityHistoryLive,
       benchmarkService,
       dataWarehouse,
       dataQualityValidator,

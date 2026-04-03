@@ -75,7 +75,7 @@ def _get_klines(symbol: str, start_date: str, end_date: str) -> list[dict]:
 
 
 def _get_fundamentals(symbol: str) -> dict | None:
-    """Fetch latest fundamentals from SQLite cache."""
+    """Fetch latest fundamentals from SQLite cache, with on-demand fallback."""
     try:
         conn = sqlite3.connect(CACHE_DB)
         conn.row_factory = sqlite3.Row
@@ -86,6 +86,10 @@ def _get_fundamentals(symbol: str) -> dict | None:
         ).fetchone()
         conn.close()
         if not row:
+            # On-demand: fetch from Xueqiu and cache
+            fetched = _fetch_fundamentals_on_demand(symbol)
+            if fetched:
+                return fetched
             return None
         d = dict(row)
         # Merge data_json if present — it often has richer data than columns
@@ -101,6 +105,141 @@ def _get_fundamentals(symbol: str) -> dict | None:
         return d
     except Exception:
         return None
+
+
+def _fetch_fundamentals_on_demand(symbol: str) -> dict | None:
+    """Fetch fundamentals with multi-source fallback: 东财个股 → 东财快照 → 雪球."""
+    sources = [
+        ("东财个股", _fetch_via_em_individual),
+        ("东财快照", _fetch_via_em_spot),
+        ("雪球", _fetch_via_xueqiu),
+    ]
+    for name, fetcher in sources:
+        try:
+            result = fetcher(symbol)
+            if result and (result.get("total_market_val") or result.get("total_market_val_yi")):
+                # Cache it for future use
+                from cache.stock_cache import get_cache
+                cache = get_cache()
+                cache.save_fundamentals({symbol: result})
+                print(f"[profiler] 按需获取 {symbol} 基本面 (来源: {name}) 并缓存", file=sys.stderr)
+                return result
+        except Exception as e:
+            print(f"[profiler] {name} 获取 {symbol} 失败: {e}", file=sys.stderr)
+            continue
+    return None
+
+
+def _fetch_via_em_individual(symbol: str) -> dict | None:
+    """东方财富个股信息 stock_individual_info_em — 稳定，轻量."""
+    import akshare as ak
+
+    df = ak.stock_individual_info_em(symbol=symbol)
+    if df is None or df.empty:
+        return None
+    info_map = dict(zip(df["item"], df["value"]))
+    result: dict[str, Any] = {}
+
+    _EM_INFO_MAP = {
+        "总市值": "total_market_val",
+        "流通市值": "circulating_market_val",
+        "行业": "industry",
+        "上市时间": "listing_date",
+        "总股本": "total_shares",
+        "流通股": "float_shares",
+    }
+    for cn_key, en_key in _EM_INFO_MAP.items():
+        val = info_map.get(cn_key)
+        if val is not None:
+            try:
+                fval = float(val)
+                result[en_key] = fval
+                if en_key == "total_market_val":
+                    result["total_market_val_yi"] = fval / 1e8
+                elif en_key == "circulating_market_val":
+                    result["circulating_market_val_yi"] = fval / 1e8
+            except (ValueError, TypeError):
+                result[en_key] = str(val)
+    return result if result else None
+
+
+def _fetch_via_em_spot(symbol: str) -> dict | None:
+    """东方财富全量快照 stock_zh_a_spot_em — 稳定，数据全，但拉取较重."""
+    import akshare as ak
+
+    df = ak.stock_zh_a_spot_em()
+    if df is None or df.empty:
+        return None
+    row = df[df["代码"] == symbol]
+    if row.empty:
+        return None
+    r = row.iloc[0]
+
+    result: dict[str, Any] = {}
+    _EM_SPOT_MAP = {
+        "总市值": "total_market_val",
+        "流通市值": "circulating_market_val",
+        "市盈率-动态": "pe",
+        "市净率": "pb",
+        "换手率": "turnover_rate",
+    }
+    for cn_key, en_key in _EM_SPOT_MAP.items():
+        val = r.get(cn_key)
+        if val is not None and str(val) not in ("", "nan", "-"):
+            try:
+                fval = float(val)
+                result[en_key] = fval
+                if en_key == "total_market_val":
+                    result["total_market_val_yi"] = fval / 1e8
+                elif en_key == "circulating_market_val":
+                    result["circulating_market_val_yi"] = fval / 1e8
+            except (ValueError, TypeError):
+                pass
+    return result if result else None
+
+
+def _fetch_via_xueqiu(symbol: str) -> dict | None:
+    """雪球 stock_individual_spot_xq — 数据最全(PE/PB/EPS/股息率)，但不够稳定."""
+    import akshare as ak
+
+    if symbol.startswith("6"):
+        xq_sym = f"SH{symbol}"
+    elif symbol.startswith(("0", "3")):
+        xq_sym = f"SZ{symbol}"
+    elif symbol.startswith(("4", "8", "9")):
+        xq_sym = f"BJ{symbol}"
+    else:
+        xq_sym = f"SH{symbol}"
+
+    _XQ_ITEM_MAP = {
+        "市盈率(动)": "pe", "市盈率(TTM)": "pe_ttm", "市盈率(静)": "pe_static",
+        "市净率": "pb", "每股收益": "eps", "每股净资产": "bvps",
+        "股息率(TTM)": "dividend_yield", "总市值": "total_market_val",
+        "流通值": "circulating_market_val", "52周最高": "week52_high",
+        "52周最低": "week52_low", "周转率": "turnover_rate",
+        "行业": "industry", "上市时间": "listing_date",
+    }
+
+    df = ak.stock_individual_spot_xq(symbol=xq_sym)
+    if df is None or df.empty:
+        return None
+
+    result: dict[str, Any] = {}
+    for _, row in df.iterrows():
+        item = str(row.get("item", ""))
+        value = row.get("value")
+        if item in _XQ_ITEM_MAP and value is not None:
+            en_key = _XQ_ITEM_MAP[item]
+            try:
+                fval = float(value)
+                result[en_key] = fval
+                if en_key == "total_market_val":
+                    result["total_market_val_yi"] = fval / 1e8
+                elif en_key == "circulating_market_val":
+                    result["circulating_market_val_yi"] = fval / 1e8
+            except (ValueError, TypeError):
+                result[en_key] = str(value)
+    return result if result else None
 
 
 def _get_stock_name(symbol: str) -> str:

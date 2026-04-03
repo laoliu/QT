@@ -52,10 +52,12 @@ function getPortfolioPath(config: QuantTradingConfig): string {
  * When a live engine with a real broker (e.g. QMT) is running,
  * returns the actual account data from the broker.
  * Falls back to the paper portfolio file or default values.
+ * @param liveOnly When true, skip paper fallback — return empty if broker isn't live QMT.
  */
 export async function handlePortfolioApi(
   config: QuantTradingConfig,
   getEngine?: () => LiveEngine | null,
+  liveOnly = false,
 ): Promise<Record<string, unknown>> {
   // Prefer live broker account data when available
   const engine = getEngine?.();
@@ -104,6 +106,22 @@ export async function handlePortfolioApi(
         },
       };
     }
+  }
+
+  // If caller only wants live data and we didn't get it from broker, return empty
+  if (liveOnly) {
+    return {
+      status: "ok",
+      source: "live",
+      data: {
+        id: "live",
+        name: "实盘组合",
+        cash: 0,
+        totalValue: 0,
+        positions: [],
+        message: "实盘未连接或无数据",
+      },
+    };
   }
 
   // Fallback: read paper portfolio from disk and enrich with live quotes
@@ -172,6 +190,101 @@ export async function handlePortfolioApi(
         positions: [],
       },
     };
+  }
+}
+
+/**
+ * GET /quant/api/portfolio?mode=paper — force read paper portfolio from disk.
+ * Always reads portfolio-paper.json regardless of active engine mode.
+ * Falls back to legacy portfolio.json if new file doesn't exist yet.
+ */
+export async function handlePaperPortfolioOnly(
+  config: QuantTradingConfig,
+): Promise<Record<string, unknown>> {
+  const dir = modeDataDir(config);
+  // Try new mode-specific file first, then legacy
+  for (const filename of ["portfolio-paper.json", "portfolio.json"]) {
+    try {
+      const raw = await fs.readFile(path.join(dir, filename), "utf-8");
+      const pf = JSON.parse(raw) as Portfolio;
+      return { status: "ok", source: "paper", data: pf };
+    } catch {
+      continue;
+    }
+  }
+  return {
+    status: "ok",
+    source: "paper",
+    data: {
+      id: "paper",
+      name: "模拟组合",
+      cash: 100000,
+      totalValue: 100000,
+      positions: [],
+    },
+  };
+}
+
+// ── Mode-specific file readers (for cross-mode queries) ──────────
+
+function modeDataDir(config: QuantTradingConfig): string {
+  return config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+}
+
+/**
+ * Read orders from a specific mode file (paper or live).
+ * Used when the UI is viewing a mode different from the active engine.
+ */
+export async function readOrdersFromFile(
+  config: QuantTradingConfig,
+  mode: "paper" | "live",
+  statusFilter?: string,
+): Promise<Record<string, unknown>> {
+  const filePath = path.join(modeDataDir(config), `orders-${mode}.json`);
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    let orders = JSON.parse(raw) as Record<string, unknown>[];
+    if (statusFilter) orders = orders.filter((o) => o.status === statusFilter);
+    return { status: "ok", mode, data: orders };
+  } catch {
+    return { status: "ok", mode, data: [] };
+  }
+}
+
+/**
+ * Read trades from a specific mode file.
+ */
+export async function readTradesFromFile(
+  config: QuantTradingConfig,
+  mode: "paper" | "live",
+): Promise<Record<string, unknown>> {
+  const filePath = path.join(modeDataDir(config), `trades-${mode}.json`);
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    return { status: "ok", mode, data: JSON.parse(raw) };
+  } catch {
+    return { status: "ok", mode, data: [] };
+  }
+}
+
+/**
+ * Compute daily PnL from a specific mode's trades file.
+ */
+export async function readDailyPnlFromFile(
+  config: QuantTradingConfig,
+  mode: "paper" | "live",
+): Promise<Record<string, unknown>> {
+  const filePath = path.join(modeDataDir(config), `trades-${mode}.json`);
+  try {
+    const raw = await fs.readFile(filePath, "utf-8");
+    const trades = JSON.parse(raw) as { exitTime?: string; netPnl: number }[];
+    const today = new Date().toISOString().slice(0, 10);
+    const pnl = trades
+      .filter((t) => t.exitTime?.startsWith(today))
+      .reduce((sum, t) => sum + t.netPnl, 0);
+    return { status: "ok", mode, data: { date: today, netPnl: pnl } };
+  } catch {
+    return { status: "ok", mode, data: { date: new Date().toISOString().slice(0, 10), netPnl: 0 } };
   }
 }
 

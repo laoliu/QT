@@ -53,6 +53,8 @@ export interface RouteDeps {
   backtestStore: BacktestStore;
   eventBus: EventBus;
   equityHistory: EquityHistory;
+  equityHistoryPaper?: EquityHistory;
+  equityHistoryLive?: EquityHistory;
   benchmarkService: BenchmarkService;
   dataWarehouse: HistoricalDataWarehouse;
   dataQualityValidator: DataQualityValidator;
@@ -77,6 +79,8 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     backtestStore,
     eventBus,
     equityHistory,
+    equityHistoryPaper,
+    equityHistoryLive,
     benchmarkService,
     dataWarehouse,
     dataQualityValidator,
@@ -86,6 +90,14 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     secure,
     securePublic,
   } = deps;
+
+  /** Resolve equity history instance by ?mode= param (paper|live), fallback to active */
+  function resolveEquityHistory(params: URLSearchParams): EquityHistory {
+    const mode = params.get("mode");
+    if (mode === "paper" && equityHistoryPaper) return equityHistoryPaper;
+    if (mode === "live" && equityHistoryLive) return equityHistoryLive;
+    return equityHistory;
+  }
 
   // ── Dashboard ──────────────────────────────────────────────────
   api.registerHttpRoute({
@@ -143,20 +155,22 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     path: "/quant/api/equity-history",
     handler: secure((_req, res) => {
       const params = urlParams(_req);
+      const eh = resolveEquityHistory(params);
       const start = params.get("start") ?? undefined;
       const end = params.get("end") ?? undefined;
       const limit = params.get("limit") ? Number(params.get("limit")) : undefined;
+      const mode = params.get("mode") ?? (eh === equityHistoryLive ? "live" : "paper");
 
       let data;
       if (start && end) {
-        data = equityHistory.getRange(start, end);
+        data = eh.getRange(start, end);
       } else if (limit) {
-        data = equityHistory.getRecent(limit);
+        data = eh.getRecent(limit);
       } else {
-        data = equityHistory.getAll();
+        data = eh.getAll();
       }
 
-      json(res, { status: "ok", data, count: data.length });
+      json(res, { status: "ok", mode, data, count: data.length });
     }),
   });
 
@@ -164,7 +178,8 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     auth: "plugin",
     path: "/quant/api/equity-history/summary",
     handler: secure((_req, res) => {
-      json(res, { status: "ok", data: equityHistory.getSummary() });
+      const eh = resolveEquityHistory(urlParams(_req));
+      json(res, { status: "ok", data: eh.getSummary() });
     }),
   });
 
@@ -184,7 +199,8 @@ export function registerQuantRoutes(deps: RouteDeps): void {
       const params = urlParams(_req);
       const benchmarkId = params.get("benchmark") ?? "csi300";
       try {
-        const equitySnaps = equityHistory.getAll();
+        const eh = resolveEquityHistory(params);
+        const equitySnaps = eh.getAll();
         const result = await benchmarkService.compare(equitySnaps, benchmarkId);
         json(res, { status: "ok", data: result });
       } catch (err) {
@@ -198,8 +214,18 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     auth: "plugin",
     path: "/quant/api/portfolio",
     handler: secure(async (_req, res) => {
-      const { handlePortfolioApi } = await import("./portfolio-api.js");
-      json(res, await handlePortfolioApi(config, getEngine));
+      const { handlePortfolioApi, handlePaperPortfolioOnly } = await import("./portfolio-api.js");
+      const params = urlParams(_req);
+      const mode = params.get("mode");
+      if (mode === "paper") {
+        // Force reading paper portfolio from file, regardless of active engine
+        json(res, await handlePaperPortfolioOnly(config));
+      } else if (mode === "live") {
+        // Force reading from live broker only
+        json(res, await handlePortfolioApi(config, getEngine, true));
+      } else {
+        json(res, await handlePortfolioApi(config, getEngine));
+      }
     }),
   });
 
@@ -750,13 +776,17 @@ function registerBacktestRoutes({ api, config, backtestStore, secure }: RouteDep
 
 // ── Trading sub-routes ───────────────────────────────────────────
 
-function registerTradingRoutes({ api, getEngine, secure }: RouteDeps): void {
+function registerTradingRoutes({ api, config, getEngine, secure }: RouteDeps): void {
   api.registerHttpRoute({
     auth: "plugin",
     path: "/quant/api/orders",
     handler: secure(async (req, res) => {
-      const { handlePlaceOrderApi, handleCancelOrderApi, handleOrdersApi } =
-        await import("./portfolio-api.js");
+      const {
+        handlePlaceOrderApi,
+        handleCancelOrderApi,
+        handleOrdersApi,
+        readOrdersFromFile,
+      } = await import("./portfolio-api.js");
 
       if (req.method === "POST") {
         const body = await parseJsonBody<Record<string, unknown>>(req);
@@ -774,10 +804,19 @@ function registerTradingRoutes({ api, getEngine, secure }: RouteDeps): void {
         return;
       }
 
-      // GET — list orders
-      const statusFilter = req.url?.includes("status=")
-        ? (urlParams(req).get("status") ?? undefined)
-        : undefined;
+      // GET — list orders (mode-aware)
+      const params = urlParams(req);
+      const mode = params.get("mode") as "paper" | "live" | null;
+      const statusFilter = params.get("status") ?? undefined;
+
+      // If mode specified and differs from active engine's broker, read from file
+      const engine = getEngine();
+      const engineMode = engine?.broker?.brokerType === "paper" ? "paper" : "live";
+      if (mode && mode !== engineMode) {
+        json(res, await readOrdersFromFile(config, mode, statusFilter));
+        return;
+      }
+
       json(res, await handleOrdersApi(getEngine, statusFilter));
     }),
   });
@@ -786,7 +825,17 @@ function registerTradingRoutes({ api, getEngine, secure }: RouteDeps): void {
     auth: "plugin",
     path: "/quant/api/trades",
     handler: secure(async (_req, res) => {
+      const params = urlParams(_req);
+      const mode = params.get("mode") as "paper" | "live" | null;
       const engine = getEngine();
+      const engineMode = engine?.broker?.brokerType === "paper" ? "paper" : "live";
+
+      if (mode && mode !== engineMode) {
+        // Read from mode-specific file
+        const { readTradesFromFile } = await import("./portfolio-api.js");
+        json(res, await readTradesFromFile(config, mode));
+        return;
+      }
       const trades = engine.orderManager ? await engine.orderManager.getTrades() : [];
       json(res, { status: "ok", data: trades });
     }),
@@ -796,7 +845,18 @@ function registerTradingRoutes({ api, getEngine, secure }: RouteDeps): void {
     auth: "plugin",
     path: "/quant/api/pnl",
     handler: secure(async (_req, res) => {
+      const params = urlParams(_req);
+      const mode = params.get("mode") as "paper" | "live" | null;
       const engine = getEngine();
+      const engineMode = engine?.broker?.brokerType === "paper" ? "paper" : "live";
+
+      if (mode && mode !== engineMode) {
+        // Compute PnL from mode-specific trades file
+        const { readDailyPnlFromFile } = await import("./portfolio-api.js");
+        json(res, await readDailyPnlFromFile(config, mode));
+        return;
+      }
+
       if (!engine.orderManager) {
         json(res, { status: "ok", data: null });
         return;

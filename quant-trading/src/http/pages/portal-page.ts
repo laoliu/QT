@@ -114,6 +114,11 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
 <header>
   <h1>🦞 OpenClaw 量化交易</h1>
   <div class="header-right">
+    <select id="modeSwitch" onchange="switchViewMode(this.value)" style="cursor:pointer;appearance:none;-webkit-appearance:none;display:inline-block;padding:4px 28px 4px 12px;border-radius:6px;font-size:13px;font-weight:600;background:rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3);background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 5l3 3 3-3%22 fill=%22%238b949e%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;">
+      <option value="">当前模式</option>
+      <option value="paper">🟡 模拟盘</option>
+      <option value="live">🟢 实盘</option>
+    </select>
     <span id="clock" style="color:var(--text-dim)"></span>
     <span id="engineChip" class="status-chip"><span class="dot dot-yellow"></span> 加载中…</span>
   </div>
@@ -575,8 +580,22 @@ async function loadOverview(){
   } catch(e){ console.error('alerts chip error', e); }
 }
 
+// ── View mode: paper / live / '' (auto) ─────────────────
+var portalViewMode = '';
+function switchViewMode(mode) {
+  portalViewMode = mode;
+  var sel = document.getElementById('modeSwitch');
+  if (sel) {
+    sel.style.background = mode === 'live' ? 'rgba(63,185,80,0.15)' : 'rgba(210,153,34,0.15)';
+    sel.style.color = mode === 'live' ? '#3fb950' : '#d29922';
+    sel.style.borderColor = mode === 'live' ? 'rgba(63,185,80,0.3)' : 'rgba(210,153,34,0.3)';
+  }
+  Promise.all([loadOverview(), loadPortfolio()]);
+}
+
 async function loadPortfolio(){
-  const p = await fetchJSON(B+'/quant/api/portfolio');
+  const modeQ = portalViewMode ? '?mode=' + portalViewMode : '';
+  const p = await fetchJSON(B+'/quant/api/portfolio' + modeQ);
   if(!p || p.error) return;
   const d = p.data || p;
   const positions = d.positions || [];
@@ -586,8 +605,20 @@ async function loadPortfolio(){
   const pnl = d.profit ?? d.today_pnl ?? d.unrealized_pnl ?? 0;
   const pnlPct = d.profitPct!=null ? d.profitPct*100 : (equity > 0 ? (pnl / equity * 100) : 0);
 
-  const srcLabel = p.source==='qmt'||p.source==='remote-qmt' ? ' (QMT)' : '';
+  const isPaper = p.source==='paper';
+  const isLive = p.source==='qmt'||p.source==='remote-qmt'||p.source==='live';
+  const srcLabel = isLive ? ' (QMT实盘)' : isPaper ? ' (模拟盘)' : '';
   document.getElementById('kpiEquity').textContent = '¥'+fmt(equity)+srcLabel;
+  // Auto-update mode switch when in auto mode
+  if (!portalViewMode) {
+    var sel = document.getElementById('modeSwitch');
+    if (sel) {
+      sel.value = isPaper ? 'paper' : isLive ? 'live' : '';
+      sel.style.background = isLive ? 'rgba(63,185,80,0.15)' : 'rgba(210,153,34,0.15)';
+      sel.style.color = isLive ? '#3fb950' : '#d29922';
+      sel.style.borderColor = isLive ? 'rgba(63,185,80,0.3)' : 'rgba(210,153,34,0.3)';
+    }
+  }
   document.getElementById('kpiCash').textContent = '¥'+fmt(cash);
   document.getElementById('kpiPositions').textContent = fmtInt(positions.length);
 

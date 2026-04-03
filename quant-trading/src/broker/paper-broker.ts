@@ -48,11 +48,16 @@ function dataDir(config: QuantTradingConfig): string {
 }
 
 function portfolioPath(config: QuantTradingConfig): string {
-  return path.join(dataDir(config), "portfolio.json");
+  return path.join(dataDir(config), "portfolio-paper.json");
 }
 
 function ordersPath(config: QuantTradingConfig): string {
-  return path.join(dataDir(config), "orders.json");
+  return path.join(dataDir(config), "orders-paper.json");
+}
+
+/** Legacy paths — for migration from old single-file layout */
+function legacyPortfolioPath(config: QuantTradingConfig): string {
+  return path.join(dataDir(config), "portfolio.json");
 }
 
 async function ensureDir(cfg: QuantTradingConfig): Promise<void> {
@@ -67,7 +72,19 @@ async function loadPortfolio(cfg: QuantTradingConfig): Promise<Portfolio> {
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
-      // File doesn't exist yet — use default
+      // New file doesn't exist — try migrating from legacy path
+      try {
+        const legacyPath = legacyPortfolioPath(cfg);
+        const legacyRaw = await fs.readFile(legacyPath, "utf-8");
+        const legacy = JSON.parse(legacyRaw) as Portfolio;
+        // Save to new path
+        await ensureDir(cfg);
+        await fs.writeFile(filePath, JSON.stringify(legacy, null, 2));
+        console.log(`[PaperBroker] 已迁移 portfolio.json → portfolio-paper.json`);
+        return legacy;
+      } catch {
+        // No legacy file either — use default
+      }
     } else {
       // Corrupted JSON or other error — backup and warn
       console.warn(

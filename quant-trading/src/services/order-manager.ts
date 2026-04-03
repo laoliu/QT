@@ -40,12 +40,27 @@ function dir(cfg: QuantTradingConfig): string {
   return cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
 }
 
+/** Mode suffix based on broker type — keeps paper/live orders in separate files */
+function modeSuffix(cfg: QuantTradingConfig): string {
+  const broker = cfg.tradingAccount?.broker ?? cfg.tradingAccount?.mode ?? "paper";
+  return broker === "paper" ? "-paper" : "-live";
+}
+
 function ordersPath(cfg: QuantTradingConfig): string {
-  return path.join(dir(cfg), "orders.json");
+  return path.join(dir(cfg), `orders${modeSuffix(cfg)}.json`);
 }
 
 function tradesPath(cfg: QuantTradingConfig): string {
-  return path.join(dir(cfg), "trades.json");
+  return path.join(dir(cfg), `trades${modeSuffix(cfg)}.json`);
+}
+
+/** Get orders/trades path for a specific mode (for API queries) */
+export function ordersPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live"): string {
+  return path.join(dir(cfg), `orders-${mode}.json`);
+}
+
+export function tradesPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live"): string {
+  return path.join(dir(cfg), `trades-${mode}.json`);
 }
 
 async function ensureDir(cfg: QuantTradingConfig): Promise<void> {

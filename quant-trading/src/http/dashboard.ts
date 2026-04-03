@@ -141,6 +141,30 @@ export function getDashboardHtml(baseUrl: string): string {
     .btn-danger:hover { background: rgba(248,81,73,0.15); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
     .btn-group { display: flex; gap: 6px; }
+    /* Mode banner */
+    .mode-banner {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.5px;
+    }
+    .mode-paper {
+      background: rgba(210,153,34,0.15); color: var(--yellow);
+      border: 1px solid rgba(210,153,34,0.3);
+    }
+    .mode-live {
+      background: rgba(63,185,80,0.15); color: var(--green);
+      border: 1px solid rgba(63,185,80,0.3);
+    }
+    .mode-banner .mode-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    .mode-paper .mode-dot { background: var(--yellow); }
+    .mode-live .mode-dot { background: var(--green); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
     /* Chart */
     .chart-container { position: relative; }
     .chart-container svg { width: 100%; height: 160px; }
@@ -204,6 +228,12 @@ export function getDashboardHtml(baseUrl: string): string {
   <header>
     <h1><a href="${baseUrl}/quant/" style="color:inherit;text-decoration:none">OpenClaw 量化交易</a></h1>
     <div class="header-right">
+      <select id="modeSwitch" class="mode-banner mode-paper" onchange="switchViewMode(this.value)" style="cursor:pointer;appearance:none;-webkit-appearance:none;padding:4px 28px 4px 14px;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 5l3 3 3-3%22 fill=%22%238b949e%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;">
+        <option value="">当前模式</option>
+        <option value="paper">🟡 模拟盘</option>
+        <option value="live">🟢 实盘</option>
+      </select>
+      <span id="modeBanner" class="mode-banner mode-paper" style="display:none"><span class="mode-dot"></span>加载中...</span>
       <div class="btn-group" id="engineControls">
         <button class="btn btn-primary" onclick="engineAction('start')" id="btnStart" disabled>启动</button>
         <button class="btn" onclick="engineAction('pause')" id="btnPause" disabled>暂停</button>
@@ -332,6 +362,18 @@ export function getDashboardHtml(baseUrl: string): string {
 
   <script>
     const BASE = ${JSON.stringify(baseUrl)};
+    // ── View mode: paper / live / '' (auto) ─────────────────
+    let viewMode = ''; // '' = auto (follow active engine)
+    function switchViewMode(mode) {
+      viewMode = mode;
+      const sel = document.getElementById('modeSwitch');
+      sel.className = 'mode-banner ' + (mode === 'live' ? 'mode-live' : 'mode-paper');
+      refreshAll();
+    }
+    function modeParam(prefix) {
+      if (!viewMode) return '';
+      return (prefix ? '&' : '?') + 'mode=' + viewMode;
+    }
     async function api(path, opts) {
       try { const r = await fetch(BASE + path, opts); return await r.json(); }
       catch(e) { console.error('API error:', path, e); return null; }
@@ -456,11 +498,19 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Portfolio ───────────────────────────────────────────
     async function loadPortfolio() {
-      const r = await api('/quant/api/portfolio'); if (!r?.data) return;
+      const r = await api('/quant/api/portfolio' + modeParam(false)); if (!r?.data) return;
       const d = r.data, cash = d.cash??0, tv = d.totalValue??cash;
       const pnl = d.profit!=null ? d.profit : tv-(d.initialCash??100000);
       const pct = d.profitPct!=null ? d.profitPct*100 : (d.initialCash ? pnl/(d.initialCash)*100 : 0);
-      const srcLabel = r.source==='qmt'||r.source==='remote-qmt' ? ' (QMT实盘)' : r.source==='paper' ? ' (模拟)' : '';
+      const isPaper = r.source==='paper';
+      const isLive = r.source==='qmt'||r.source==='remote-qmt'||r.source==='live';
+      const srcLabel = isLive ? ' (QMT实盘)' : isPaper ? ' (模拟)' : '';
+      // Auto-select the mode dropdown when in auto mode
+      const sel = document.getElementById('modeSwitch');
+      if (!viewMode && sel) {
+        sel.value = isPaper ? 'paper' : isLive ? 'live' : '';
+        sel.className = 'mode-banner ' + (isLive ? 'mode-live' : 'mode-paper');
+      }
       document.getElementById('portfolioStats').innerHTML =
         '<div class="stat"><span class="value">¥'+fmt(tv)+'</span><span class="label">总资产'+srcLabel+'</span></div>'+
         '<div class="stat"><span class="value">¥'+fmt(cash)+'</span><span class="label">可用资金</span></div>'+
@@ -476,7 +526,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Orders ──────────────────────────────────────────────
     async function loadOrders() {
-      const r = await api('/quant/api/orders'); const orders=r?.data??[];
+      const r = await api('/quant/api/orders' + modeParam(false)); const orders=r?.data??[];
       if(!orders.length){document.getElementById('ordersTable').innerHTML='<div class="empty">暂无委托</div>';return;}
       let h='<table><tr><th>时间</th><th>代码</th><th>方向</th><th>数量</th><th>价格</th><th>状态</th></tr>';
       for(const o of orders.slice(-20)){
@@ -488,7 +538,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Signals ─────────────────────────────────────────────
     async function loadSignals() {
-      const r = await api('/quant/api/signals?limit=20'); const sigs=r?.data??[];
+      const r = await api('/quant/api/signals?limit=20' + modeParam(true)); const sigs=r?.data??[];
       if(!sigs.length){document.getElementById('signalsTable').innerHTML='<div class="empty">暂无信号</div>';return;}
       let h='<table><tr><th>日期</th><th>策略</th><th>代码</th><th>方向</th><th>价格</th></tr>';
       for(const s of sigs.slice(-15)){
@@ -514,7 +564,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Daily P&L ───────────────────────────────────────────
     async function loadPnl() {
-      const r = await api('/quant/api/pnl'); const d=r?.data;
+      const r = await api('/quant/api/pnl' + modeParam(false)); const d=r?.data;
       if(!d||d.netPnl==null){document.getElementById('pnlCard').innerHTML='<div class="empty">暂无数据</div>';return;}
       document.getElementById('pnlCard').innerHTML=
         '<div class="stats"><div class="stat"><span class="value '+pctClass(d.netPnl)+'">¥'+fmt(d.netPnl)+'</span><span class="label">'+(d.date??'今日')+' 净盈亏</span></div></div>';
@@ -523,13 +573,13 @@ export function getDashboardHtml(baseUrl: string): string {
     // ── Equity chart (SVG) — powered by equity-history API ───
     async function loadEquityChart() {
       // Try dedicated equity-history endpoint first
-      const r = await api('/quant/api/equity-history?limit=120');
+      const r = await api('/quant/api/equity-history?limit=120' + modeParam(true));
       const history = r?.data;
 
       if (history && Array.isArray(history) && history.length >= 2) {
         renderSvgChart('equityChart', history.map(h => ({x: h.date, y: h.equity})));
         // Load summary stats
-        const sr = await api('/quant/api/equity-history/summary');
+        const sr = await api('/quant/api/equity-history/summary' + modeParam(false));
         const s = sr?.data;
         if (s && s.totalDays > 0) {
           const retCls = pctClass(s.totalReturnPct);
@@ -543,7 +593,7 @@ export function getDashboardHtml(baseUrl: string): string {
       }
 
       // Fallback: try pnl endpoint for legacy data
-      const pr = await api('/quant/api/pnl'); const d=pr?.data;
+      const pr = await api('/quant/api/pnl' + modeParam(false)); const d=pr?.data;
       const legacyHistory = d?.equityHistory ?? d?.history;
       if (legacyHistory && Array.isArray(legacyHistory) && legacyHistory.length >= 2) {
         renderSvgChart('equityChart', legacyHistory.map(h => ({x: h.date||h.timestamp, y: h.equity||h.value})));
@@ -641,14 +691,14 @@ export function getDashboardHtml(baseUrl: string): string {
         document.getElementById('benchmarkStats').innerHTML = '';
         return;
       }
-      const r = await api('/quant/api/benchmark/compare?benchmark=' + benchId);
+      const r = await api('/quant/api/benchmark/compare?benchmark=' + benchId + modeParam(true));
       if (!r || r.status !== 'ok' || !r.data) {
         document.getElementById('benchmarkStats').innerHTML = '<span style="color:var(--text-dim)">基准数据不足</span>';
         return;
       }
       const cmp = r.data;
       // Re-render chart with both curves using normalized equity values
-      const eqR = await api('/quant/api/equity-history?limit=120');
+      const eqR = await api('/quant/api/equity-history?limit=120' + modeParam(true));
       const history = eqR?.data;
       if (history && history.length >= 2) {
         const first = history[0].equity;
@@ -783,9 +833,14 @@ export function getDashboardHtml(baseUrl: string): string {
       if (!symbol || !quantity || quantity <= 0) { toast('请填写有效数量'); return; }
       if (orderType === 'limit' && (!price || price <= 0)) { toast('请填写有效价格'); return; }
       document.getElementById('omSubmit').disabled = true;
-      const body = { symbol, side, orderType, quantity };
+      const body = { symbol, side, orderType, quantity, mode: viewMode || undefined };
       if (price != null) body.price = price;
-      const r = await api('/quant/api/orders', {
+      // Warn if placing order in a mode different from active engine
+      if (viewMode && viewMode !== '') {
+        const confirmMsg = viewMode === 'live' ? '⚠️ 将通过实盘下单，确认？' : '将通过模拟盘下单，确认？';
+        if (!confirm(confirmMsg)) { document.getElementById('omSubmit').disabled = false; return; }
+      }
+      const r = await api('/quant/api/orders' + modeParam(false), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

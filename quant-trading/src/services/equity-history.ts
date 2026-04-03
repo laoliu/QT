@@ -37,6 +37,8 @@ export interface EquityHistoryOptions {
   dataDir?: string;
   /** Maximum number of snapshots to retain (default: 2000 ≈ 4 years daily) */
   maxSnapshots?: number;
+  /** Trading mode — determines which file to use for persistence */
+  mode?: "paper" | "live";
 }
 
 // ── Service ──────────────────────────────────────────────────
@@ -51,7 +53,8 @@ export class EquityHistory {
 
   constructor(opts: EquityHistoryOptions = {}) {
     const dir = opts.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
-    this.filePath = path.join(dir, "equity-history.json");
+    const suffix = opts.mode ? `-${opts.mode}` : "";
+    this.filePath = path.join(dir, `equity-history${suffix}.json`);
     this.maxSnapshots = opts.maxSnapshots ?? 2000;
   }
 

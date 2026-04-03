@@ -1377,6 +1377,25 @@ export function getPlannerBodyHtml(b: string): string {
       <div id="pbt-failed-content"></div>
     </div>
   </div>
+
+  <!-- Strategy Frequency Analysis -->
+  <div class="card" style="margin-bottom:14px">
+    <h3 style="display:flex;align-items:center;gap:8px">
+      📊 策略表现频率分析
+      <button class="btn btn-sm" onclick="loadPbtFrequency()" style="font-size:11px">🔄 刷新</button>
+    </h3>
+    <p style="font-size:11px;color:var(--text-dim);margin-bottom:10px">统计所有历史回测中，各策略的综合评分、排名和出现频率，帮助识别持续表现优秀的策略</p>
+    <div id="pbt-frequency-content"><span style="color:var(--text-dim);font-size:12px">点击刷新加载数据，或完成首次回测后自动显示</span></div>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <h3 style="display:flex;align-items:center;gap:8px">
+      📜 回测历史记录
+      <button class="btn btn-sm" onclick="loadPbtHistory()" style="font-size:11px">🔄 刷新</button>
+    </h3>
+    <div id="pbt-history-content"><span style="color:var(--text-dim);font-size:12px">完成首次回测后自动显示</span></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>

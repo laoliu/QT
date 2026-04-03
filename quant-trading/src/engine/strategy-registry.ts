@@ -333,7 +333,7 @@ const strategyMap = new Map<string, StrategyFactory>([
       ),
   ],
   [
-    "kdj",
+    "cta-kdj",
     (p) =>
       ctaKdj(
         (p?.period as number) ?? 9,

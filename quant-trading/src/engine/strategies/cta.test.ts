@@ -1509,7 +1509,7 @@ describe("ctaKdj", () => {
     const bars = generateBars(200, { trend: "sine" });
     const signals = runStrategy(ctaKdj(9, 3, 3, 80, 20), bars);
     if (signals.length > 0) {
-      expect(signals[0]!.strategyId).toBe("kdj");
+      expect(signals[0]!.strategyId).toBe("cta-kdj");
     }
   });
 

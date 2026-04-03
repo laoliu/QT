@@ -618,7 +618,7 @@ export function ctaKdj(
           price: bar.close,
           reason:
             `[KDJ平多] K(${curK.toFixed(1)})下穿D(${curD.toFixed(1)})` + `，J=${curJ.toFixed(1)}`,
-          strategyId: "kdj",
+          strategyId: "cta-kdj",
         };
         // Check reverse entry
         if (curJ > overbought) {
@@ -633,7 +633,7 @@ export function ctaKdj(
               reason:
                 `[KDJ做空] K(${curK.toFixed(1)})下穿D(${curD.toFixed(1)})` +
                 `，J=${curJ.toFixed(1)}>${overbought}，价格 ¥${bar.close.toFixed(2)}`,
-              strategyId: "kdj",
+              strategyId: "cta-kdj",
             },
           ];
         }
@@ -648,7 +648,7 @@ export function ctaKdj(
           price: bar.close,
           reason:
             `[KDJ平空] K(${curK.toFixed(1)})上穿D(${curD.toFixed(1)})` + `，J=${curJ.toFixed(1)}`,
-          strategyId: "kdj",
+          strategyId: "cta-kdj",
         };
         // Check reverse entry
         if (curJ < oversold) {
@@ -663,7 +663,7 @@ export function ctaKdj(
               reason:
                 `[KDJ做多] K(${curK.toFixed(1)})上穿D(${curD.toFixed(1)})` +
                 `，J=${curJ.toFixed(1)}<${oversold}，价格 ¥${bar.close.toFixed(2)}`,
-              strategyId: "kdj",
+              strategyId: "cta-kdj",
             },
           ];
         }
@@ -683,7 +683,7 @@ export function ctaKdj(
             reason:
               `[KDJ做多] K(${curK.toFixed(1)})上穿D(${curD.toFixed(1)})` +
               `，J=${curJ.toFixed(1)}<${oversold}，价格 ¥${bar.close.toFixed(2)}`,
-            strategyId: "kdj",
+            strategyId: "cta-kdj",
           };
         }
         if (kCrossDown && curJ > overbought) {
@@ -696,7 +696,7 @@ export function ctaKdj(
             reason:
               `[KDJ做空] K(${curK.toFixed(1)})下穿D(${curD.toFixed(1)})` +
               `，J=${curJ.toFixed(1)}>${overbought}，价格 ¥${bar.close.toFixed(2)}`,
-            strategyId: "kdj",
+            strategyId: "cta-kdj",
           };
         }
       }

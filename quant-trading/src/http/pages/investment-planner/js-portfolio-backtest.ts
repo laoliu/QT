@@ -169,6 +169,8 @@ function runPortfolioBacktest(){
     document.getElementById('pbt-status').textContent='';
     if(d.error){toast('❌ 回测失败: '+d.error);return}
     renderPbtResults(d);
+    loadPbtHistory();
+    loadPbtFrequency();
   }).catch(function(e){
     btn.disabled=false;btn.textContent='🚀 开始回测';
     document.getElementById('pbt-status').textContent='';
@@ -249,6 +251,93 @@ function renderPbtResults(data){
 function pbtFmt(v){return v!=null?Number(v).toFixed(2):'N/A'}
 function pbtFmtMoney(v){return v!=null?Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}):'N/A'}
 
+/* ── History & Frequency ── */
+
+function loadPbtHistory(){
+  api('/quant/admin/api/pbt-history').then(function(d){
+    renderPbtHistory(d.entries||[]);
+  }).catch(function(e){
+    var c=document.getElementById('pbt-history-content');
+    if(c)c.innerHTML='<span style="color:var(--red)">加载失败: '+esc(e.message)+'</span>';
+  });
+}
+
+function renderPbtHistory(entries){
+  var c=document.getElementById('pbt-history-content');
+  if(!c)return;
+  if(!entries.length){c.innerHTML='<span style="color:var(--text-dim);font-size:12px">暂无历史记录</span>';return}
+  var html='<div style="overflow-x:auto"><table><thead><tr>';
+  html+='<th>时间</th><th>股票</th><th>周期</th><th>策略数</th><th>最优策略</th><th>最佳收益</th><th>操作</th>';
+  html+='</tr></thead><tbody>';
+  entries.forEach(function(e){
+    var best=e.comparison&&e.comparison[0];
+    var ret=best?pbtFmt(best.totalReturn)+'%':'N/A';
+    var retCl=best&&best.totalReturn>=0?'up':'down';
+    html+='<tr>';
+    html+='<td style="white-space:nowrap;font-size:11px">'+esc(e.createdAt.replace('T',' ').slice(0,19))+'</td>';
+    html+='<td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="'+esc(e.symbols.join(','))+'">'+esc(e.symbols.slice(0,3).join(','))+(e.symbols.length>3?'...':'')+'</td>';
+    html+='<td style="font-size:11px">'+esc(e.period)+'</td>';
+    html+='<td>'+e.successCount+'/'+e.strategyCount+'</td>';
+    html+='<td style="font-size:11px">'+esc(e.bestStrategy||'N/A')+'</td>';
+    html+='<td class="'+retCl+'">'+ret+'</td>';
+    html+='<td><button class="btn btn-sm" onclick="viewPbtHistoryDetail(\\''+e.id+'\\')">详情</button> ';
+    html+='<button class="btn btn-sm" style="color:var(--red)" onclick="deletePbtHistoryEntry(\\''+e.id+'\\')">删除</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  c.innerHTML=html;
+}
+
+function viewPbtHistoryDetail(id){
+  api('/quant/admin/api/pbt-history?id='+encodeURIComponent(id)).then(function(d){
+    if(d.error){toast('❌ '+d.error);return}
+    renderPbtResults(d);
+  }).catch(function(e){toast('❌ '+e.message)});
+}
+
+function deletePbtHistoryEntry(id){
+  if(!confirm('确定删除此回测记录？'))return;
+  api('/quant/admin/api/pbt-history?id='+encodeURIComponent(id),{method:'DELETE'}).then(function(d){
+    if(d.ok)loadPbtHistory();
+    else toast('删除失败');
+  }).catch(function(e){toast('❌ '+e.message)});
+}
+
+function loadPbtFrequency(){
+  api('/quant/admin/api/pbt-strategy-frequency').then(function(d){
+    renderPbtFrequency(d.strategies||[]);
+  }).catch(function(e){
+    var c=document.getElementById('pbt-frequency-content');
+    if(c)c.innerHTML='<span style="color:var(--red)">加载失败: '+esc(e.message)+'</span>';
+  });
+}
+
+function renderPbtFrequency(strategies){
+  var c=document.getElementById('pbt-frequency-content');
+  if(!c)return;
+  if(!strategies.length){c.innerHTML='<span style="color:var(--text-dim);font-size:12px">暂无数据，请先完成至少一次回测</span>';return}
+  var html='<div style="overflow-x:auto"><table><thead><tr>';
+  html+='<th>排名</th><th>策略</th><th>平均评分</th><th>平均排名</th><th>最高分</th><th>最低分</th><th>平均收益</th><th>Top3次数</th><th>出现次数</th><th>最后出现</th>';
+  html+='</tr></thead><tbody>';
+  strategies.forEach(function(s,i){
+    var scoreCl=s.avgScore>=50?'up':s.avgScore>=20?'':'down';
+    html+='<tr>';
+    html+='<td><span class="badge '+(i===0?'badge-green':i<3?'badge-blue':'badge-purple')+'">#'+(i+1)+'</span></td>';
+    html+='<td><strong>'+esc(s.strategy)+'</strong><br><span style="font-size:11px;color:var(--text-dim)">'+esc(s.strategyId)+'</span></td>';
+    html+='<td class="'+scoreCl+'" style="font-weight:600">'+pbtFmt(s.avgScore)+'</td>';
+    html+='<td>'+pbtFmt(s.avgRank)+'</td>';
+    html+='<td class="up">'+pbtFmt(s.bestScore)+'</td>';
+    html+='<td>'+pbtFmt(s.worstScore)+'</td>';
+    html+='<td class="'+(s.avgReturn>=0?'up':'down')+'">'+pbtFmt(s.avgReturn)+'%</td>';
+    html+='<td>'+(s.top3Count||0)+'</td>';
+    html+='<td>'+s.appearances+'</td>';
+    html+='<td style="font-size:11px">'+esc(s.lastSeen.slice(0,10))+'</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  c.innerHTML=html;
+}
+
 /* ── init: set defaults + lazy-load strategies on tab activation ── */
 (function(){
   var pbtInited=false;
@@ -258,6 +347,8 @@ function pbtFmtMoney(v){return v!=null?Number(v).toLocaleString('zh-CN',{minimum
     PBT_RECOMMENDED.forEach(function(id){pbtSelectedStrategies.add(id)});
     setPbtPeriod(12);
     loadPbtStrategies();
+    loadPbtHistory();
+    loadPbtFrequency();
   }
   var origOnTab=window._onTabActivated;
   window._onTabActivated=function(name){

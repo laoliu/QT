@@ -2329,7 +2329,7 @@ const ctaStrategies: StrategyDefinition[] = [
     markets: ["futures"],
   },
   {
-    id: "kdj",
+    id: "cta-kdj",
     name: "KDJ 随机指标策略",
     description:
       "基于 KDJ 随机振荡器的交易策略。K 上穿 D 且 J 处于超卖区时做多，" +

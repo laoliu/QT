@@ -3,6 +3,13 @@ import { listStrategies } from "../../engine/strategy-registry.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../../services/batch-backtest.js";
 import type { TickAggregationInterval } from "../../types.js";
 import { toNumberOrDefault } from "../../utils/number-utils.js";
+import {
+  appendPbtHistory,
+  getPbtHistory,
+  getPbtHistoryById,
+  deletePbtHistory,
+  getPbtStrategyFrequency,
+} from "../pbt-history.js";
 /**
  * Strategy Routing API routes (profile, recommend, routing, tick strategies)
  *
@@ -151,25 +158,27 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
 
         const batchResult = await runBatchBacktest(batchItems, config);
 
-        json(res, {
+        const comparison = batchResult.ranked.map((r, idx) => ({
+          rank: idx + 1,
+          strategy: r.label,
+          strategyId: r.strategyId,
+          totalReturn: r.totalReturn ?? null,
+          annualizedReturn: r.annualizedReturn ?? null,
+          finalValue: r.finalValue ?? null,
+          profit: r.finalValue != null ? r.finalValue - initialCash : null,
+          maxDrawdown: r.maxDrawdown ?? null,
+          sharpeRatio: r.sharpeRatio ?? null,
+          winRate: r.winRate ?? null,
+          totalTrades: r.totalTrades ?? null,
+          compositeScore: (r as unknown as Record<string, unknown>).compositeScore as number ?? null,
+        }));
+
+        const responseData = {
           ok: true,
           symbols,
           period: `${startDate} ~ ${endDate}`,
           initialCash,
-          comparison: batchResult.ranked.map((r, idx) => ({
-            rank: idx + 1,
-            strategy: r.label,
-            strategyId: r.strategyId,
-            totalReturn: r.totalReturn,
-            annualizedReturn: r.annualizedReturn,
-            finalValue: r.finalValue,
-            profit: r.finalValue != null ? r.finalValue - initialCash : null,
-            maxDrawdown: r.maxDrawdown,
-            sharpeRatio: r.sharpeRatio,
-            winRate: r.winRate,
-            totalTrades: r.totalTrades,
-            compositeScore: r.compositeScore,
-          })),
+          comparison,
           bestStrategy: batchResult.bestStrategy,
           totalRuns: batchResult.totalRuns,
           successCount: batchResult.successCount,
@@ -177,7 +186,21 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           failed: batchResult.results
             .filter((r) => !r.ok)
             .map((r) => ({ strategy: r.label, error: r.error })),
-        });
+        };
+
+        // Auto-save to history (fire-and-forget)
+        appendPbtHistory(config, {
+          symbols,
+          period: `${startDate} ~ ${endDate}`,
+          initialCash,
+          comparison,
+          bestStrategy: batchResult.bestStrategy,
+          successCount: batchResult.successCount,
+          failCount: batchResult.failCount,
+          totalRuns: batchResult.totalRuns,
+        }).catch(() => {});
+
+        json(res, responseData);
       } catch (err) {
         json(
           res,
@@ -187,6 +210,41 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           500,
         );
       }
+    }),
+  });
+
+  // ── Portfolio Backtest History ──────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/pbt-history",
+    handler: secure(async (req, res) => {
+      const url = new URL(req.url ?? "", "http://localhost");
+      const historyId = url.searchParams.get("id");
+
+      if (req.method === "DELETE" && historyId) {
+        const ok = await deletePbtHistory(config, historyId);
+        json(res, { ok });
+        return;
+      }
+
+      if (historyId) {
+        const entry = await getPbtHistoryById(config, historyId);
+        json(res, entry ?? { error: "not found" });
+        return;
+      }
+
+      const entries = await getPbtHistory(config);
+      json(res, { entries, total: entries.length });
+    }),
+  });
+
+  // ── Portfolio Backtest Strategy Frequency ───────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/pbt-strategy-frequency",
+    handler: secure(async (_req, res) => {
+      const freq = await getPbtStrategyFrequency(config);
+      json(res, { strategies: freq, total: freq.length });
     }),
   });
 

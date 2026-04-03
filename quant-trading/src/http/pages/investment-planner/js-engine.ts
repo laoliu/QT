@@ -31,6 +31,26 @@ function renderRecommend(d){
   if(execHint){
     execHint.textContent='执行会按分批入场第1笔价格提交限价买单；当前推荐 '+allocs.length+' 只，建议投入 ¥'+numInt(sm.investedAmount||0)+'。';
   }
+  // Show broker mode warning
+  var modeHintEl=document.getElementById('rec-exec-mode-hint');
+  if(modeHintEl){
+    api('/quant/admin/api/engine-status').then(function(es){
+      var isLive=es.brokerType&&es.brokerType!=='paper';
+      if(isLive){
+        modeHintEl.style.display='block';
+        modeHintEl.style.background='rgba(248,81,73,.12)';
+        modeHintEl.style.color='var(--red)';
+        modeHintEl.innerHTML='⚠️ 当前引擎为 <strong>实盘模式 ('+esc(es.brokerType||'live')+')</strong>，执行建仓将提交真实委托';
+      }else{
+        modeHintEl.style.display='block';
+        modeHintEl.style.background='rgba(13,148,136,.12)';
+        modeHintEl.style.color='var(--green)';
+        modeHintEl.innerHTML='🟢 当前引擎为 <strong>模拟盘模式</strong>，执行建仓仅在模拟账户中记录';
+      }
+    }).catch(function(){
+      modeHintEl.style.display='none';
+    });
+  }
   document.getElementById('rec-exec-status').textContent='';
   document.getElementById('rec-exec-result').innerHTML='';
   allocs.forEach(function(a,i){

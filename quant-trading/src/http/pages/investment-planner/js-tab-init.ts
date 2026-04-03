@@ -24,6 +24,7 @@ function _onTabDataLoad(tabName){
     if(tabName==='institution'){ensureInstitutionDefaults();loadInstitutionHistory();}
     if(tabName==='plan'){loadPlanHistory();restoreCachedPlan();}
     if(tabName==='recommend'){loadDailyPickHistory();loadOptHistory();}
+    if(tabName==='rebalance'||tabName==='recommend')refreshGlobalMode();
   }catch(e){console.error('[tab-data-load]',e)}
 }
 /* wire the callback so the isolated tab script triggers data loads */
@@ -97,9 +98,52 @@ function loadComposedStrategies(){
   }).catch(function(){/* compositions not available */});
 }
 
+/* ══════ GLOBAL MODE INDICATOR ══════ */
+var _cachedBrokerMode=null;
+function refreshGlobalMode(){
+  api('/quant/admin/api/engine-status').then(function(d){
+    var isLive=d.brokerType&&d.brokerType!=='paper';
+    _cachedBrokerMode=isLive?d.brokerType:'paper';
+    var badge=document.getElementById('global-mode-badge');
+    if(badge){
+      badge.style.display='inline-block';
+      if(isLive){
+        badge.style.background='rgba(248,81,73,.15)';
+        badge.style.color='var(--red)';
+        badge.style.border='1px solid var(--red)';
+        badge.textContent='⚠ 实盘模式 ('+(_cachedBrokerMode||'live')+')';
+      }else{
+        badge.style.background='rgba(13,148,136,.12)';
+        badge.style.color='var(--green)';
+        badge.style.border='1px solid var(--green)';
+        badge.textContent='🟢 模拟模式';
+      }
+    }
+    updateRebalanceModeHint(isLive,d.brokerType);
+  }).catch(function(){
+    var badge=document.getElementById('global-mode-badge');
+    if(badge)badge.style.display='none';
+  });
+}
+function updateRebalanceModeHint(isLive,brokerType){
+  var el=document.getElementById('rebalance-mode-hint');
+  if(!el)return;
+  el.style.display='block';
+  if(isLive){
+    el.style.background='rgba(248,81,73,.12)';
+    el.style.color='var(--red)';
+    el.innerHTML='⚠️ 当前引擎为 <strong>实盘模式 ('+esc(brokerType||'live')+')</strong>，调仓操作将作用于实盘账户';
+  }else{
+    el.style.background='rgba(13,148,136,.12)';
+    el.style.color='var(--green)';
+    el.innerHTML='🟢 当前引擎为 <strong>模拟盘模式</strong>，调仓仅在模拟账户中记录';
+  }
+}
+
 // Initial data load (hash already restored by the isolated tab script)
 (function(){
   loadComposedStrategies();
+  refreshGlobalMode();
   var h=(location.hash||'').replace('#','');
   if(!h){loadPlanHistory();restoreCachedPlan();}
   else{_onTabDataLoad(h);}

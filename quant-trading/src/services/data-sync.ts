@@ -17,9 +17,13 @@ import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-
 import type { Portfolio, QuantTradingConfig } from "../types.js";
 import type { EventBus } from "./event-bus.js";
 
-function getPortfolioPath(config: QuantTradingConfig): string {
+function getPortfolioPaths(config: QuantTradingConfig): string[] {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
-  return path.join(dir, "portfolio.json");
+  return [
+    path.join(dir, "portfolio-paper.json"),
+    path.join(dir, "portfolio-live.json"),
+    path.join(dir, "portfolio.json"), // legacy fallback
+  ];
 }
 
 function getWatchlistPath(config: QuantTradingConfig): string {
@@ -29,13 +33,15 @@ function getWatchlistPath(config: QuantTradingConfig): string {
 
 async function loadWatchedSymbols(config: QuantTradingConfig): Promise<string[]> {
   const seen = new Set<string>();
-  // Portfolio positions
-  try {
-    const raw = await fs.readFile(getPortfolioPath(config), "utf-8");
-    const pf = JSON.parse(raw) as Portfolio;
-    for (const p of pf.positions) seen.add(p.symbol);
-  } catch {
-    // no portfolio file
+  // Portfolio positions (all modes)
+  for (const pfPath of getPortfolioPaths(config)) {
+    try {
+      const raw = await fs.readFile(pfPath, "utf-8");
+      const pf = JSON.parse(raw) as Portfolio;
+      for (const p of pf.positions) seen.add(p.symbol);
+    } catch {
+      // file may not exist
+    }
   }
   // Watchlist
   try {

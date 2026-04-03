@@ -44,6 +44,12 @@ export function paginate<T>(items: T[], params: PaginationParams): PaginatedResu
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return path.join(dir, "portfolio-paper.json");
+}
+
+/** Legacy path — used only for migration fallback */
+function getLegacyPortfolioPath(config: QuantTradingConfig): string {
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
   return path.join(dir, "portfolio.json");
 }
 
@@ -125,8 +131,19 @@ export async function handlePortfolioApi(
   }
 
   // Fallback: read paper portfolio from disk and enrich with live quotes
+  let raw: string | null = null;
   try {
-    const raw = await fs.readFile(getPortfolioPath(config), "utf-8");
+    raw = await fs.readFile(getPortfolioPath(config), "utf-8");
+  } catch {
+    // Try legacy path for migration
+    try {
+      raw = await fs.readFile(getLegacyPortfolioPath(config), "utf-8");
+    } catch {
+      // no file at all
+    }
+  }
+  try {
+    if (!raw) throw new Error("no portfolio file");
     const pf = JSON.parse(raw) as Portfolio;
 
     // Refresh currentPrice / PnL from live quotes so the dashboard shows real values

@@ -15,27 +15,26 @@ import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import { runBatchBacktest } from "../services/batch-backtest.js";
 import type { BacktestResult, Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 
-function getPortfolioPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
-  return path.join(dir, "portfolio.json");
-}
-
 async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
-  const filePath = getPortfolioPath(config);
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as Portfolio;
-  } catch {
-    return {
-      id: "default",
-      name: "默认组合",
-      cash: 100000,
-      totalValue: 100000,
-      positions: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  // Try mode-specific file first, then legacy
+  for (const name of ["portfolio-paper.json", "portfolio.json"]) {
+    try {
+      const raw = await fs.readFile(path.join(dir, name), "utf-8");
+      return JSON.parse(raw) as Portfolio;
+    } catch {
+      continue;
+    }
   }
+  return {
+    id: "default",
+    name: "默认组合",
+    cash: 100000,
+    totalValue: 100000,
+    positions: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function getDefaultStartDate(): string {

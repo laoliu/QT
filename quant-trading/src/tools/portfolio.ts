@@ -11,25 +11,34 @@ import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return path.join(dir, "portfolio-paper.json");
+}
+
+/** Legacy path — used only for migration fallback */
+function getLegacyPortfolioPath(config: QuantTradingConfig): string {
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
   return path.join(dir, "portfolio.json");
 }
 
 async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
-  const filePath = getPortfolioPath(config);
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    return JSON.parse(raw) as Portfolio;
-  } catch {
-    return {
-      id: "default",
-      name: "默认组合",
-      cash: 100000,
-      totalValue: 100000,
-      positions: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  // Try mode-specific file first, then legacy
+  for (const filePath of [getPortfolioPath(config), getLegacyPortfolioPath(config)]) {
+    try {
+      const raw = await fs.readFile(filePath, "utf-8");
+      return JSON.parse(raw) as Portfolio;
+    } catch {
+      continue;
+    }
   }
+  return {
+    id: "default",
+    name: "默认组合",
+    cash: 100000,
+    totalValue: 100000,
+    positions: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): Promise<void> {

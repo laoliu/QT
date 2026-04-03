@@ -477,7 +477,9 @@ function executeRecommend(dryRun,forcePremarket){
   }
 
   if(!dryRun&&!forcePremarket){
-    var ok=confirm('将提交真实买入委托并创建条件单，是否继续？');
+    var modeHintEl=document.getElementById('rec-exec-mode-hint');
+    var modeText=modeHintEl&&modeHintEl.style.color==='var(--red)'?'【实盘模式】将提交真实买入委托':'【模拟盘】将记录模拟买入委托';
+    var ok=confirm(modeText+'并创建条件单，是否继续？');
     if(!ok){
       return;
     }

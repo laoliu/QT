@@ -11,6 +11,7 @@ export function getPlannerBodyHtml(b: string): string {
 <header>
   <h1>📈 投资规划系统</h1>
   <div class="header-right">
+    <span id="global-mode-badge" style="font-size:12px;padding:2px 10px;border-radius:10px;font-weight:600;display:none"></span>
     <a href="${b}/quant/dashboard/ui">📊 交易仪表盘</a>
     <span style="color:var(--text-dim)" id="clock"></span>
   </div>
@@ -464,6 +465,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div class="card">
     <h3>⚖️ 调仓建议</h3>
     <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px">根据当前持仓、最新行情和选股结果，生成买入/卖出/加仓/减仓建议</p>
+    <div id="rebalance-mode-hint" style="font-size:12px;margin-bottom:8px;padding:4px 8px;border-radius:4px;display:none"></div>
     <div class="btn-group">
       <button class="btn btn-primary" id="btn-rebalance" onclick="runRebalance()">🔄 生成调仓建议</button>
     </div>
@@ -1147,6 +1149,7 @@ export function getPlannerBodyHtml(b: string): string {
         <button class="btn" id="btn-rec-premarket" onclick="executeRecommend(false,true)" title="跳过交易时段检查，直接提交限价委托到QMT（盘前预埋单）">📋 预埋委托（盘前下单）</button>
         <button class="btn" id="btn-rec-schedule" onclick="scheduleStrategy()" title="生成 MiniQMT 预埋策略文件，开盘时自动下单">📄 生成QMT策略文件</button>
       </div>
+      <div id="rec-exec-mode-hint" style="font-size:12px;margin-top:6px;padding:4px 8px;border-radius:4px;display:none"></div>
       <div id="rec-exec-hint" style="font-size:12px;color:var(--text-dim);margin-top:8px">执行会按分批入场第1笔价格提交限价买单；预埋委托可在非交易时段提交，开盘后按限价撮合。</div>
       <div id="rec-exec-status" style="font-size:12px;color:var(--text-dim);margin-top:4px"></div>
       <div id="rec-exec-result" style="margin-top:8px"></div>

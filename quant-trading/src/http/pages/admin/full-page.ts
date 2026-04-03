@@ -9,6 +9,7 @@ export function getAdminPageHtml(
   baseUrl: string,
   apiToken?: string,
   gatewayToken?: string,
+  openclawProxyPort?: number,
 ): string {
   const b = baseUrl.replace(/\/$/, "");
   return `<!DOCTYPE html>
@@ -27,6 +28,7 @@ window.onerror=function(msg,src,line){console.error('[admin] JS error:',msg,'at 
 var B = ${JSON.stringify(b)};
 var _T = ${JSON.stringify(apiToken ?? "")};
 var _GT = ${JSON.stringify(gatewayToken ?? "")};
+window._PROXY_PORT = ${JSON.stringify(openclawProxyPort ?? 0)};
 ${getAdminMainScript()}
 </script>
 </body>

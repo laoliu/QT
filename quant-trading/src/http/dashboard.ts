@@ -777,10 +777,10 @@ export function getDashboardHtml(baseUrl: string): string {
         const hasSymbol = !!sym;
         const actions = hasSymbol ? (
           '<div class="alert-actions">' +
-          '<button class="btn" onclick="viewStock(\''+esc(sym)+'\')" title="查看 K线/行情">📈 行情</button>' +
-          '<button class="btn btn-buy" onclick="openQuickOrder(\''+esc(sym)+'\',\'buy\','+price+','+changePct+')" title="快速买入">买入</button>' +
-          '<button class="btn btn-sell" onclick="openQuickOrder(\''+esc(sym)+'\',\'sell\','+price+','+changePct+')" title="快速卖出">卖出</button>' +
-          (a.metadata?.alertId ? '<button class="btn" onclick="dismissAlert(\''+esc(a.metadata.alertId)+'\')" title="停止该条件监控">停止监控</button>' : '') +
+          '<button class="btn" onclick="viewStock(\\''+esc(sym)+'\\')" title="查看 K线/行情">📈 行情</button>' +
+          '<button class="btn btn-buy" onclick="openQuickOrder(\\''+esc(sym)+'\\',\\'buy\\',\\''+price+'\\',\\''+changePct+'\\')" title="快速买入">买入</button>' +
+          '<button class="btn btn-sell" onclick="openQuickOrder(\\''+esc(sym)+'\\',\\'sell\\',\\''+price+'\\',\\''+changePct+'\\')" title="快速卖出">卖出</button>' +
+          (a.metadata?.alertId ? '<button class="btn" onclick="dismissAlert(\\''+esc(a.metadata.alertId)+'\\')" title="停止该条件监控">停止监控</button>' : '') +
           '</div>'
         ) : '';
         h += '<div class="alert-item sev-'+a.severity+'">' +

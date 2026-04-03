@@ -268,6 +268,10 @@
             }
           }
         }
+      },
+      "openclawProxyPort": {
+        "type": "number",
+        "description": "Port for the OpenClaw iframe reverse proxy. When set, a proxy is started that strips X-Frame-Options/CSP headers, allowing the admin panel to embed the OpenClaw chat UI via iframe. Example: 18890"
       }
     }
   }

@@ -42,31 +42,32 @@ export function getPlannerBodyHtml(b: string): string {
   </div>
 </div>
 
-<!-- ═══ Plan Tab ═══ -->
-<div class="tab-content active" id="tab-plan">
-  <!-- Quick-nav guide -->
-  <div class="nav-guide" id="nav-guide">
-    <div class="nav-guide-paper">
-      <span class="nav-guide-title">🟢 模拟盘功能导航</span>
-      <div class="nav-guide-btns">
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('screen');history.pushState(null,null,'#screen')">🔍 选股筛选</button>
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('institution');history.pushState(null,null,'#institution')">🏦 机构行为</button>
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('accumulation');history.pushState(null,null,'#accumulation')">🧲 主力吸筹</button>
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('backtest');history.pushState(null,null,'#backtest')">🧪 策略回测</button>
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('pf-backtest');history.pushState(null,null,'#pf-backtest')">📊 持仓回测</button>
-        <button class="nav-btn nav-btn-sim" onclick="activateTab('portfolio');history.pushState(null,null,'#portfolio')">💼 模拟持仓</button>
-      </div>
-    </div>
-    <div class="nav-guide-live">
-      <span class="nav-guide-title">🔴 实盘功能导航</span>
-      <div class="nav-guide-btns">
-        <button class="nav-btn nav-btn-live" onclick="activateTab('recommend');history.pushState(null,null,'#recommend')">🎯 建仓推荐</button>
-        <button class="nav-btn nav-btn-live" onclick="activateTab('rebalance');history.pushState(null,null,'#rebalance')">⚖️ 调仓建议</button>
-        <button class="nav-btn nav-btn-live" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
-        <button class="nav-btn nav-btn-live" onclick="activateTab('milestones');history.pushState(null,null,'#milestones')">📊 目标追踪</button>
-      </div>
+<!-- Quick-nav guide (shared across all tabs) -->
+<div class="nav-guide" id="nav-guide">
+  <div class="nav-guide-paper">
+    <span class="nav-guide-title">🟢 模拟盘功能导航</span>
+    <div class="nav-guide-btns">
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('screen');history.pushState(null,null,'#screen')">🔍 选股筛选</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('institution');history.pushState(null,null,'#institution')">🏦 机构行为</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('accumulation');history.pushState(null,null,'#accumulation')">🧲 主力吸筹</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('backtest');history.pushState(null,null,'#backtest')">🧪 策略回测</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('pf-backtest');history.pushState(null,null,'#pf-backtest')">📊 持仓回测</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('portfolio');history.pushState(null,null,'#portfolio')">💼 模拟持仓</button>
     </div>
   </div>
+  <div class="nav-guide-live">
+    <span class="nav-guide-title">🔴 实盘功能导航</span>
+    <div class="nav-guide-btns">
+      <button class="nav-btn nav-btn-live" onclick="activateTab('recommend');history.pushState(null,null,'#recommend')">🎯 建仓推荐</button>
+      <button class="nav-btn nav-btn-live" onclick="activateTab('rebalance');history.pushState(null,null,'#rebalance')">⚖️ 调仓建议</button>
+      <button class="nav-btn nav-btn-live" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
+      <button class="nav-btn nav-btn-live" onclick="activateTab('milestones');history.pushState(null,null,'#milestones')">📊 目标追踪</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Plan Tab ═══ -->
+<div class="tab-content active" id="tab-plan">
   <div class="cards">
     <div class="card">
       <h3>💰 投资目标设定</h3>

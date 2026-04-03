@@ -8,6 +8,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { OrderRequest } from "../broker/adapter.js";
+import { startOpenClawProxy } from "./openclaw-proxy.js";
 import {
   createDataProvider,
   detectMarketFromSymbol,
@@ -116,6 +117,23 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   } = deps;
   const marketDataProvider = createDataProvider(config);
 
+  // ── OpenClaw iframe proxy ──────────────────────────────────────
+  const proxyPort = config.openclawProxyPort
+    ? Number(config.openclawProxyPort)
+    : 0;
+  if (proxyPort) {
+    const gwPort = Number(process.env["OPENCLAW_GATEWAY_PORT"] || 18789);
+    const gwTarget = `http://localhost:${gwPort}`;
+    // Resolve gateway token for auto-login injection
+    const rawGwToken = api.config.gateway?.auth?.token;
+    let gwToken: string | undefined;
+    if (typeof rawGwToken === "string") {
+      const envMatch = /^\$\{(\w+)\}$/.exec(rawGwToken);
+      gwToken = envMatch ? process.env[envMatch[1]] : rawGwToken;
+    }
+    startOpenClawProxy({ target: gwTarget, port: proxyPort, gatewayToken: gwToken });
+  }
+
   // ── Portal (Home) Page ─────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -142,7 +160,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const envMatch = /^\$\{(\w+)\}$/.exec(rawGwToken);
         gatewayToken = envMatch ? process.env[envMatch[1]] : rawGwToken;
       }
-      const html = getAdminPageHtml("", config.apiToken, gatewayToken);
+      const html = getAdminPageHtml("", config.apiToken, gatewayToken, proxyPort || undefined);
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",

@@ -22,6 +22,7 @@ export function getAdminBodyHtml(b: string): string {
   <div class="tab" data-tab="tasks">⏰ 任务</div>
   <div class="tab" data-tab="logs">📋 日志</div>
   <div class="tab" data-tab="chat">💬 聊天</div>
+  <div class="tab" data-tab="ai-chat">🤖 AI助手</div>
   <div class="tab" data-tab="config">🔑 配置</div>
 </div>
 
@@ -245,6 +246,21 @@ export function getAdminBodyHtml(b: string): string {
     <div style="display:flex;gap:8px;margin-top:8px;flex-shrink:0">
       <textarea id="chat-input" placeholder="输入消息… (Enter 发送, Shift+Enter 换行)" rows="2" style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;resize:vertical;font-family:inherit"></textarea>
       <button class="btn btn-primary" id="chat-send-btn" onclick="chatSend()" style="align-self:flex-end;padding:8px 16px" disabled>发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AI Chat (iframe) ═══ -->
+<div class="tab-content" id="tab-ai-chat">
+  <div style="display:flex;flex-direction:column;height:calc(100vh - 140px)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-shrink:0">
+      <span id="ai-chat-status" style="font-size:12px;color:var(--text-dim)">就绪</span>
+      <button class="btn btn-sm" onclick="reloadAiChat()">🔄 刷新</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--text-dim)">嵌入 OpenClaw 完整聊天界面</span>
+    </div>
+    <div id="ai-chat-frame-container" style="flex:1;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2)">
+      <div id="ai-chat-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:14px">点击加载 AI 助手…</div>
     </div>
   </div>
 </div>

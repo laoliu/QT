@@ -3,7 +3,8 @@ export function getStateJs(): string {
   return `
 var currentPlan = null;
 var currentPlanVersion = null;
-var signalHistory = [];
+var signalHistory = {paper:[],live:[]};
+var _lastPortfolioSignals = {paper:[],live:[]};
 var institutionScanCache = null;
 var institutionHistoryCache = null;
 var institutionHistoryPeakSortBy = {order: 'count', customer: 'count', patent: 'count', restructure: 'count'};

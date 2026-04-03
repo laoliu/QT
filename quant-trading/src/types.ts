@@ -873,6 +873,15 @@ export type QuantTradingConfig = {
   };
 
   /**
+   * OpenClaw iframe proxy port.
+   * When set, a reverse proxy is started on this port that strips
+   * X-Frame-Options / CSP headers and optionally injects the gateway
+   * token, allowing the admin panel to embed the OpenClaw chat UI
+   * via iframe.  Example: 18890.
+   */
+  openclawProxyPort?: number;
+
+  /**
    * Data staleness monitoring configuration.
    * Detects when live market data feeds stop delivering for subscribed symbols.
    */

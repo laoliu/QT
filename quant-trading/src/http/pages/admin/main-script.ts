@@ -51,7 +51,7 @@ setInterval(function(){document.getElementById('clock').textContent=new Date().t
 // Set default end date for kline query to today
 (function(){var el=document.getElementById('kline-end');if(el)el.value=new Date().toISOString().slice(0,10)})();
 function loadTab(name){
-  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,chat:loadChat,config:loadConfig};
+  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,chat:loadChat,'ai-chat':loadAiChat,config:loadConfig};
   if(m[name])m[name]();
 }
 
@@ -929,6 +929,39 @@ var _chatInput=document.getElementById('chat-input');
 if(_chatInput)_chatInput.addEventListener('keydown',function(e){
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatSend();}
 });
+
+/* ── AI Chat iframe ── */
+var _aiChatLoaded=false;
+function loadAiChat(){
+  if(_aiChatLoaded)return;
+  _aiChatLoaded=true;
+  var container=document.getElementById('ai-chat-frame-container');
+  var status=document.getElementById('ai-chat-status');
+  if(!container)return;
+  // Proxy port is injected as _PROXY_PORT by the server
+  var proxyPort=window._PROXY_PORT||0;
+  if(!proxyPort){
+    container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--red);font-size:14px">⚠️ iframe 代理未启用 (未配置 openclawProxyPort)</div>';
+    if(status)status.textContent='未启用';
+    return;
+  }
+  var src=location.protocol+'//'+location.hostname+':'+proxyPort+'/';
+  container.innerHTML='<iframe id="ai-chat-iframe" src="'+esc(src)+'" style="width:100%;height:100%;border:0" allow="clipboard-read; clipboard-write" title="OpenClaw Chat"></iframe>';
+  if(status)status.textContent='已加载';
+  var iframe=document.getElementById('ai-chat-iframe');
+  if(iframe){
+    iframe.addEventListener('load',function(){if(status)status.textContent='✅ 已连接'});
+    iframe.addEventListener('error',function(){if(status)status.textContent='❌ 加载失败'});
+  }
+}
+function reloadAiChat(){
+  _aiChatLoaded=false;
+  var container=document.getElementById('ai-chat-frame-container');
+  if(container)container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:14px">加载中…</div>';
+  var status=document.getElementById('ai-chat-status');
+  if(status)status.textContent='刷新中…';
+  loadAiChat();
+}
 
 /* ── Auto-refresh overview every 15s ── */
 setInterval(function(){

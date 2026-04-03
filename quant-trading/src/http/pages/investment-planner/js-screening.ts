@@ -3,20 +3,22 @@ export function getScreeningJs(): string {
   return `
 function refreshPortfolio(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
+    document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
     return;
   }
   toast('🔄 刷新持仓行情…');
   api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan}),_timeout:60000}).then(function(d){
     var s=d.summary;
+    var _mode=window._currentViewMode||'paper';
+    _lastPortfolioSignals[_mode]=d.signals||[];
     document.getElementById('portfolio-kpis').innerHTML=[
       kpiHtml('¥'+numInt(s.totalCost),'总成本'),
       kpiHtml('¥'+numInt(s.totalValue),'总市值'),
       kpiHtml('<span style="color:'+pctColor(s.totalPnl)+'">¥'+numInt(s.totalPnl)+'</span>','总盈亏'),
       kpiHtml('<span style="color:'+pctColor(s.totalPnlPct)+'">'+pct(s.totalPnlPct)+'</span>','收益率'),
       kpiHtml(s.positionCount,'持仓数'),
-      kpiHtml(s.signalCount,'活跃信号'),
-      kpiHtml('<span style="color:var(--red)">'+s.urgentSignals+'</span>','紧急信号'),
+      kpiClickable(s.signalCount,'活跃信号','showSignalPopup()'),
+      kpiClickable('<span style="color:var(--red)">'+s.urgentSignals+'</span>','紧急信号','showSignalPopup("紧急")'),
     ].join('');
 
     var tbody=document.querySelector('#portfolio-table tbody');
@@ -41,13 +43,55 @@ function refreshPortfolio(){
         '</tr>';
     }).join('')||'<tr><td colspan="12" style="text-align:center;color:var(--text-dim)">暂无持仓数据</td></tr>';
 
-    // Store signals
+    // Store signals (per mode)
     if(d.signals&&d.signals.length){
-      d.signals.forEach(function(s){s.timestamp=d.timestamp;signalHistory.unshift(s)});
-      if(signalHistory.length>100)signalHistory=signalHistory.slice(0,100);
+      var _m=window._currentViewMode||'paper';
+      d.signals.forEach(function(s){s.timestamp=d.timestamp;s._mode=_m;signalHistory[_m].unshift(s)});
+      if(signalHistory[_m].length>100)signalHistory[_m]=signalHistory[_m].slice(0,100);
     }
     toast('✅ 持仓已刷新');
   });
+}
+
+function showSignalPopup(filterUrgency){
+  var _mode=window._currentViewMode||'paper';
+  var signals=_lastPortfolioSignals[_mode]||[];
+  if(filterUrgency)signals=signals.filter(function(s){return s.urgency===filterUrgency});
+  var existing=document.getElementById('signal-popup-overlay');
+  if(existing)existing.remove();
+  var overlay=document.createElement('div');
+  overlay.id='signal-popup-overlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+  var modeLabel=_mode==='live'?'实盘':'模拟盘';
+  var title=filterUrgency?modeLabel+' 紧急信号 ('+signals.length+')':modeLabel+' 活跃信号 ('+signals.length+')';
+  var content;
+  if(!signals.length){
+    content='<div style="text-align:center;padding:40px;color:var(--text-dim)">✅ 当前无'+(filterUrgency||'')+'信号</div>';
+  }else{
+    content=signals.map(function(s){
+      var icon=s.type==='STOP_LOSS'?'🛑':s.type==='TAKE_PROFIT'?'💰':s.type==='VOLUME_SPIKE'||s.type==='VOLUME_EXTREME'?'📊':s.type==='CHURNING_ALERT'||s.type==='CHURNING_PATTERN'?'🔄':s.type==='DISTRIBUTION_ALERT'||s.type==='DISTRIBUTION_PATTERN'?'📤':'⚠️';
+      var urgBadge='<span class="badge badge-'+(s.urgency==='紧急'?'red':s.urgency==='重要'?'orange':'yellow')+'">'+esc(s.urgency)+'</span>';
+      var actionBadge=s.action==='卖出'?'<span class="badge badge-red">'+esc(s.action)+'</span>':
+                      s.action==='减仓'?'<span class="badge badge-orange">'+esc(s.action)+'</span>':
+                      '<span class="badge badge-yellow">'+esc(s.action||'关注')+'</span>';
+      return '<div style="padding:12px;border-bottom:1px solid var(--border);">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+icon+' <a href="'+B+'/quant/admin/stock?symbol='+esc(s.symbol)+'" target="_blank" style="color:var(--accent);font-weight:600">'+esc(s.symbol)+'</a> <span style="color:var(--text)">'+esc(s.name)+'</span> '+actionBadge+' '+urgBadge+'</div>'+
+        '<div style="font-size:13px;color:var(--text-dim);margin-bottom:4px">'+esc(s.message)+'</div>'+
+        '<div style="font-size:12px;color:var(--text-dim)">现价: '+num(s.currentPrice)+(s.triggerPrice?' | 触发价: '+num(s.triggerPrice):'')+(s.pnlPct!=null?' | 盈亏: <span style="color:'+pctColor(s.pnlPct)+'">'+pct(s.pnlPct)+'</span>':'')+'</div>'+
+        '</div>';
+    }).join('');
+  }
+  overlay.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;width:600px;max-width:90vw;max-height:80vh;overflow:hidden;display:flex;flex-direction:column">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
+      '<h3 style="margin:0;font-size:16px">'+(filterUrgency?'🚨':'📡')+' '+title+'</h3>'+
+      '<span style="cursor:pointer;font-size:20px;color:var(--text-dim)" onclick="document.getElementById(\\'signal-popup-overlay\\').remove()">✕</span>'+
+    '</div>'+
+    '<div style="overflow-y:auto;flex:1">'+content+'</div>'+
+    '<div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right">'+
+      '<button class="btn" onclick="_activateTab(\\'signals\\');history.pushState(null,null,\\'#signals\\');document.getElementById(\\'signal-popup-overlay\\').remove()">查看全部信号详情</button>'+
+    '</div></div>';
+  document.body.appendChild(overlay);
 }
 
 /* ══════ PORTFOLIO CONDITIONAL ORDER TRACKING ══════ */
@@ -481,13 +525,17 @@ function renderRebalance(d){
 /* ══════ SIGNALS ══════ */
 function loadSignals(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('signal-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划并刷新持仓</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
+    document.getElementById('signal-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划并刷新持仓</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
     return;
   }
   // Refresh portfolio to get latest signals
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan}),_timeout:60000}).then(function(d){
+  var _mode=window._currentViewMode||'paper';
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan,mode:_mode}),_timeout:60000}).then(function(d){
     var signals=d.signals||[];
+    _lastPortfolioSignals[_mode]=signals;
+    var modeTag=_mode==='live'?'🔴 实盘':'🟢 模拟盘';
     document.getElementById('signal-kpis').innerHTML=[
+      kpiHtml(modeTag,'当前模式'),
       kpiHtml(signals.length,'当前信号'),
       kpiHtml(signals.filter(function(s){return s.urgency==='紧急'}).length,'<span style="color:var(--red)">紧急</span>'),
       kpiHtml(signals.filter(function(s){return s.urgency==='重要'}).length,'<span style="color:var(--orange)">重要</span>'),
@@ -516,9 +564,13 @@ function loadSignals(){
       }).join('');
     }
 
-    // Signal history table
+    // Signal history table (per mode)
+    if(d.signals&&d.signals.length){
+      d.signals.forEach(function(s){s.timestamp=d.timestamp;s._mode=_mode;signalHistory[_mode].unshift(s)});
+      if(signalHistory[_mode].length>100)signalHistory[_mode]=signalHistory[_mode].slice(0,100);
+    }
     var ht=document.querySelector('#signal-history-table tbody');
-    ht.innerHTML=signalHistory.slice(0,50).map(function(s){
+    ht.innerHTML=(signalHistory[_mode]||[]).slice(0,50).map(function(s){
       return '<tr>'+
         '<td style="white-space:nowrap;font-size:11px">'+esc(s.timestamp||'-')+'</td>'+
         '<td><span class="badge badge-'+(s.type==='STOP_LOSS'?'red':s.type==='TAKE_PROFIT'?'green':'yellow')+'">'+esc(s.type)+'</span></td>'+
@@ -535,7 +587,7 @@ function loadSignals(){
 /* ══════ MILESTONES ══════ */
 function loadMilestones(){
   if(!currentPlan||!currentPlan.milestones){
-    document.getElementById('milestone-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\'plan\');history.pushState(null,null,\'#plan\')">📋 前往制定计划</button></div>';
+    document.getElementById('milestone-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
     return;
   }
   var plan=currentPlan.plan;

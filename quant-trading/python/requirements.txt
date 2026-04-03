@@ -1,0 +1,33 @@
+# Quant Trading Extension — Python Dependencies
+#
+# Install with: pip install -r requirements.txt
+
+# Data providers
+akshare>=1.12.0
+baostock>=0.8.8
+jqdatasdk>=1.9.0
+tushare>=1.4.0
+yfinance>=0.2.0
+pytdx>=1.72  # 通达信行情 (optional, fast free data source)
+
+# Backtest engine
+backtrader>=1.9.78
+
+# Data manipulation
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Live trading — QMT (迅投 miniQMT)
+# xtquant is distributed by 迅投科技 and must be installed separately:
+#   pip install xtquant  (or copy from the miniQMT installation directory)
+# xtquant>=0.0.1   # uncomment after installing xtquant
+
+# Live trading — WebSocket client (used by some broker push channels)
+websocket-client>=1.6.0
+
+# Testing
+pytest>=7.0.0
+
+# Optional: advanced analytics
+scipy>=1.10.0
+# matplotlib>=3.7.0

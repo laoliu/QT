@@ -1,0 +1,101 @@
+{
+  "000975": {
+    "name": "山金国际",
+    "holders": 2,
+    "totalShares": 51505830.0,
+    "totalValue": 1253136843.9,
+    "change": "增仓",
+    "changePct": 63.07,
+    "changeQty": 19920450.0
+  },
+  "603268": {
+    "name": "*ST松发",
+    "holders": 2,
+    "totalShares": 3631840.0,
+    "totalValue": 302822819.2,
+    "change": "减仓",
+    "changePct": -27.06,
+    "changeQty": -1347600.0
+  },
+  "002422": {
+    "name": "科伦药业",
+    "holders": 1,
+    "totalShares": 13944473.0,
+    "totalValue": 409270282.55,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13944473.0
+  },
+  "002668": {
+    "name": "TCL智家",
+    "holders": 1,
+    "totalShares": 11482522.0,
+    "totalValue": 119188578.36,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600132": {
+    "name": "重庆啤酒",
+    "holders": 1,
+    "totalShares": 3241838.0,
+    "totalValue": 169353617.12,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600219": {
+    "name": "南山铝业",
+    "holders": 1,
+    "totalShares": 164343200.0,
+    "totalValue": 884166416.0,
+    "change": "增仓",
+    "changePct": 2.71,
+    "changeQty": 4343200.0
+  },
+  "600605": {
+    "name": "汇通能源",
+    "holders": 1,
+    "totalShares": 2761000.0,
+    "totalValue": 82830000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2761000.0
+  },
+  "601619": {
+    "name": "嘉泽新能",
+    "holders": 1,
+    "totalShares": 19454800.0,
+    "totalValue": 86379312.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 19454800.0
+  },
+  "603031": {
+    "name": "安孚科技",
+    "holders": 1,
+    "totalShares": 5731048.0,
+    "totalValue": 253885426.4,
+    "change": "增仓",
+    "changePct": 33.31,
+    "changeQty": 1432029.0
+  },
+  "603317": {
+    "name": "天味食品",
+    "holders": 1,
+    "totalShares": 9291076.0,
+    "totalValue": 116324271.52,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9291076.0
+  },
+  "603659": {
+    "name": "璞泰来",
+    "holders": 1,
+    "totalShares": 13669335.0,
+    "totalValue": 373719618.9,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13669335.0
+  }
+}

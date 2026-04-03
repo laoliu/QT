@@ -1,0 +1,216 @@
+{
+  "_description": "技术壁垒证据链表 (Tech Moat Evidence Chain)",
+  "_updated": "2026-03-26",
+  "_usage": "tech_moat_engine.py reads this to extract and verify real technology barriers from news",
+
+  "_signal_categories": {
+    "announce": "宣传信号（新闻中的声明）",
+    "verify": "验证指标（需要多源确认的数据点）",
+    "competitor": "竞对对标（是否被应用于竞对产品）",
+    "supply_chain": "供应链验证（是否进入头部客户供应链）",
+    "patent": "专利验证（是否有相关专利、引用量）"
+  },
+
+  "tech_keywords": {
+    "hardware": {
+      "label": "硬件创新",
+      "announce_keywords": [
+        "芯片设计",
+        "工艺突破",
+        "制程",
+        "流片",
+        "首次量产",
+        "自主可控",
+        "国产",
+        "独立研发",
+        "专有工艺",
+        "纳米级",
+        "先进工艺",
+        "技术指标"
+      ],
+      "verify_metrics": [
+        "市占率",
+        "市场份额",
+        "全球排名",
+        "全球前三",
+        "全球前五",
+        "行业前三",
+        "认证通过",
+        "认证",
+        "出货量",
+        "产能",
+        "量产状态",
+        "量产",
+        "批量供货"
+      ],
+      "competitor_signals": [
+        "被三星采用",
+        "被英特尔采用",
+        "被高通采用",
+        "被华为采用",
+        "被阿里采用",
+        "被头部厂商采用",
+        "实现替代",
+        "国产替代"
+      ],
+      "supply_chain_signals": [
+        "苹果供应链",
+        "华为供应链",
+        "特斯拉供应链",
+        "NVIDIA供应链",
+        "AMD供应链",
+        "供应链",
+        "服务器供应链",
+        "进入供应链",
+        "头部客户",
+        "核心供应商",
+        "批量供货"
+      ]
+    },
+    "software": {
+      "label": "软件算法",
+      "announce_keywords": [
+        "算法突破",
+        "架构优化",
+        "性能提升",
+        "编译器",
+        "AI模型",
+        "神经网络架构",
+        "优化框架",
+        "系统架构",
+        "独特架构"
+      ],
+      "verify_metrics": [
+        "性能对标",
+        "基准测试",
+        "学术论文",
+        "开源贡献",
+        "专利数量",
+        "技术文献",
+        "客户验证",
+        "商业化",
+        "正式发布"
+      ],
+      "competitor_signals": [
+        "被NVIDIA应用",
+        "被OpenAI应用",
+        "被Meta应用",
+        "被Google应用",
+        "被Microsoft应用",
+        "被头部云厂商采用",
+        "行业客户采用"
+      ],
+      "supply_chain_signals": ["云厂商集成", "大模型应用", "算力平台集成", "平台接入", "客户上线"]
+    },
+    "material": {
+      "label": "材料创新",
+      "announce_keywords": [
+        "新材料",
+        "材料突破",
+        "配方研发",
+        "工艺创新",
+        "纯度突破",
+        "性能指标",
+        "替代进口",
+        "国产替代"
+      ],
+      "verify_metrics": [
+        "纯度等级",
+        "性能指标",
+        "成本线",
+        "产量",
+        "市占率",
+        "国际认证",
+        "客户验证",
+        "量产",
+        "送样通过"
+      ],
+      "competitor_signals": ["被国际大厂采用", "进入全球供应链", "替代进口", "打破垄断"],
+      "supply_chain_signals": [
+        "被半导体厂采用",
+        "被光学厂采用",
+        "进入头部供应商",
+        "核心材料供应",
+        "批量交付"
+      ]
+    },
+    "process": {
+      "label": "制造工艺",
+      "announce_keywords": [
+        "工艺突破",
+        "设备创新",
+        "产能提升",
+        "良率提高",
+        "成本降低",
+        "效率提升",
+        "自动化"
+      ],
+      "verify_metrics": [
+        "良率数据",
+        "产能数据",
+        "成本指标",
+        "市占率",
+        "订单数",
+        "客户数",
+        "验证产线",
+        "规模化生产",
+        "量产"
+      ],
+      "competitor_signals": ["被行业龙头采用", "打破进口垄断", "实现替代", "对标国际龙头"],
+      "supply_chain_signals": [
+        "进入产业链核心环节",
+        "成为主流供应商",
+        "进入头部客户供应链",
+        "设备验证通过"
+      ]
+    }
+  },
+
+  "evidence_weights": {
+    "announce": 1,
+    "single_source_verify": 2,
+    "multi_source_verify": 3,
+    "competitor_adoption": 4,
+    "supply_chain_adoption": 5,
+    "patent_backed": 1.5,
+    "academic_backed": 2
+  },
+
+  "moat_assessment": {
+    "score_0_to_2": "宣传信号，缺乏验证",
+    "score_2_to_4": "有部分验证，壁垒较弱",
+    "score_4_to_6": "多源验证，壁垒中等",
+    "score_6_to_8": "供应链验证，壁垒较强",
+    "score_8_plus": "竞对采用，壁垒极强"
+  },
+
+  "examples": {
+    "strong_moat_600519": {
+      "company": "贵州茅台",
+      "tech": "白酒酿造工艺",
+      "announce": "茅台镇微生物发酵工艺",
+      "verify": ["市占率行业第一", "产量受限", "毫克数据对标"],
+      "competitor": "无法被竞对复制（地理位置+时间）",
+      "supply_chain": "全球奢侈品渠道垄断",
+      "confidence": 9.5
+    },
+    "medium_moat_688008": {
+      "company": "澜起科技",
+      "tech": "内存接口芯片（DDR5）",
+      "announce": "自主设计DDR5buffer芯片",
+      "verify": ["市占率全球前三", "Samsung/SK海力士采用", "订单增长"],
+      "competitor": "Samsung、Intel等验证",
+      "supply_chain": "内存芯片主流供应商",
+      "confidence": 7.8
+    },
+    "weak_moat_news": {
+      "company": "某公司",
+      "tech": "AI芯片",
+      "announce": "技术突破达到国际水平",
+      "verify": ["缺乏第三方认证", "产量不明", "无头部客户"],
+      "competitor": "无竞对采用案例",
+      "supply_chain": "未进入主流供应链",
+      "confidence": 2.1
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "qt-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw quant-trading plugin standalone workspace",
+  "scripts": {
+    "build": "echo 'build not configured yet'",
+    "check": "oxfmt --check . && oxlint .",
+    "format": "oxfmt --check .",
+    "format:fix": "oxfmt --write .",
+    "test": "vitest run",
+    "dev": "pnpm openclaw gateway run --bind loopback --port 18789 --force"
+  },
+  "devDependencies": {
+    "openclaw": "latest",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}

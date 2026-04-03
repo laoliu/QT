@@ -1,0 +1,5546 @@
+{
+  "000680": {
+    "name": "山推股份",
+    "holders": 5,
+    "totalShares": 85159015.0,
+    "totalValue": 881395805.25,
+    "change": "减仓",
+    "changePct": -5.73,
+    "changeQty": -5175049.0
+  },
+  "001283": {
+    "name": "豪鹏科技",
+    "holders": 4,
+    "totalShares": 4182314.0,
+    "totalValue": 320323429.26,
+    "change": "增仓",
+    "changePct": 40.72,
+    "changeQty": 1210160.0
+  },
+  "002938": {
+    "name": "鹏鼎控股",
+    "holders": 4,
+    "totalShares": 57415198.0,
+    "totalValue": 3219270151.86,
+    "change": "增仓",
+    "changePct": 33.49,
+    "changeQty": 14405214.0
+  },
+  "600426": {
+    "name": "华鲁恒升",
+    "holders": 4,
+    "totalShares": 138169107.0,
+    "totalValue": 3676679937.27,
+    "change": "增仓",
+    "changePct": 4.13,
+    "changeQty": 5485294.0
+  },
+  "603619": {
+    "name": "中曼石油",
+    "holders": 4,
+    "totalShares": 30887144.0,
+    "totalValue": 601990436.56,
+    "change": "增仓",
+    "changePct": 20.63,
+    "changeQty": 5282700.0
+  },
+  "000719": {
+    "name": "中原传媒",
+    "holders": 3,
+    "totalShares": 11796530.0,
+    "totalValue": 139199054.0,
+    "change": "增仓",
+    "changePct": 101.65,
+    "changeQty": 5946530.0
+  },
+  "002003": {
+    "name": "伟星股份",
+    "holders": 3,
+    "totalShares": 73140110.0,
+    "totalValue": 744566319.8,
+    "change": "增仓",
+    "changePct": 1.61,
+    "changeQty": 1161100.0
+  },
+  "002078": {
+    "name": "太阳纸业",
+    "holders": 3,
+    "totalShares": 108837301.0,
+    "totalValue": 1555285031.29,
+    "change": "减仓",
+    "changePct": -27.98,
+    "changeQty": -42273582.0
+  },
+  "002126": {
+    "name": "银轮股份",
+    "holders": 3,
+    "totalShares": 31228684.0,
+    "totalValue": 1291618370.24,
+    "change": "增仓",
+    "changePct": 47.52,
+    "changeQty": 10059649.0
+  },
+  "002315": {
+    "name": "焦点科技",
+    "holders": 3,
+    "totalShares": 8242625.0,
+    "totalValue": 398530918.75,
+    "change": "减仓",
+    "changePct": -9.71,
+    "changeQty": -886340.0
+  },
+  "002318": {
+    "name": "久立特材",
+    "holders": 3,
+    "totalShares": 42411167.0,
+    "totalValue": 1033560139.79,
+    "change": "增仓",
+    "changePct": 32.46,
+    "changeQty": 10391900.0
+  },
+  "002444": {
+    "name": "巨星科技",
+    "holders": 3,
+    "totalShares": 46098556.0,
+    "totalValue": 1418452568.12,
+    "change": "减仓",
+    "changePct": -21.45,
+    "changeQty": -12588110.0
+  },
+  "002545": {
+    "name": "东方铁塔",
+    "holders": 3,
+    "totalShares": 45311212.0,
+    "totalValue": 634356968.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 45311212.0
+  },
+  "002831": {
+    "name": "裕同科技",
+    "holders": 3,
+    "totalShares": 25595159.0,
+    "totalValue": 701051405.01,
+    "change": "增仓",
+    "changePct": 10.53,
+    "changeQty": 2439200.0
+  },
+  "300416": {
+    "name": "苏试试验",
+    "holders": 3,
+    "totalShares": 12726962.0,
+    "totalValue": 223103643.86,
+    "change": "减仓",
+    "changePct": -14.37,
+    "changeQty": -2135000.0
+  },
+  "300627": {
+    "name": "华测导航",
+    "holders": 3,
+    "totalShares": 29042883.0,
+    "totalValue": 1028989344.69,
+    "change": "增仓",
+    "changePct": 53.54,
+    "changeQty": 10126987.0
+  },
+  "600153": {
+    "name": "建发股份",
+    "holders": 3,
+    "totalShares": 83722225.0,
+    "totalValue": 858990028.5,
+    "change": "增仓",
+    "changePct": 58.68,
+    "changeQty": 30961801.0
+  },
+  "600323": {
+    "name": "瀚蓝环境",
+    "holders": 3,
+    "totalShares": 30765159.0,
+    "totalValue": 831582247.77,
+    "change": "减仓",
+    "changePct": -0.97,
+    "changeQty": -300000.0
+  },
+  "600389": {
+    "name": "江山股份",
+    "holders": 3,
+    "totalShares": 21347505.0,
+    "totalValue": 557169880.5,
+    "change": "减仓",
+    "changePct": -10.34,
+    "changeQty": -2461860.0
+  },
+  "601001": {
+    "name": "晋控煤业",
+    "holders": 3,
+    "totalShares": 44678764.0,
+    "totalValue": 614779792.64,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 44678764.0
+  },
+  "601128": {
+    "name": "常熟银行",
+    "holders": 3,
+    "totalShares": 210959174.0,
+    "totalValue": 1442960750.16,
+    "change": "减仓",
+    "changePct": -24.06,
+    "changeQty": -66832113.0
+  },
+  "601702": {
+    "name": "华峰铝业",
+    "holders": 3,
+    "totalShares": 16773547.0,
+    "totalValue": 284814828.06,
+    "change": "增仓",
+    "changePct": 51.5,
+    "changeQty": 5702000.0
+  },
+  "603268": {
+    "name": "*ST松发",
+    "holders": 3,
+    "totalShares": 4979440.0,
+    "totalValue": 239262092.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603599": {
+    "name": "广信股份",
+    "holders": 3,
+    "totalShares": 47090997.0,
+    "totalValue": 560853774.27,
+    "change": "增仓",
+    "changePct": 277.97,
+    "changeQty": 34632230.0
+  },
+  "603737": {
+    "name": "三棵树",
+    "holders": 3,
+    "totalShares": 15024012.0,
+    "totalValue": 719349694.56,
+    "change": "增仓",
+    "changePct": 186.76,
+    "changeQty": 9784864.0
+  },
+  "688087": {
+    "name": "英科再生",
+    "holders": 3,
+    "totalShares": 8446799.0,
+    "totalValue": 223079961.59,
+    "change": "减仓",
+    "changePct": -5.78,
+    "changeQty": -518304.0
+  },
+  "688095": {
+    "name": "福昕软件",
+    "holders": 3,
+    "totalShares": 2693494.0,
+    "totalValue": 211789433.22,
+    "change": "增仓",
+    "changePct": 124.44,
+    "changeQty": 1493399.0
+  },
+  "688269": {
+    "name": "凯立新材",
+    "holders": 3,
+    "totalShares": 7582459.0,
+    "totalValue": 310122573.1,
+    "change": "增仓",
+    "changePct": 19.14,
+    "changeQty": 1218217.0
+  },
+  "000028": {
+    "name": "国药一致",
+    "holders": 2,
+    "totalShares": 11661114.0,
+    "totalValue": 291527850.0,
+    "change": "增仓",
+    "changePct": 2.1,
+    "changeQty": 239901.0
+  },
+  "000096": {
+    "name": "广聚能源",
+    "holders": 2,
+    "totalShares": 16894601.0,
+    "totalValue": 192091613.37,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000521": {
+    "name": "长虹美菱",
+    "holders": 2,
+    "totalShares": 20965602.0,
+    "totalValue": 149484742.26,
+    "change": "增仓",
+    "changePct": 49.76,
+    "changeQty": 6965700.0
+  },
+  "000528": {
+    "name": "柳工",
+    "holders": 2,
+    "totalShares": 39891522.0,
+    "totalValue": 441200233.32,
+    "change": "增仓",
+    "changePct": 68.14,
+    "changeQty": 16166355.0
+  },
+  "000581": {
+    "name": "威孚高科",
+    "holders": 2,
+    "totalShares": 14039974.0,
+    "totalValue": 323481000.96,
+    "change": "增仓",
+    "changePct": 102.6,
+    "changeQty": 7109974.0
+  },
+  "000726": {
+    "name": "鲁泰A",
+    "holders": 2,
+    "totalShares": 23446302.0,
+    "totalValue": 156152371.32,
+    "change": "增仓",
+    "changePct": 57.25,
+    "changeQty": 8536251.0
+  },
+  "000830": {
+    "name": "鲁西化工",
+    "holders": 2,
+    "totalShares": 29421397.0,
+    "totalValue": 427198684.44,
+    "change": "减仓",
+    "changePct": -16.04,
+    "changeQty": -5620400.0
+  },
+  "000869": {
+    "name": "张裕A",
+    "holders": 2,
+    "totalShares": 6425115.0,
+    "totalValue": 139232242.05,
+    "change": "增仓",
+    "changePct": 1.42,
+    "changeQty": 90000.0
+  },
+  "000892": {
+    "name": "欢瑞世纪",
+    "holders": 2,
+    "totalShares": 12912900.0,
+    "totalValue": 84708624.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 12912900.0
+  },
+  "000915": {
+    "name": "华特达因",
+    "holders": 2,
+    "totalShares": 6771129.0,
+    "totalValue": 211936337.7,
+    "change": "减仓",
+    "changePct": -2.77,
+    "changeQty": -192900.0
+  },
+  "000921": {
+    "name": "海信家电",
+    "holders": 2,
+    "totalShares": 11942544.0,
+    "totalValue": 310983845.76,
+    "change": "减仓",
+    "changePct": -33.28,
+    "changeQty": -5958088.0
+  },
+  "000962": {
+    "name": "东方钽业",
+    "holders": 2,
+    "totalShares": 10367225.0,
+    "totalValue": 252960290.0,
+    "change": "增仓",
+    "changePct": 167.89,
+    "changeQty": 6497200.0
+  },
+  "001206": {
+    "name": "依依股份",
+    "holders": 2,
+    "totalShares": 3068100.0,
+    "totalValue": 93208878.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3068100.0
+  },
+  "001311": {
+    "name": "多利科技",
+    "holders": 2,
+    "totalShares": 2269441.0,
+    "totalValue": 57711884.63,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2269441.0
+  },
+  "001979": {
+    "name": "招商蛇口",
+    "holders": 2,
+    "totalShares": 213783487.0,
+    "totalValue": 2174178062.79,
+    "change": "增仓",
+    "changePct": 18.49,
+    "changeQty": 33365272.0
+  },
+  "002011": {
+    "name": "盾安环境",
+    "holders": 2,
+    "totalShares": 15265924.0,
+    "totalValue": 217234098.52,
+    "change": "减仓",
+    "changePct": -60.86,
+    "changeQty": -23734169.0
+  },
+  "002025": {
+    "name": "航天电器",
+    "holders": 2,
+    "totalShares": 9518992.0,
+    "totalValue": 488419479.52,
+    "change": "增仓",
+    "changePct": 154.57,
+    "changeQty": 5779736.0
+  },
+  "002027": {
+    "name": "分众传媒",
+    "holders": 2,
+    "totalShares": 332676263.0,
+    "totalValue": 2681370679.78,
+    "change": "减仓",
+    "changePct": -0.43,
+    "changeQty": -1447200.0
+  },
+  "002064": {
+    "name": "华峰化学",
+    "holders": 2,
+    "totalShares": 44496334.0,
+    "totalValue": 405806566.08,
+    "change": "增仓",
+    "changePct": 3.72,
+    "changeQty": 1597789.0
+  },
+  "002202": {
+    "name": "金风科技",
+    "holders": 2,
+    "totalShares": 53760525.0,
+    "totalValue": 804795059.25,
+    "change": "增仓",
+    "changePct": 66.31,
+    "changeQty": 21435866.0
+  },
+  "002223": {
+    "name": "鱼跃医疗",
+    "holders": 2,
+    "totalShares": 26039009.0,
+    "totalValue": 1015781741.09,
+    "change": "减仓",
+    "changePct": -6.98,
+    "changeQty": -1955200.0
+  },
+  "002262": {
+    "name": "恩华药业",
+    "holders": 2,
+    "totalShares": 21830260.0,
+    "totalValue": 593783072.0,
+    "change": "增仓",
+    "changePct": 155.27,
+    "changeQty": 13278320.0
+  },
+  "002271": {
+    "name": "东方雨虹",
+    "holders": 2,
+    "totalShares": 42270942.0,
+    "totalValue": 520778005.44,
+    "change": "增仓",
+    "changePct": 11.43,
+    "changeQty": 4336800.0
+  },
+  "002301": {
+    "name": "齐心集团",
+    "holders": 2,
+    "totalShares": 27134000.0,
+    "totalValue": 172300900.0,
+    "change": "增仓",
+    "changePct": 18.76,
+    "changeQty": 4286300.0
+  },
+  "002311": {
+    "name": "海大集团",
+    "holders": 2,
+    "totalShares": 28720356.0,
+    "totalValue": 1831497102.12,
+    "change": "增仓",
+    "changePct": 36.54,
+    "changeQty": 7686006.0
+  },
+  "002353": {
+    "name": "杰瑞股份",
+    "holders": 2,
+    "totalShares": 13646012.0,
+    "totalValue": 760082868.4,
+    "change": "增仓",
+    "changePct": 88.69,
+    "changeQty": 6414201.0
+  },
+  "002423": {
+    "name": "中粮资本",
+    "holders": 2,
+    "totalShares": 5149500.0,
+    "totalValue": 68951805.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5149500.0
+  },
+  "002430": {
+    "name": "杭氧股份",
+    "holders": 2,
+    "totalShares": 40645895.0,
+    "totalValue": 990134002.2,
+    "change": "增仓",
+    "changePct": 41.93,
+    "changeQty": 12008298.0
+  },
+  "002442": {
+    "name": "龙星科技",
+    "holders": 2,
+    "totalShares": 25099200.0,
+    "totalValue": 157120992.0,
+    "change": "增仓",
+    "changePct": 51.78,
+    "changeQty": 8562300.0
+  },
+  "002459": {
+    "name": "晶澳科技",
+    "holders": 2,
+    "totalShares": 80929032.0,
+    "totalValue": 1063407480.48,
+    "change": "增仓",
+    "changePct": 43.97,
+    "changeQty": 24715820.0
+  },
+  "002461": {
+    "name": "珠江啤酒",
+    "holders": 2,
+    "totalShares": 19680000.0,
+    "totalValue": 196996800.0,
+    "change": "减仓",
+    "changePct": -7.95,
+    "changeQty": -1700000.0
+  },
+  "002469": {
+    "name": "三维化学",
+    "holders": 2,
+    "totalShares": 31967700.0,
+    "totalValue": 280037052.0,
+    "change": "增仓",
+    "changePct": 6.67,
+    "changeQty": 2000000.0
+  },
+  "002518": {
+    "name": "科士达",
+    "holders": 2,
+    "totalShares": 10526181.0,
+    "totalValue": 434626013.49,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 10526181.0
+  },
+  "002558": {
+    "name": "巨人网络",
+    "holders": 2,
+    "totalShares": 27848213.0,
+    "totalValue": 1258182263.34,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 27848213.0
+  },
+  "002568": {
+    "name": "百润股份",
+    "holders": 2,
+    "totalShares": 33128484.0,
+    "totalValue": 854052317.52,
+    "change": "减仓",
+    "changePct": -4.07,
+    "changeQty": -1407096.0
+  },
+  "002832": {
+    "name": "比音勒芬",
+    "holders": 2,
+    "totalShares": 21348897.0,
+    "totalValue": 337953039.51,
+    "change": "减仓",
+    "changePct": -25.59,
+    "changeQty": -7340350.0
+  },
+  "002916": {
+    "name": "深南电路",
+    "holders": 2,
+    "totalShares": 7501672.0,
+    "totalValue": 1625162222.08,
+    "change": "增仓",
+    "changePct": 181.5,
+    "changeQty": 4836825.0
+  },
+  "002991": {
+    "name": "甘源食品",
+    "holders": 2,
+    "totalShares": 1904200.0,
+    "totalValue": 104083572.0,
+    "change": "增仓",
+    "changePct": 1.73,
+    "changeQty": 32400.0
+  },
+  "003006": {
+    "name": "百亚股份",
+    "holders": 2,
+    "totalShares": 18600705.0,
+    "totalValue": 490872604.95,
+    "change": "增仓",
+    "changePct": 20.68,
+    "changeQty": 3186900.0
+  },
+  "300233": {
+    "name": "金城医药",
+    "holders": 2,
+    "totalShares": 11891300.0,
+    "totalValue": 221178180.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11891300.0
+  },
+  "300617": {
+    "name": "安靠智电",
+    "holders": 2,
+    "totalShares": 7200710.0,
+    "totalValue": 264554085.4,
+    "change": "减仓",
+    "changePct": -13.39,
+    "changeQty": -1113200.0
+  },
+  "300662": {
+    "name": "科锐国际",
+    "holders": 2,
+    "totalShares": 9953247.0,
+    "totalValue": 283866604.44,
+    "change": "减仓",
+    "changePct": -19.49,
+    "changeQty": -2408914.0
+  },
+  "300693": {
+    "name": "盛弘股份",
+    "holders": 2,
+    "totalShares": 5642009.0,
+    "totalValue": 233466332.42,
+    "change": "增仓",
+    "changePct": 67.13,
+    "changeQty": 2266090.0
+  },
+  "300770": {
+    "name": "新媒股份",
+    "holders": 2,
+    "totalShares": 2500800.0,
+    "totalValue": 119038080.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2500800.0
+  },
+  "300783": {
+    "name": "三只松鼠",
+    "holders": 2,
+    "totalShares": 4098728.0,
+    "totalValue": 98779344.8,
+    "change": "减仓",
+    "changePct": -61.3,
+    "changeQty": -6491800.0
+  },
+  "300824": {
+    "name": "北鼎股份",
+    "holders": 2,
+    "totalShares": 14549267.0,
+    "totalValue": 177210072.06,
+    "change": "增仓",
+    "changePct": 45.49,
+    "changeQty": 4549267.0
+  },
+  "300836": {
+    "name": "佰奥智能",
+    "holders": 2,
+    "totalShares": 4570570.0,
+    "totalValue": 259151319.0,
+    "change": "增仓",
+    "changePct": 0.04,
+    "changeQty": 1980.0
+  },
+  "300850": {
+    "name": "新强联",
+    "holders": 2,
+    "totalShares": 10183154.0,
+    "totalValue": 442763535.92,
+    "change": "增仓",
+    "changePct": 83.3,
+    "changeQty": 4627549.0
+  },
+  "300910": {
+    "name": "瑞丰新材",
+    "holders": 2,
+    "totalShares": 8344370.0,
+    "totalValue": 442251610.0,
+    "change": "增仓",
+    "changePct": 101.62,
+    "changeQty": 4205716.0
+  },
+  "300979": {
+    "name": "华利集团",
+    "holders": 2,
+    "totalShares": 13297525.0,
+    "totalValue": 705034775.5,
+    "change": "增仓",
+    "changePct": 31.53,
+    "changeQty": 3187400.0
+  },
+  "301005": {
+    "name": "超捷股份",
+    "holders": 2,
+    "totalShares": 1254267.0,
+    "totalValue": 62211643.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1254267.0
+  },
+  "301327": {
+    "name": "华宝新能",
+    "holders": 2,
+    "totalShares": 3780751.0,
+    "totalValue": 285295470.46,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3780751.0
+  },
+  "301328": {
+    "name": "维峰电子",
+    "holders": 2,
+    "totalShares": 637608.0,
+    "totalValue": 30413901.6,
+    "change": "减仓",
+    "changePct": -64.38,
+    "changeQty": -1152592.0
+  },
+  "301333": {
+    "name": "诺思格",
+    "holders": 2,
+    "totalShares": 4666569.0,
+    "totalValue": 256661295.0,
+    "change": "增仓",
+    "changePct": 114.97,
+    "changeQty": 2495780.0
+  },
+  "301518": {
+    "name": "长华化学",
+    "holders": 2,
+    "totalShares": 2590669.0,
+    "totalValue": 97538687.85,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2590669.0
+  },
+  "301525": {
+    "name": "儒竞科技",
+    "holders": 2,
+    "totalShares": 3355709.0,
+    "totalValue": 369966917.25,
+    "change": "增仓",
+    "changePct": 28.8,
+    "changeQty": 750300.0
+  },
+  "600031": {
+    "name": "三一重工",
+    "holders": 2,
+    "totalShares": 178223964.0,
+    "totalValue": 4141924923.36,
+    "change": "增仓",
+    "changePct": 3.98,
+    "changeQty": 6829565.0
+  },
+  "600057": {
+    "name": "厦门象屿",
+    "holders": 2,
+    "totalShares": 83895518.0,
+    "totalValue": 588107581.18,
+    "change": "增仓",
+    "changePct": 31.3,
+    "changeQty": 20000088.0
+  },
+  "600059": {
+    "name": "古越龙山",
+    "holders": 2,
+    "totalShares": 19722696.0,
+    "totalValue": 188548973.76,
+    "change": "减仓",
+    "changePct": -0.47,
+    "changeQty": -94100.0
+  },
+  "600060": {
+    "name": "海信视像",
+    "holders": 2,
+    "totalShares": 45461905.0,
+    "totalValue": 1096541148.6,
+    "change": "减仓",
+    "changePct": -4.55,
+    "changeQty": -2169300.0
+  },
+  "600063": {
+    "name": "皖维高新",
+    "holders": 2,
+    "totalShares": 50590000.0,
+    "totalValue": 314163900.0,
+    "change": "增仓",
+    "changePct": 86.33,
+    "changeQty": 23439902.0
+  },
+  "600176": {
+    "name": "中国巨石",
+    "holders": 2,
+    "totalShares": 85519561.0,
+    "totalValue": 1482909187.74,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600409": {
+    "name": "三友化工",
+    "holders": 2,
+    "totalShares": 41162067.0,
+    "totalValue": 231742437.21,
+    "change": "减仓",
+    "changePct": -15.46,
+    "changeQty": -7526900.0
+  },
+  "600486": {
+    "name": "扬农化工",
+    "holders": 2,
+    "totalShares": 21392863.0,
+    "totalValue": 1539002564.22,
+    "change": "增仓",
+    "changePct": 31.18,
+    "changeQty": 5084817.0
+  },
+  "600710": {
+    "name": "苏美达",
+    "holders": 2,
+    "totalShares": 26829854.0,
+    "totalValue": 281713467.0,
+    "change": "增仓",
+    "changePct": 70.56,
+    "changeQty": 11099853.0
+  },
+  "600861": {
+    "name": "北京人力",
+    "holders": 2,
+    "totalShares": 12362211.0,
+    "totalValue": 232533188.91,
+    "change": "增仓",
+    "changePct": 40.7,
+    "changeQty": 3575801.0
+  },
+  "600885": {
+    "name": "宏发股份",
+    "holders": 2,
+    "totalShares": 29381791.0,
+    "totalValue": 774504010.76,
+    "change": "增仓",
+    "changePct": 70.82,
+    "changeQty": 12181791.0
+  },
+  "601033": {
+    "name": "永兴股份",
+    "holders": 2,
+    "totalShares": 10399211.0,
+    "totalValue": 164099549.58,
+    "change": "减仓",
+    "changePct": -33.64,
+    "changeQty": -5272496.0
+  },
+  "601155": {
+    "name": "新城控股",
+    "holders": 2,
+    "totalShares": 24192600.0,
+    "totalValue": 393129750.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 24192600.0
+  },
+  "601199": {
+    "name": "江南水务",
+    "holders": 2,
+    "totalShares": 25510179.0,
+    "totalValue": 142346798.82,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 25510179.0
+  },
+  "601319": {
+    "name": "中国人保",
+    "holders": 2,
+    "totalShares": 97494280.0,
+    "totalValue": 759480441.2,
+    "change": "增仓",
+    "changePct": 87.07,
+    "changeQty": 45376974.0
+  },
+  "601877": {
+    "name": "正泰电器",
+    "holders": 2,
+    "totalShares": 57194862.0,
+    "totalValue": 1756454212.02,
+    "change": "减仓",
+    "changePct": -34.25,
+    "changeQty": -29788208.0
+  },
+  "601886": {
+    "name": "江河集团",
+    "holders": 2,
+    "totalShares": 14910000.0,
+    "totalValue": 108843000.0,
+    "change": "增仓",
+    "changePct": 343.18,
+    "changeQty": 11545700.0
+  },
+  "603067": {
+    "name": "振华股份",
+    "holders": 2,
+    "totalShares": 17742778.0,
+    "totalValue": 329483387.46,
+    "change": "减仓",
+    "changePct": -15.67,
+    "changeQty": -3297221.0
+  },
+  "603091": {
+    "name": "众鑫股份",
+    "holders": 2,
+    "totalShares": 1387109.0,
+    "totalValue": 102784776.9,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1387109.0
+  },
+  "603100": {
+    "name": "川仪股份",
+    "holders": 2,
+    "totalShares": 7338490.0,
+    "totalValue": 175610065.7,
+    "change": "减仓",
+    "changePct": -32.42,
+    "changeQty": -3521009.0
+  },
+  "603186": {
+    "name": "华正新材",
+    "holders": 2,
+    "totalShares": 3703300.0,
+    "totalValue": 156723656.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3703300.0
+  },
+  "603195": {
+    "name": "公牛集团",
+    "holders": 2,
+    "totalShares": 9924799.0,
+    "totalValue": 443241523.34,
+    "change": "减仓",
+    "changePct": -15.44,
+    "changeQty": -1812105.0
+  },
+  "603283": {
+    "name": "赛腾股份",
+    "holders": 2,
+    "totalShares": 2801170.0,
+    "totalValue": 132775458.0,
+    "change": "增仓",
+    "changePct": 121.74,
+    "changeQty": 1537880.0
+  },
+  "603345": {
+    "name": "安井食品",
+    "holders": 2,
+    "totalShares": 7841261.0,
+    "totalValue": 552887313.11,
+    "change": "减仓",
+    "changePct": -55.28,
+    "changeQty": -9693088.0
+  },
+  "603517": {
+    "name": "ST绝味",
+    "holders": 2,
+    "totalShares": 13417050.0,
+    "totalValue": 181398516.0,
+    "change": "减仓",
+    "changePct": -14.41,
+    "changeQty": -2258550.0
+  },
+  "603833": {
+    "name": "欧派家居",
+    "holders": 2,
+    "totalShares": 3322700.0,
+    "totalValue": 177099910.0,
+    "change": "减仓",
+    "changePct": -67.14,
+    "changeQty": -6789401.0
+  },
+  "603885": {
+    "name": "吉祥航空",
+    "holders": 2,
+    "totalShares": 33919566.0,
+    "totalValue": 461306097.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603979": {
+    "name": "金诚信",
+    "holders": 2,
+    "totalShares": 23917579.0,
+    "totalValue": 1668011959.46,
+    "change": "减仓",
+    "changePct": -24.28,
+    "changeQty": -7668454.0
+  },
+  "605016": {
+    "name": "百龙创园",
+    "holders": 2,
+    "totalShares": 8903250.0,
+    "totalValue": 178688227.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 8903250.0
+  },
+  "605183": {
+    "name": "确成股份",
+    "holders": 2,
+    "totalShares": 16877200.0,
+    "totalValue": 344294880.0,
+    "change": "增仓",
+    "changePct": 1.64,
+    "changeQty": 272300.0
+  },
+  "688029": {
+    "name": "南微医学",
+    "holders": 2,
+    "totalShares": 6269209.0,
+    "totalValue": 629115123.15,
+    "change": "减仓",
+    "changePct": -31.7,
+    "changeQty": -2909286.0
+  },
+  "688036": {
+    "name": "传音控股",
+    "holders": 2,
+    "totalShares": 32718372.0,
+    "totalValue": 3082070642.4,
+    "change": "减仓",
+    "changePct": -14.49,
+    "changeQty": -5545588.0
+  },
+  "688083": {
+    "name": "中望软件",
+    "holders": 2,
+    "totalShares": 3808703.0,
+    "totalValue": 289270992.85,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688187": {
+    "name": "时代电气",
+    "holders": 2,
+    "totalShares": 15129500.0,
+    "totalValue": 796265585.0,
+    "change": "增仓",
+    "changePct": 139.78,
+    "changeQty": 8819750.0
+  },
+  "688190": {
+    "name": "云路股份",
+    "holders": 2,
+    "totalShares": 3233744.0,
+    "totalValue": 352219396.48,
+    "change": "减仓",
+    "changePct": -26.72,
+    "changeQty": -1179273.0
+  },
+  "688212": {
+    "name": "澳华内镜",
+    "holders": 2,
+    "totalShares": 5147370.0,
+    "totalValue": 266530818.6,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5147370.0
+  },
+  "688258": {
+    "name": "卓易信息",
+    "holders": 2,
+    "totalShares": 2336844.0,
+    "totalValue": 171243928.32,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2336844.0
+  },
+  "688349": {
+    "name": "三一重能",
+    "holders": 2,
+    "totalShares": 18901867.0,
+    "totalValue": 574427738.13,
+    "change": "增仓",
+    "changePct": 53.54,
+    "changeQty": 6591136.0
+  },
+  "688475": {
+    "name": "萤石网络",
+    "holders": 2,
+    "totalShares": 7934017.0,
+    "totalValue": 268725155.79,
+    "change": "增仓",
+    "changePct": 82.9,
+    "changeQty": 3596019.0
+  },
+  "688510": {
+    "name": "航亚科技",
+    "holders": 2,
+    "totalShares": 9644562.0,
+    "totalValue": 252205296.3,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9644562.0
+  },
+  "688568": {
+    "name": "中科星图",
+    "holders": 2,
+    "totalShares": 15289790.0,
+    "totalValue": 665717456.6,
+    "change": "增仓",
+    "changePct": 10.88,
+    "changeQty": 1500000.0
+  },
+  "000021": {
+    "name": "深科技",
+    "holders": 1,
+    "totalShares": 4841500.0,
+    "totalValue": 134932605.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4841500.0
+  },
+  "000060": {
+    "name": "中金岭南",
+    "holders": 1,
+    "totalShares": 48780000.0,
+    "totalValue": 278046000.0,
+    "change": "增仓",
+    "changePct": 12.14,
+    "changeQty": 5280000.0
+  },
+  "000061": {
+    "name": "农产品",
+    "holders": 1,
+    "totalShares": 31806930.0,
+    "totalValue": 255091578.6,
+    "change": "增仓",
+    "changePct": 23.71,
+    "changeQty": 6097021.0
+  },
+  "000069": {
+    "name": "华侨城A",
+    "holders": 1,
+    "totalShares": 57600073.0,
+    "totalValue": 152640193.45,
+    "change": "增仓",
+    "changePct": 34.02,
+    "changeQty": 14620073.0
+  },
+  "000089": {
+    "name": "深圳机场",
+    "holders": 1,
+    "totalShares": 10548468.0,
+    "totalValue": 73311852.6,
+    "change": "增仓",
+    "changePct": 26.14,
+    "changeQty": 2185797.0
+  },
+  "000403": {
+    "name": "派林生物",
+    "holders": 1,
+    "totalShares": 11466087.0,
+    "totalValue": 185521287.66,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000404": {
+    "name": "长虹华意",
+    "holders": 1,
+    "totalShares": 2699397.0,
+    "totalValue": 19192712.67,
+    "change": "减仓",
+    "changePct": -66.85,
+    "changeQty": -5444653.0
+  },
+  "000408": {
+    "name": "藏格矿业",
+    "holders": 1,
+    "totalShares": 18000000.0,
+    "totalValue": 1049940000.0,
+    "change": "减仓",
+    "changePct": -0.66,
+    "changeQty": -120000.0
+  },
+  "000411": {
+    "name": "英特集团",
+    "holders": 1,
+    "totalShares": 1730020.0,
+    "totalValue": 19428124.6,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1730020.0
+  },
+  "000498": {
+    "name": "山东路桥",
+    "holders": 1,
+    "totalShares": 16043759.0,
+    "totalValue": 98348242.67,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000503": {
+    "name": "国新健康",
+    "holders": 1,
+    "totalShares": 5221389.0,
+    "totalValue": 53519237.25,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5221389.0
+  },
+  "000513": {
+    "name": "丽珠集团",
+    "holders": 1,
+    "totalShares": 5881739.0,
+    "totalValue": 226152864.55,
+    "change": "增仓",
+    "changePct": 11.23,
+    "changeQty": 593900.0
+  },
+  "000526": {
+    "name": "学大教育",
+    "holders": 1,
+    "totalShares": 2780437.0,
+    "totalValue": 124480164.49,
+    "change": "减仓",
+    "changePct": -8.14,
+    "changeQty": -246500.0
+  },
+  "000534": {
+    "name": "万泽股份",
+    "holders": 1,
+    "totalShares": 20003156.0,
+    "totalValue": 305048129.0,
+    "change": "增仓",
+    "changePct": 7.53,
+    "changeQty": 1399920.0
+  },
+  "000543": {
+    "name": "皖能电力",
+    "holders": 1,
+    "totalShares": 6664180.0,
+    "totalValue": 47315678.0,
+    "change": "减仓",
+    "changePct": -70.47,
+    "changeQty": -15906490.0
+  },
+  "000582": {
+    "name": "北部湾港",
+    "holders": 1,
+    "totalShares": 22470000.0,
+    "totalValue": 189197400.0,
+    "change": "减仓",
+    "changePct": -43.51,
+    "changeQty": -17310296.0
+  },
+  "000629": {
+    "name": "钒钛股份",
+    "holders": 1,
+    "totalShares": 170000051.0,
+    "totalValue": 521900156.57,
+    "change": "减仓",
+    "changePct": -5.56,
+    "changeQty": -9999949.0
+  },
+  "000655": {
+    "name": "金岭矿业",
+    "holders": 1,
+    "totalShares": 8810400.0,
+    "totalValue": 78324456.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 8810400.0
+  },
+  "000672": {
+    "name": "上峰水泥",
+    "holders": 1,
+    "totalShares": 9780014.0,
+    "totalValue": 107775754.28,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9780014.0
+  },
+  "000682": {
+    "name": "东方电子",
+    "holders": 1,
+    "totalShares": 50000000.0,
+    "totalValue": 601500000.0,
+    "change": "增仓",
+    "changePct": 8.7,
+    "changeQty": 4000000.0
+  },
+  "000729": {
+    "name": "燕京啤酒",
+    "holders": 1,
+    "totalShares": 38025257.0,
+    "totalValue": 461246367.41,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000733": {
+    "name": "振华科技",
+    "holders": 1,
+    "totalShares": 8630925.0,
+    "totalValue": 433617672.0,
+    "change": "增仓",
+    "changePct": 32.98,
+    "changeQty": 2140303.0
+  },
+  "000776": {
+    "name": "广发证券",
+    "holders": 1,
+    "totalShares": 61133957.0,
+    "totalValue": 1362064561.96,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 61133957.0
+  },
+  "000778": {
+    "name": "新兴铸管",
+    "holders": 1,
+    "totalShares": 52950000.0,
+    "totalValue": 203857500.0,
+    "change": "增仓",
+    "changePct": 5.69,
+    "changeQty": 2850000.0
+  },
+  "000779": {
+    "name": "甘咨询",
+    "holders": 1,
+    "totalShares": 2447552.0,
+    "totalValue": 22150345.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000801": {
+    "name": "四川九洲",
+    "holders": 1,
+    "totalShares": 5118000.0,
+    "totalValue": 81836820.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5118000.0
+  },
+  "000807": {
+    "name": "云铝股份",
+    "holders": 1,
+    "totalShares": 155787159.0,
+    "totalValue": 3209215475.4,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000819": {
+    "name": "岳阳兴长",
+    "holders": 1,
+    "totalShares": 6000000.0,
+    "totalValue": 99840000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000831": {
+    "name": "中国稀土",
+    "holders": 1,
+    "totalShares": 4922800.0,
+    "totalValue": 254754900.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4922800.0
+  },
+  "000848": {
+    "name": "承德露露",
+    "holders": 1,
+    "totalShares": 13400000.0,
+    "totalValue": 112962000.0,
+    "change": "减仓",
+    "changePct": -56.24,
+    "changeQty": -17220000.0
+  },
+  "000885": {
+    "name": "城发环境",
+    "holders": 1,
+    "totalShares": 3949691.0,
+    "totalValue": 59837818.65,
+    "change": "减仓",
+    "changePct": -12.76,
+    "changeQty": -577889.0
+  },
+  "000893": {
+    "name": "亚钾国际",
+    "holders": 1,
+    "totalShares": 17900165.0,
+    "totalValue": 701149463.05,
+    "change": "增仓",
+    "changePct": 14.27,
+    "changeQty": 2234800.0
+  },
+  "000898": {
+    "name": "鞍钢股份",
+    "holders": 1,
+    "totalShares": 32820781.0,
+    "totalValue": 86646861.84,
+    "change": "减仓",
+    "changePct": -37.87,
+    "changeQty": -20006719.0
+  },
+  "000899": {
+    "name": "赣能股份",
+    "holders": 1,
+    "totalShares": 1750400.0,
+    "totalValue": 16086176.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1750400.0
+  },
+  "000902": {
+    "name": "新洋丰",
+    "holders": 1,
+    "totalShares": 39701178.0,
+    "totalValue": 554625456.66,
+    "change": "增仓",
+    "changePct": 5.35,
+    "changeQty": 2014730.0
+  },
+  "000920": {
+    "name": "沃顿科技",
+    "holders": 1,
+    "totalShares": 1515100.0,
+    "totalValue": 19135713.0,
+    "change": "减仓",
+    "changePct": -19.56,
+    "changeQty": -368400.0
+  },
+  "000922": {
+    "name": "佳电股份",
+    "holders": 1,
+    "totalShares": 19378196.0,
+    "totalValue": 234476171.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000923": {
+    "name": "河钢资源",
+    "holders": 1,
+    "totalShares": 7725300.0,
+    "totalValue": 138360123.0,
+    "change": "减仓",
+    "changePct": -37.65,
+    "changeQty": -4664425.0
+  },
+  "000933": {
+    "name": "神火股份",
+    "holders": 1,
+    "totalShares": 18500000.0,
+    "totalValue": 370185000.0,
+    "change": "减仓",
+    "changePct": -11.54,
+    "changeQty": -2414272.0
+  },
+  "000957": {
+    "name": "中通客车",
+    "holders": 1,
+    "totalShares": 2700000.0,
+    "totalValue": 29673000.0,
+    "change": "减仓",
+    "changePct": -84.7,
+    "changeQty": -14947702.0
+  },
+  "000963": {
+    "name": "华东医药",
+    "holders": 1,
+    "totalShares": 16989744.0,
+    "totalValue": 705923863.2,
+    "change": "减仓",
+    "changePct": -3.41,
+    "changeQty": -600000.0
+  },
+  "000967": {
+    "name": "盈峰环境",
+    "holders": 1,
+    "totalShares": 22666578.0,
+    "totalValue": 162972695.82,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 22666578.0
+  },
+  "000975": {
+    "name": "山金国际",
+    "holders": 1,
+    "totalShares": 31585380.0,
+    "totalValue": 721094225.4,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "000977": {
+    "name": "浪潮信息",
+    "holders": 1,
+    "totalShares": 6699911.0,
+    "totalValue": 498607376.62,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6699911.0
+  },
+  "000988": {
+    "name": "华工科技",
+    "holders": 1,
+    "totalShares": 8825010.0,
+    "totalValue": 816136924.8,
+    "change": "减仓",
+    "changePct": -38.61,
+    "changeQty": -5550200.0
+  },
+  "000997": {
+    "name": "新大陆",
+    "holders": 1,
+    "totalShares": 11988209.0,
+    "totalValue": 354371458.04,
+    "change": "增仓",
+    "changePct": 132.32,
+    "changeQty": 6827964.0
+  },
+  "001205": {
+    "name": "盛航股份",
+    "holders": 1,
+    "totalShares": 3435144.0,
+    "totalValue": 54962304.0,
+    "change": "增仓",
+    "changePct": 15.34,
+    "changeQty": 456929.0
+  },
+  "001221": {
+    "name": "悍高集团",
+    "holders": 1,
+    "totalShares": 505200.0,
+    "totalValue": 31150632.0,
+    "change": "新进",
+    "changePct": 100.0,
+    "changeQty": 505200.0
+  },
+  "001255": {
+    "name": "博菲电气",
+    "holders": 1,
+    "totalShares": 320100.0,
+    "totalValue": 10377642.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 320100.0
+  },
+  "001286": {
+    "name": "陕西能源",
+    "holders": 1,
+    "totalShares": 13647820.0,
+    "totalValue": 122011510.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13647820.0
+  },
+  "001289": {
+    "name": "龙源电力",
+    "holders": 1,
+    "totalShares": 3008933.0,
+    "totalValue": 52656327.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3008933.0
+  },
+  "001914": {
+    "name": "招商积余",
+    "holders": 1,
+    "totalShares": 11000049.0,
+    "totalValue": 134200597.8,
+    "change": "减仓",
+    "changePct": -43.57,
+    "changeQty": -8493900.0
+  },
+  "002001": {
+    "name": "新和成",
+    "holders": 1,
+    "totalShares": 25000000.0,
+    "totalValue": 595750000.0,
+    "change": "减仓",
+    "changePct": -19.35,
+    "changeQty": -5999980.0
+  },
+  "002008": {
+    "name": "大族激光",
+    "holders": 1,
+    "totalShares": 11928451.0,
+    "totalValue": 485607240.21,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11928451.0
+  },
+  "002015": {
+    "name": "协鑫能科",
+    "holders": 1,
+    "totalShares": 15999945.0,
+    "totalValue": 189759347.7,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 15999945.0
+  },
+  "002020": {
+    "name": "京新药业",
+    "holders": 1,
+    "totalShares": 7727540.0,
+    "totalValue": 160114628.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7727540.0
+  },
+  "002026": {
+    "name": "山东威达",
+    "holders": 1,
+    "totalShares": 1779400.0,
+    "totalValue": 25303068.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1779400.0
+  },
+  "002028": {
+    "name": "思源电气",
+    "holders": 1,
+    "totalShares": 8272512.0,
+    "totalValue": 901869258.24,
+    "change": "减仓",
+    "changePct": -11.59,
+    "changeQty": -1084840.0
+  },
+  "002043": {
+    "name": "兔宝宝",
+    "holders": 1,
+    "totalShares": 20384215.0,
+    "totalValue": 218926469.1,
+    "change": "减仓",
+    "changePct": -9.56,
+    "changeQty": -2154587.0
+  },
+  "002049": {
+    "name": "紫光国微",
+    "holders": 1,
+    "totalShares": 11073001.0,
+    "totalValue": 1000002720.31,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11073001.0
+  },
+  "002056": {
+    "name": "横店东磁",
+    "holders": 1,
+    "totalShares": 13000000.0,
+    "totalValue": 266370000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002096": {
+    "name": "易普力",
+    "holders": 1,
+    "totalShares": 9150000.0,
+    "totalValue": 126636000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9150000.0
+  },
+  "002112": {
+    "name": "三变科技",
+    "holders": 1,
+    "totalShares": 1587000.0,
+    "totalValue": 20504040.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002120": {
+    "name": "韵达股份",
+    "holders": 1,
+    "totalShares": 14959800.0,
+    "totalValue": 111001716.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 14959800.0
+  },
+  "002127": {
+    "name": "南极电商",
+    "holders": 1,
+    "totalShares": 16055500.0,
+    "totalValue": 56354805.0,
+    "change": "减仓",
+    "changePct": -50.06,
+    "changeQty": -16091500.0
+  },
+  "002129": {
+    "name": "TCL中环",
+    "holders": 1,
+    "totalShares": 70512167.0,
+    "totalValue": 638135111.35,
+    "change": "增仓",
+    "changePct": 55.16,
+    "changeQty": 25066500.0
+  },
+  "002152": {
+    "name": "广电运通",
+    "holders": 1,
+    "totalShares": 10920000.0,
+    "totalValue": 151569600.0,
+    "change": "减仓",
+    "changePct": -6.67,
+    "changeQty": -780000.0
+  },
+  "002153": {
+    "name": "石基信息",
+    "holders": 1,
+    "totalShares": 34132978.0,
+    "totalValue": 364881534.82,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002156": {
+    "name": "通富微电",
+    "holders": 1,
+    "totalShares": 5691986.0,
+    "totalValue": 228647077.62,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5691986.0
+  },
+  "002170": {
+    "name": "芭田股份",
+    "holders": 1,
+    "totalShares": 6202900.0,
+    "totalValue": 67053349.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6202900.0
+  },
+  "002179": {
+    "name": "中航光电",
+    "holders": 1,
+    "totalShares": 24892191.0,
+    "totalValue": 1027300722.57,
+    "change": "增仓",
+    "changePct": 55.43,
+    "changeQty": 8877246.0
+  },
+  "002182": {
+    "name": "宝武镁业",
+    "holders": 1,
+    "totalShares": 8999980.0,
+    "totalValue": 141659685.2,
+    "change": "减仓",
+    "changePct": -25.0,
+    "changeQty": -3000020.0
+  },
+  "002209": {
+    "name": "达意隆",
+    "holders": 1,
+    "totalShares": 673600.0,
+    "totalValue": 10104000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 673600.0
+  },
+  "002215": {
+    "name": "诺普信",
+    "holders": 1,
+    "totalShares": 9914501.0,
+    "totalValue": 127996207.91,
+    "change": "增仓",
+    "changePct": 37.32,
+    "changeQty": 2694400.0
+  },
+  "002222": {
+    "name": "福晶科技",
+    "holders": 1,
+    "totalShares": 3431215.0,
+    "totalValue": 170531385.5,
+    "change": "增仓",
+    "changePct": 37.67,
+    "changeQty": 938850.0
+  },
+  "002233": {
+    "name": "塔牌集团",
+    "holders": 1,
+    "totalShares": 8222500.0,
+    "totalValue": 72029100.0,
+    "change": "减仓",
+    "changePct": -32.41,
+    "changeQty": -3943265.0
+  },
+  "002246": {
+    "name": "北化股份",
+    "holders": 1,
+    "totalShares": 6000000.0,
+    "totalValue": 136200000.0,
+    "change": "减仓",
+    "changePct": -33.33,
+    "changeQty": -3000000.0
+  },
+  "002258": {
+    "name": "利尔化学",
+    "holders": 1,
+    "totalShares": 22311196.0,
+    "totalValue": 289822436.04,
+    "change": "增仓",
+    "changePct": 284.68,
+    "changeQty": 16511236.0
+  },
+  "002261": {
+    "name": "拓维信息",
+    "holders": 1,
+    "totalShares": 2160000.0,
+    "totalValue": 78062400.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2160000.0
+  },
+  "002264": {
+    "name": "新华都",
+    "holders": 1,
+    "totalShares": 8610500.0,
+    "totalValue": 61392865.0,
+    "change": "减仓",
+    "changePct": -6.0,
+    "changeQty": -549600.0
+  },
+  "002281": {
+    "name": "光迅科技",
+    "holders": 1,
+    "totalShares": 6524380.0,
+    "totalValue": 434523708.0,
+    "change": "增仓",
+    "changePct": 63.07,
+    "changeQty": 2523380.0
+  },
+  "002294": {
+    "name": "信立泰",
+    "holders": 1,
+    "totalShares": 9927500.0,
+    "totalValue": 599124625.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002299": {
+    "name": "圣农发展",
+    "holders": 1,
+    "totalShares": 23928992.0,
+    "totalValue": 431439725.76,
+    "change": "减仓",
+    "changePct": -26.24,
+    "changeQty": -8511800.0
+  },
+  "002317": {
+    "name": "众生药业",
+    "holders": 1,
+    "totalShares": 8048216.0,
+    "totalValue": 139073172.48,
+    "change": "减仓",
+    "changePct": -48.35,
+    "changeQty": -7534184.0
+  },
+  "002327": {
+    "name": "富安娜",
+    "holders": 1,
+    "totalShares": 6207500.0,
+    "totalValue": 43576650.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6207500.0
+  },
+  "002332": {
+    "name": "仙琚制药",
+    "holders": 1,
+    "totalShares": 5366700.0,
+    "totalValue": 52593660.0,
+    "change": "减仓",
+    "changePct": -34.69,
+    "changeQty": -2850800.0
+  },
+  "002345": {
+    "name": "潮宏基",
+    "holders": 1,
+    "totalShares": 9144500.0,
+    "totalValue": 130674905.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9144500.0
+  },
+  "002351": {
+    "name": "漫步者",
+    "holders": 1,
+    "totalShares": 6286900.0,
+    "totalValue": 89148242.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6286900.0
+  },
+  "002352": {
+    "name": "顺丰控股",
+    "holders": 1,
+    "totalShares": 24585513.0,
+    "totalValue": 991533739.29,
+    "change": "减仓",
+    "changePct": -5.37,
+    "changeQty": -1395000.0
+  },
+  "002380": {
+    "name": "科远智慧",
+    "holders": 1,
+    "totalShares": 2882400.0,
+    "totalValue": 81543096.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2882400.0
+  },
+  "002386": {
+    "name": "天原股份",
+    "holders": 1,
+    "totalShares": 9412750.0,
+    "totalValue": 49322810.0,
+    "change": "减仓",
+    "changePct": -25.57,
+    "changeQty": -3233360.0
+  },
+  "002389": {
+    "name": "航天彩虹",
+    "holders": 1,
+    "totalShares": 10504987.0,
+    "totalValue": 242770249.57,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 10504987.0
+  },
+  "002396": {
+    "name": "星网锐捷",
+    "holders": 1,
+    "totalShares": 4772431.0,
+    "totalValue": 144843280.85,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4772431.0
+  },
+  "002409": {
+    "name": "雅克科技",
+    "holders": 1,
+    "totalShares": 2353500.0,
+    "totalValue": 173570625.0,
+    "change": "减仓",
+    "changePct": -8.47,
+    "changeQty": -217900.0
+  },
+  "002410": {
+    "name": "广联达",
+    "holders": 1,
+    "totalShares": 39998133.0,
+    "totalValue": 562373749.98,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002436": {
+    "name": "兴森科技",
+    "holders": 1,
+    "totalShares": 12433100.0,
+    "totalValue": 275020172.0,
+    "change": "增仓",
+    "changePct": 38.15,
+    "changeQty": 3433100.0
+  },
+  "002463": {
+    "name": "沪电股份",
+    "holders": 1,
+    "totalShares": 11580547.0,
+    "totalValue": 850822788.09,
+    "change": "减仓",
+    "changePct": -10.82,
+    "changeQty": -1404842.0
+  },
+  "002468": {
+    "name": "申通快递",
+    "holders": 1,
+    "totalShares": 14759810.0,
+    "totalValue": 264200599.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 14759810.0
+  },
+  "002487": {
+    "name": "大金重工",
+    "holders": 1,
+    "totalShares": 3573477.0,
+    "totalValue": 168703849.17,
+    "change": "减仓",
+    "changePct": -43.18,
+    "changeQty": -2715700.0
+  },
+  "002527": {
+    "name": "新时达",
+    "holders": 1,
+    "totalShares": 8174702.0,
+    "totalValue": 167417896.96,
+    "change": "减仓",
+    "changePct": -25.59,
+    "changeQty": -2811102.0
+  },
+  "002532": {
+    "name": "天山铝业",
+    "holders": 1,
+    "totalShares": 100183877.0,
+    "totalValue": 1161131134.43,
+    "change": "减仓",
+    "changePct": -3.26,
+    "changeQty": -3379300.0
+  },
+  "002534": {
+    "name": "西子洁能",
+    "holders": 1,
+    "totalShares": 4250653.0,
+    "totalValue": 72048568.35,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4250653.0
+  },
+  "002567": {
+    "name": "唐人神",
+    "holders": 1,
+    "totalShares": 7835100.0,
+    "totalValue": 37608480.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7835100.0
+  },
+  "002572": {
+    "name": "索菲亚",
+    "holders": 1,
+    "totalShares": 8656400.0,
+    "totalValue": 109763152.0,
+    "change": "减仓",
+    "changePct": -70.5,
+    "changeQty": -20682968.0
+  },
+  "002588": {
+    "name": "史丹利",
+    "holders": 1,
+    "totalShares": 27000000.0,
+    "totalValue": 249750000.0,
+    "change": "增仓",
+    "changePct": 22.73,
+    "changeQty": 5000090.0
+  },
+  "002594": {
+    "name": "比亚迪",
+    "holders": 1,
+    "totalShares": 36964544.0,
+    "totalValue": 4036897850.24,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 36964544.0
+  },
+  "002595": {
+    "name": "豪迈科技",
+    "holders": 1,
+    "totalShares": 10908917.0,
+    "totalValue": 646353332.25,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002597": {
+    "name": "金禾实业",
+    "holders": 1,
+    "totalShares": 5000000.0,
+    "totalValue": 104200000.0,
+    "change": "减仓",
+    "changePct": -57.51,
+    "changeQty": -6768149.0
+  },
+  "002601": {
+    "name": "龙佰集团",
+    "holders": 1,
+    "totalShares": 34704503.0,
+    "totalValue": 675349628.38,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002605": {
+    "name": "姚记科技",
+    "holders": 1,
+    "totalShares": 4242700.0,
+    "totalValue": 117989487.0,
+    "change": "减仓",
+    "changePct": -32.82,
+    "changeQty": -2073000.0
+  },
+  "002635": {
+    "name": "安洁科技",
+    "holders": 1,
+    "totalShares": 1815533.0,
+    "totalValue": 26906199.06,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1815533.0
+  },
+  "002643": {
+    "name": "万润股份",
+    "holders": 1,
+    "totalShares": 15000000.0,
+    "totalValue": 206250000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002648": {
+    "name": "卫星化学",
+    "holders": 1,
+    "totalShares": 21068656.0,
+    "totalValue": 407467807.04,
+    "change": "增仓",
+    "changePct": 4.46,
+    "changeQty": 899400.0
+  },
+  "002657": {
+    "name": "中科金财",
+    "holders": 1,
+    "totalShares": 1100020.0,
+    "totalValue": 35255641.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1100020.0
+  },
+  "002659": {
+    "name": "凯文教育",
+    "holders": 1,
+    "totalShares": 7990400.0,
+    "totalValue": 47702688.0,
+    "change": "减仓",
+    "changePct": -21.72,
+    "changeQty": -2217500.0
+  },
+  "002668": {
+    "name": "TCL智家",
+    "holders": 1,
+    "totalShares": 11482522.0,
+    "totalValue": 110921162.52,
+    "change": "减仓",
+    "changePct": -30.23,
+    "changeQty": -4975078.0
+  },
+  "002701": {
+    "name": "奥瑞金",
+    "holders": 1,
+    "totalShares": 25919500.0,
+    "totalValue": 140224495.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002739": {
+    "name": "万达电影",
+    "holders": 1,
+    "totalShares": 10450202.0,
+    "totalValue": 128641986.62,
+    "change": "减仓",
+    "changePct": -76.91,
+    "changeQty": -34809077.0
+  },
+  "002746": {
+    "name": "仙坛股份",
+    "holders": 1,
+    "totalShares": 15600000.0,
+    "totalValue": 95004000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002756": {
+    "name": "永兴材料",
+    "holders": 1,
+    "totalShares": 4228716.0,
+    "totalValue": 163905032.16,
+    "change": "减仓",
+    "changePct": -47.94,
+    "changeQty": -3893799.0
+  },
+  "002765": {
+    "name": "蓝黛科技",
+    "holders": 1,
+    "totalShares": 2165300.0,
+    "totalValue": 30833872.0,
+    "change": "减仓",
+    "changePct": -72.34,
+    "changeQty": -5663900.0
+  },
+  "002768": {
+    "name": "国恩股份",
+    "holders": 1,
+    "totalShares": 7790754.0,
+    "totalValue": 382993466.64,
+    "change": "增仓",
+    "changePct": 230.28,
+    "changeQty": 5431900.0
+  },
+  "002788": {
+    "name": "鹭燕医药",
+    "holders": 1,
+    "totalShares": 2381074.0,
+    "totalValue": 19239077.92,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2381074.0
+  },
+  "002791": {
+    "name": "坚朗五金",
+    "holders": 1,
+    "totalShares": 4926103.0,
+    "totalValue": 107044218.19,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002818": {
+    "name": "富森美",
+    "holders": 1,
+    "totalShares": 1850457.0,
+    "totalValue": 21705860.61,
+    "change": "增仓",
+    "changePct": 14.77,
+    "changeQty": 238100.0
+  },
+  "002833": {
+    "name": "弘亚数控",
+    "holders": 1,
+    "totalShares": 3460000.0,
+    "totalValue": 57678200.0,
+    "change": "减仓",
+    "changePct": -49.78,
+    "changeQty": -3429568.0
+  },
+  "002837": {
+    "name": "英维克",
+    "holders": 1,
+    "totalShares": 6511042.0,
+    "totalValue": 520753139.16,
+    "change": "减仓",
+    "changePct": -56.69,
+    "changeQty": -8520816.0
+  },
+  "002847": {
+    "name": "盐津铺子",
+    "holders": 1,
+    "totalShares": 1712751.0,
+    "totalValue": 120063845.1,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002859": {
+    "name": "洁美科技",
+    "holders": 1,
+    "totalShares": 3709700.0,
+    "totalValue": 124312047.0,
+    "change": "减仓",
+    "changePct": -20.84,
+    "changeQty": -976596.0
+  },
+  "002865": {
+    "name": "钧达股份",
+    "holders": 1,
+    "totalShares": 9964027.0,
+    "totalValue": 422773665.61,
+    "change": "减仓",
+    "changePct": -2.95,
+    "changeQty": -302825.0
+  },
+  "002867": {
+    "name": "周大生",
+    "holders": 1,
+    "totalShares": 7258016.0,
+    "totalValue": 97983216.0,
+    "change": "减仓",
+    "changePct": -40.11,
+    "changeQty": -4859975.0
+  },
+  "002869": {
+    "name": "金溢科技",
+    "holders": 1,
+    "totalShares": 2037874.0,
+    "totalValue": 65211968.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2037874.0
+  },
+  "002871": {
+    "name": "伟隆股份",
+    "holders": 1,
+    "totalShares": 8587552.0,
+    "totalValue": 143497993.92,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 8587552.0
+  },
+  "002884": {
+    "name": "凌霄泵业",
+    "holders": 1,
+    "totalShares": 9900191.0,
+    "totalValue": 169392268.01,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002891": {
+    "name": "中宠股份",
+    "holders": 1,
+    "totalShares": 1442309.0,
+    "totalValue": 76745261.89,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1442309.0
+  },
+  "002895": {
+    "name": "川恒股份",
+    "holders": 1,
+    "totalShares": 6074006.0,
+    "totalValue": 177725415.56,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002929": {
+    "name": "润建股份",
+    "holders": 1,
+    "totalShares": 1294000.0,
+    "totalValue": 63807140.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1294000.0
+  },
+  "002946": {
+    "name": "新乳业",
+    "holders": 1,
+    "totalShares": 3038900.0,
+    "totalValue": 51874023.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3038900.0
+  },
+  "002947": {
+    "name": "恒铭达",
+    "holders": 1,
+    "totalShares": 3030838.0,
+    "totalValue": 146813792.72,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3030838.0
+  },
+  "002955": {
+    "name": "鸿合科技",
+    "holders": 1,
+    "totalShares": 4976051.0,
+    "totalValue": 143061466.25,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002959": {
+    "name": "小熊电器",
+    "holders": 1,
+    "totalShares": 1396593.0,
+    "totalValue": 69787752.21,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1396593.0
+  },
+  "002960": {
+    "name": "青鸟消防",
+    "holders": 1,
+    "totalShares": 15000041.0,
+    "totalValue": 190350520.29,
+    "change": "增仓",
+    "changePct": 7.14,
+    "changeQty": 1000001.0
+  },
+  "002984": {
+    "name": "森麒麟",
+    "holders": 1,
+    "totalShares": 9003223.0,
+    "totalValue": 173222010.52,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "002993": {
+    "name": "奥海科技",
+    "holders": 1,
+    "totalShares": 3771042.0,
+    "totalValue": 172676013.18,
+    "change": "减仓",
+    "changePct": -38.04,
+    "changeQty": -2315040.0
+  },
+  "003020": {
+    "name": "立方制药",
+    "holders": 1,
+    "totalShares": 1013900.0,
+    "totalValue": 28744065.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1013900.0
+  },
+  "300002": {
+    "name": "神州泰岳",
+    "holders": 1,
+    "totalShares": 30816898.0,
+    "totalValue": 439757134.46,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 30816898.0
+  },
+  "300014": {
+    "name": "亿纬锂能",
+    "holders": 1,
+    "totalShares": 14279737.0,
+    "totalValue": 1299456067.0,
+    "change": "增仓",
+    "changePct": 1.37,
+    "changeQty": 193637.0
+  },
+  "300017": {
+    "name": "网宿科技",
+    "holders": 1,
+    "totalShares": 21925098.0,
+    "totalValue": 253015630.92,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 21925098.0
+  },
+  "300019": {
+    "name": "硅宝科技",
+    "holders": 1,
+    "totalShares": 3516753.0,
+    "totalValue": 75399184.32,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300051": {
+    "name": "琏升科技",
+    "holders": 1,
+    "totalShares": 2961237.0,
+    "totalValue": 20580597.15,
+    "change": "减仓",
+    "changePct": -45.3,
+    "changeQty": -2452300.0
+  },
+  "300055": {
+    "name": "万邦达",
+    "holders": 1,
+    "totalShares": 15992709.0,
+    "totalValue": 92277930.93,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300101": {
+    "name": "振芯科技",
+    "holders": 1,
+    "totalShares": 5911827.0,
+    "totalValue": 145549180.74,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5911827.0
+  },
+  "300119": {
+    "name": "瑞普生物",
+    "holders": 1,
+    "totalShares": 4000000.0,
+    "totalValue": 84760000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4000000.0
+  },
+  "300124": {
+    "name": "汇川技术",
+    "holders": 1,
+    "totalShares": 28300000.0,
+    "totalValue": 2372106000.0,
+    "change": "增仓",
+    "changePct": 1.07,
+    "changeQty": 300000.0
+  },
+  "300129": {
+    "name": "泰胜风能",
+    "holders": 1,
+    "totalShares": 7825000.0,
+    "totalValue": 63226000.0,
+    "change": "减仓",
+    "changePct": -38.72,
+    "changeQty": -4944100.0
+  },
+  "300130": {
+    "name": "新国都",
+    "holders": 1,
+    "totalShares": 8000000.0,
+    "totalValue": 221120000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 8000000.0
+  },
+  "300133": {
+    "name": "华策影视",
+    "holders": 1,
+    "totalShares": 16932400.0,
+    "totalValue": 157301996.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 16932400.0
+  },
+  "300136": {
+    "name": "信维通信",
+    "holders": 1,
+    "totalShares": 38000000.0,
+    "totalValue": 980400000.0,
+    "change": "增仓",
+    "changePct": 2.7,
+    "changeQty": 1000000.0
+  },
+  "300158": {
+    "name": "振东制药",
+    "holders": 1,
+    "totalShares": 4187547.0,
+    "totalValue": 27470308.32,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4187547.0
+  },
+  "300181": {
+    "name": "佐力药业",
+    "holders": 1,
+    "totalShares": 10490450.0,
+    "totalValue": 186730010.0,
+    "change": "减仓",
+    "changePct": -5.41,
+    "changeQty": -600000.0
+  },
+  "300196": {
+    "name": "长海股份",
+    "holders": 1,
+    "totalShares": 2587935.0,
+    "totalValue": 38534352.15,
+    "change": "减仓",
+    "changePct": -37.23,
+    "changeQty": -1535000.0
+  },
+  "300207": {
+    "name": "欣旺达",
+    "holders": 1,
+    "totalShares": 23007607.0,
+    "totalValue": 777427040.53,
+    "change": "减仓",
+    "changePct": -36.72,
+    "changeQty": -13349900.0
+  },
+  "300224": {
+    "name": "正海磁材",
+    "holders": 1,
+    "totalShares": 5373198.0,
+    "totalValue": 90484654.32,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5373198.0
+  },
+  "300226": {
+    "name": "上海钢联",
+    "holders": 1,
+    "totalShares": 3000000.0,
+    "totalValue": 78330000.0,
+    "change": "减仓",
+    "changePct": -40.0,
+    "changeQty": -2000000.0
+  },
+  "300236": {
+    "name": "上海新阳",
+    "holders": 1,
+    "totalShares": 3977000.0,
+    "totalValue": 247170550.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3977000.0
+  },
+  "300239": {
+    "name": "东宝生物",
+    "holders": 1,
+    "totalShares": 9621200.0,
+    "totalValue": 52050692.0,
+    "change": "减仓",
+    "changePct": -26.31,
+    "changeQty": -3435300.0
+  },
+  "300257": {
+    "name": "开山股份",
+    "holders": 1,
+    "totalShares": 16160081.0,
+    "totalValue": 249350049.83,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300258": {
+    "name": "精锻科技",
+    "holders": 1,
+    "totalShares": 3668600.0,
+    "totalValue": 57193474.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300259": {
+    "name": "新天科技",
+    "holders": 1,
+    "totalShares": 5222258.0,
+    "totalValue": 20262361.04,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5222258.0
+  },
+  "300327": {
+    "name": "中颖电子",
+    "holders": 1,
+    "totalShares": 1089731.0,
+    "totalValue": 29662477.82,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1089731.0
+  },
+  "300331": {
+    "name": "苏大维格",
+    "holders": 1,
+    "totalShares": 1077036.0,
+    "totalValue": 37943978.28,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1077036.0
+  },
+  "300347": {
+    "name": "泰格医药",
+    "holders": 1,
+    "totalShares": 11453550.0,
+    "totalValue": 664305900.0,
+    "change": "增仓",
+    "changePct": 7.37,
+    "changeQty": 786563.0
+  },
+  "300357": {
+    "name": "我武生物",
+    "holders": 1,
+    "totalShares": 26081102.0,
+    "totalValue": 761307367.38,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300363": {
+    "name": "博腾股份",
+    "holders": 1,
+    "totalShares": 4074300.0,
+    "totalValue": 104994711.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300382": {
+    "name": "斯莱克",
+    "holders": 1,
+    "totalShares": 2846501.0,
+    "totalValue": 46654151.39,
+    "change": "减仓",
+    "changePct": -5.48,
+    "changeQty": -164999.0
+  },
+  "300395": {
+    "name": "菲利华",
+    "holders": 1,
+    "totalShares": 8871432.0,
+    "totalValue": 671567402.4,
+    "change": "减仓",
+    "changePct": -16.94,
+    "changeQty": -1809900.0
+  },
+  "300408": {
+    "name": "三环集团",
+    "holders": 1,
+    "totalShares": 15500000.0,
+    "totalValue": 718115000.0,
+    "change": "增仓",
+    "changePct": 13.97,
+    "changeQty": 1900000.0
+  },
+  "300413": {
+    "name": "芒果超媒",
+    "holders": 1,
+    "totalShares": 16885463.0,
+    "totalValue": 603824156.88,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300451": {
+    "name": "创业慧康",
+    "holders": 1,
+    "totalShares": 10374900.0,
+    "totalValue": 49903269.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300470": {
+    "name": "中密控股",
+    "holders": 1,
+    "totalShares": 8000059.0,
+    "totalValue": 290882145.24,
+    "change": "减仓",
+    "changePct": -18.39,
+    "changeQty": -1802840.0
+  },
+  "300487": {
+    "name": "蓝晓科技",
+    "holders": 1,
+    "totalShares": 4949925.0,
+    "totalValue": 285610672.5,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300488": {
+    "name": "恒锋工具",
+    "holders": 1,
+    "totalShares": 553962.0,
+    "totalValue": 20092201.74,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 553962.0
+  },
+  "300499": {
+    "name": "高澜股份",
+    "holders": 1,
+    "totalShares": 903800.0,
+    "totalValue": 29391576.0,
+    "change": "减仓",
+    "changePct": -65.19,
+    "changeQty": -1692500.0
+  },
+  "300508": {
+    "name": "维宏股份",
+    "holders": 1,
+    "totalShares": 255960.0,
+    "totalValue": 7440757.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 255960.0
+  },
+  "300515": {
+    "name": "三德科技",
+    "holders": 1,
+    "totalShares": 1719002.0,
+    "totalValue": 34603510.26,
+    "change": "减仓",
+    "changePct": -24.11,
+    "changeQty": -546200.0
+  },
+  "300519": {
+    "name": "新光药业",
+    "holders": 1,
+    "totalShares": 471300.0,
+    "totalValue": 7366419.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 471300.0
+  },
+  "300566": {
+    "name": "激智科技",
+    "holders": 1,
+    "totalShares": 1219800.0,
+    "totalValue": 23090814.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1219800.0
+  },
+  "300570": {
+    "name": "太辰光",
+    "holders": 1,
+    "totalShares": 1971027.0,
+    "totalValue": 207509722.56,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1971027.0
+  },
+  "300575": {
+    "name": "中旗股份",
+    "holders": 1,
+    "totalShares": 2288458.0,
+    "totalValue": 14966515.32,
+    "change": "增仓",
+    "changePct": 6.03,
+    "changeQty": 130200.0
+  },
+  "300577": {
+    "name": "开润股份",
+    "holders": 1,
+    "totalShares": 6462846.0,
+    "totalValue": 152523165.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300590": {
+    "name": "移为通信",
+    "holders": 1,
+    "totalShares": 1907350.0,
+    "totalValue": 23098008.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1907350.0
+  },
+  "300593": {
+    "name": "新雷能",
+    "holders": 1,
+    "totalShares": 7414832.0,
+    "totalValue": 166388830.08,
+    "change": "减仓",
+    "changePct": -41.65,
+    "changeQty": -5292070.0
+  },
+  "300628": {
+    "name": "亿联网络",
+    "holders": 1,
+    "totalShares": 33109942.0,
+    "totalValue": 1225067854.0,
+    "change": "增仓",
+    "changePct": 13.76,
+    "changeQty": 4004187.0
+  },
+  "300633": {
+    "name": "开立医疗",
+    "holders": 1,
+    "totalShares": 8435794.0,
+    "totalValue": 290022597.72,
+    "change": "增仓",
+    "changePct": 6.22,
+    "changeQty": 493900.0
+  },
+  "300638": {
+    "name": "广和通",
+    "holders": 1,
+    "totalShares": 5021373.0,
+    "totalValue": 152499098.01,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5021373.0
+  },
+  "300679": {
+    "name": "电连技术",
+    "holders": 1,
+    "totalShares": 7602127.0,
+    "totalValue": 433321239.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7602127.0
+  },
+  "300685": {
+    "name": "艾德生物",
+    "holders": 1,
+    "totalShares": 3111820.0,
+    "totalValue": 71571860.0,
+    "change": "减仓",
+    "changePct": -39.24,
+    "changeQty": -2009680.0
+  },
+  "300695": {
+    "name": "兆丰股份",
+    "holders": 1,
+    "totalShares": 1148530.0,
+    "totalValue": 118987708.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1148530.0
+  },
+  "300702": {
+    "name": "天宇股份",
+    "holders": 1,
+    "totalShares": 2292504.0,
+    "totalValue": 59146603.2,
+    "change": "减仓",
+    "changePct": -8.05,
+    "changeQty": -200800.0
+  },
+  "300733": {
+    "name": "西菱动力",
+    "holders": 1,
+    "totalShares": 3622840.0,
+    "totalValue": 69196244.0,
+    "change": "减仓",
+    "changePct": -4.89,
+    "changeQty": -186140.0
+  },
+  "300760": {
+    "name": "迈瑞医疗",
+    "holders": 1,
+    "totalShares": 7725274.0,
+    "totalValue": 1898022569.06,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7725274.0
+  },
+  "300761": {
+    "name": "立华股份",
+    "holders": 1,
+    "totalShares": 13097820.0,
+    "totalValue": 284353672.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13097820.0
+  },
+  "300772": {
+    "name": "运达股份",
+    "holders": 1,
+    "totalShares": 7981214.0,
+    "totalValue": 151084381.02,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7981214.0
+  },
+  "300774": {
+    "name": "倍杰特",
+    "holders": 1,
+    "totalShares": 2763400.0,
+    "totalValue": 35951834.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2763400.0
+  },
+  "300790": {
+    "name": "宇瞳光学",
+    "holders": 1,
+    "totalShares": 7111420.0,
+    "totalValue": 238303684.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7111420.0
+  },
+  "300810": {
+    "name": "中科海讯",
+    "holders": 1,
+    "totalShares": 685500.0,
+    "totalValue": 31930590.0,
+    "change": "减仓",
+    "changePct": -25.49,
+    "changeQty": -234500.0
+  },
+  "300832": {
+    "name": "新产业",
+    "holders": 1,
+    "totalShares": 17000060.0,
+    "totalValue": 1161104098.0,
+    "change": "减仓",
+    "changePct": -12.82,
+    "changeQty": -2499940.0
+  },
+  "300833": {
+    "name": "浩洋股份",
+    "holders": 1,
+    "totalShares": 1351000.0,
+    "totalValue": 58079490.0,
+    "change": "减仓",
+    "changePct": -20.04,
+    "changeQty": -338500.0
+  },
+  "300841": {
+    "name": "康华生物",
+    "holders": 1,
+    "totalShares": 599950.0,
+    "totalValue": 45866177.5,
+    "change": "减仓",
+    "changePct": -72.99,
+    "changeQty": -1621450.0
+  },
+  "300866": {
+    "name": "安克创新",
+    "holders": 1,
+    "totalShares": 11874619.0,
+    "totalValue": 1445497370.87,
+    "change": "增仓",
+    "changePct": 6.48,
+    "changeQty": 723100.0
+  },
+  "300879": {
+    "name": "大叶股份",
+    "holders": 1,
+    "totalShares": 670400.0,
+    "totalValue": 23631600.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 670400.0
+  },
+  "300926": {
+    "name": "博俊科技",
+    "holders": 1,
+    "totalShares": 6660738.0,
+    "totalValue": 208214669.88,
+    "change": "增仓",
+    "changePct": 25.09,
+    "changeQty": 1335944.0
+  },
+  "300930": {
+    "name": "屹通新材",
+    "holders": 1,
+    "totalShares": 244200.0,
+    "totalValue": 7538454.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 244200.0
+  },
+  "300945": {
+    "name": "曼卡龙",
+    "holders": 1,
+    "totalShares": 5069470.0,
+    "totalValue": 100527590.1,
+    "change": "增仓",
+    "changePct": 65.16,
+    "changeQty": 2000000.0
+  },
+  "300957": {
+    "name": "贝泰妮",
+    "holders": 1,
+    "totalShares": 3417711.0,
+    "totalValue": 154070411.88,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300980": {
+    "name": "祥源新材",
+    "holders": 1,
+    "totalShares": 1720329.0,
+    "totalValue": 47240234.34,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "300996": {
+    "name": "普联软件",
+    "holders": 1,
+    "totalShares": 2562020.0,
+    "totalValue": 44604768.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2562020.0
+  },
+  "301023": {
+    "name": "江南奕帆",
+    "holders": 1,
+    "totalShares": 175840.0,
+    "totalValue": 7234057.6,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 175840.0
+  },
+  "301029": {
+    "name": "怡合达",
+    "holders": 1,
+    "totalShares": 13775830.0,
+    "totalValue": 439586735.3,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13775830.0
+  },
+  "301052": {
+    "name": "果麦文化",
+    "holders": 1,
+    "totalShares": 780569.0,
+    "totalValue": 59713528.5,
+    "change": "减仓",
+    "changePct": -14.88,
+    "changeQty": -136425.0
+  },
+  "301068": {
+    "name": "大地海洋",
+    "holders": 1,
+    "totalShares": 2984462.0,
+    "totalValue": 80192493.94,
+    "change": "增仓",
+    "changePct": 19.32,
+    "changeQty": 483137.0
+  },
+  "301107": {
+    "name": "瑜欣电子",
+    "holders": 1,
+    "totalShares": 490840.0,
+    "totalValue": 14361978.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 490840.0
+  },
+  "301108": {
+    "name": "洁雅股份",
+    "holders": 1,
+    "totalShares": 1364002.0,
+    "totalValue": 44425545.14,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1364002.0
+  },
+  "301110": {
+    "name": "青木科技",
+    "holders": 1,
+    "totalShares": 900249.0,
+    "totalValue": 65997254.19,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 900249.0
+  },
+  "301150": {
+    "name": "中一科技",
+    "holders": 1,
+    "totalShares": 1491374.0,
+    "totalValue": 61772711.08,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1491374.0
+  },
+  "301175": {
+    "name": "中科环保",
+    "holders": 1,
+    "totalShares": 2466500.0,
+    "totalValue": 13146445.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2466500.0
+  },
+  "301187": {
+    "name": "欧圣电气",
+    "holders": 1,
+    "totalShares": 402353.0,
+    "totalValue": 11008378.08,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 402353.0
+  },
+  "301220": {
+    "name": "亚香股份",
+    "holders": 1,
+    "totalShares": 2315880.0,
+    "totalValue": 97521706.8,
+    "change": "增仓",
+    "changePct": 52.96,
+    "changeQty": 801880.0
+  },
+  "301291": {
+    "name": "明阳电气",
+    "holders": 1,
+    "totalShares": 1686696.0,
+    "totalValue": 81433682.88,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1686696.0
+  },
+  "301306": {
+    "name": "西测测试",
+    "holders": 1,
+    "totalShares": 3499990.0,
+    "totalValue": 194809443.4,
+    "change": "增仓",
+    "changePct": 40.0,
+    "changeQty": 999990.0
+  },
+  "301357": {
+    "name": "北方长龙",
+    "holders": 1,
+    "totalShares": 92292.0,
+    "totalValue": 10600659.12,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 92292.0
+  },
+  "301358": {
+    "name": "湖南裕能",
+    "holders": 1,
+    "totalShares": 7309300.0,
+    "totalValue": 441627906.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7309300.0
+  },
+  "301392": {
+    "name": "汇成真空",
+    "holders": 1,
+    "totalShares": 370000.0,
+    "totalValue": 64058100.0,
+    "change": "减仓",
+    "changePct": -23.65,
+    "changeQty": -114600.0
+  },
+  "301556": {
+    "name": "托普云农",
+    "holders": 1,
+    "totalShares": 583767.0,
+    "totalValue": 55481215.68,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "301568": {
+    "name": "思泰克",
+    "holders": 1,
+    "totalShares": 1506104.0,
+    "totalValue": 71359207.52,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1506104.0
+  },
+  "301578": {
+    "name": "辰奕智能",
+    "holders": 1,
+    "totalShares": 192530.0,
+    "totalValue": 7248754.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 192530.0
+  },
+  "301589": {
+    "name": "诺瓦星云",
+    "holders": 1,
+    "totalShares": 560969.0,
+    "totalValue": 97047637.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "301592": {
+    "name": "六九一二",
+    "holders": 1,
+    "totalShares": 134000.0,
+    "totalValue": 18140920.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 134000.0
+  },
+  "301606": {
+    "name": "绿联科技",
+    "holders": 1,
+    "totalShares": 2200000.0,
+    "totalValue": 140756000.0,
+    "change": "增仓",
+    "changePct": 120.0,
+    "changeQty": 1199992.0
+  },
+  "600004": {
+    "name": "白云机场",
+    "holders": 1,
+    "totalShares": 9402733.0,
+    "totalValue": 89137908.84,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600007": {
+    "name": "中国国贸",
+    "holders": 1,
+    "totalShares": 22500000.0,
+    "totalValue": 458100000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600019": {
+    "name": "宝钢股份",
+    "holders": 1,
+    "totalShares": 164925252.0,
+    "totalValue": 1166021531.64,
+    "change": "增仓",
+    "changePct": 4.2,
+    "changeQty": 6646500.0
+  },
+  "600020": {
+    "name": "中原高速",
+    "holders": 1,
+    "totalShares": 15000053.0,
+    "totalValue": 63450224.19,
+    "change": "增仓",
+    "changePct": 15.38,
+    "changeQty": 2000000.0
+  },
+  "600033": {
+    "name": "福建高速",
+    "holders": 1,
+    "totalShares": 19920014.0,
+    "totalValue": 66931247.04,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 19920014.0
+  },
+  "600038": {
+    "name": "中直股份",
+    "holders": 1,
+    "totalShares": 7080079.0,
+    "totalValue": 256582062.96,
+    "change": "增仓",
+    "changePct": 12.92,
+    "changeQty": 810000.0
+  },
+  "600048": {
+    "name": "保利发展",
+    "holders": 1,
+    "totalShares": 123947712.0,
+    "totalValue": 974229016.32,
+    "change": "增仓",
+    "changePct": 19.08,
+    "changeQty": 19861300.0
+  },
+  "600066": {
+    "name": "宇通客车",
+    "holders": 1,
+    "totalShares": 44253778.0,
+    "totalValue": 1204145299.38,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600095": {
+    "name": "湘财股份",
+    "holders": 1,
+    "totalShares": 12367591.0,
+    "totalValue": 163004849.38,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 12367591.0
+  },
+  "600105": {
+    "name": "永鼎股份",
+    "holders": 1,
+    "totalShares": 4000000.0,
+    "totalValue": 50840000.0,
+    "change": "减仓",
+    "changePct": -66.67,
+    "changeQty": -8000098.0
+  },
+  "600125": {
+    "name": "铁龙物流",
+    "holders": 1,
+    "totalShares": 24120000.0,
+    "totalValue": 153162000.0,
+    "change": "增仓",
+    "changePct": 1.77,
+    "changeQty": 420000.0
+  },
+  "600132": {
+    "name": "重庆啤酒",
+    "holders": 1,
+    "totalShares": 3241838.0,
+    "totalValue": 173730098.42,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600183": {
+    "name": "生益科技",
+    "holders": 1,
+    "totalShares": 9508728.0,
+    "totalValue": 513661486.56,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 9508728.0
+  },
+  "600208": {
+    "name": "衢州发展",
+    "holders": 1,
+    "totalShares": 66646943.0,
+    "totalValue": 301244182.36,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 66646943.0
+  },
+  "600210": {
+    "name": "紫江企业",
+    "holders": 1,
+    "totalShares": 6831123.0,
+    "totalValue": 50550310.2,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6831123.0
+  },
+  "600219": {
+    "name": "南山铝业",
+    "holders": 1,
+    "totalShares": 160000000.0,
+    "totalValue": 633600000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600223": {
+    "name": "福瑞达",
+    "holders": 1,
+    "totalShares": 11880160.0,
+    "totalValue": 91596033.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600233": {
+    "name": "圆通速递",
+    "holders": 1,
+    "totalShares": 45500096.0,
+    "totalValue": 834926761.6,
+    "change": "增仓",
+    "changePct": 15.86,
+    "changeQty": 6228493.0
+  },
+  "600256": {
+    "name": "广汇能源",
+    "holders": 1,
+    "totalShares": 68947901.0,
+    "totalValue": 347497421.04,
+    "change": "减仓",
+    "changePct": -39.84,
+    "changeQty": -45652240.0
+  },
+  "600258": {
+    "name": "首旅酒店",
+    "holders": 1,
+    "totalShares": 12364140.0,
+    "totalValue": 181505575.2,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600259": {
+    "name": "广晟有色",
+    "holders": 1,
+    "totalShares": 2797783.0,
+    "totalValue": 161543990.42,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2797783.0
+  },
+  "600281": {
+    "name": "华阳新材",
+    "holders": 1,
+    "totalShares": 1333800.0,
+    "totalValue": 8109504.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1333800.0
+  },
+  "600282": {
+    "name": "南钢股份",
+    "holders": 1,
+    "totalShares": 104000000.0,
+    "totalValue": 546000000.0,
+    "change": "增仓",
+    "changePct": 0.97,
+    "changeQty": 1000000.0
+  },
+  "600299": {
+    "name": "安迪苏",
+    "holders": 1,
+    "totalShares": 3231025.0,
+    "totalValue": 30403945.25,
+    "change": "减仓",
+    "changePct": -10.23,
+    "changeQty": -368400.0
+  },
+  "600301": {
+    "name": "华锡有色",
+    "holders": 1,
+    "totalShares": 2575300.0,
+    "totalValue": 87148152.0,
+    "change": "增仓",
+    "changePct": 1.32,
+    "changeQty": 33461.0
+  },
+  "600309": {
+    "name": "万华化学",
+    "holders": 1,
+    "totalShares": 23900000.0,
+    "totalValue": 1591262000.0,
+    "change": "增仓",
+    "changePct": 12.68,
+    "changeQty": 2690114.0
+  },
+  "600315": {
+    "name": "上海家化",
+    "holders": 1,
+    "totalShares": 7483239.0,
+    "totalValue": 196958850.48,
+    "change": "减仓",
+    "changePct": -34.96,
+    "changeQty": -4021811.0
+  },
+  "600316": {
+    "name": "洪都航空",
+    "holders": 1,
+    "totalShares": 5000022.0,
+    "totalValue": 189500833.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5000022.0
+  },
+  "600325": {
+    "name": "华发股份",
+    "holders": 1,
+    "totalShares": 55718756.0,
+    "totalValue": 315368158.96,
+    "change": "减仓",
+    "changePct": -38.39,
+    "changeQty": -34719500.0
+  },
+  "600335": {
+    "name": "国机汽车",
+    "holders": 1,
+    "totalShares": 2292150.0,
+    "totalValue": 13707057.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600348": {
+    "name": "华阳股份",
+    "holders": 1,
+    "totalShares": 17267191.0,
+    "totalValue": 127259197.67,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 17267191.0
+  },
+  "600373": {
+    "name": "中文传媒",
+    "holders": 1,
+    "totalShares": 14189812.0,
+    "totalValue": 144168489.92,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 14189812.0
+  },
+  "600378": {
+    "name": "昊华科技",
+    "holders": 1,
+    "totalShares": 19301370.0,
+    "totalValue": 592938086.4,
+    "change": "减仓",
+    "changePct": -32.75,
+    "changeQty": -9400165.0
+  },
+  "600383": {
+    "name": "金地集团",
+    "holders": 1,
+    "totalShares": 61627100.0,
+    "totalValue": 267461614.0,
+    "change": "减仓",
+    "changePct": -32.88,
+    "changeQty": -30183559.0
+  },
+  "600391": {
+    "name": "航发科技",
+    "holders": 1,
+    "totalShares": 3576100.0,
+    "totalValue": 101668523.0,
+    "change": "增仓",
+    "changePct": 6.94,
+    "changeQty": 232100.0
+  },
+  "600397": {
+    "name": "江钨装备",
+    "holders": 1,
+    "totalShares": 16286510.0,
+    "totalValue": 113354109.6,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 16286510.0
+  },
+  "600418": {
+    "name": "江淮汽车",
+    "holders": 1,
+    "totalShares": 18504967.0,
+    "totalValue": 997417721.3,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 18504967.0
+  },
+  "600419": {
+    "name": "天润乳业",
+    "holders": 1,
+    "totalShares": 1886474.0,
+    "totalValue": 19242034.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1886474.0
+  },
+  "600422": {
+    "name": "昆药集团",
+    "holders": 1,
+    "totalShares": 14351252.0,
+    "totalValue": 200343477.92,
+    "change": "增仓",
+    "changePct": 39.44,
+    "changeQty": 4059400.0
+  },
+  "600425": {
+    "name": "青松建化",
+    "holders": 1,
+    "totalShares": 36000000.0,
+    "totalValue": 159480000.0,
+    "change": "减仓",
+    "changePct": -18.18,
+    "changeQty": -8000000.0
+  },
+  "600438": {
+    "name": "通威股份",
+    "holders": 1,
+    "totalShares": 36235456.0,
+    "totalValue": 807688314.24,
+    "change": "减仓",
+    "changePct": -43.03,
+    "changeQty": -27366390.0
+  },
+  "600452": {
+    "name": "涪陵电力",
+    "holders": 1,
+    "totalShares": 72000000.0,
+    "totalValue": 670320000.0,
+    "change": "减仓",
+    "changePct": -11.87,
+    "changeQty": -9699384.0
+  },
+  "600479": {
+    "name": "千金药业",
+    "holders": 1,
+    "totalShares": 7800060.0,
+    "totalValue": 80418618.6,
+    "change": "增仓",
+    "changePct": 1.17,
+    "changeQty": 90000.0
+  },
+  "600483": {
+    "name": "福能股份",
+    "holders": 1,
+    "totalShares": 20733790.0,
+    "totalValue": 203813155.7,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600487": {
+    "name": "亨通光电",
+    "holders": 1,
+    "totalShares": 14756721.0,
+    "totalValue": 338961881.37,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 14756721.0
+  },
+  "600498": {
+    "name": "烽火通信",
+    "holders": 1,
+    "totalShares": 7389430.0,
+    "totalValue": 202839853.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7389430.0
+  },
+  "600511": {
+    "name": "国药股份",
+    "holders": 1,
+    "totalShares": 22817572.0,
+    "totalValue": 652582559.2,
+    "change": "增仓",
+    "changePct": 2.24,
+    "changeQty": 500000.0
+  },
+  "600521": {
+    "name": "华海药业",
+    "holders": 1,
+    "totalShares": 16686369.0,
+    "totalValue": 353584159.11,
+    "change": "减仓",
+    "changePct": -2.0,
+    "changeQty": -340500.0
+  },
+  "600528": {
+    "name": "中铁工业",
+    "holders": 1,
+    "totalShares": 23760000.0,
+    "totalValue": 196732800.0,
+    "change": "减仓",
+    "changePct": -8.97,
+    "changeQty": -2340000.0
+  },
+  "600529": {
+    "name": "山东药玻",
+    "holders": 1,
+    "totalShares": 7408500.0,
+    "totalValue": 158986410.0,
+    "change": "减仓",
+    "changePct": -65.11,
+    "changeQty": -13824572.0
+  },
+  "600547": {
+    "name": "山东黄金",
+    "holders": 1,
+    "totalShares": 33888388.0,
+    "totalValue": 1332830300.04,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600558": {
+    "name": "大西洋",
+    "holders": 1,
+    "totalShares": 10994978.0,
+    "totalValue": 56074387.8,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600559": {
+    "name": "老白干酒",
+    "holders": 1,
+    "totalShares": 8359787.0,
+    "totalValue": 143788336.4,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600563": {
+    "name": "法拉电子",
+    "holders": 1,
+    "totalShares": 4500000.0,
+    "totalValue": 568800000.0,
+    "change": "减仓",
+    "changePct": -2.17,
+    "changeQty": -100000.0
+  },
+  "600566": {
+    "name": "济川药业",
+    "holders": 1,
+    "totalShares": 4295588.0,
+    "totalValue": 104468700.16,
+    "change": "减仓",
+    "changePct": -0.01,
+    "changeQty": -500.0
+  },
+  "600581": {
+    "name": "八一钢铁",
+    "holders": 1,
+    "totalShares": 22000000.0,
+    "totalValue": 95480000.0,
+    "change": "减仓",
+    "changePct": -15.38,
+    "changeQty": -4000040.0
+  },
+  "600583": {
+    "name": "海油工程",
+    "holders": 1,
+    "totalShares": 10896200.0,
+    "totalValue": 57749860.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 10896200.0
+  },
+  "600585": {
+    "name": "海螺水泥",
+    "holders": 1,
+    "totalShares": 25928326.0,
+    "totalValue": 602055729.72,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 25928326.0
+  },
+  "600597": {
+    "name": "光明乳业",
+    "holders": 1,
+    "totalShares": 18450000.0,
+    "totalValue": 154795500.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600601": {
+    "name": "方正科技",
+    "holders": 1,
+    "totalShares": 30131600.0,
+    "totalValue": 342294976.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 30131600.0
+  },
+  "600612": {
+    "name": "老凤祥",
+    "holders": 1,
+    "totalShares": 5372791.0,
+    "totalValue": 269069373.28,
+    "change": "减仓",
+    "changePct": -62.12,
+    "changeQty": -8810475.0
+  },
+  "600623": {
+    "name": "华谊集团",
+    "holders": 1,
+    "totalShares": 17709400.0,
+    "totalValue": 155311438.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600642": {
+    "name": "申能股份",
+    "holders": 1,
+    "totalShares": 30510395.0,
+    "totalValue": 238591288.9,
+    "change": "减仓",
+    "changePct": -21.84,
+    "changeQty": -8527900.0
+  },
+  "600649": {
+    "name": "城投控股",
+    "holders": 1,
+    "totalShares": 12779238.0,
+    "totalValue": 60829172.88,
+    "change": "减仓",
+    "changePct": -25.04,
+    "changeQty": -4268700.0
+  },
+  "600690": {
+    "name": "海尔智家",
+    "holders": 1,
+    "totalShares": 74870190.0,
+    "totalValue": 1896461912.7,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 74870190.0
+  },
+  "600694": {
+    "name": "大商股份",
+    "holders": 1,
+    "totalShares": 1496891.0,
+    "totalValue": 26584784.16,
+    "change": "减仓",
+    "changePct": -37.37,
+    "changeQty": -893111.0
+  },
+  "600702": {
+    "name": "舍得酒业",
+    "holders": 1,
+    "totalShares": 1326484.0,
+    "totalValue": 80000250.04,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1326484.0
+  },
+  "600703": {
+    "name": "三安光电",
+    "holders": 1,
+    "totalShares": 82000000.0,
+    "totalValue": 1277560000.0,
+    "change": "增仓",
+    "changePct": 2.49,
+    "changeQty": 1990086.0
+  },
+  "600707": {
+    "name": "彩虹股份",
+    "holders": 1,
+    "totalShares": 15688700.0,
+    "totalValue": 92406443.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 15688700.0
+  },
+  "600716": {
+    "name": "凤凰股份",
+    "holders": 1,
+    "totalShares": 5899196.0,
+    "totalValue": 22416944.8,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600741": {
+    "name": "华域汽车",
+    "holders": 1,
+    "totalShares": 25782239.0,
+    "totalValue": 528535899.5,
+    "change": "增仓",
+    "changePct": 1.14,
+    "changeQty": 291400.0
+  },
+  "600750": {
+    "name": "华润江中",
+    "holders": 1,
+    "totalShares": 15500000.0,
+    "totalValue": 339915000.0,
+    "change": "减仓",
+    "changePct": -10.4,
+    "changeQty": -1800000.0
+  },
+  "600757": {
+    "name": "长江传媒",
+    "holders": 1,
+    "totalShares": 13037941.0,
+    "totalValue": 110952877.91,
+    "change": "减仓",
+    "changePct": -4.24,
+    "changeQty": -577600.0
+  },
+  "600761": {
+    "name": "安徽合力",
+    "holders": 1,
+    "totalShares": 28651054.0,
+    "totalValue": 628317614.22,
+    "change": "增仓",
+    "changePct": 16.11,
+    "changeQty": 3976149.0
+  },
+  "600801": {
+    "name": "华新建材",
+    "holders": 1,
+    "totalShares": 12810000.0,
+    "totalValue": 236985000.0,
+    "change": "减仓",
+    "changePct": -56.14,
+    "changeQty": -16398736.0
+  },
+  "600803": {
+    "name": "新奥股份",
+    "holders": 1,
+    "totalShares": 61375490.0,
+    "totalValue": 1103531310.2,
+    "change": "减仓",
+    "changePct": -1.85,
+    "changeQty": -1158800.0
+  },
+  "600820": {
+    "name": "隧道股份",
+    "holders": 1,
+    "totalShares": 33150000.0,
+    "totalValue": 212160000.0,
+    "change": "减仓",
+    "changePct": -2.64,
+    "changeQty": -900000.0
+  },
+  "600873": {
+    "name": "梅花生物",
+    "holders": 1,
+    "totalShares": 38950999.0,
+    "totalValue": 413270099.39,
+    "change": "增仓",
+    "changePct": 17.4,
+    "changeQty": 5771800.0
+  },
+  "600882": {
+    "name": "妙可蓝多",
+    "holders": 1,
+    "totalShares": 5964700.0,
+    "totalValue": 145419386.0,
+    "change": "增仓",
+    "changePct": 13.98,
+    "changeQty": 731699.0
+  },
+  "600901": {
+    "name": "江苏金租",
+    "holders": 1,
+    "totalShares": 45654264.0,
+    "totalValue": 258859676.88,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 45654264.0
+  },
+  "600956": {
+    "name": "新天绿能",
+    "holders": 1,
+    "totalShares": 3404867.0,
+    "totalValue": 26217475.9,
+    "change": "减仓",
+    "changePct": -37.57,
+    "changeQty": -2049400.0
+  },
+  "600968": {
+    "name": "海油发展",
+    "holders": 1,
+    "totalShares": 55160600.0,
+    "totalValue": 211816704.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600969": {
+    "name": "郴电国际",
+    "holders": 1,
+    "totalShares": 2824340.0,
+    "totalValue": 20137544.2,
+    "change": "减仓",
+    "changePct": -35.35,
+    "changeQty": -1544200.0
+  },
+  "600970": {
+    "name": "中材国际",
+    "holders": 1,
+    "totalShares": 47876478.0,
+    "totalValue": 427536948.54,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "600984": {
+    "name": "建设机械",
+    "holders": 1,
+    "totalShares": 13543160.0,
+    "totalValue": 50515986.8,
+    "change": "减仓",
+    "changePct": -37.28,
+    "changeQty": -8048200.0
+  },
+  "600988": {
+    "name": "赤峰黄金",
+    "holders": 1,
+    "totalShares": 57435229.0,
+    "totalValue": 1698934073.82,
+    "change": "增仓",
+    "changePct": 42.8,
+    "changeQty": 17213545.0
+  },
+  "600989": {
+    "name": "宝丰能源",
+    "holders": 1,
+    "totalShares": 35175317.0,
+    "totalValue": 626120642.6,
+    "change": "增仓",
+    "changePct": 4.5,
+    "changeQty": 1514800.0
+  },
+  "600998": {
+    "name": "九州通",
+    "holders": 1,
+    "totalShares": 70835998.0,
+    "totalValue": 343554590.3,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 70835998.0
+  },
+  "601012": {
+    "name": "隆基绿能",
+    "holders": 1,
+    "totalShares": 79076949.0,
+    "totalValue": 1423385082.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 79076949.0
+  },
+  "601021": {
+    "name": "春秋航空",
+    "holders": 1,
+    "totalShares": 11233271.0,
+    "totalValue": 600755333.08,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601058": {
+    "name": "赛轮轮胎",
+    "holders": 1,
+    "totalShares": 40093360.0,
+    "totalValue": 576542516.8,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601069": {
+    "name": "西部黄金",
+    "holders": 1,
+    "totalShares": 7234100.0,
+    "totalValue": 216299590.0,
+    "change": "减仓",
+    "changePct": -15.93,
+    "changeQty": -1371200.0
+  },
+  "601098": {
+    "name": "中南传媒",
+    "holders": 1,
+    "totalShares": 12390000.0,
+    "totalValue": 152149200.0,
+    "change": "增仓",
+    "changePct": 7.55,
+    "changeQty": 870000.0
+  },
+  "601100": {
+    "name": "恒立液压",
+    "holders": 1,
+    "totalShares": 6443270.0,
+    "totalValue": 617071967.9,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601111": {
+    "name": "中国国航",
+    "holders": 1,
+    "totalShares": 70249185.0,
+    "totalValue": 555671053.35,
+    "change": "增仓",
+    "changePct": 2.93,
+    "changeQty": 2000000.0
+  },
+  "601126": {
+    "name": "四方股份",
+    "holders": 1,
+    "totalShares": 4702500.0,
+    "totalValue": 94943475.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601139": {
+    "name": "深圳燃气",
+    "holders": 1,
+    "totalShares": 27000000.0,
+    "totalValue": 178740000.0,
+    "change": "增仓",
+    "changePct": 3.45,
+    "changeQty": 900000.0
+  },
+  "601179": {
+    "name": "中国西电",
+    "holders": 1,
+    "totalShares": 25050000.0,
+    "totalValue": 169338000.0,
+    "change": "减仓",
+    "changePct": -19.48,
+    "changeQty": -6060000.0
+  },
+  "601187": {
+    "name": "厦门银行",
+    "holders": 1,
+    "totalShares": 26949760.0,
+    "totalValue": 169244492.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 26949760.0
+  },
+  "601233": {
+    "name": "桐昆股份",
+    "holders": 1,
+    "totalShares": 21375984.0,
+    "totalValue": 320853519.84,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 21375984.0
+  },
+  "601336": {
+    "name": "新华保险",
+    "holders": 1,
+    "totalShares": 16000000.0,
+    "totalValue": 978560000.0,
+    "change": "增仓",
+    "changePct": 5.62,
+    "changeQty": 851776.0
+  },
+  "601519": {
+    "name": "大智慧",
+    "holders": 1,
+    "totalShares": 11610800.0,
+    "totalValue": 187862744.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11610800.0
+  },
+  "601600": {
+    "name": "中国铝业",
+    "holders": 1,
+    "totalShares": 125530978.0,
+    "totalValue": 1034375258.72,
+    "change": "增仓",
+    "changePct": 1.67,
+    "changeQty": 2056500.0
+  },
+  "601618": {
+    "name": "中国中冶",
+    "holders": 1,
+    "totalShares": 100358800.0,
+    "totalValue": 386381380.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 100358800.0
+  },
+  "601628": {
+    "name": "中国人寿",
+    "holders": 1,
+    "totalShares": 14089600.0,
+    "totalValue": 558511744.0,
+    "change": "增仓",
+    "changePct": 3.28,
+    "changeQty": 447100.0
+  },
+  "601633": {
+    "name": "长城汽车",
+    "holders": 1,
+    "totalShares": 53500000.0,
+    "totalValue": 1316100000.0,
+    "change": "增仓",
+    "changePct": 4.82,
+    "changeQty": 2460004.0
+  },
+  "601636": {
+    "name": "旗滨集团",
+    "holders": 1,
+    "totalShares": 27582700.0,
+    "totalValue": 198043786.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601668": {
+    "name": "中国建筑",
+    "holders": 1,
+    "totalShares": 205170036.0,
+    "totalValue": 1118176696.2,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "601677": {
+    "name": "明泰铝业",
+    "holders": 1,
+    "totalShares": 14772593.0,
+    "totalValue": 212873065.13,
+    "change": "减仓",
+    "changePct": -77.19,
+    "changeQty": -50000061.0
+  },
+  "601798": {
+    "name": "蓝科高新",
+    "holders": 1,
+    "totalShares": 7638700.0,
+    "totalValue": 72032941.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7638700.0
+  },
+  "601838": {
+    "name": "成都银行",
+    "holders": 1,
+    "totalShares": 39118132.0,
+    "totalValue": 674787777.0,
+    "change": "减仓",
+    "changePct": -14.75,
+    "changeQty": -6766014.0
+  },
+  "601865": {
+    "name": "福莱特",
+    "holders": 1,
+    "totalShares": 16341492.0,
+    "totalValue": 281890737.0,
+    "change": "减仓",
+    "changePct": -42.84,
+    "changeQty": -12245600.0
+  },
+  "601888": {
+    "name": "中国中免",
+    "holders": 1,
+    "totalShares": 11679368.0,
+    "totalValue": 835892367.76,
+    "change": "增仓",
+    "changePct": 24.16,
+    "changeQty": 2272400.0
+  },
+  "601918": {
+    "name": "新集能源",
+    "holders": 1,
+    "totalShares": 13554800.0,
+    "totalValue": 84446404.0,
+    "change": "减仓",
+    "changePct": -88.17,
+    "changeQty": -100988320.0
+  },
+  "601928": {
+    "name": "凤凰传媒",
+    "holders": 1,
+    "totalShares": 11520000.0,
+    "totalValue": 121190400.0,
+    "change": "增仓",
+    "changePct": 4.07,
+    "changeQty": 450000.0
+  },
+  "601952": {
+    "name": "苏垦农发",
+    "holders": 1,
+    "totalShares": 16590089.0,
+    "totalValue": 155615034.82,
+    "change": "增仓",
+    "changePct": 14.02,
+    "changeQty": 2040000.0
+  },
+  "601966": {
+    "name": "玲珑轮胎",
+    "holders": 1,
+    "totalShares": 13110000.0,
+    "totalValue": 201107400.0,
+    "change": "减仓",
+    "changePct": -36.37,
+    "changeQty": -7491908.0
+  },
+  "603006": {
+    "name": "联明股份",
+    "holders": 1,
+    "totalShares": 583600.0,
+    "totalValue": 8240432.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 583600.0
+  },
+  "603008": {
+    "name": "喜临门",
+    "holders": 1,
+    "totalShares": 10897147.0,
+    "totalValue": 192007730.14,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603013": {
+    "name": "亚普股份",
+    "holders": 1,
+    "totalShares": 2509400.0,
+    "totalValue": 65244400.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2509400.0
+  },
+  "603031": {
+    "name": "安孚科技",
+    "holders": 1,
+    "totalShares": 4299019.0,
+    "totalValue": 183912032.82,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4299019.0
+  },
+  "603055": {
+    "name": "台华新材",
+    "holders": 1,
+    "totalShares": 18070600.0,
+    "totalValue": 162093282.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 18070600.0
+  },
+  "603059": {
+    "name": "倍加洁",
+    "holders": 1,
+    "totalShares": 421900.0,
+    "totalValue": 14032394.0,
+    "change": "减仓",
+    "changePct": -13.9,
+    "changeQty": -68100.0
+  },
+  "603093": {
+    "name": "南华期货",
+    "holders": 1,
+    "totalShares": 2880000.0,
+    "totalValue": 61660800.0,
+    "change": "减仓",
+    "changePct": -28.89,
+    "changeQty": -1170000.0
+  },
+  "603127": {
+    "name": "昭衍新药",
+    "holders": 1,
+    "totalShares": 6703600.0,
+    "totalValue": 236637080.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 6703600.0
+  },
+  "603160": {
+    "name": "汇顶科技",
+    "holders": 1,
+    "totalShares": 5500000.0,
+    "totalValue": 454355000.0,
+    "change": "减仓",
+    "changePct": -31.25,
+    "changeQty": -2500000.0
+  },
+  "603200": {
+    "name": "上海洗霸",
+    "holders": 1,
+    "totalShares": 999987.0,
+    "totalValue": 90788819.73,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 999987.0
+  },
+  "603215": {
+    "name": "比依股份",
+    "holders": 1,
+    "totalShares": 1000000.0,
+    "totalValue": 22500000.0,
+    "change": "增仓",
+    "changePct": 85.46,
+    "changeQty": 460800.0
+  },
+  "603238": {
+    "name": "诺邦股份",
+    "holders": 1,
+    "totalShares": 3900587.0,
+    "totalValue": 74111153.0,
+    "change": "增仓",
+    "changePct": 23.84,
+    "changeQty": 750970.0
+  },
+  "603255": {
+    "name": "鼎际得",
+    "holders": 1,
+    "totalShares": 800000.0,
+    "totalValue": 30616000.0,
+    "change": "减仓",
+    "changePct": -33.33,
+    "changeQty": -400000.0
+  },
+  "603275": {
+    "name": "众辰科技",
+    "holders": 1,
+    "totalShares": 461000.0,
+    "totalValue": 24861730.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 461000.0
+  },
+  "603277": {
+    "name": "银都股份",
+    "holders": 1,
+    "totalShares": 3166510.0,
+    "totalValue": 57978798.1,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603279": {
+    "name": "景津装备",
+    "holders": 1,
+    "totalShares": 7534162.0,
+    "totalValue": 120847958.48,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603286": {
+    "name": "日盈电子",
+    "holders": 1,
+    "totalShares": 740300.0,
+    "totalValue": 32861917.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 740300.0
+  },
+  "603298": {
+    "name": "杭叉集团",
+    "holders": 1,
+    "totalShares": 13295485.0,
+    "totalValue": 381979284.05,
+    "change": "减仓",
+    "changePct": -37.97,
+    "changeQty": -8139916.0
+  },
+  "603300": {
+    "name": "海南华铁",
+    "holders": 1,
+    "totalShares": 11100000.0,
+    "totalValue": 107448000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11100000.0
+  },
+  "603309": {
+    "name": "维力医疗",
+    "holders": 1,
+    "totalShares": 3106687.0,
+    "totalValue": 42406277.55,
+    "change": "增仓",
+    "changePct": 31.19,
+    "changeQty": 738527.0
+  },
+  "603337": {
+    "name": "杰克科技",
+    "holders": 1,
+    "totalShares": 3704274.0,
+    "totalValue": 176212314.18,
+    "change": "减仓",
+    "changePct": -41.2,
+    "changeQty": -2595726.0
+  },
+  "603351": {
+    "name": "威尔药业",
+    "holders": 1,
+    "totalShares": 4186371.0,
+    "totalValue": 113743700.07,
+    "change": "减仓",
+    "changePct": -9.22,
+    "changeQty": -425400.0
+  },
+  "603379": {
+    "name": "三美股份",
+    "holders": 1,
+    "totalShares": 3146600.0,
+    "totalValue": 185083012.0,
+    "change": "减仓",
+    "changePct": -66.61,
+    "changeQty": -6278345.0
+  },
+  "603383": {
+    "name": "顶点软件",
+    "holders": 1,
+    "totalShares": 3945040.0,
+    "totalValue": 169084414.4,
+    "change": "减仓",
+    "changePct": -24.06,
+    "changeQty": -1249570.0
+  },
+  "603393": {
+    "name": "新天然气",
+    "holders": 1,
+    "totalShares": 7281092.0,
+    "totalValue": 204453063.36,
+    "change": "减仓",
+    "changePct": -50.72,
+    "changeQty": -7494200.0
+  },
+  "603444": {
+    "name": "吉比特",
+    "holders": 1,
+    "totalShares": 957011.0,
+    "totalValue": 543582248.0,
+    "change": "减仓",
+    "changePct": -0.02,
+    "changeQty": -225.0
+  },
+  "603456": {
+    "name": "九洲药业",
+    "holders": 1,
+    "totalShares": 12699920.0,
+    "totalValue": 247013444.0,
+    "change": "增仓",
+    "changePct": 28.39,
+    "changeQty": 2808120.0
+  },
+  "603477": {
+    "name": "巨星农牧",
+    "holders": 1,
+    "totalShares": 22906400.0,
+    "totalValue": 464770856.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603486": {
+    "name": "科沃斯",
+    "holders": 1,
+    "totalShares": 4006903.0,
+    "totalValue": 430742072.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 4006903.0
+  },
+  "603508": {
+    "name": "思维列控",
+    "holders": 1,
+    "totalShares": 2800000.0,
+    "totalValue": 93800000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603551": {
+    "name": "奥普科技",
+    "holders": 1,
+    "totalShares": 1605800.0,
+    "totalValue": 19510470.0,
+    "change": "减仓",
+    "changePct": -11.77,
+    "changeQty": -214200.0
+  },
+  "603556": {
+    "name": "海兴电力",
+    "holders": 1,
+    "totalShares": 3484200.0,
+    "totalValue": 97000128.0,
+    "change": "减仓",
+    "changePct": -19.37,
+    "changeQty": -836930.0
+  },
+  "603583": {
+    "name": "捷昌驱动",
+    "holders": 1,
+    "totalShares": 3963502.0,
+    "totalValue": 169281170.42,
+    "change": "增仓",
+    "changePct": 5.45,
+    "changeQty": 205002.0
+  },
+  "603601": {
+    "name": "再升科技",
+    "holders": 1,
+    "totalShares": 22000083.0,
+    "totalValue": 110220415.83,
+    "change": "增仓",
+    "changePct": 553.36,
+    "changeQty": 18632843.0
+  },
+  "603606": {
+    "name": "东方电缆",
+    "holders": 1,
+    "totalShares": 5300000.0,
+    "totalValue": 374392000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5300000.0
+  },
+  "603612": {
+    "name": "索通发展",
+    "holders": 1,
+    "totalShares": 3700000.0,
+    "totalValue": 98420000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3700000.0
+  },
+  "603630": {
+    "name": "拉芳家化",
+    "holders": 1,
+    "totalShares": 2769650.0,
+    "totalValue": 65751491.0,
+    "change": "增仓",
+    "changePct": 39.18,
+    "changeQty": 779650.0
+  },
+  "603661": {
+    "name": "恒林股份",
+    "holders": 1,
+    "totalShares": 634822.0,
+    "totalValue": 20073071.64,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 634822.0
+  },
+  "603682": {
+    "name": "锦和商管",
+    "holders": 1,
+    "totalShares": 1477000.0,
+    "totalValue": 8522290.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1477000.0
+  },
+  "603689": {
+    "name": "皖天然气",
+    "holders": 1,
+    "totalShares": 2333040.0,
+    "totalValue": 19830840.0,
+    "change": "减仓",
+    "changePct": -3.28,
+    "changeQty": -79136.0
+  },
+  "603690": {
+    "name": "至纯科技",
+    "holders": 1,
+    "totalShares": 2793007.0,
+    "totalValue": 85326363.85,
+    "change": "减仓",
+    "changePct": -22.82,
+    "changeQty": -826000.0
+  },
+  "603707": {
+    "name": "健友股份",
+    "holders": 1,
+    "totalShares": 12972900.0,
+    "totalValue": 134399244.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603712": {
+    "name": "七一二",
+    "holders": 1,
+    "totalShares": 6254512.0,
+    "totalValue": 136911267.68,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603730": {
+    "name": "岱美股份",
+    "holders": 1,
+    "totalShares": 6249403.0,
+    "totalValue": 36871477.7,
+    "change": "减仓",
+    "changePct": -74.09,
+    "changeQty": -17869690.0
+  },
+  "603806": {
+    "name": "福斯特",
+    "holders": 1,
+    "totalShares": 11745492.0,
+    "totalValue": 184404224.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 11745492.0
+  },
+  "603808": {
+    "name": "歌力思",
+    "holders": 1,
+    "totalShares": 2500000.0,
+    "totalValue": 19525000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603811": {
+    "name": "诚意药业",
+    "holders": 1,
+    "totalShares": 4733800.0,
+    "totalValue": 61302710.0,
+    "change": "减仓",
+    "changePct": -64.17,
+    "changeQty": -8479420.0
+  },
+  "603816": {
+    "name": "顾家家居",
+    "holders": 1,
+    "totalShares": 10911448.0,
+    "totalValue": 329198386.16,
+    "change": "增仓",
+    "changePct": 25.76,
+    "changeQty": 2234848.0
+  },
+  "603848": {
+    "name": "好太太",
+    "holders": 1,
+    "totalShares": 2000000.0,
+    "totalValue": 38600000.0,
+    "change": "减仓",
+    "changePct": -79.93,
+    "changeQty": -7965040.0
+  },
+  "603866": {
+    "name": "桃李面包",
+    "holders": 1,
+    "totalShares": 19500089.0,
+    "totalValue": 105300480.6,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603867": {
+    "name": "新化股份",
+    "holders": 1,
+    "totalShares": 1573000.0,
+    "totalValue": 52223600.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1573000.0
+  },
+  "603871": {
+    "name": "嘉友国际",
+    "holders": 1,
+    "totalShares": 8594627.0,
+    "totalValue": 122903166.1,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 8594627.0
+  },
+  "603918": {
+    "name": "金桥信息",
+    "holders": 1,
+    "totalShares": 4532200.0,
+    "totalValue": 83211192.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603927": {
+    "name": "中科软",
+    "holders": 1,
+    "totalShares": 16113324.0,
+    "totalValue": 336285071.88,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603929": {
+    "name": "亚翔集成",
+    "holders": 1,
+    "totalShares": 1715200.0,
+    "totalValue": 71935488.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1715200.0
+  },
+  "603967": {
+    "name": "中创物流",
+    "holders": 1,
+    "totalShares": 2397450.0,
+    "totalValue": 26683618.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2397450.0
+  },
+  "603983": {
+    "name": "丸美生物",
+    "holders": 1,
+    "totalShares": 1941705.0,
+    "totalValue": 77279859.0,
+    "change": "减仓",
+    "changePct": -2.0,
+    "changeQty": -39600.0
+  },
+  "603988": {
+    "name": "中电电机",
+    "holders": 1,
+    "totalShares": 4000006.0,
+    "totalValue": 112360168.54,
+    "change": "减仓",
+    "changePct": -13.11,
+    "changeQty": -603690.0
+  },
+  "603992": {
+    "name": "松霖科技",
+    "holders": 1,
+    "totalShares": 6900090.0,
+    "totalValue": 214868802.6,
+    "change": "增仓",
+    "changePct": 7.98,
+    "changeQty": 510100.0
+  },
+  "603997": {
+    "name": "继峰股份",
+    "holders": 1,
+    "totalShares": 19500000.0,
+    "totalValue": 258765000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "603999": {
+    "name": "读者传媒",
+    "holders": 1,
+    "totalShares": 1213000.0,
+    "totalValue": 7799590.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1213000.0
+  },
+  "605090": {
+    "name": "九丰能源",
+    "holders": 1,
+    "totalShares": 7750000.0,
+    "totalValue": 268847500.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7750000.0
+  },
+  "605111": {
+    "name": "新洁能",
+    "holders": 1,
+    "totalShares": 7350094.0,
+    "totalValue": 264970888.7,
+    "change": "增仓",
+    "changePct": 18.36,
+    "changeQty": 1140035.0
+  },
+  "605117": {
+    "name": "德业股份",
+    "holders": 1,
+    "totalShares": 5000000.0,
+    "totalValue": 405000000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5000000.0
+  },
+  "605118": {
+    "name": "力鼎光电",
+    "holders": 1,
+    "totalShares": 641100.0,
+    "totalValue": 18623955.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 641100.0
+  },
+  "605167": {
+    "name": "利柏特",
+    "holders": 1,
+    "totalShares": 9000000.0,
+    "totalValue": 94500000.0,
+    "change": "减仓",
+    "changePct": -10.0,
+    "changeQty": -1000000.0
+  },
+  "605196": {
+    "name": "华通线缆",
+    "holders": 1,
+    "totalShares": 4869900.0,
+    "totalValue": 118533366.0,
+    "change": "减仓",
+    "changePct": -61.48,
+    "changeQty": -7774000.0
+  },
+  "605286": {
+    "name": "同力天启",
+    "holders": 1,
+    "totalShares": 568900.0,
+    "totalValue": 23979135.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 568900.0
+  },
+  "605296": {
+    "name": "神农集团",
+    "holders": 1,
+    "totalShares": 1047031.0,
+    "totalValue": 31672687.75,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "605337": {
+    "name": "李子园",
+    "holders": 1,
+    "totalShares": 1259350.0,
+    "totalValue": 16069306.0,
+    "change": "减仓",
+    "changePct": -58.31,
+    "changeQty": -1761200.0
+  },
+  "605368": {
+    "name": "蓝天燃气",
+    "holders": 1,
+    "totalShares": 5057400.0,
+    "totalValue": 48753336.0,
+    "change": "减仓",
+    "changePct": -1.56,
+    "changeQty": -80360.0
+  },
+  "605369": {
+    "name": "拱东医疗",
+    "holders": 1,
+    "totalShares": 1339044.0,
+    "totalValue": 25428445.56,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "605377": {
+    "name": "华旺科技",
+    "holders": 1,
+    "totalShares": 16032500.0,
+    "totalValue": 141406650.0,
+    "change": "减仓",
+    "changePct": -32.38,
+    "changeQty": -7678914.0
+  },
+  "605555": {
+    "name": "德昌股份",
+    "holders": 1,
+    "totalShares": 3750886.0,
+    "totalValue": 63877588.58,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "605589": {
+    "name": "圣泉集团",
+    "holders": 1,
+    "totalShares": 8459464.0,
+    "totalValue": 286691234.96,
+    "change": "减仓",
+    "changePct": -10.16,
+    "changeQty": -956500.0
+  },
+  "688006": {
+    "name": "杭可科技",
+    "holders": 1,
+    "totalShares": 4710000.0,
+    "totalValue": 172291800.0,
+    "change": "减仓",
+    "changePct": -12.29,
+    "changeQty": -660000.0
+  },
+  "688016": {
+    "name": "心脉医疗",
+    "holders": 1,
+    "totalShares": 1842353.0,
+    "totalValue": 205606594.8,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688018": {
+    "name": "乐鑫科技",
+    "holders": 1,
+    "totalShares": 2759816.0,
+    "totalValue": 598493697.76,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2759816.0
+  },
+  "688019": {
+    "name": "安集科技",
+    "holders": 1,
+    "totalShares": 3392917.0,
+    "totalValue": 775077959.48,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688020": {
+    "name": "方邦股份",
+    "holders": 1,
+    "totalShares": 500000.0,
+    "totalValue": 34250000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 500000.0
+  },
+  "688025": {
+    "name": "杰普特",
+    "holders": 1,
+    "totalShares": 4000000.0,
+    "totalValue": 565480000.0,
+    "change": "增仓",
+    "changePct": 5.26,
+    "changeQty": 200000.0
+  },
+  "688048": {
+    "name": "长光华芯",
+    "holders": 1,
+    "totalShares": 2313503.0,
+    "totalValue": 175247852.25,
+    "change": "减仓",
+    "changePct": -0.4,
+    "changeQty": -9323.0
+  },
+  "688052": {
+    "name": "纳芯微",
+    "holders": 1,
+    "totalShares": 3276969.0,
+    "totalValue": 655328260.62,
+    "change": "增仓",
+    "changePct": 10.34,
+    "changeQty": 307025.0
+  },
+  "688071": {
+    "name": "华依科技",
+    "holders": 1,
+    "totalShares": 952694.0,
+    "totalValue": 42194817.26,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 952694.0
+  },
+  "688073": {
+    "name": "毕得医药",
+    "holders": 1,
+    "totalShares": 1349802.0,
+    "totalValue": 103813271.82,
+    "change": "增仓",
+    "changePct": 200.22,
+    "changeQty": 900197.0
+  },
+  "688085": {
+    "name": "三友医疗",
+    "holders": 1,
+    "totalShares": 7914517.0,
+    "totalValue": 155757694.56,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 7914517.0
+  },
+  "688093": {
+    "name": "世华科技",
+    "holders": 1,
+    "totalShares": 1900000.0,
+    "totalValue": 75791000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688112": {
+    "name": "鼎阳科技",
+    "holders": 1,
+    "totalShares": 1062933.0,
+    "totalValue": 40061944.77,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1062933.0
+  },
+  "688122": {
+    "name": "西部超导",
+    "holders": 1,
+    "totalShares": 20580878.0,
+    "totalValue": 1339609349.02,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688125": {
+    "name": "安达智能",
+    "holders": 1,
+    "totalShares": 2400000.0,
+    "totalValue": 127824000.0,
+    "change": "减仓",
+    "changePct": -10.39,
+    "changeQty": -278167.0
+  },
+  "688129": {
+    "name": "东来技术",
+    "holders": 1,
+    "totalShares": 1800000.0,
+    "totalValue": 42102000.0,
+    "change": "增仓",
+    "changePct": 20.0,
+    "changeQty": 300000.0
+  },
+  "688133": {
+    "name": "泰坦科技",
+    "holders": 1,
+    "totalShares": 2832008.0,
+    "totalValue": 70970120.48,
+    "change": "增仓",
+    "changePct": 3.24,
+    "changeQty": 88932.0
+  },
+  "688181": {
+    "name": "八亿时空",
+    "holders": 1,
+    "totalShares": 798897.0,
+    "totalValue": 30677644.8,
+    "change": "减仓",
+    "changePct": -81.12,
+    "changeQty": -3432146.0
+  },
+  "688188": {
+    "name": "柏楚电子",
+    "holders": 1,
+    "totalShares": 3527470.0,
+    "totalValue": 542454336.6,
+    "change": "增仓",
+    "changePct": 22.47,
+    "changeQty": 647250.0
+  },
+  "688197": {
+    "name": "首药控股",
+    "holders": 1,
+    "totalShares": 2636965.0,
+    "totalValue": 118927121.5,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688198": {
+    "name": "佰仁医疗",
+    "holders": 1,
+    "totalShares": 691038.0,
+    "totalValue": 73111820.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 691038.0
+  },
+  "688200": {
+    "name": "华峰测控",
+    "holders": 1,
+    "totalShares": 1800000.0,
+    "totalValue": 374940000.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688210": {
+    "name": "统联精密",
+    "holders": 1,
+    "totalShares": 2031697.0,
+    "totalValue": 126879477.65,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2031697.0
+  },
+  "688231": {
+    "name": "隆达股份",
+    "holders": 1,
+    "totalShares": 1848047.0,
+    "totalValue": 37330549.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1848047.0
+  },
+  "688233": {
+    "name": "神工股份",
+    "holders": 1,
+    "totalShares": 1443229.0,
+    "totalValue": 73272736.33,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1443229.0
+  },
+  "688246": {
+    "name": "嘉和美康",
+    "holders": 1,
+    "totalShares": 2633495.0,
+    "totalValue": 80110917.9,
+    "change": "减仓",
+    "changePct": -9.62,
+    "changeQty": -280154.0
+  },
+  "688252": {
+    "name": "天德钰",
+    "holders": 1,
+    "totalShares": 739600.0,
+    "totalValue": 21300480.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 739600.0
+  },
+  "688267": {
+    "name": "中触媒",
+    "holders": 1,
+    "totalShares": 3600000.0,
+    "totalValue": 100080000.0,
+    "change": "增仓",
+    "changePct": 12.5,
+    "changeQty": 400000.0
+  },
+  "688283": {
+    "name": "坤恒顺维",
+    "holders": 1,
+    "totalShares": 2060264.0,
+    "totalValue": 69204267.76,
+    "change": "增仓",
+    "changePct": 34.4,
+    "changeQty": 527333.0
+  },
+  "688310": {
+    "name": "迈得医疗",
+    "holders": 1,
+    "totalShares": 1978064.0,
+    "totalValue": 39660183.2,
+    "change": "减仓",
+    "changePct": -22.06,
+    "changeQty": -559852.0
+  },
+  "688323": {
+    "name": "瑞华泰",
+    "holders": 1,
+    "totalShares": 5000000.0,
+    "totalValue": 77550000.0,
+    "change": "增仓",
+    "changePct": 4.17,
+    "changeQty": 200000.0
+  },
+  "688337": {
+    "name": "普源精电",
+    "holders": 1,
+    "totalShares": 1720998.0,
+    "totalValue": 65965853.34,
+    "change": "增仓",
+    "changePct": 77.31,
+    "changeQty": 750387.0
+  },
+  "688356": {
+    "name": "键凯科技",
+    "holders": 1,
+    "totalShares": 518090.0,
+    "totalValue": 48933600.5,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688376": {
+    "name": "美埃科技",
+    "holders": 1,
+    "totalShares": 1619258.0,
+    "totalValue": 82258306.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1619258.0
+  },
+  "688389": {
+    "name": "普门科技",
+    "holders": 1,
+    "totalShares": 13495376.0,
+    "totalValue": 186506096.32,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 13495376.0
+  },
+  "688408": {
+    "name": "中信博",
+    "holders": 1,
+    "totalShares": 1379057.0,
+    "totalValue": 65408673.51,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1379057.0
+  },
+  "688416": {
+    "name": "恒烁股份",
+    "holders": 1,
+    "totalShares": 909646.0,
+    "totalValue": 49766732.66,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688433": {
+    "name": "华曙高科",
+    "holders": 1,
+    "totalShares": 5500000.0,
+    "totalValue": 289465000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 5500000.0
+  },
+  "688486": {
+    "name": "龙迅股份",
+    "holders": 1,
+    "totalShares": 3097131.0,
+    "totalValue": 230240718.54,
+    "change": "增仓",
+    "changePct": 7.36,
+    "changeQty": 212365.0
+  },
+  "688498": {
+    "name": "源杰科技",
+    "holders": 1,
+    "totalShares": 982679.0,
+    "totalValue": 421569291.0,
+    "change": "增仓",
+    "changePct": 28.05,
+    "changeQty": 215256.0
+  },
+  "688533": {
+    "name": "上声电子",
+    "holders": 1,
+    "totalShares": 342400.0,
+    "totalValue": 10039168.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 342400.0
+  },
+  "688535": {
+    "name": "华海诚科",
+    "holders": 1,
+    "totalShares": 510197.0,
+    "totalValue": 59386930.8,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 510197.0
+  },
+  "688538": {
+    "name": "和辉光电",
+    "holders": 1,
+    "totalShares": 26713817.0,
+    "totalValue": 77470069.3,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 26713817.0
+  },
+  "688543": {
+    "name": "国科军工",
+    "holders": 1,
+    "totalShares": 1351738.0,
+    "totalValue": 69181950.84,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1351738.0
+  },
+  "688548": {
+    "name": "广钢气体",
+    "holders": 1,
+    "totalShares": 14114241.0,
+    "totalValue": 173746306.71,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 14114241.0
+  },
+  "688558": {
+    "name": "国盛智科",
+    "holders": 1,
+    "totalShares": 658764.0,
+    "totalValue": 20797179.48,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 658764.0
+  },
+  "688569": {
+    "name": "铁科轨道",
+    "holders": 1,
+    "totalShares": 2471709.0,
+    "totalValue": 52400230.8,
+    "change": "减仓",
+    "changePct": -6.73,
+    "changeQty": -178427.0
+  },
+  "688593": {
+    "name": "新相微",
+    "holders": 1,
+    "totalShares": 5000000.0,
+    "totalValue": 110800000.0,
+    "change": "减仓",
+    "changePct": -9.09,
+    "changeQty": -500000.0
+  },
+  "688652": {
+    "name": "京仪装备",
+    "holders": 1,
+    "totalShares": 1709406.0,
+    "totalValue": 172342312.92,
+    "change": "增仓",
+    "changePct": 0.76,
+    "changeQty": 12820.0
+  },
+  "688677": {
+    "name": "海泰新光",
+    "holders": 1,
+    "totalShares": 5034550.0,
+    "totalValue": 250217135.0,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688700": {
+    "name": "东威科技",
+    "holders": 1,
+    "totalShares": 3886454.0,
+    "totalValue": 152543319.5,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 3886454.0
+  },
+  "688717": {
+    "name": "艾罗能源",
+    "holders": 1,
+    "totalShares": 2398918.0,
+    "totalValue": 205827164.4,
+    "change": "减仓",
+    "changePct": -4.92,
+    "changeQty": -124060.0
+  },
+  "688750": {
+    "name": "金天钛业",
+    "holders": 1,
+    "totalShares": 611316.0,
+    "totalValue": 12910993.92,
+    "change": "不变",
+    "changePct": 0.0,
+    "changeQty": 0.0
+  },
+  "688768": {
+    "name": "容知日新",
+    "holders": 1,
+    "totalShares": 1866384.0,
+    "totalValue": 87365435.04,
+    "change": "减仓",
+    "changePct": -4.29,
+    "changeQty": -83616.0
+  },
+  "688775": {
+    "name": "影石创新",
+    "holders": 1,
+    "totalShares": 500000.0,
+    "totalValue": 145280000.0,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 500000.0
+  },
+  "688778": {
+    "name": "厦钨新能",
+    "holders": 1,
+    "totalShares": 2627076.0,
+    "totalValue": 220411676.4,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 2627076.0
+  },
+  "688786": {
+    "name": "悦安新材",
+    "holders": 1,
+    "totalShares": 1726032.0,
+    "totalValue": 50020407.36,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 1726032.0
+  },
+  "688787": {
+    "name": "海天瑞声",
+    "holders": 1,
+    "totalShares": 713694.0,
+    "totalValue": 92073662.94,
+    "change": "增仓",
+    "changePct": 16.29,
+    "changeQty": 100000.0
+  },
+  "688789": {
+    "name": "宏华数科",
+    "holders": 1,
+    "totalShares": 2334923.0,
+    "totalValue": 197534485.8,
+    "change": "减仓",
+    "changePct": -17.88,
+    "changeQty": -508542.0
+  },
+  "920037": {
+    "name": "广信科技",
+    "holders": 1,
+    "totalShares": 521463.0,
+    "totalValue": 48428268.81,
+    "change": "新进",
+    "changePct": 0.0,
+    "changeQty": 521463.0
+  }
+}

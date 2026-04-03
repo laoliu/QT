@@ -1,0 +1,386 @@
+{
+  "summaries": [
+    {
+      "name": "Bollinger主导+MACD+KDJ过滤",
+      "avgReturn": 11.87,
+      "avgSharpe": 1.48,
+      "avgMaxDD": 6.19,
+      "avgWinRate": 65.4,
+      "positiveStocks": 7,
+      "totalStocks": 8,
+      "score": 0.485
+    },
+    {
+      "name": "趋势+均值回归投票 (MACD+Bollinger+均值回归)",
+      "avgReturn": 10.27,
+      "avgSharpe": 1.29,
+      "avgMaxDD": 5.3,
+      "avgWinRate": 72.7,
+      "positiveStocks": 8,
+      "totalStocks": 8,
+      "score": 0.472
+    },
+    {
+      "name": "均值回归主导+RSI过滤",
+      "avgReturn": 9.14,
+      "avgSharpe": 1.87,
+      "avgMaxDD": 7.72,
+      "avgWinRate": 87.5,
+      "positiveStocks": 8,
+      "totalStocks": 8,
+      "score": 0.472
+    },
+    {
+      "name": "加权评分 (MACD×2+RSI+Bollinger)",
+      "avgReturn": 11.52,
+      "avgSharpe": 1.67,
+      "avgMaxDD": 10.63,
+      "avgWinRate": 70.8,
+      "positiveStocks": 7,
+      "totalStocks": 8,
+      "score": 0.456
+    },
+    {
+      "name": "Bollinger 单策略",
+      "avgReturn": 2.79,
+      "avgSharpe": 0.85,
+      "avgMaxDD": 8.15,
+      "avgWinRate": 66.0,
+      "positiveStocks": 5,
+      "totalStocks": 8,
+      "score": 0.285
+    }
+  ],
+  "details": {
+    "Bollinger 单策略": {
+      "600519": {
+        "return": 6.7,
+        "sharpe": 1.0,
+        "maxDD": 4.46,
+        "winRate": 75.0,
+        "trades": 4,
+        "signals": 8
+      },
+      "000858": {
+        "return": -5.11,
+        "sharpe": -1.0,
+        "maxDD": 7.65,
+        "winRate": 40.0,
+        "trades": 5,
+        "signals": 9
+      },
+      "300750": {
+        "return": 1.94,
+        "sharpe": 1.0,
+        "maxDD": 14.75,
+        "winRate": 66.7,
+        "trades": 3,
+        "signals": 6
+      },
+      "601318": {
+        "return": 9.48,
+        "sharpe": 2.929,
+        "maxDD": 5.02,
+        "winRate": 100.0,
+        "trades": 4,
+        "signals": 8
+      },
+      "000001": {
+        "return": 9.26,
+        "sharpe": 4.81,
+        "maxDD": 4.07,
+        "winRate": 80.0,
+        "trades": 5,
+        "signals": 10
+      },
+      "000651": {
+        "return": -2.92,
+        "sharpe": -0.255,
+        "maxDD": 12.74,
+        "winRate": 50.0,
+        "trades": 4,
+        "signals": 9
+      },
+      "600036": {
+        "return": 7.14,
+        "sharpe": 1.258,
+        "maxDD": 4.8,
+        "winRate": 66.7,
+        "trades": 6,
+        "signals": 12
+      },
+      "600276": {
+        "return": -4.14,
+        "sharpe": -2.973,
+        "maxDD": 11.7,
+        "winRate": 50.0,
+        "trades": 4,
+        "signals": 8
+      }
+    },
+    "Bollinger主导+MACD+KDJ过滤": {
+      "600519": {
+        "return": 6.7,
+        "sharpe": 1.0,
+        "maxDD": 4.46,
+        "winRate": 75.0,
+        "trades": 4,
+        "signals": 0
+      },
+      "000858": {
+        "return": -5.11,
+        "sharpe": -1.0,
+        "maxDD": 7.65,
+        "winRate": 40.0,
+        "trades": 5,
+        "signals": 0
+      },
+      "300750": {
+        "return": 32.83,
+        "sharpe": 0.833,
+        "maxDD": 9.1,
+        "winRate": 57.1,
+        "trades": 7,
+        "signals": 0
+      },
+      "601318": {
+        "return": 9.48,
+        "sharpe": 2.929,
+        "maxDD": 5.02,
+        "winRate": 100.0,
+        "trades": 4,
+        "signals": 0
+      },
+      "000001": {
+        "return": 17.6,
+        "sharpe": 1.313,
+        "maxDD": 6.09,
+        "winRate": 42.9,
+        "trades": 7,
+        "signals": 0
+      },
+      "000651": {
+        "return": 5.24,
+        "sharpe": 3.019,
+        "maxDD": 6.98,
+        "winRate": 75.0,
+        "trades": 8,
+        "signals": 0
+      },
+      "600036": {
+        "return": 7.14,
+        "sharpe": 1.258,
+        "maxDD": 4.8,
+        "winRate": 66.7,
+        "trades": 6,
+        "signals": 0
+      },
+      "600276": {
+        "return": 21.1,
+        "sharpe": 2.501,
+        "maxDD": 5.39,
+        "winRate": 66.7,
+        "trades": 9,
+        "signals": 0
+      }
+    },
+    "趋势+均值回归投票 (MACD+Bollinger+均值回归)": {
+      "600519": {
+        "return": 6.7,
+        "sharpe": 1.0,
+        "maxDD": 4.46,
+        "winRate": 75.0,
+        "trades": 4,
+        "signals": 1
+      },
+      "000858": {
+        "return": 0.59,
+        "sharpe": 1.0,
+        "maxDD": 2.18,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 0
+      },
+      "300750": {
+        "return": 32.83,
+        "sharpe": 0.833,
+        "maxDD": 9.1,
+        "winRate": 57.1,
+        "trades": 7,
+        "signals": 0
+      },
+      "601318": {
+        "return": 9.48,
+        "sharpe": 2.929,
+        "maxDD": 5.02,
+        "winRate": 100.0,
+        "trades": 4,
+        "signals": 1
+      },
+      "000001": {
+        "return": 17.6,
+        "sharpe": 1.313,
+        "maxDD": 6.09,
+        "winRate": 42.9,
+        "trades": 7,
+        "signals": 0
+      },
+      "000651": {
+        "return": 2.89,
+        "sharpe": 1.0,
+        "maxDD": 7.69,
+        "winRate": 40.0,
+        "trades": 10,
+        "signals": 0
+      },
+      "600036": {
+        "return": 7.14,
+        "sharpe": 1.258,
+        "maxDD": 4.8,
+        "winRate": 66.7,
+        "trades": 6,
+        "signals": 1
+      },
+      "600276": {
+        "return": 4.96,
+        "sharpe": 1.0,
+        "maxDD": 3.05,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 0
+      }
+    },
+    "均值回归主导+RSI过滤": {
+      "600519": {
+        "return": 12.49,
+        "sharpe": 1.339,
+        "maxDD": 12.81,
+        "winRate": 100.0,
+        "trades": 2,
+        "signals": 0
+      },
+      "000858": {
+        "return": 0.59,
+        "sharpe": 1.0,
+        "maxDD": 2.18,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 1
+      },
+      "300750": {
+        "return": 18.67,
+        "sharpe": 1.0,
+        "maxDD": 3.37,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 1
+      },
+      "601318": {
+        "return": 11.24,
+        "sharpe": 1.0,
+        "maxDD": 9.52,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 0
+      },
+      "000001": {
+        "return": 12.19,
+        "sharpe": 1.0,
+        "maxDD": 4.16,
+        "winRate": 50.0,
+        "trades": 2,
+        "signals": 0
+      },
+      "000651": {
+        "return": 9.52,
+        "sharpe": 8.254,
+        "maxDD": 13.58,
+        "winRate": 50.0,
+        "trades": 2,
+        "signals": 1
+      },
+      "600036": {
+        "return": 3.38,
+        "sharpe": 1.0,
+        "maxDD": 1.55,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 0
+      },
+      "600276": {
+        "return": 5.05,
+        "sharpe": 0.349,
+        "maxDD": 14.61,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 0
+      }
+    },
+    "加权评分 (MACD×2+RSI+Bollinger)": {
+      "600519": {
+        "return": 12.49,
+        "sharpe": 1.339,
+        "maxDD": 12.81,
+        "winRate": 100.0,
+        "trades": 2,
+        "signals": 18
+      },
+      "000858": {
+        "return": -3.75,
+        "sharpe": -1.0,
+        "maxDD": 14.57,
+        "winRate": 50.0,
+        "trades": 2,
+        "signals": 16
+      },
+      "300750": {
+        "return": 32.83,
+        "sharpe": 0.833,
+        "maxDD": 9.1,
+        "winRate": 57.1,
+        "trades": 7,
+        "signals": 14
+      },
+      "601318": {
+        "return": 11.24,
+        "sharpe": 1.0,
+        "maxDD": 9.52,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 22
+      },
+      "000001": {
+        "return": 17.6,
+        "sharpe": 1.313,
+        "maxDD": 6.09,
+        "winRate": 42.9,
+        "trades": 7,
+        "signals": 15
+      },
+      "000651": {
+        "return": 9.52,
+        "sharpe": 8.254,
+        "maxDD": 13.58,
+        "winRate": 50.0,
+        "trades": 2,
+        "signals": 20
+      },
+      "600036": {
+        "return": 7.14,
+        "sharpe": 1.258,
+        "maxDD": 4.8,
+        "winRate": 66.7,
+        "trades": 6,
+        "signals": 27
+      },
+      "600276": {
+        "return": 5.05,
+        "sharpe": 0.349,
+        "maxDD": 14.61,
+        "winRate": 100.0,
+        "trades": 1,
+        "signals": 24
+      }
+    }
+  }
+}

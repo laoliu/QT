@@ -1,0 +1,219 @@
+{
+  "_description": "A股细分领域唯一性/稀缺性标签表 (Scarcity & Uniqueness Tags)",
+  "_updated": "2026-03-20",
+  "_usage": "event_catalyst_screener.py reads this as a scarcity bonus factor",
+  "_scoring": "scarcity_score: 1.0=极度稀缺/唯一, 0.8=高度稀缺, 0.6=较稀缺, 0.4=有竞争优势",
+
+  "stocks": {
+    "002281": {
+      "name": "光迅科技",
+      "scarcity_score": 0.8,
+      "tags": ["光模块龙头", "400G光芯片"],
+      "moat": "国产光芯片自主可控"
+    },
+    "300502": {
+      "name": "新易盛",
+      "scarcity_score": 0.8,
+      "tags": ["800G光模块", "AI算力配套"],
+      "moat": "高端光模块出货量前三"
+    },
+    "603019": {
+      "name": "中科曙光",
+      "scarcity_score": 0.8,
+      "tags": ["国产算力", "海光信息"],
+      "moat": "国产GPU唯一上市公司绑定"
+    },
+    "300750": {
+      "name": "宁德时代",
+      "scarcity_score": 1.0,
+      "tags": ["动力电池全球第一", "钠电池"],
+      "moat": "全球市占率37%+"
+    },
+    "002460": {
+      "name": "赣锋锂业",
+      "scarcity_score": 0.8,
+      "tags": ["锂资源", "全球锂矿"],
+      "moat": "全球最大锂化合物供应商"
+    },
+    "603501": {
+      "name": "韦尔股份",
+      "scarcity_score": 0.8,
+      "tags": ["CMOS图像传感器", "车载CIS"],
+      "moat": "全球CIS第三"
+    },
+    "688008": {
+      "name": "澜起科技",
+      "scarcity_score": 0.9,
+      "tags": ["内存接口芯片", "DDR5"],
+      "moat": "全球内存接口芯片三巨头之一"
+    },
+    "002371": {
+      "name": "北方华创",
+      "scarcity_score": 0.9,
+      "tags": ["半导体设备龙头", "刻蚀/CVD"],
+      "moat": "国产半导体设备平台型龙头"
+    },
+    "300236": {
+      "name": "上海新阳",
+      "scarcity_score": 0.7,
+      "tags": ["光刻胶", "半导体材料"],
+      "moat": "国产ArF光刻胶突破"
+    },
+    "688012": {
+      "name": "中微公司",
+      "scarcity_score": 0.9,
+      "tags": ["刻蚀设备", "MOCVD"],
+      "moat": "5nm刻蚀机国产唯一"
+    },
+    "000725": {
+      "name": "京东方A",
+      "scarcity_score": 0.8,
+      "tags": ["面板全球第一", "OLED"],
+      "moat": "全球LCD产能第一"
+    },
+    "688981": {
+      "name": "中芯国际",
+      "scarcity_score": 1.0,
+      "tags": ["晶圆代工", "14nm"],
+      "moat": "中国大陆最先进制程代工唯一"
+    },
+    "002156": {
+      "name": "通富微电",
+      "scarcity_score": 0.7,
+      "tags": ["先进封装", "AMD封测"],
+      "moat": "AMD核心封测伙伴"
+    },
+    "300308": {
+      "name": "中际旭创",
+      "scarcity_score": 0.9,
+      "tags": ["800G/1.6T光模块", "AI数据中心"],
+      "moat": "全球AI光模块出货量第一"
+    },
+    "000977": {
+      "name": "浪潮信息",
+      "scarcity_score": 0.7,
+      "tags": ["AI服务器", "国产算力"],
+      "moat": "中国AI服务器出货量第一"
+    },
+    "002527": {
+      "name": "新时达",
+      "scarcity_score": 0.6,
+      "tags": ["机器人", "运动控制"],
+      "moat": "人形机器人核心零部件"
+    },
+    "601127": {
+      "name": "赛力斯",
+      "scarcity_score": 0.7,
+      "tags": ["华为智选车", "问界"],
+      "moat": "华为汽车深度绑定唯一"
+    },
+    "002405": {
+      "name": "四维图新",
+      "scarcity_score": 0.7,
+      "tags": ["高精度地图", "自动驾驶"],
+      "moat": "国内高精度地图三大供应商"
+    },
+    "300346": {
+      "name": "南大光电",
+      "scarcity_score": 0.8,
+      "tags": ["ArF光刻胶", "电子特气"],
+      "moat": "ArF光刻胶国产突破领先"
+    },
+    "688396": {
+      "name": "华润微",
+      "scarcity_score": 0.7,
+      "tags": ["功率半导体IDM", "IGBT"],
+      "moat": "国内功率半导体IDM龙头"
+    },
+    "002837": {
+      "name": "英维克",
+      "scarcity_score": 0.7,
+      "tags": ["液冷散热", "精密温控"],
+      "moat": "数据中心液冷龙头"
+    },
+    "688111": {
+      "name": "金山办公",
+      "scarcity_score": 0.9,
+      "tags": ["WPS", "国产办公软件"],
+      "moat": "国产办公软件唯一龙头"
+    },
+    "300782": {
+      "name": "卓胜微",
+      "scarcity_score": 0.7,
+      "tags": ["射频前端", "滤波器"],
+      "moat": "国产射频芯片龙头"
+    },
+    "000063": {
+      "name": "中兴通讯",
+      "scarcity_score": 0.7,
+      "tags": ["5G设备", "光通信"],
+      "moat": "全球5G设备前四"
+    },
+    "002475": {
+      "name": "立讯精密",
+      "scarcity_score": 0.7,
+      "tags": ["消费电子连接器", "苹果核心供应商"],
+      "moat": "果链一哥+汽车电子布局"
+    },
+    "300014": {
+      "name": "亿纬锂能",
+      "scarcity_score": 0.7,
+      "tags": ["动力电池", "大圆柱电池"],
+      "moat": "46系大圆柱电池国内领先"
+    },
+    "300024": {
+      "name": "机器人",
+      "scarcity_score": 0.6,
+      "tags": ["工业机器人", "人形机器人"],
+      "moat": "A股机器人概念标杆"
+    },
+    "688521": {
+      "name": "芯原股份",
+      "scarcity_score": 0.8,
+      "tags": ["芯片IP", "GPU IP"],
+      "moat": "国内芯片IP授权龙头"
+    },
+    "688036": {
+      "name": "传音控股",
+      "scarcity_score": 0.7,
+      "tags": ["非洲手机龙头", "新兴市场"],
+      "moat": "非洲手机市场占有率第一"
+    },
+    "688082": {
+      "name": "盛美上海",
+      "scarcity_score": 0.8,
+      "tags": ["清洗设备", "半导体设备"],
+      "moat": "国产半导体清洗设备龙头"
+    },
+    "603501_cpo": {
+      "name": "韦尔股份(CPO)",
+      "scarcity_score": 0.7,
+      "tags": ["CPO封装", "光电共封装", "传感器"],
+      "moat": "光电共封装传感器布局"
+    },
+    "688562": {
+      "name": "联影医疗",
+      "scarcity_score": 0.9,
+      "tags": ["高端医疗影像", "PET-CT"],
+      "moat": "国产高端医疗影像唯一全线龙头"
+    },
+    "688120": {
+      "name": "华海清科",
+      "scarcity_score": 0.8,
+      "tags": ["CMP抛光设备", "半导体设备"],
+      "moat": "国产CMP设备唯一量产供应商"
+    },
+    "301269": {
+      "name": "英利汽车",
+      "scarcity_score": 0.6,
+      "tags": ["轻量化材料", "汽车新材料"],
+      "moat": "汽车轻量化GMT/LFT复合材料龙头"
+    },
+    "300593": {
+      "name": "新奥股份",
+      "scarcity_score": 0.6,
+      "tags": ["液冷服务器", "数据中心散热"],
+      "moat": "液冷散热方案供应商"
+    }
+  }
+}

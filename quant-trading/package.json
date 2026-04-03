@@ -1,0 +1,14 @@
+{
+  "name": "@openclaw/quant-trading",
+  "version": "2026.2.22",
+  "description": "OpenClaw quantitative trading plugin — stock, futures, fund recommendations, strategy backtesting, and portfolio management",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "latest"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

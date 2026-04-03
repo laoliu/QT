@@ -1,0 +1,803 @@
+/** Investment Planner — daily composite picks, recommendations, and order execution */
+export function getDailyPickJs(): string {
+  return `
+function getDailyPickStrategies(){
+  return Array.from(document.querySelectorAll('.dp-strategy:checked')).map(function(el){
+    return el.value;
+  });
+}
+
+function setDailyPickLoading(loading,msg){
+  var btn=document.getElementById('btn-dp-run');
+  if(btn){
+    btn.disabled=loading;
+    btn.textContent=loading?'⏳ 正在运行综合选股…':'🚀 运行每日综合选股';
+  }
+  var st=document.getElementById('dp-status');
+  if(st&&msg!=null)st.textContent=msg;
+  // Disable/enable history action buttons while running
+  document.querySelectorAll('#dp-history-table .btn').forEach(function(b){b.disabled=loading;});
+}
+
+function getDailyPickHistoryRaw(){
+  try{
+    var raw=localStorage.getItem(DAILY_PICK_HISTORY_KEY);
+    if(!raw)return [];
+    var parsed=JSON.parse(raw);
+    return Array.isArray(parsed)?parsed:[];
+  }catch(_e){
+    return [];
+  }
+}
+
+function saveDailyPickHistoryRaw(list){
+  try{
+    localStorage.setItem(DAILY_PICK_HISTORY_KEY,JSON.stringify((list||[]).slice(0,30)));
+  }catch(_e){}
+}
+
+function syncDailyPickHistory(){
+  _dailyPickHistory=getDailyPickHistoryRaw();
+  return _dailyPickHistory;
+}
+
+function captureDailyPickParams(){
+  return {
+    strategies:getDailyPickStrategies(),
+    topN:Math.max(5,Math.min(20,parseInt(document.getElementById('dp-top-n').value)||8)),
+    topStrategyCount:Math.max(2,Math.min(3,parseInt(document.getElementById('dp-top-strategy-count').value)||3)),
+    finalLimit:Math.max(3,Math.min(8,parseInt(document.getElementById('dp-final-limit').value)||8)),
+    initialCapital:Number(document.getElementById('rec-capital').value)||500000,
+    riskTolerance:document.getElementById('rec-risk').value||'medium',
+    rebalanceDays:Number(document.getElementById('rec-rebalance').value)||5,
+    startDate:document.getElementById('rec-start').value||'2025-06-01',
+    endDate:(document.getElementById('rec-end').value||'').trim()
+  };
+}
+
+function summarizeDailyPickResult(d){
+  var ranking=Array.isArray(d&&d.strategyRanking)?d.strategyRanking:[];
+  var best=null;
+  for(var i=0;i<ranking.length;i++){
+    if(ranking[i]&&ranking[i].rank===1){best=ranking[i];break;}
+  }
+  var finalSymbols=Array.isArray(d&&d.finalSymbols)?d.finalSymbols:[];
+  return {
+    bestStrategy:(best&&(best.strategyLabel||best.strategy))||'-',
+    bestScore:(best&&best.compositeScore!=null)?Number(best.compositeScore).toFixed(1):'-',
+    finalCount:finalSymbols.length,
+    finalSymbols:finalSymbols
+  };
+}
+
+function formatDailyPickTime(ts){
+  if(!ts)return '-';
+  try{return new Date(ts).toLocaleString('zh-CN');}catch(_e){return String(ts);}
+}
+
+function saveDailyPickHistoryEntry(d){
+  var entry={
+    id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),
+    createdAt:new Date().toISOString(),
+    params:captureDailyPickParams(),
+    summary:summarizeDailyPickResult(d),
+    result:d
+  };
+  var list=syncDailyPickHistory();
+  list.unshift(entry);
+  if(list.length>30)list=list.slice(0,30);
+  saveDailyPickHistoryRaw(list);
+  _dailyPickHistory=list;
+  renderDailyPickHistory();
+}
+
+function renderDailyPickHistory(){
+  var statusEl=document.getElementById('dp-history-status');
+  var panelEl=document.getElementById('dp-history-panel');
+  var tbody=document.querySelector('#dp-history-table tbody');
+  if(!statusEl||!panelEl||!tbody)return;
+
+  var list=syncDailyPickHistory();
+  if(!list.length){
+    statusEl.textContent='暂无历史';
+    panelEl.style.display='none';
+    tbody.innerHTML='';
+    return;
+  }
+
+  statusEl.textContent='共 '+list.length+' 条历史记录';
+  panelEl.style.display='block';
+
+  var rows='';
+  list.forEach(function(entry,idx){
+    var p=entry.params||{};
+    var sum=entry.summary||{};
+    var strategies=Array.isArray(p.strategies)?p.strategies.join(', '):'-';
+    var symbols=Array.isArray(sum.finalSymbols)?sum.finalSymbols:[];
+    var symbolText=symbols.length?symbols.slice(0,8).join(', '):'-';
+    rows+='<tr>';
+    rows+='<td>'+(idx+1)+'</td>';
+    rows+='<td>'+esc(formatDailyPickTime(entry.createdAt))+'</td>';
+    rows+='<td>'+esc(strategies)+'</td>';
+    rows+='<td>'+esc(sum.bestStrategy||'-')+'</td>';
+    rows+='<td>'+esc(sum.bestScore||'-')+'</td>';
+    rows+='<td>'+(sum.finalCount||0)+'</td>';
+    rows+='<td style="max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(symbolText)+'</td>';
+    rows+='<td>'+
+      '<button class="btn btn-sm" onclick="restoreDailyPickHistory(\\''+entry.id+'\\')">查看</button> '+
+      '<button class="btn btn-sm" onclick="applyDailyPickHistoryToRecommend(\\''+entry.id+'\\')">应用</button> '+
+      '<button class="btn btn-sm btn-danger" onclick="deleteDailyPickHistory(\\''+entry.id+'\\')">删除</button>'+
+      '</td>';
+    rows+='</tr>';
+  });
+  tbody.innerHTML=rows;
+}
+
+function loadDailyPickHistory(){
+  renderDailyPickHistory();
+}
+
+function restoreDailyPickHistory(id){
+  if(_dailyPickRunning){
+    toast('⏳ 综合选股正在运行中，请等待完成后再操作');
+    return;
+  }
+  var list=syncDailyPickHistory();
+  var found=null;
+  for(var i=0;i<list.length;i++){
+    if(list[i]&&list[i].id===id){found=list[i];break;}
+  }
+  if(!found||!found.result){
+    toast('未找到历史记录');
+    return;
+  }
+
+  var p=found.params||{};
+  if(Array.isArray(p.strategies)&&p.strategies.length){
+    document.querySelectorAll('.dp-strategy').forEach(function(el){
+      el.checked=p.strategies.indexOf(el.value)>=0;
+    });
+  }
+  if(p.topN!=null)document.getElementById('dp-top-n').value=p.topN;
+  if(p.topStrategyCount!=null)document.getElementById('dp-top-strategy-count').value=p.topStrategyCount;
+  if(p.finalLimit!=null)document.getElementById('dp-final-limit').value=p.finalLimit;
+  if(p.startDate)document.getElementById('rec-start').value=p.startDate;
+  document.getElementById('rec-end').value=p.endDate||'';
+  if(p.initialCapital!=null)document.getElementById('rec-capital').value=p.initialCapital;
+  if(p.rebalanceDays!=null)document.getElementById('rec-rebalance').value=p.rebalanceDays;
+  if(p.riskTolerance){
+    var riskSel=document.getElementById('rec-risk');
+    for(var j=0;j<riskSel.options.length;j++){
+      if(riskSel.options[j].value===p.riskTolerance){riskSel.selectedIndex=j;break;}
+    }
+  }
+
+  renderDailyCompositePick(found.result,{skipHistory:true});
+  setDailyPickLoading(false,'已加载历史记录：'+formatDailyPickTime(found.createdAt));
+  toast('✅ 已恢复历史综合选股结果');
+}
+
+function applyDailyPickHistoryToRecommend(id){
+  restoreDailyPickHistory(id);
+  applyDailyPickToRecommend();
+}
+
+function deleteDailyPickHistory(id){
+  if(_dailyPickRunning){
+    toast('⏳ 综合选股正在运行中，请等待完成后再操作');
+    return;
+  }
+  if(!confirm('确认删除这条每日综合选股历史记录吗？'))return;
+  var list=syncDailyPickHistory().filter(function(entry){return entry&&entry.id!==id;});
+  saveDailyPickHistoryRaw(list);
+  _dailyPickHistory=list;
+  renderDailyPickHistory();
+  toast('🗑️ 历史记录已删除');
+}
+
+function runDailyCompositePick(){
+  if(_dailyPickRunning){
+    toast('⏳ 综合选股正在运行中，请等待完成后再操作');
+    return;
+  }
+  var strategies=getDailyPickStrategies();
+  if(!strategies.length){
+    toast('请至少选择一个策略');
+    return;
+  }
+
+  var topN=Math.max(5,Math.min(20,parseInt(document.getElementById('dp-top-n').value)||8));
+  var topStrategyCount=Math.max(2,Math.min(3,parseInt(document.getElementById('dp-top-strategy-count').value)||3));
+  var finalLimit=Math.max(3,Math.min(8,parseInt(document.getElementById('dp-final-limit').value)||8));
+  var endVal=document.getElementById('rec-end').value.trim();
+
+  var body={
+    strategies:strategies,
+    top_n_per_strategy:topN,
+    top_strategy_count:topStrategyCount,
+    final_stock_limit:finalLimit,
+    initial_capital:Number(document.getElementById('rec-capital').value)||500000,
+    risk_tolerance:document.getElementById('rec-risk').value||'medium',
+    rebalance_days:Number(document.getElementById('rec-rebalance').value)||5,
+    start_date:document.getElementById('rec-start').value||'2025-06-01'
+  };
+  if(endVal)body.end_date=endVal;
+
+  document.getElementById('dp-results').style.display='none';
+  _dailyPickRunning=true;
+  setDailyPickLoading(true,'正在执行：策略筛选 → 策略回测排行 → 合并候选 → 8股内回测排行（约1-4分钟）…');
+  toast('正在运行每日综合选股…');
+
+  api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:600000})
+    .then(function(d){
+      _dailyPickRunning=false;
+      setDailyPickLoading(false,'每日综合选股完成');
+      if(d.error){toast('❌ '+d.error);return;}
+      renderDailyCompositePick(d);
+    })
+    .catch(function(e){
+      _dailyPickRunning=false;
+      setDailyPickLoading(false,'每日综合选股失败: '+e.message);
+    });
+}
+
+function renderDailyCompositePick(d){
+  var opts=arguments[1]||{};
+  _dailyPickState=d;
+  if(!opts.skipHistory)saveDailyPickHistoryEntry(d);
+  document.getElementById('dp-results').style.display='block';
+
+  function isNum(v){return typeof v==='number'&&isFinite(v)}
+  function f2(v){return isNum(v)?Number(v).toFixed(2):'-'}
+  function fPct(v){return isNum(v)?pct(Number(v)):'-'}
+  function fDD(v){return isNum(v)?('-'+Math.abs(Number(v)).toFixed(2)+'%'):'-'}
+  function colorPct(v){return isNum(v)?pctColor(Number(v)):'var(--text)'}
+
+  var ranking=Array.isArray(d.strategyRanking)?d.strategyRanking:[];
+  var selected=Array.isArray(d.selectedStrategies)?d.selectedStrategies:[];
+  var combined=Array.isArray(d.combinedList)?d.combinedList:[];
+  var finalSymbols=Array.isArray(d.finalSymbols)?d.finalSymbols:[];
+  var stockBt=Array.isArray(d.stockBacktestRanking)?d.stockBacktestRanking:[];
+  var poolBt=Array.isArray(d.poolBacktestRanking)?d.poolBacktestRanking:[];
+
+  var bestLabel='-';
+  var bestScore='-';
+  for(var i=0;i<ranking.length;i++){
+    if(ranking[i].rank===1){
+      bestLabel=ranking[i].strategyLabel||ranking[i].strategy||'-';
+      bestScore=isNum(ranking[i].compositeScore)?Number(ranking[i].compositeScore).toFixed(1):'-';
+      break;
+    }
+  }
+
+  var okStockBt=0;
+  for(var si=0;si<stockBt.length;si++){
+    if(stockBt[si]&&stockBt[si].error==null&&stockBt[si].rank!=null)okStockBt++;
+  }
+
+  document.getElementById('dp-kpis').innerHTML=
+    kpiHtml(esc(bestLabel),'最佳策略')+
+    kpiHtml(bestScore,'策略综合分')+
+    kpiHtml(finalSymbols.length+'只','最终入围')+
+    kpiHtml(selected.length+'个','入围策略')+
+    kpiHtml(okStockBt+'只','单股可回测');
+
+  // Strategy ranking table
+  var stBody=document.querySelector('#dp-strategy-table tbody');
+  var stRows='';
+  ranking.forEach(function(r,rIdx){
+    var isTop=r.rank===1;
+    var style=isTop?'background:rgba(63,185,80,.08)':'';
+    var hasDetail=!r.error&&r.backtestDetail;
+    stRows+='<tr style="'+style+';'+(hasDetail?'cursor:pointer':'') +'" '+(hasDetail?'onclick="showStrategyDetail('+rIdx+')" title="点击查看详细计算过程"':'')+'>';
+    stRows+='<td>'+(r.rank==null?'-':(isTop?'🏆 ':'')+r.rank)+'</td>';
+    stRows+='<td>'+(hasDetail?'<span style="color:var(--accent);text-decoration:underline">':'') +esc(r.strategyLabel||r.strategy||'-')+(hasDetail?'</span>':'')+'</td>';
+    stRows+='<td>'+(r.screenCount!=null?r.screenCount:'-')+'</td>';
+    stRows+='<td style="color:'+colorPct(r.totalReturn)+'">'+fPct(r.totalReturn)+'</td>';
+    stRows+='<td style="color:var(--red)">'+fDD(r.maxDrawdown)+'</td>';
+    stRows+='<td>'+(isNum(r.winRate)?Number(r.winRate).toFixed(1)+'%':'-')+'</td>';
+    stRows+='<td>'+f2(r.sharpeRatio)+'</td>';
+    stRows+='<td>'+f2(r.profitFactor)+'</td>';
+    stRows+='<td>'+(isNum(r.compositeScore)?Number(r.compositeScore).toFixed(1):'-')+'</td>';
+    if(r.error){
+      stRows+='<td><span class="badge badge-red">'+esc(r.error)+'</span></td>';
+    }else if(r.rank!=null&&r.rank<=3){
+      stRows+='<td><span class="badge badge-green">入围</span></td>';
+    }else{
+      stRows+='<td><span class="badge badge-yellow">观察</span></td>';
+    }
+    stRows+='</tr>';
+  });
+  stBody.innerHTML=stRows||'<tr><td colspan="10" style="color:var(--text-dim)">暂无数据</td></tr>';
+
+  // Combined list table
+  var cbBody=document.querySelector('#dp-combined-table tbody');
+  var cbRows='';
+  var routingMap={};
+  var routingArr=Array.isArray(d.routingEnrichment)?d.routingEnrichment:[];
+  routingArr.forEach(function(re){if(re&&re.symbol&&re.routing)routingMap[re.symbol]=re.routing;});
+  combined.forEach(function(item,itemIdx){
+    var selectedBy=(item.selectedBy||[]).map(function(s){
+      return '<span class="badge badge-blue" style="margin:1px">'+esc(s)+'</span>';
+    }).join(' ');
+    var details=(item.sourceDetails||[]).map(function(src){
+      return esc(src.strategyLabel||src.strategy||'-')+'#'+(src.candidateRank||'-')+'('+f2(src.screenScore)+')';
+    }).join(' | ');
+    var itemSym=String(item.symbol||'');
+    var itemSymJs=itemSym.replace(/\\\\/g,'\\\\\\\\').replace(/'/g,"\\\\'" );
+    var rt=routingMap[itemSym];
+    var routingCell='-';
+    if(rt){
+      var rtBadge=rt.source==='data-driven'?'badge-green':'badge-yellow';
+      routingCell='<span class="badge '+rtBadge+'" style="margin:1px" title="'+esc(rt.reason||'')+'">'+esc(rt.combo||'-')+'</span>';
+      routingCell+='<br><span style="font-size:10px;color:var(--text-dim)">'+esc(rt.profileKey||'')+'</span>';
+    }
+    cbRows+='<tr style="cursor:pointer;'+(item.selected?'background:rgba(88,166,255,.07)':'')+'" onclick="showStockDetail('+itemIdx+')" title="点击查看评分详情">';
+    cbRows+='<td>'+(item.rank||'-')+'</td>';
+    cbRows+='<td><strong><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(itemSym)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation()">'+esc(itemSym||'-')+'</a></strong></td>';
+    cbRows+='<td>'+esc(item.name||item.symbol||'-')+'</td>';
+    cbRows+='<td>'+num(item.price)+'</td>';
+    cbRows+='<td style="color:'+colorPct(item.changePct)+'">'+fPct(item.changePct)+'</td>';
+    cbRows+='<td><strong>'+f2(item.combinedScore)+'</strong></td>';
+    if(item.backtestError){
+      cbRows+='<td colspan="4" style="color:var(--text-dim);font-size:11px" title="'+esc(item.backtestError)+'"><span class="badge badge-red">'+esc(item.backtestError)+'</span></td>';
+    }else{
+      cbRows+='<td style="color:'+colorPct(item.backtestReturn)+'">'+fPct(item.backtestReturn)+'</td>';
+      cbRows+='<td>'+f2(item.backtestSharpe)+'</td>';
+      cbRows+='<td style="color:var(--red)">'+fDD(item.backtestDrawdown)+'</td>';
+      cbRows+='<td>'+(isNum(item.backtestWinRate)?Number(item.backtestWinRate).toFixed(1)+'%':'-')+'</td>';
+    }
+    cbRows+='<td>'+(item.appearanceCount||0)+'</td>';
+    cbRows+='<td>'+selectedBy+'</td>';
+    cbRows+='<td>'+routingCell+'</td>';
+    cbRows+='<td style="font-size:11px">'+(details||'-')+'</td>';
+    cbRows+='<td>'+(item.selected?'<span class="badge badge-green">入围8股</span>':'<span class="badge badge-yellow">候补</span>')+'</td>';
+    cbRows+='</tr>';
+  });
+  cbBody.innerHTML=cbRows||'<tr><td colspan="15" style="color:var(--text-dim)">暂无数据</td></tr>';
+
+  // Single-stock backtest ranking
+  var sbBody=document.querySelector('#dp-stock-bt-table tbody');
+  var sbRows='';
+  stockBt.forEach(function(r){
+    var src=(r.selectedBy||[]).join('、');
+    var stockSym=String(r.symbol||'');
+    var stockSymJs=stockSym.replace(/\\\\/g,'\\\\\\\\').replace(/'/g,"\\\\'" );
+    sbRows+='<tr'+(r.rank===1?' style="background:rgba(63,185,80,.08)"':'')+'>';
+    sbRows+='<td>'+(r.rank==null?'-':(r.rank===1?'🏆 ':'')+r.rank)+'</td>';
+    sbRows+='<td style="cursor:pointer" onclick="viewStock(\\''+stockSymJs+'\\')"><strong><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(stockSym)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(stockSym||'-')+'</a></strong></td>';
+    sbRows+='<td>'+esc(r.name||r.symbol||'-')+'</td>';
+    sbRows+='<td>'+esc(r.strategyLabel||r.strategy||'-')+'</td>';
+    sbRows+='<td style="font-size:11px">'+esc(src||'-')+'</td>';
+    sbRows+='<td style="color:'+colorPct(r.totalReturn)+'">'+fPct(r.totalReturn)+'</td>';
+    sbRows+='<td style="color:var(--red)">'+fDD(r.maxDrawdown)+'</td>';
+    sbRows+='<td>'+(isNum(r.winRate)?Number(r.winRate).toFixed(1)+'%':'-')+'</td>';
+    sbRows+='<td>'+f2(r.sharpeRatio)+'</td>';
+    sbRows+='<td>'+(isNum(r.compositeScore)?Number(r.compositeScore).toFixed(1):'-')+'</td>';
+    if(r.error)sbRows+='<td><span class="badge badge-red">'+esc(r.error)+'</span></td>';
+    else sbRows+='<td><span class="badge badge-green">有效</span></td>';
+    sbRows+='</tr>';
+  });
+  sbBody.innerHTML=sbRows||'<tr><td colspan="11" style="color:var(--text-dim)">暂无数据</td></tr>';
+
+  // Pool strategy ranking on final symbols
+  var pbBody=document.querySelector('#dp-pool-bt-table tbody');
+  var pbRows='';
+  poolBt.forEach(function(r){
+    pbRows+='<tr'+(r.rank===1?' style="background:rgba(63,185,80,.08)"':'')+'>';
+    pbRows+='<td>'+(r.rank==null?'-':(r.rank===1?'🏆 ':'')+r.rank)+'</td>';
+    pbRows+='<td>'+esc(r.strategyLabel||r.strategy||'-')+'</td>';
+    pbRows+='<td style="color:'+colorPct(r.totalReturn)+'">'+fPct(r.totalReturn)+'</td>';
+    pbRows+='<td style="color:var(--red)">'+fDD(r.maxDrawdown)+'</td>';
+    pbRows+='<td>'+(isNum(r.winRate)?Number(r.winRate).toFixed(1)+'%':'-')+'</td>';
+    pbRows+='<td>'+f2(r.sharpeRatio)+'</td>';
+    pbRows+='<td>'+f2(r.profitFactor)+'</td>';
+    pbRows+='<td>'+(isNum(r.compositeScore)?Number(r.compositeScore).toFixed(1):'-')+'</td>';
+    if(r.error)pbRows+='<td><span class="badge badge-red">'+esc(r.error)+'</span></td>';
+    else if(r.rank!=null&&r.rank<=3)pbRows+='<td><span class="badge badge-green">优先</span></td>';
+    else pbRows+='<td><span class="badge badge-yellow">参考</span></td>';
+    pbRows+='</tr>';
+  });
+  pbBody.innerHTML=pbRows||'<tr><td colspan="9" style="color:var(--text-dim)">暂无数据</td></tr>';
+
+  toast('✅ 每日综合选股完成，可一键应用到建仓推荐');
+}
+
+function applyDailyPickToRecommend(){
+  if(!_dailyPickState||!Array.isArray(_dailyPickState.finalSymbols)||!_dailyPickState.finalSymbols.length){
+    toast('请先运行每日综合选股');
+    return;
+  }
+  document.getElementById('rec-symbols').value=_dailyPickState.finalSymbols.join(',');
+  var best=Array.isArray(_dailyPickState.selectedStrategies)&&_dailyPickState.selectedStrategies.length?_dailyPickState.selectedStrategies[0]:null;
+  if(best&&best.strategy){
+    var stratSel=document.getElementById('rec-strategy');
+    for(var i=0;i<stratSel.options.length;i++){
+      if(stratSel.options[i].value===best.strategy){stratSel.selectedIndex=i;break;}
+    }
+  }
+  localStorage.setItem('openclaw-rec-symbols',document.getElementById('rec-symbols').value||'');
+  toast('✅ 已应用每日综合选股结果到建仓推荐');
+}
+
+/* ══════ RECOMMEND ══════ */
+function runRecommend(){
+  var btn=document.getElementById('btn-rec-run');
+  btn.disabled=true;btn.textContent='⏳ 正在分析…';
+  _lastRecommendData=null;
+  _recExecuted=false;
+  document.getElementById('rec-status').textContent='正在运行回测+实时数据分析，请稍候（可能需要30-60秒）…';
+  document.getElementById('rec-results').style.display='none';
+  var execStatusEl=document.getElementById('rec-exec-status');
+  if(execStatusEl){execStatusEl.textContent='';}
+  var execResultEl=document.getElementById('rec-exec-result');
+  if(execResultEl){execResultEl.innerHTML='';}
+  toast('正在生成建仓推荐…');
+
+  var endVal=document.getElementById('rec-end').value.trim();
+  var symVal=document.getElementById('rec-symbols').value.trim();
+  if(symVal)localStorage.setItem('openclaw-rec-symbols',symVal);
+  var body={
+    capital:Number(document.getElementById('rec-capital').value)||500000,
+    target_capital:Number(document.getElementById('rec-target-capital').value)||0,
+    strategy:document.getElementById('rec-strategy').value,
+    risk_tolerance:document.getElementById('rec-risk').value,
+    rebalance_days:Number(document.getElementById('rec-rebalance').value)||5,
+    start_date:document.getElementById('rec-start').value||'2025-06-01',
+    symbols:symVal,
+    exclude_star:document.getElementById('rec-exclude-star').checked
+  };
+  if(endVal)body.end_date=endVal;
+
+  api('/quant/admin/api/recommend',{method:'POST',body:JSON.stringify(body),_timeout:120000})
+    .then(function(d){
+      btn.disabled=false;btn.textContent='🎯 生成建仓推荐';
+      document.getElementById('rec-status').textContent='分析完成';
+      if(d.error){toast('❌ '+d.error);return;}
+      renderRecommend(d);
+    })
+    .catch(function(e){
+      btn.disabled=false;btn.textContent='🎯 生成建仓推荐';
+      document.getElementById('rec-status').textContent='分析失败: '+e.message;
+    });
+}
+
+function executeRecommend(dryRun,forcePremarket){
+  if(_recExecRunning){
+    return;
+  }
+  if(_recExecuted&&!dryRun){
+    toast('已执行过建仓，请重新生成推荐后再下单');
+    return;
+  }
+  var data=_lastRecommendData;
+  if(!data||!Array.isArray(data.allocations)||data.allocations.length===0){
+    toast('请先生成建仓推荐');
+    return;
+  }
+
+  if(!dryRun&&!forcePremarket){
+    var ok=confirm('将提交真实买入委托并创建条件单，是否继续？');
+    if(!ok){
+      return;
+    }
+  }
+  if(forcePremarket){
+    var ok2=confirm('将跳过交易时段检查，直接提交限价预埋委托到QMT。\\n委托将在开盘后按限价撮合。是否继续？');
+    if(!ok2){
+      return;
+    }
+  }
+
+  var pctVal=Number(document.getElementById('rec-exec-pct').value);
+  if(!isFinite(pctVal))pctVal=60;
+  pctVal=Math.max(10,Math.min(100,Math.round(pctVal)));
+
+  var trailingVal=Number(document.getElementById('rec-exec-trailing').value);
+  if(!isFinite(trailingVal))trailingVal=8;
+  trailingVal=Math.max(2,Math.min(20,trailingVal));
+
+  var createCond=document.getElementById('rec-exec-conds').checked;
+  var statusEl=document.getElementById('rec-exec-status');
+  var resultEl=document.getElementById('rec-exec-result');
+  var dryBtn=document.getElementById('btn-rec-dry-run');
+  var liveBtn=document.getElementById('btn-rec-exec');
+
+  _recExecRunning=true;
+  dryBtn.disabled=true;
+  liveBtn.disabled=true;
+  statusEl.style.color='var(--text-dim)';
+  statusEl.textContent=forcePremarket?'正在提交预埋委托…':(dryRun?'正在试运行执行计划…':'正在提交真实委托，请稍候…');
+  resultEl.innerHTML='';
+
+  api('/quant/admin/api/recommend-execute',{
+    method:'POST',
+    body:JSON.stringify({
+      dry_run:dryRun,
+      force_premarket:!!forcePremarket,
+      execute_pct:pctVal,
+      create_conditional_orders:createCond,
+      trailing_stop_pct:trailingVal,
+      allocations:data.allocations
+    })
+  })
+    .then(function(resp){
+      if(resp.error){
+        statusEl.style.color='var(--red)';
+        statusEl.textContent='执行失败: '+resp.error;
+        if(resp.hint){
+          resultEl.innerHTML='<div class="card" style="border:1px solid var(--red);background:rgba(248,81,73,.08)">'+esc(resp.hint)+'</div>';
+        }
+        toast('❌ '+resp.error);
+        return;
+      }
+
+      var plan=resp.plan||{};
+      var items=Array.isArray(plan.items)?plan.items:[];
+      var skipped=Array.isArray(plan.skipped)?plan.skipped:[];
+
+      if(resp.dryRun){
+        statusEl.style.color='var(--green)';
+        statusEl.textContent='试运行完成：计划下单 '+(plan.totalOrders||0)+' 笔，预计金额 ¥'+numInt(plan.estimatedAmount||0)+'。';
+        var html='<div class="card" style="padding:10px">';
+        html+='<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">按第1笔入场比例 '+(plan.executePct||pctVal)+'% 生成执行计划（未下单）</div>';
+        if(items.length){
+          html+='<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>限价</th><th>金额</th></tr></thead><tbody>';
+          items.forEach(function(it){
+            html+='<tr><td>'+esc(it.code)+'</td><td>'+numInt(it.quantity)+'</td><td>'+num(it.limitPrice)+'</td><td>¥'+numInt(it.notional)+'</td></tr>';
+          });
+          html+='</tbody></table></div>';
+        }
+        if(skipped.length){
+          html+='<div style="margin-top:8px;font-size:12px;color:var(--orange)">跳过 '+skipped.length+' 只：'+skipped.map(function(s){return esc(s.code+':'+s.reason)}).join('；')+'</div>';
+        }
+        html+='</div>';
+        resultEl.innerHTML=html;
+        toast('✅ 试运行完成');
+        return;
+      }
+
+      var exec=resp.execution||{};
+      var submitted=Number(exec.submitted)||0;
+      var rejected=Number(exec.rejected)||0;
+      var conds=Number(exec.conditionalOrders)||0;
+      statusEl.style.color=rejected>0?'var(--orange)':'var(--green)';
+      statusEl.textContent='执行完成：已提交 '+submitted+' 笔，失败 '+rejected+' 笔，创建条件单 '+conds+' 个。';
+
+      var rows='';
+      (exec.orders||[]).forEach(function(o){
+        rows+='<tr><td>'+esc(o.code)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
+      });
+      var failHtml='';
+      if(Array.isArray(exec.failures)&&exec.failures.length){
+        failHtml='<div style="margin-top:8px;font-size:12px;color:var(--orange)">失败明细：'+exec.failures.map(function(f){return esc(f.code+':'+f.reason)}).join('；')+'</div>';
+      }
+      resultEl.innerHTML='<div class="card" style="padding:10px">'+
+        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
+        failHtml+
+        '</div>';
+      toast(rejected>0?'⚠️ 已执行，存在部分失败':'✅ 建仓委托已提交，正在等待成交确认…');
+      // Start fill confirmation polling
+      if(submitted>0){
+        startFillConfirmPolling(exec.orders||[]);
+      }
+      // Prevent accidental re-execution with the same data
+      _recExecuted=true;
+    })
+    .catch(function(e){
+      statusEl.style.color='var(--red)';
+      statusEl.textContent='执行失败: '+e.message;
+    })
+    .finally(function(){
+      _recExecRunning=false;
+      dryBtn.disabled=false;
+      // Keep live button disabled after successful real execution
+      if(_recExecuted){
+        liveBtn.disabled=true;
+        liveBtn.title='已执行，请重新生成推荐后再下单';
+      } else {
+        liveBtn.disabled=false;
+        liveBtn.title='';
+      }
+    });
+}
+
+/* ══════ SCHEDULE QMT STRATEGY (PRE-MARKET) ══════ */
+function scheduleStrategy(){
+  var data=_lastRecommendData;
+  if(!data||!Array.isArray(data.allocations)||data.allocations.length===0){
+    toast('请先生成建仓推荐');
+    return;
+  }
+
+  var ok=confirm('将在 Windows MiniQMT 上生成预埋策略文件，开盘时自动提交限价买单。是否继续？');
+  if(!ok) return;
+
+  var pctVal=Number(document.getElementById('rec-exec-pct').value);
+  if(!isFinite(pctVal))pctVal=60;
+  pctVal=Math.max(10,Math.min(100,Math.round(pctVal)));
+
+  var statusEl=document.getElementById('rec-exec-status');
+  var resultEl=document.getElementById('rec-exec-result');
+  var schedBtn=document.getElementById('btn-rec-schedule');
+
+  schedBtn.disabled=true;
+  statusEl.style.color='var(--text-dim)';
+  statusEl.textContent='正在生成 MiniQMT 预埋策略…';
+  resultEl.innerHTML='';
+
+  api('/quant/admin/api/recommend-schedule-strategy',{
+    method:'POST',
+    body:JSON.stringify({
+      execute_pct:pctVal,
+      allocations:data.allocations
+    })
+  })
+    .then(function(resp){
+      if(resp.error){
+        statusEl.style.color='var(--red)';
+        statusEl.textContent='生成失败: '+resp.error;
+        toast('❌ '+resp.error);
+        return;
+      }
+
+      var strat=resp.strategy||{};
+      var orders=Array.isArray(resp.orders)?resp.orders:[];
+      var skipped=Array.isArray(resp.skipped)?resp.skipped:[];
+
+      statusEl.style.color='var(--green)';
+      statusEl.textContent='✅ 预埋策略已生成，共 '+orders.length+' 笔委托';
+
+      var html='<div class="card" style="padding:10px;border:1px solid rgba(13,148,136,.35)">';
+      html+='<div style="font-size:13px;font-weight:600;margin-bottom:8px">📋 MiniQMT 预埋策略</div>';
+      html+='<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">';
+      html+='策略文件: <code style="color:var(--accent)">'+esc(strat.filepath||strat.filename||'')+'</code></div>';
+      html+='<div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">';
+      html+='请在 MiniQMT 中加载此策略文件并运行，开盘时将自动提交以下委托：</div>';
+
+      if(orders.length){
+        html+='<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>名称</th><th>数量</th><th>限价</th><th>金额</th></tr></thead><tbody>';
+        orders.forEach(function(o){
+          html+='<tr><td>'+esc(o.code)+'</td><td>'+esc(o.name)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>¥'+numInt(o.quantity*o.price)+'</td></tr>';
+        });
+        html+='</tbody></table></div>';
+      }
+      if(skipped.length){
+        html+='<div style="margin-top:8px;font-size:12px;color:var(--orange)">跳过 '+skipped.length+' 只：'+skipped.map(function(s){return esc(s.code+':'+s.reason)}).join('；')+'</div>';
+      }
+      html+='<div style="margin-top:10px;font-size:12px;padding:8px;background:rgba(13,148,136,.08);border-radius:6px">';
+      html+='<strong>使用说明：</strong><br>';
+      html+='1. 在 Windows 上打开 MiniQMT<br>';
+      html+='2. 新建策略 → 加载文件: <code>'+esc(strat.filename||'')+'</code><br>';
+      html+='3. 运行策略，等待开盘自动下单<br>';
+      html+='4. 策略会在集合竞价/开盘时自动提交限价委托</div>';
+      html+='</div>';
+      resultEl.innerHTML=html;
+      toast('✅ 预埋策略已生成');
+    })
+    .catch(function(e){
+      statusEl.style.color='var(--red)';
+      statusEl.textContent='生成失败: '+e.message;
+    })
+    .finally(function(){
+      schedBtn.disabled=false;
+    });
+}
+
+/* ══════ FILL CONFIRMATION POLLING ══════ */
+var _fillPollTimer=null;
+var _fillPollOrderIds=[];
+var _fillPollOrders=[];
+var _fillConfirmed=false;
+var _fillPollCount=0;
+var FILL_POLL_INTERVAL=5000;
+var FILL_POLL_MAX=120; // stop after 10 minutes
+
+function startFillConfirmPolling(executedOrders){
+  // Show panel
+  _fillConfirmed=false;
+  _fillPollCount=0;
+  _fillPollOrders=executedOrders;
+  _fillPollOrderIds=executedOrders.map(function(o){return o.orderId});
+  document.getElementById('rec-fill-confirm').style.display='block';
+  document.getElementById('btn-fill-monitor').disabled=true;
+  document.getElementById('fill-confirm-status').textContent='正在等待订单成交… (0/'+_fillPollOrderIds.length+')';
+  document.getElementById('fill-confirm-status').style.color='var(--yellow)';
+  // Initial render
+  renderFillTable(_fillPollOrders.map(function(o){
+    return {orderId:o.orderId,symbol:o.code,status:o.status,quantity:o.quantity,filledQty:0,avgFillPrice:null,hasPosition:false,positionQty:0};
+  }));
+  // Start polling
+  if(_fillPollTimer){clearInterval(_fillPollTimer)}
+  _fillPollTimer=setInterval(pollFillStatusOnce,FILL_POLL_INTERVAL);
+  // First poll immediately
+  pollFillStatusOnce();
+}
+
+function pollFillStatusOnce(){
+  if(!_fillPollOrderIds.length)return;
+  _fillPollCount++;
+  api('/quant/admin/api/order-fill-status',{
+    method:'POST',
+    body:JSON.stringify({orderIds:_fillPollOrderIds})
+  }).then(function(d){
+    var orders=d.orders||[];
+    renderFillTable(orders);
+    var filledCount=orders.filter(function(o){return o.status==='filled'||o.hasPosition}).length;
+    var partialCount=orders.filter(function(o){return o.status==='partial'}).length;
+    var pendingCount=orders.filter(function(o){return o.status==='pending'||o.status==='submitted'}).length;
+    var cancelledCount=orders.filter(function(o){return o.status==='cancelled'||o.status==='rejected'||o.status==='expired'}).length;
+    var statusEl=document.getElementById('fill-confirm-status');
+
+    if(d.allFilled||filledCount===_fillPollOrderIds.length){
+      // All confirmed
+      _fillConfirmed=true;
+      stopFillPolling();
+      statusEl.style.color='var(--green)';
+      statusEl.textContent='✅ 全部成交确认完成 ('+filledCount+'/'+_fillPollOrderIds.length+')，可以进入实盘监控。';
+      document.getElementById('btn-fill-monitor').disabled=false;
+      document.getElementById('rec-fill-confirm').style.borderColor='rgba(63,185,80,.5)';
+      toast('✅ 所有订单已成交，可进入实盘监控');
+    }else if(d.anyFilled||filledCount>0){
+      statusEl.style.color='var(--accent)';
+      statusEl.textContent='部分成交 ('+filledCount+'/'+_fillPollOrderIds.length+')'+
+        (partialCount>0?' · 部分成交 '+partialCount:'')+(pendingCount>0?' · 等待中 '+pendingCount:'')+
+        ' · 轮询 #'+_fillPollCount;
+      // Allow monitoring if at least some filled
+      document.getElementById('btn-fill-monitor').disabled=false;
+    }else{
+      statusEl.style.color='var(--yellow)';
+      statusEl.textContent='等待成交中… ('+filledCount+'/'+_fillPollOrderIds.length+')'+
+        (cancelledCount>0?' · 已撤/拒绝 '+cancelledCount:'')+' · 轮询 #'+_fillPollCount;
+    }
+
+    // Auto-stop after max polls
+    if(_fillPollCount>=FILL_POLL_MAX){
+      stopFillPolling();
+      if(!_fillConfirmed){
+        statusEl.textContent+=' · 已达最大轮询次数，请手动检查订单状态。';
+        document.getElementById('btn-fill-monitor').disabled=false;
+      }
+    }
+  }).catch(function(e){
+    document.getElementById('fill-confirm-status').textContent='查询失败: '+e.message+' · 轮询 #'+_fillPollCount;
+  });
+}
+
+function stopFillPolling(){
+  if(_fillPollTimer){clearInterval(_fillPollTimer);_fillPollTimer=null}
+}
+
+function renderFillTable(orders){
+  var tbody=document.querySelector('#fill-confirm-table tbody');
+  var statusLabels={pending:'⏳ 待提交',submitted:'📤 已提交',partial:'🔄 部分成交',filled:'✅ 已成交',cancelled:'❌ 已撤单',rejected:'🚫 被拒绝',expired:'⌛ 已过期',unknown:'❓ 未知'};
+  tbody.innerHTML=orders.map(function(o){
+    var filled=o.status==='filled'||o.hasPosition;
+    var rowStyle=filled?'background:rgba(63,185,80,.06)':'';
+    return '<tr style="'+rowStyle+'">'+
+      '<td>'+esc(o.symbol||o.orderId||'')+'</td>'+
+      '<td>'+numInt(o.quantity||0)+'</td>'+
+      '<td>'+numInt(o.filledQty||0)+'</td>'+
+      '<td>'+(o.avgFillPrice?num(o.avgFillPrice):'-')+'</td>'+
+      '<td>'+(o.hasPosition?'<span style="color:var(--green)">✅ 有持仓('+numInt(o.positionQty)+')</span>':'<span style="color:var(--text-dim)">—</span>')+'</td>'+
+      '<td>'+(statusLabels[o.status]||o.status)+'</td>'+
+      '</tr>';
+  }).join('')||'<tr><td colspan="6" style="color:var(--text-dim)">无订单</td></tr>';
+}
+
+function startMonitoringAfterFill(){
+  stopFillPolling();
+  toast('🚀 成交确认完毕，进入实盘监控');
+  startMonitoring();
+}
+
+function skipFillConfirm(){
+  stopFillPolling();
+  var ok=confirm('订单可能尚未完全成交，确定跳过确认直接进入监控？');
+  if(!ok)return;
+  toast('⏭️ 已跳过成交确认，进入实盘监控');
+  startMonitoring();
+}
+
+`;
+}

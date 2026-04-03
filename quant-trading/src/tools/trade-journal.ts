@@ -1,0 +1,175 @@
+/**
+ * trade_journal tool — AI-callable interface for trade notes and annotations.
+ *
+ * Actions:
+ *   add_note     — write a note about a trade/symbol
+ *   update_note  — update an existing note
+ *   delete_note  — remove a note
+ *   view         — view a specific note or notes by trade/symbol/date
+ *   search       — search notes by keyword
+ *   recent       — list recent notes
+ *   summary      — overall journal statistics
+ *   tags         — list all unique tags
+ */
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { TradeJournal } from "../services/trade-journal.js";
+
+export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJournal) {
+  return {
+    name: "trade_journal",
+    description:
+      "交易笔记/复盘记录。记录每笔交易的思考和总结。" +
+      "action=add_note 添加笔记, action=update_note 修改, action=delete_note 删除, " +
+      "action=view 查看(按trade_id/symbol/date), action=search 搜索, " +
+      "action=recent 最近笔记, action=summary 统计概览, action=tags 标签列表。",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "add_note",
+            "update_note",
+            "delete_note",
+            "view",
+            "search",
+            "recent",
+            "summary",
+            "tags",
+          ],
+          description: "操作类型",
+        },
+        symbol: { type: "string", description: "标的代码" },
+        content: { type: "string", description: "笔记内容" },
+        trade_id: { type: "string", description: "交易ID" },
+        note_id: { type: "string", description: "笔记ID (update/delete)" },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "标签 (e.g. ['止损', '追涨'])",
+        },
+        rating: { type: "number", description: "自评分 1-5" },
+        lesson: { type: "string", description: "经验教训/关键总结" },
+        strategy_id: { type: "string", description: "策略ID" },
+        direction: {
+          type: "string",
+          enum: ["buy", "sell", "short", "cover"],
+          description: "交易方向",
+        },
+        entry_price: { type: "number", description: "入场价" },
+        exit_price: { type: "number", description: "出场价" },
+        pnl: { type: "number", description: "盈亏金额" },
+        date: { type: "string", description: "日期 YYYY-MM-DD (默认今天)" },
+        query: { type: "string", description: "搜索关键词 (search)" },
+        limit: { type: "number", description: "返回数量" },
+      },
+      required: ["action"],
+    },
+
+    async execute(args: Record<string, unknown>) {
+      const action = args.action as string;
+      const limit = (args.limit as number) ?? 20;
+
+      switch (action) {
+        case "add_note": {
+          const symbol = args.symbol as string;
+          const content = args.content as string;
+          if (!symbol || !content) return { error: "请提供 symbol 和 content" };
+          const id = journal.addNote({
+            symbol,
+            content,
+            tradeId: args.trade_id as string | undefined,
+            tags: (args.tags as string[]) ?? [],
+            rating: args.rating as number | undefined,
+            strategyId: args.strategy_id as string | undefined,
+            direction: args.direction as "buy" | "sell" | "short" | "cover" | undefined,
+            entryPrice: args.entry_price as number | undefined,
+            exitPrice: args.exit_price as number | undefined,
+            pnl: args.pnl as number | undefined,
+            lesson: args.lesson as string | undefined,
+            date: args.date as string | undefined,
+          });
+          return { message: "笔记已保存", id };
+        }
+
+        case "update_note": {
+          const noteId = args.note_id as string;
+          if (!noteId) return { error: "请提供 note_id" };
+          const ok = journal.updateNote(noteId, {
+            content: args.content as string | undefined,
+            tags: args.tags as string[] | undefined,
+            rating: args.rating as number | undefined,
+            lesson: args.lesson as string | undefined,
+          });
+          return ok ? { message: `笔记 ${noteId} 已更新` } : { error: `未找到笔记 ${noteId}` };
+        }
+
+        case "delete_note": {
+          const noteId = args.note_id as string;
+          if (!noteId) return { error: "请提供 note_id" };
+          const ok = journal.deleteNote(noteId);
+          return ok ? { message: `笔记 ${noteId} 已删除` } : { error: `未找到笔记 ${noteId}` };
+        }
+
+        case "view": {
+          const tradeId = args.trade_id as string;
+          const symbol = args.symbol as string;
+          const date = args.date as string;
+          const noteId = args.note_id as string;
+
+          if (noteId) {
+            const note = journal.getNote(noteId);
+            return note ?? { error: `未找到笔记 ${noteId}` };
+          }
+          if (tradeId) {
+            const notes = journal.getByTradeId(tradeId);
+            return { count: notes.length, notes };
+          }
+          if (symbol) {
+            const notes = journal.getBySymbol(symbol, limit);
+            return { count: notes.length, notes };
+          }
+          if (date) {
+            const notes = journal.getByDate(date);
+            return { count: notes.length, notes };
+          }
+          return { error: "请提供 note_id, trade_id, symbol, 或 date" };
+        }
+
+        case "search": {
+          const query = args.query as string;
+          if (!query) return { error: "请提供 query 搜索关键词" };
+          const results = journal.search(query, limit);
+          return { count: results.length, notes: results };
+        }
+
+        case "recent": {
+          const notes = journal.getRecent(limit);
+          return {
+            count: notes.length,
+            notes: notes.map((n) => ({
+              id: n.id,
+              symbol: n.symbol,
+              date: n.date,
+              content: n.content.slice(0, 100) + (n.content.length > 100 ? "…" : ""),
+              tags: n.tags,
+              rating: n.rating,
+              pnl: n.pnl != null ? `¥${n.pnl.toFixed(2)}` : undefined,
+            })),
+          };
+        }
+
+        case "summary": {
+          return journal.getSummary();
+        }
+
+        case "tags": {
+          return { tags: journal.getAllTags() };
+        }
+
+        default:
+          return { error: `未知操作: ${action}` };
+      }
+    },
+  };
+}

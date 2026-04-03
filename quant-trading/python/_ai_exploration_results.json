@@ -1,0 +1,4929 @@
+{
+  "config": {
+    "startDate": "2024-10-08",
+    "endDate": "2026-03-20",
+    "initialCash": 100000,
+    "totalCandidates": 188,
+    "screenStocks": ["000001", "300059", "600016", "688981", "000651"],
+    "validationStocksCount": 30
+  },
+  "phase1_top20": [
+    {
+      "name": "三投票 MACD+KDJ+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "mean-reversion-cn"],
+      "avgReturn": 13.26,
+      "avgSharpe": 0.99,
+      "avgMaxDD": 6.58,
+      "avgWinRate": 65.4,
+      "positiveRate": "5/5",
+      "score": 0.5171
+    },
+    {
+      "name": "三投票 MACD+KDJ+网格",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "grid"],
+      "avgReturn": 15.22,
+      "avgSharpe": 0.6,
+      "avgMaxDD": 11.3,
+      "avgWinRate": 67.6,
+      "positiveRate": "4/5",
+      "score": 0.4647
+    },
+    {
+      "name": "单策略 网格",
+      "method": "voting",
+      "strategyIds": ["grid"],
+      "avgReturn": 13.23,
+      "avgSharpe": 0.53,
+      "avgMaxDD": 11.45,
+      "avgWinRate": 71.7,
+      "positiveRate": "5/5",
+      "score": 0.4611
+    },
+    {
+      "name": "投票 MACD+KDJ",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 9.14,
+      "avgSharpe": 0.91,
+      "avgMaxDD": 6.32,
+      "avgWinRate": 65.0,
+      "positiveRate": "4/5",
+      "score": 0.4466
+    },
+    {
+      "name": "门控 MACD→KDJ过滤",
+      "method": "gated",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 9.14,
+      "avgSharpe": 0.91,
+      "avgMaxDD": 6.32,
+      "avgWinRate": 65.0,
+      "positiveRate": "4/5",
+      "score": 0.4466
+    },
+    {
+      "name": "三投票 MACD+KDJ+龙回头",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "dragon-return"],
+      "avgReturn": 9.14,
+      "avgSharpe": 0.91,
+      "avgMaxDD": 6.32,
+      "avgWinRate": 65.0,
+      "positiveRate": "4/5",
+      "score": 0.4466
+    },
+    {
+      "name": "级联 MACD→KDJ",
+      "method": "cascade",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 9.14,
+      "avgSharpe": 0.91,
+      "avgMaxDD": 6.32,
+      "avgWinRate": 65.0,
+      "positiveRate": "4/5",
+      "score": 0.4466
+    },
+    {
+      "name": "四投票3/4 MACD+KDJ+布林+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "bollinger", "mean-reversion-cn"],
+      "avgReturn": 3.7,
+      "avgSharpe": 0.63,
+      "avgMaxDD": 3.39,
+      "avgWinRate": 85.0,
+      "positiveRate": "5/5",
+      "score": 0.4328
+    },
+    {
+      "name": "三投票 MACD+布林+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "bollinger", "mean-reversion-cn"],
+      "avgReturn": 4.0,
+      "avgSharpe": 0.67,
+      "avgMaxDD": 3.72,
+      "avgWinRate": 73.0,
+      "positiveRate": "5/5",
+      "score": 0.4233
+    },
+    {
+      "name": "四投票3/4 海龟+RSI+KDJ+均值回归",
+      "method": "voting",
+      "strategyIds": ["turtle", "rsi", "kdj", "mean-reversion-cn"],
+      "avgReturn": 3.12,
+      "avgSharpe": 0.53,
+      "avgMaxDD": 2.6,
+      "avgWinRate": 65.0,
+      "positiveRate": "5/5",
+      "score": 0.4068
+    },
+    {
+      "name": "三投票 MACD+KDJ+多因子",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "multi-factor"],
+      "avgReturn": 14.34,
+      "avgSharpe": 0.55,
+      "avgMaxDD": 11.82,
+      "avgWinRate": 45.9,
+      "positiveRate": "3/5",
+      "score": 0.4063
+    },
+    {
+      "name": "三投票 MACD+均值回归+网格",
+      "method": "voting",
+      "strategyIds": ["macd", "mean-reversion-cn", "grid"],
+      "avgReturn": 4.05,
+      "avgSharpe": 0.57,
+      "avgMaxDD": 4.8,
+      "avgWinRate": 68.7,
+      "positiveRate": "5/5",
+      "score": 0.4059
+    },
+    {
+      "name": "三投票 海龟+RSI+多因子",
+      "method": "voting",
+      "strategyIds": ["turtle", "rsi", "multi-factor"],
+      "avgReturn": 6.38,
+      "avgSharpe": 0.5,
+      "avgMaxDD": 8.57,
+      "avgWinRate": 69.4,
+      "positiveRate": "5/5",
+      "score": 0.4001
+    },
+    {
+      "name": "投票 KDJ+竞价",
+      "method": "voting",
+      "strategyIds": ["kdj", "auction"],
+      "avgReturn": 16.35,
+      "avgSharpe": 0.26,
+      "avgMaxDD": 18.19,
+      "avgWinRate": 61.2,
+      "positiveRate": "4/5",
+      "score": 0.3992
+    },
+    {
+      "name": "门控 KDJ→竞价过滤",
+      "method": "gated",
+      "strategyIds": ["kdj", "auction"],
+      "avgReturn": 16.35,
+      "avgSharpe": 0.26,
+      "avgMaxDD": 18.19,
+      "avgWinRate": 61.2,
+      "positiveRate": "4/5",
+      "score": 0.3992
+    },
+    {
+      "name": "三投票 MACD+KDJ+布林",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "bollinger"],
+      "avgReturn": 10.81,
+      "avgSharpe": 0.61,
+      "avgMaxDD": 12.29,
+      "avgWinRate": 59.8,
+      "positiveRate": "4/5",
+      "score": 0.3981
+    },
+    {
+      "name": "三投票 海龟+KDJ+网格",
+      "method": "voting",
+      "strategyIds": ["turtle", "kdj", "grid"],
+      "avgReturn": 9.63,
+      "avgSharpe": 0.4,
+      "avgMaxDD": 10.32,
+      "avgWinRate": 65.6,
+      "positiveRate": "4/5",
+      "score": 0.3954
+    },
+    {
+      "name": "三投票 MACD+布林+网格",
+      "method": "voting",
+      "strategyIds": ["macd", "bollinger", "grid"],
+      "avgReturn": 5.81,
+      "avgSharpe": 0.57,
+      "avgMaxDD": 6.6,
+      "avgWinRate": 70.5,
+      "positiveRate": "4/5",
+      "score": 0.3939
+    },
+    {
+      "name": "投票 多因子+网格",
+      "method": "voting",
+      "strategyIds": ["multi-factor", "grid"],
+      "avgReturn": 5.36,
+      "avgSharpe": 0.47,
+      "avgMaxDD": 5.9,
+      "avgWinRate": 74.7,
+      "positiveRate": "4/5",
+      "score": 0.3936
+    },
+    {
+      "name": "门控 多因子→网格过滤",
+      "method": "gated",
+      "strategyIds": ["multi-factor", "grid"],
+      "avgReturn": 5.36,
+      "avgSharpe": 0.47,
+      "avgMaxDD": 5.9,
+      "avgWinRate": 74.7,
+      "positiveRate": "4/5",
+      "score": 0.3936
+    }
+  ],
+  "phase2_final": [
+    {
+      "name": "三投票 MACD+KDJ+多因子",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "multi-factor"],
+      "avgReturn": 23.35,
+      "avgSharpe": 0.68,
+      "avgMaxDD": 15.67,
+      "avgWinRate": 59.6,
+      "positiveRate": "22/30",
+      "score": 0.5137,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 13.13,
+          "sharpe": 1.28,
+          "maxDD": 4.97,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": -7.03,
+          "sharpe": -0.12,
+          "maxDD": 20.25,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -25.21,
+          "sharpe": -1.81,
+          "maxDD": 33.33,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 13
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": -0.94,
+          "sharpe": -0.01,
+          "maxDD": 10.64,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 9
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 65.98,
+          "sharpe": 1.52,
+          "maxDD": 13.34,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 0.55,
+          "sharpe": 0.09,
+          "maxDD": 9.9,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 29.88,
+          "sharpe": 1.74,
+          "maxDD": 5.12,
+          "winRate": 44.4,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 18.15,
+          "sharpe": 1.04,
+          "maxDD": 10.56,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 45.59,
+          "sharpe": 1.17,
+          "maxDD": 20.74,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 38.02,
+          "sharpe": 1.25,
+          "maxDD": 10.82,
+          "winRate": 87.5,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -7.97,
+          "sharpe": -0.36,
+          "maxDD": 18.75,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -1.97,
+          "sharpe": -0.03,
+          "maxDD": 19.27,
+          "winRate": 50.0,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 101.65,
+          "sharpe": 1.84,
+          "maxDD": 11.99,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 29.18,
+          "sharpe": 1.51,
+          "maxDD": 6.8,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 60.07,
+          "sharpe": 1.31,
+          "maxDD": 22.43,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 2.92,
+          "sharpe": 0.25,
+          "maxDD": 9.42,
+          "winRate": 44.4,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 115.84,
+          "sharpe": 2.33,
+          "maxDD": 9.72,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.65,
+          "sharpe": -0.25,
+          "maxDD": 30.82,
+          "winRate": 50.0,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 26.69,
+          "sharpe": 0.75,
+          "maxDD": 28.89,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 7.2,
+          "sharpe": 0.4,
+          "maxDD": 21.37,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 74.7,
+          "sharpe": 2.29,
+          "maxDD": 12.92,
+          "winRate": 120.0,
+          "trades": 5,
+          "signals": 11
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": 31.74,
+          "sharpe": 0.81,
+          "maxDD": 21.62,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 47.1,
+          "sharpe": 1.25,
+          "maxDD": 15.83,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 1.71,
+          "sharpe": 0.2,
+          "maxDD": 7.65,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -5.63,
+          "sharpe": -0.18,
+          "maxDD": 19.16,
+          "winRate": 28.6,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 1.43,
+          "sharpe": 0.16,
+          "maxDD": 10.0,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 20.76,
+          "sharpe": 0.88,
+          "maxDD": 18.1,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 12.68,
+          "sharpe": 0.53,
+          "maxDD": 13.84,
+          "winRate": 80.0,
+          "trades": 5,
+          "signals": 11
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 24.59,
+          "sharpe": 0.89,
+          "maxDD": 11.74,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -8.8,
+          "sharpe": -0.47,
+          "maxDD": 20.15,
+          "winRate": 42.9,
+          "trades": 14,
+          "signals": 29
+        }
+      ]
+    },
+    {
+      "name": "投票 KDJ+竞价",
+      "method": "voting",
+      "strategyIds": ["kdj", "auction"],
+      "avgReturn": 21.1,
+      "avgSharpe": 0.48,
+      "avgMaxDD": 19.03,
+      "avgWinRate": 64.1,
+      "positiveRate": "21/30",
+      "score": 0.4522,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 6.97,
+          "sharpe": 0.52,
+          "maxDD": 11.97,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 3.04,
+          "sharpe": 0.22,
+          "maxDD": 20.5,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -16.73,
+          "sharpe": -1.0,
+          "maxDD": 22.86,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": -18.09,
+          "sharpe": -1.13,
+          "maxDD": 25.22,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 13
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 87.4,
+          "sharpe": 1.46,
+          "maxDD": 19.48,
+          "winRate": 66.7,
+          "trades": 12,
+          "signals": 25
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 2.43,
+          "sharpe": 0.21,
+          "maxDD": 13.78,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 14.87,
+          "sharpe": 0.57,
+          "maxDD": 23.34,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.35,
+          "sharpe": 0.52,
+          "maxDD": 10.55,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": -1.44,
+          "sharpe": 0.16,
+          "maxDD": 23.08,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": -11.13,
+          "sharpe": -0.21,
+          "maxDD": 23.17,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -29.78,
+          "sharpe": -1.17,
+          "maxDD": 31.53,
+          "winRate": 28.6,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 42.64,
+          "sharpe": 1.43,
+          "maxDD": 13.76,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 58.51,
+          "sharpe": 1.33,
+          "maxDD": 15.27,
+          "winRate": 100.0,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 4.55,
+          "sharpe": 0.29,
+          "maxDD": 12.42,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 17.04,
+          "sharpe": 0.58,
+          "maxDD": 27.61,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 9.64,
+          "sharpe": 0.55,
+          "maxDD": 9.92,
+          "winRate": 69.2,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 82.71,
+          "sharpe": 2.09,
+          "maxDD": 10.84,
+          "winRate": 87.5,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -9.74,
+          "sharpe": -0.13,
+          "maxDD": 26.81,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 104.2,
+          "sharpe": 1.63,
+          "maxDD": 20.49,
+          "winRate": 84.6,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": -11.02,
+          "sharpe": -0.33,
+          "maxDD": 26.29,
+          "winRate": 45.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 45.32,
+          "sharpe": 1.29,
+          "maxDD": 19.03,
+          "winRate": 62.5,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": 48.62,
+          "sharpe": 1.14,
+          "maxDD": 21.15,
+          "winRate": 68.8,
+          "trades": 16,
+          "signals": 33
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 54.64,
+          "sharpe": 1.84,
+          "maxDD": 12.48,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 0.56,
+          "sharpe": 0.09,
+          "maxDD": 11.02,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 9.51,
+          "sharpe": 0.46,
+          "maxDD": 17.81,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.09,
+          "sharpe": 0.22,
+          "maxDD": 11.01,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.85,
+          "maxDD": 21.15,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": -9.34,
+          "sharpe": -0.21,
+          "maxDD": 21.31,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 119.49,
+          "sharpe": 1.68,
+          "maxDD": 27.31,
+          "winRate": 83.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -12.4,
+          "sharpe": -0.48,
+          "maxDD": 19.73,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        }
+      ]
+    },
+    {
+      "name": "门控 KDJ→竞价过滤",
+      "method": "gated",
+      "strategyIds": ["kdj", "auction"],
+      "avgReturn": 21.1,
+      "avgSharpe": 0.48,
+      "avgMaxDD": 19.03,
+      "avgWinRate": 64.1,
+      "positiveRate": "21/30",
+      "score": 0.4522,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 6.97,
+          "sharpe": 0.52,
+          "maxDD": 11.97,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 3.04,
+          "sharpe": 0.22,
+          "maxDD": 20.5,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -16.73,
+          "sharpe": -1.0,
+          "maxDD": 22.86,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": -18.09,
+          "sharpe": -1.13,
+          "maxDD": 25.22,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 13
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 87.4,
+          "sharpe": 1.46,
+          "maxDD": 19.48,
+          "winRate": 66.7,
+          "trades": 12,
+          "signals": 25
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 2.43,
+          "sharpe": 0.21,
+          "maxDD": 13.78,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 14.87,
+          "sharpe": 0.57,
+          "maxDD": 23.34,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.35,
+          "sharpe": 0.52,
+          "maxDD": 10.55,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": -1.44,
+          "sharpe": 0.16,
+          "maxDD": 23.08,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": -11.13,
+          "sharpe": -0.21,
+          "maxDD": 23.17,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -29.78,
+          "sharpe": -1.17,
+          "maxDD": 31.53,
+          "winRate": 28.6,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 42.64,
+          "sharpe": 1.43,
+          "maxDD": 13.76,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 58.51,
+          "sharpe": 1.33,
+          "maxDD": 15.27,
+          "winRate": 100.0,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 4.55,
+          "sharpe": 0.29,
+          "maxDD": 12.42,
+          "winRate": 60.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 17.04,
+          "sharpe": 0.58,
+          "maxDD": 27.61,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 9.64,
+          "sharpe": 0.55,
+          "maxDD": 9.92,
+          "winRate": 69.2,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 82.71,
+          "sharpe": 2.09,
+          "maxDD": 10.84,
+          "winRate": 87.5,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -9.74,
+          "sharpe": -0.13,
+          "maxDD": 26.81,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 104.2,
+          "sharpe": 1.63,
+          "maxDD": 20.49,
+          "winRate": 84.6,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": -11.02,
+          "sharpe": -0.33,
+          "maxDD": 26.29,
+          "winRate": 45.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 45.32,
+          "sharpe": 1.29,
+          "maxDD": 19.03,
+          "winRate": 62.5,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": 48.62,
+          "sharpe": 1.14,
+          "maxDD": 21.15,
+          "winRate": 68.8,
+          "trades": 16,
+          "signals": 33
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 54.64,
+          "sharpe": 1.84,
+          "maxDD": 12.48,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 0.56,
+          "sharpe": 0.09,
+          "maxDD": 11.02,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 9.51,
+          "sharpe": 0.46,
+          "maxDD": 17.81,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.09,
+          "sharpe": 0.22,
+          "maxDD": 11.01,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.85,
+          "maxDD": 21.15,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": -9.34,
+          "sharpe": -0.21,
+          "maxDD": 21.31,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 119.49,
+          "sharpe": 1.68,
+          "maxDD": 27.31,
+          "winRate": 83.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -12.4,
+          "sharpe": -0.48,
+          "maxDD": 19.73,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        }
+      ]
+    },
+    {
+      "name": "三投票 海龟+RSI+多因子",
+      "method": "voting",
+      "strategyIds": ["turtle", "rsi", "multi-factor"],
+      "avgReturn": 14.62,
+      "avgSharpe": 0.6,
+      "avgMaxDD": 13.07,
+      "avgWinRate": 65.7,
+      "positiveRate": "23/30",
+      "score": 0.4384,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 6.2,
+          "sharpe": 0.72,
+          "maxDD": 5.42,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 6.48,
+          "sharpe": 0.36,
+          "maxDD": 12.79,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -11.49,
+          "sharpe": -0.94,
+          "maxDD": 19.55,
+          "winRate": 40.0,
+          "trades": 5,
+          "signals": 11
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 4.88,
+          "sharpe": 0.4,
+          "maxDD": 10.64,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 4.88,
+          "sharpe": 0.42,
+          "maxDD": 5.62,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 9.48,
+          "sharpe": 0.58,
+          "maxDD": 8.37,
+          "winRate": 80.0,
+          "trades": 5,
+          "signals": 11
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 16.86,
+          "sharpe": 1.23,
+          "maxDD": 8.84,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 2.92,
+          "sharpe": 0.26,
+          "maxDD": 11.41,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 13
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 55.84,
+          "sharpe": 1.37,
+          "maxDD": 26.46,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 23.72,
+          "sharpe": 1.27,
+          "maxDD": 9.22,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -13.93,
+          "sharpe": -0.78,
+          "maxDD": 17.25,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 9
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 12.38,
+          "sharpe": 0.87,
+          "maxDD": 4.84,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": -2.85,
+          "sharpe": 0.09,
+          "maxDD": 27.64,
+          "winRate": 25.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 9.89,
+          "sharpe": 0.8,
+          "maxDD": 4.95,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 89.72,
+          "sharpe": 2.04,
+          "maxDD": 8.96,
+          "winRate": 100.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 14.06,
+          "sharpe": 1.11,
+          "maxDD": 11.38,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 15.34,
+          "sharpe": 0.65,
+          "maxDD": 19.3,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.38,
+          "sharpe": -0.27,
+          "maxDD": 35.9,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 11
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 22.75,
+          "sharpe": 1.08,
+          "maxDD": 4.58,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 29.5,
+          "sharpe": 1.38,
+          "maxDD": 12.71,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 40.82,
+          "sharpe": 2.21,
+          "maxDD": 11.5,
+          "winRate": 100.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": 24.95,
+          "sharpe": 0.99,
+          "maxDD": 16.19,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 38.72,
+          "sharpe": 1.43,
+          "maxDD": 9.74,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 2.47,
+          "sharpe": 0.28,
+          "maxDD": 9.34,
+          "winRate": 80.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 8.92,
+          "sharpe": 0.63,
+          "maxDD": 6.76,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": -6.86,
+          "sharpe": -1.52,
+          "maxDD": 8.01,
+          "winRate": 0.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 36.03,
+          "sharpe": 1.3,
+          "maxDD": 11.75,
+          "winRate": 80.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": -0.77,
+          "sharpe": 0.06,
+          "maxDD": 16.71,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.03,
+          "sharpe": 0.73,
+          "maxDD": 16.7,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -11.01,
+          "sharpe": -0.71,
+          "maxDD": 19.57,
+          "winRate": 28.6,
+          "trades": 7,
+          "signals": 15
+        }
+      ]
+    },
+    {
+      "name": "三投票 MACD+KDJ+网格",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "grid"],
+      "avgReturn": 15.18,
+      "avgSharpe": 0.51,
+      "avgMaxDD": 17.59,
+      "avgWinRate": 65.4,
+      "positiveRate": "23/30",
+      "score": 0.4037,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 4.12,
+          "sharpe": 0.33,
+          "maxDD": 8.21,
+          "winRate": 64.1,
+          "trades": 39,
+          "signals": 79
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 23.92,
+          "sharpe": 0.81,
+          "maxDD": 18.26,
+          "winRate": 68.2,
+          "trades": 44,
+          "signals": 89
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -14.05,
+          "sharpe": -1.11,
+          "maxDD": 16.39,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": -3.45,
+          "sharpe": -0.19,
+          "maxDD": 12.96,
+          "winRate": 73.1,
+          "trades": 26,
+          "signals": 53
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 38.07,
+          "sharpe": 1.13,
+          "maxDD": 8.56,
+          "winRate": 63.2,
+          "trades": 19,
+          "signals": 38
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 13.42,
+          "sharpe": 0.92,
+          "maxDD": 8.5,
+          "winRate": 69.4,
+          "trades": 36,
+          "signals": 73
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 67.21,
+          "sharpe": 1.81,
+          "maxDD": 17.61,
+          "winRate": 78.9,
+          "trades": 38,
+          "signals": 76
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 1.68,
+          "sharpe": 0.16,
+          "maxDD": 12.35,
+          "winRate": 61.3,
+          "trades": 31,
+          "signals": 62
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 11.1,
+          "sharpe": 0.46,
+          "maxDD": 20.52,
+          "winRate": 61.1,
+          "trades": 18,
+          "signals": 36
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 21.24,
+          "sharpe": 0.72,
+          "maxDD": 15.63,
+          "winRate": 61.4,
+          "trades": 44,
+          "signals": 89
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -26.5,
+          "sharpe": -0.9,
+          "maxDD": 31.62,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 9
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 11.38,
+          "sharpe": 0.49,
+          "maxDD": 18.44,
+          "winRate": 63.9,
+          "trades": 36,
+          "signals": 73
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 30.47,
+          "sharpe": 1.3,
+          "maxDD": 7.72,
+          "winRate": 55.6,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 5.76,
+          "sharpe": 0.34,
+          "maxDD": 20.41,
+          "winRate": 64.3,
+          "trades": 42,
+          "signals": 84
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 42.6,
+          "sharpe": 1.19,
+          "maxDD": 20.66,
+          "winRate": 71.9,
+          "trades": 32,
+          "signals": 65
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 4.1,
+          "sharpe": 0.28,
+          "maxDD": 11.28,
+          "winRate": 68.6,
+          "trades": 35,
+          "signals": 71
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 57.07,
+          "sharpe": 1.85,
+          "maxDD": 9.95,
+          "winRate": 61.5,
+          "trades": 26,
+          "signals": 52
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": 17.85,
+          "sharpe": 0.56,
+          "maxDD": 35.33,
+          "winRate": 66.7,
+          "trades": 36,
+          "signals": 73
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 28.74,
+          "sharpe": 0.74,
+          "maxDD": 25.21,
+          "winRate": 77.3,
+          "trades": 22,
+          "signals": 44
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": -22.1,
+          "sharpe": -0.73,
+          "maxDD": 22.38,
+          "winRate": 62.5,
+          "trades": 24,
+          "signals": 49
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 1.94,
+          "sharpe": 0.2,
+          "maxDD": 16.42,
+          "winRate": 87.5,
+          "trades": 8,
+          "signals": 17
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -1.11,
+          "sharpe": 0.09,
+          "maxDD": 20.51,
+          "winRate": 68.2,
+          "trades": 44,
+          "signals": 89
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 3.84,
+          "sharpe": 0.24,
+          "maxDD": 22.62,
+          "winRate": 40.0,
+          "trades": 15,
+          "signals": 30
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.08,
+          "sharpe": 0.55,
+          "maxDD": 11.31,
+          "winRate": 75.0,
+          "trades": 24,
+          "signals": 48
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -5.87,
+          "sharpe": -0.08,
+          "maxDD": 25.51,
+          "winRate": 65.7,
+          "trades": 35,
+          "signals": 70
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 12.85,
+          "sharpe": 0.7,
+          "maxDD": 10.99,
+          "winRate": 71.1,
+          "trades": 38,
+          "signals": 76
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 69.87,
+          "sharpe": 2.07,
+          "maxDD": 14.55,
+          "winRate": 80.0,
+          "trades": 45,
+          "signals": 90
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 2.58,
+          "sharpe": 0.2,
+          "maxDD": 18.77,
+          "winRate": 61.1,
+          "trades": 36,
+          "signals": 72
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 66.81,
+          "sharpe": 1.57,
+          "maxDD": 27.27,
+          "winRate": 77.3,
+          "trades": 22,
+          "signals": 44
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -14.37,
+          "sharpe": -0.53,
+          "maxDD": 17.89,
+          "winRate": 53.8,
+          "trades": 13,
+          "signals": 27
+        }
+      ]
+    },
+    {
+      "name": "三投票 MACD+KDJ+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "mean-reversion-cn"],
+      "avgReturn": 7.58,
+      "avgSharpe": 0.55,
+      "avgMaxDD": 10.18,
+      "avgWinRate": 55.4,
+      "positiveRate": "24/30",
+      "score": 0.37,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 10.83,
+          "sharpe": 1.73,
+          "maxDD": 2.44,
+          "winRate": 77.8,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 7.9,
+          "sharpe": 0.4,
+          "maxDD": 11.53,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": 4.43,
+          "sharpe": 0.53,
+          "maxDD": 8.1,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 5.08,
+          "sharpe": 0.53,
+          "maxDD": 8.94,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 37.49,
+          "sharpe": 1.11,
+          "maxDD": 8.02,
+          "winRate": 63.6,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 4.98,
+          "sharpe": 1.2,
+          "maxDD": 1.99,
+          "winRate": 71.4,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 16.06,
+          "sharpe": 1.11,
+          "maxDD": 5.34,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 11.21,
+          "sharpe": 0.97,
+          "maxDD": 5.4,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 5.75,
+          "sharpe": 0.33,
+          "maxDD": 15.0,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 3.48,
+          "sharpe": 0.24,
+          "maxDD": 10.78,
+          "winRate": 44.4,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -3.06,
+          "sharpe": -0.12,
+          "maxDD": 13.92,
+          "winRate": 45.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 3.89,
+          "sharpe": 0.31,
+          "maxDD": 11.2,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 28.46,
+          "sharpe": 1.26,
+          "maxDD": 7.75,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 8.21,
+          "sharpe": 0.77,
+          "maxDD": 3.85,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 26.67,
+          "sharpe": 1.58,
+          "maxDD": 5.28,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 5.52,
+          "sharpe": 0.67,
+          "maxDD": 3.47,
+          "winRate": 61.5,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 38.63,
+          "sharpe": 1.66,
+          "maxDD": 9.78,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -22.18,
+          "sharpe": -0.93,
+          "maxDD": 26.37,
+          "winRate": 28.6,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 8.96,
+          "sharpe": 0.39,
+          "maxDD": 28.76,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 4.51,
+          "sharpe": 0.33,
+          "maxDD": 11.62,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 25
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 11.22,
+          "sharpe": 0.75,
+          "maxDD": 6.58,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -15.89,
+          "sharpe": -0.69,
+          "maxDD": 22.5,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -7.06,
+          "sharpe": -0.76,
+          "maxDD": 12.5,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.65,
+          "sharpe": 1.56,
+          "maxDD": 0.86,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -10.7,
+          "sharpe": -0.92,
+          "maxDD": 19.52,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.68,
+          "sharpe": 0.46,
+          "maxDD": 3.55,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.35,
+          "maxDD": 10.35,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 14.82,
+          "sharpe": 0.85,
+          "maxDD": 10.4,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.16,
+          "sharpe": 1.4,
+          "maxDD": 4.68,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -7.11,
+          "sharpe": -0.45,
+          "maxDD": 15.04,
+          "winRate": 27.8,
+          "trades": 18,
+          "signals": 36
+        }
+      ]
+    },
+    {
+      "name": "四投票3/4 MACD+KDJ+布林+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "bollinger", "mean-reversion-cn"],
+      "avgReturn": 2.18,
+      "avgSharpe": 0.42,
+      "avgMaxDD": 3.65,
+      "avgWinRate": 75.0,
+      "positiveRate": "22/30",
+      "score": 0.3655,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 2.66,
+          "sharpe": 0.98,
+          "maxDD": 0.46,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 6.3,
+          "sharpe": 0.49,
+          "maxDD": 5.95,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 5
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": 8.37,
+          "sharpe": 1.24,
+          "maxDD": 1.95,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 2.73,
+          "sharpe": 0.59,
+          "maxDD": 2.93,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.53,
+          "maxDD": 5.62,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 5
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 2.04,
+          "sharpe": 0.58,
+          "maxDD": 1.99,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 17.85,
+          "sharpe": 1.37,
+          "maxDD": 3.32,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 7.23,
+          "sharpe": 1.47,
+          "maxDD": 1.61,
+          "winRate": 100.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 14.32,
+          "sharpe": 0.88,
+          "maxDD": 0.63,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 2.08,
+          "sharpe": 0.25,
+          "maxDD": 5.94,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -2.79,
+          "sharpe": -0.25,
+          "maxDD": 8.28,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 4.45,
+          "sharpe": 0.48,
+          "maxDD": 5.9,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 4.93,
+          "sharpe": 0.75,
+          "maxDD": 1.39,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 0.54,
+          "sharpe": 0.12,
+          "maxDD": 3.85,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 2.85,
+          "sharpe": 0.44,
+          "maxDD": 4.58,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": -1.9,
+          "sharpe": -0.6,
+          "maxDD": 2.56,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": -1.86,
+          "sharpe": -0.53,
+          "maxDD": 2.99,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -13.59,
+          "sharpe": -0.59,
+          "maxDD": 18.86,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 1.43,
+          "sharpe": 0.89,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 1.32,
+          "sharpe": 0.19,
+          "maxDD": 3.55,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 1.19,
+          "sharpe": 0.97,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -7.08,
+          "sharpe": -0.56,
+          "maxDD": 9.99,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -0.69,
+          "sharpe": -0.95,
+          "maxDD": 0.69,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 2.56,
+          "sharpe": 1.1,
+          "maxDD": 0.86,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 2.5,
+          "sharpe": 0.67,
+          "maxDD": 1.47,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 0.47,
+          "sharpe": 0.6,
+          "maxDD": 0.17,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 6.2,
+          "sharpe": 1.83,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 5.62,
+          "sharpe": 0.7,
+          "maxDD": 4.87,
+          "winRate": 100.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -9.13,
+          "sharpe": -1.06,
+          "maxDD": 9.13,
+          "winRate": 14.3,
+          "trades": 7,
+          "signals": 14
+        }
+      ]
+    },
+    {
+      "name": "三投票 MACD+布林+均值回归",
+      "method": "voting",
+      "strategyIds": ["macd", "bollinger", "mean-reversion-cn"],
+      "avgReturn": 2.21,
+      "avgSharpe": 0.4,
+      "avgMaxDD": 4.09,
+      "avgWinRate": 72.8,
+      "positiveRate": "21/30",
+      "score": 0.356,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 2.93,
+          "sharpe": 0.98,
+          "maxDD": 0.84,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 6.44,
+          "sharpe": 0.47,
+          "maxDD": 6.21,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 9
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": 11.53,
+          "sharpe": 1.53,
+          "maxDD": 1.95,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 1.97,
+          "sharpe": 0.42,
+          "maxDD": 3.92,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 4.3,
+          "sharpe": 0.45,
+          "maxDD": 5.62,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 5
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 4.37,
+          "sharpe": 1.01,
+          "maxDD": 1.99,
+          "winRate": 80.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 21.07,
+          "sharpe": 1.56,
+          "maxDD": 3.32,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.76,
+          "sharpe": 1.67,
+          "maxDD": 1.61,
+          "winRate": 100.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 8.55,
+          "sharpe": 0.53,
+          "maxDD": 6.97,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 2.32,
+          "sharpe": 0.27,
+          "maxDD": 5.94,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -2.79,
+          "sharpe": -0.25,
+          "maxDD": 8.28,
+          "winRate": 50.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 4.92,
+          "sharpe": 0.51,
+          "maxDD": 5.48,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 4.93,
+          "sharpe": 0.75,
+          "maxDD": 1.39,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": -0.04,
+          "sharpe": 0.02,
+          "maxDD": 3.85,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 2.85,
+          "sharpe": 0.44,
+          "maxDD": 4.58,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": -0.64,
+          "sharpe": -0.18,
+          "maxDD": 2.56,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": -1.86,
+          "sharpe": -0.53,
+          "maxDD": 2.99,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -12.51,
+          "sharpe": -0.51,
+          "maxDD": 18.87,
+          "winRate": 60.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 1.43,
+          "sharpe": 0.89,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 3.34,
+          "sharpe": 0.43,
+          "maxDD": 3.55,
+          "winRate": 75.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 1.19,
+          "sharpe": 0.97,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -7.99,
+          "sharpe": -0.62,
+          "maxDD": 9.99,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -0.69,
+          "sharpe": -0.95,
+          "maxDD": 0.69,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 4.25,
+          "sharpe": 1.4,
+          "maxDD": 0.86,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 2.5,
+          "sharpe": 0.67,
+          "maxDD": 1.47,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 0.47,
+          "sharpe": 0.6,
+          "maxDD": 0.17,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 2.24,
+          "sharpe": 0.39,
+          "maxDD": 4.93,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 1.51,
+          "sharpe": 0.2,
+          "maxDD": 5.37,
+          "winRate": 100.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -9.13,
+          "sharpe": -1.06,
+          "maxDD": 9.13,
+          "winRate": 14.3,
+          "trades": 7,
+          "signals": 14
+        }
+      ]
+    },
+    {
+      "name": "单策略 网格",
+      "method": "voting",
+      "strategyIds": ["grid"],
+      "avgReturn": 11.06,
+      "avgSharpe": 0.39,
+      "avgMaxDD": 18.27,
+      "avgWinRate": 68.8,
+      "positiveRate": "21/30",
+      "score": 0.3412,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 3.35,
+          "sharpe": 0.26,
+          "maxDD": 7.77,
+          "winRate": 67.4,
+          "trades": 43,
+          "signals": 87
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 41.7,
+          "sharpe": 1.04,
+          "maxDD": 16.62,
+          "winRate": 68.3,
+          "trades": 60,
+          "signals": 121
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -0.2,
+          "sharpe": 0.05,
+          "maxDD": 13.83,
+          "winRate": 69.6,
+          "trades": 23,
+          "signals": 46
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 0.22,
+          "sharpe": 0.07,
+          "maxDD": 11.64,
+          "winRate": 76.3,
+          "trades": 38,
+          "signals": 77
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 12.52,
+          "sharpe": 0.81,
+          "maxDD": 7.04,
+          "winRate": 76.9,
+          "trades": 13,
+          "signals": 26
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 8.35,
+          "sharpe": 0.48,
+          "maxDD": 14.17,
+          "winRate": 69.8,
+          "trades": 43,
+          "signals": 87
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 84.47,
+          "sharpe": 2.02,
+          "maxDD": 17.6,
+          "winRate": 82.9,
+          "trades": 41,
+          "signals": 82
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 7.72,
+          "sharpe": 0.49,
+          "maxDD": 10.49,
+          "winRate": 65.9,
+          "trades": 44,
+          "signals": 88
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 8.03,
+          "sharpe": 0.42,
+          "maxDD": 23.31,
+          "winRate": 75.0,
+          "trades": 24,
+          "signals": 48
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 19.36,
+          "sharpe": 0.67,
+          "maxDD": 13.69,
+          "winRate": 67.8,
+          "trades": 59,
+          "signals": 119
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -33.25,
+          "sharpe": -1.13,
+          "maxDD": 33.49,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 13
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 10.04,
+          "sharpe": 0.43,
+          "maxDD": 13.62,
+          "winRate": 64.4,
+          "trades": 45,
+          "signals": 90
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 10.53,
+          "sharpe": 0.85,
+          "maxDD": 6.98,
+          "winRate": 50.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": -10.76,
+          "sharpe": -0.41,
+          "maxDD": 26.0,
+          "winRate": 66.7,
+          "trades": 42,
+          "signals": 84
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 17.78,
+          "sharpe": 0.65,
+          "maxDD": 20.66,
+          "winRate": 70.6,
+          "trades": 34,
+          "signals": 68
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": -0.95,
+          "sharpe": 0.02,
+          "maxDD": 12.41,
+          "winRate": 65.8,
+          "trades": 38,
+          "signals": 77
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 12.46,
+          "sharpe": 0.71,
+          "maxDD": 10.51,
+          "winRate": 67.6,
+          "trades": 34,
+          "signals": 68
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": 23.04,
+          "sharpe": 0.66,
+          "maxDD": 34.18,
+          "winRate": 64.9,
+          "trades": 37,
+          "signals": 75
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 41.26,
+          "sharpe": 1.01,
+          "maxDD": 26.65,
+          "winRate": 67.9,
+          "trades": 28,
+          "signals": 56
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": -25.73,
+          "sharpe": -0.76,
+          "maxDD": 27.98,
+          "winRate": 69.2,
+          "trades": 26,
+          "signals": 53
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": -2.53,
+          "sharpe": -0.03,
+          "maxDD": 21.04,
+          "winRate": 81.8,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -2.38,
+          "sharpe": 0.05,
+          "maxDD": 21.92,
+          "winRate": 65.3,
+          "trades": 49,
+          "signals": 99
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 2.72,
+          "sharpe": 0.23,
+          "maxDD": 20.53,
+          "winRate": 61.5,
+          "trades": 26,
+          "signals": 52
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": -4.34,
+          "sharpe": -0.31,
+          "maxDD": 13.52,
+          "winRate": 66.7,
+          "trades": 27,
+          "signals": 54
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 18.75,
+          "sharpe": 0.77,
+          "maxDD": 19.63,
+          "winRate": 73.9,
+          "trades": 46,
+          "signals": 92
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 2.6,
+          "sharpe": 0.2,
+          "maxDD": 11.79,
+          "winRate": 67.4,
+          "trades": 43,
+          "signals": 86
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 58.0,
+          "sharpe": 1.73,
+          "maxDD": 15.05,
+          "winRate": 76.3,
+          "trades": 59,
+          "signals": 118
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 19.79,
+          "sharpe": 0.59,
+          "maxDD": 18.12,
+          "winRate": 61.2,
+          "trades": 49,
+          "signals": 98
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 27.44,
+          "sharpe": 0.83,
+          "maxDD": 35.01,
+          "winRate": 75.0,
+          "trades": 24,
+          "signals": 48
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -18.19,
+          "sharpe": -0.68,
+          "maxDD": 22.79,
+          "winRate": 61.1,
+          "trades": 18,
+          "signals": 37
+        }
+      ]
+    },
+    {
+      "name": "投票 MACD+KDJ",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 6.12,
+      "avgSharpe": 0.45,
+      "avgMaxDD": 9.79,
+      "avgWinRate": 52.8,
+      "positiveRate": "21/30",
+      "score": 0.3383,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 10.83,
+          "sharpe": 1.73,
+          "maxDD": 2.44,
+          "winRate": 77.8,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": -3.06,
+          "sharpe": -0.08,
+          "maxDD": 12.14,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -4.8,
+          "sharpe": -0.85,
+          "maxDD": 8.1,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 2.56,
+          "sharpe": 0.33,
+          "maxDD": 8.94,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.94,
+          "maxDD": 7.36,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 6.21,
+          "sharpe": 1.63,
+          "maxDD": 0.73,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 2.16,
+          "sharpe": 0.28,
+          "maxDD": 4.86,
+          "winRate": 20.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.04,
+          "sharpe": 0.75,
+          "maxDD": 5.07,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 5.75,
+          "sharpe": 0.33,
+          "maxDD": 15.0,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 3.23,
+          "sharpe": 0.24,
+          "maxDD": 12.66,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -6.19,
+          "sharpe": -0.34,
+          "maxDD": 13.92,
+          "winRate": 41.7,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -3.64,
+          "sharpe": -0.27,
+          "maxDD": 13.87,
+          "winRate": 30.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 28.53,
+          "sharpe": 1.26,
+          "maxDD": 7.72,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 10.54,
+          "sharpe": 1.04,
+          "maxDD": 1.62,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 26.67,
+          "sharpe": 1.58,
+          "maxDD": 5.28,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 5.28,
+          "sharpe": 0.67,
+          "maxDD": 3.47,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 38.63,
+          "sharpe": 1.66,
+          "maxDD": 9.78,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.43,
+          "sharpe": -0.87,
+          "maxDD": 16.18,
+          "winRate": 16.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 8.96,
+          "sharpe": 0.39,
+          "maxDD": 28.76,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 4.26,
+          "sharpe": 0.33,
+          "maxDD": 11.61,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 11.22,
+          "sharpe": 0.75,
+          "maxDD": 6.58,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -16.49,
+          "sharpe": -0.76,
+          "maxDD": 20.6,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -7.06,
+          "sharpe": -0.76,
+          "maxDD": 12.5,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.65,
+          "sharpe": 1.56,
+          "maxDD": 0.86,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -10.7,
+          "sharpe": -0.92,
+          "maxDD": 19.52,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.68,
+          "sharpe": 0.46,
+          "maxDD": 3.55,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.35,
+          "maxDD": 10.35,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 14.66,
+          "sharpe": 0.89,
+          "maxDD": 10.4,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.16,
+          "sharpe": 1.4,
+          "maxDD": 4.68,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -4.99,
+          "sharpe": -0.33,
+          "maxDD": 15.04,
+          "winRate": 29.4,
+          "trades": 17,
+          "signals": 34
+        }
+      ]
+    },
+    {
+      "name": "门控 MACD→KDJ过滤",
+      "method": "gated",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 6.12,
+      "avgSharpe": 0.45,
+      "avgMaxDD": 9.79,
+      "avgWinRate": 52.8,
+      "positiveRate": "21/30",
+      "score": 0.3383,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 10.83,
+          "sharpe": 1.73,
+          "maxDD": 2.44,
+          "winRate": 77.8,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": -3.06,
+          "sharpe": -0.08,
+          "maxDD": 12.14,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -4.8,
+          "sharpe": -0.85,
+          "maxDD": 8.1,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 2.56,
+          "sharpe": 0.33,
+          "maxDD": 8.94,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.94,
+          "maxDD": 7.36,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 6.21,
+          "sharpe": 1.63,
+          "maxDD": 0.73,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 2.16,
+          "sharpe": 0.28,
+          "maxDD": 4.86,
+          "winRate": 20.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.04,
+          "sharpe": 0.75,
+          "maxDD": 5.07,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 5.75,
+          "sharpe": 0.33,
+          "maxDD": 15.0,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 3.23,
+          "sharpe": 0.24,
+          "maxDD": 12.66,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -6.19,
+          "sharpe": -0.34,
+          "maxDD": 13.92,
+          "winRate": 41.7,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -3.64,
+          "sharpe": -0.27,
+          "maxDD": 13.87,
+          "winRate": 30.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 28.53,
+          "sharpe": 1.26,
+          "maxDD": 7.72,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 10.54,
+          "sharpe": 1.04,
+          "maxDD": 1.62,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 26.67,
+          "sharpe": 1.58,
+          "maxDD": 5.28,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 5.28,
+          "sharpe": 0.67,
+          "maxDD": 3.47,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 38.63,
+          "sharpe": 1.66,
+          "maxDD": 9.78,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.43,
+          "sharpe": -0.87,
+          "maxDD": 16.18,
+          "winRate": 16.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 8.96,
+          "sharpe": 0.39,
+          "maxDD": 28.76,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 4.26,
+          "sharpe": 0.33,
+          "maxDD": 11.61,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 11.22,
+          "sharpe": 0.75,
+          "maxDD": 6.58,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -16.49,
+          "sharpe": -0.76,
+          "maxDD": 20.6,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -7.06,
+          "sharpe": -0.76,
+          "maxDD": 12.5,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.65,
+          "sharpe": 1.56,
+          "maxDD": 0.86,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -10.7,
+          "sharpe": -0.92,
+          "maxDD": 19.52,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.68,
+          "sharpe": 0.46,
+          "maxDD": 3.55,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.35,
+          "maxDD": 10.35,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 14.66,
+          "sharpe": 0.89,
+          "maxDD": 10.4,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.16,
+          "sharpe": 1.4,
+          "maxDD": 4.68,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -4.99,
+          "sharpe": -0.33,
+          "maxDD": 15.04,
+          "winRate": 29.4,
+          "trades": 17,
+          "signals": 34
+        }
+      ]
+    },
+    {
+      "name": "三投票 MACD+KDJ+龙回头",
+      "method": "voting",
+      "strategyIds": ["macd", "kdj", "dragon-return"],
+      "avgReturn": 6.12,
+      "avgSharpe": 0.45,
+      "avgMaxDD": 9.79,
+      "avgWinRate": 52.8,
+      "positiveRate": "21/30",
+      "score": 0.3383,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 10.83,
+          "sharpe": 1.73,
+          "maxDD": 2.44,
+          "winRate": 77.8,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": -3.06,
+          "sharpe": -0.08,
+          "maxDD": 12.14,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -4.8,
+          "sharpe": -0.85,
+          "maxDD": 8.1,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 2.56,
+          "sharpe": 0.33,
+          "maxDD": 8.94,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.94,
+          "maxDD": 7.36,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 6.21,
+          "sharpe": 1.63,
+          "maxDD": 0.73,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 2.16,
+          "sharpe": 0.28,
+          "maxDD": 4.86,
+          "winRate": 20.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.04,
+          "sharpe": 0.75,
+          "maxDD": 5.07,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 5.75,
+          "sharpe": 0.33,
+          "maxDD": 15.0,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 3.23,
+          "sharpe": 0.24,
+          "maxDD": 12.66,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -6.19,
+          "sharpe": -0.34,
+          "maxDD": 13.92,
+          "winRate": 41.7,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -3.64,
+          "sharpe": -0.27,
+          "maxDD": 13.87,
+          "winRate": 30.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 28.53,
+          "sharpe": 1.26,
+          "maxDD": 7.72,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 10.54,
+          "sharpe": 1.04,
+          "maxDD": 1.62,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 26.67,
+          "sharpe": 1.58,
+          "maxDD": 5.28,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 5.28,
+          "sharpe": 0.67,
+          "maxDD": 3.47,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 38.63,
+          "sharpe": 1.66,
+          "maxDD": 9.78,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.43,
+          "sharpe": -0.87,
+          "maxDD": 16.18,
+          "winRate": 16.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 8.96,
+          "sharpe": 0.39,
+          "maxDD": 28.76,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 4.26,
+          "sharpe": 0.33,
+          "maxDD": 11.61,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 11.22,
+          "sharpe": 0.75,
+          "maxDD": 6.58,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -16.49,
+          "sharpe": -0.76,
+          "maxDD": 20.6,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -7.06,
+          "sharpe": -0.76,
+          "maxDD": 12.5,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.65,
+          "sharpe": 1.56,
+          "maxDD": 0.86,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -10.7,
+          "sharpe": -0.92,
+          "maxDD": 19.52,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.68,
+          "sharpe": 0.46,
+          "maxDD": 3.55,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.35,
+          "maxDD": 10.35,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 14.66,
+          "sharpe": 0.89,
+          "maxDD": 10.4,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.16,
+          "sharpe": 1.4,
+          "maxDD": 4.68,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -4.99,
+          "sharpe": -0.33,
+          "maxDD": 15.04,
+          "winRate": 29.4,
+          "trades": 17,
+          "signals": 34
+        }
+      ]
+    },
+    {
+      "name": "级联 MACD→KDJ",
+      "method": "cascade",
+      "strategyIds": ["macd", "kdj"],
+      "avgReturn": 6.12,
+      "avgSharpe": 0.45,
+      "avgMaxDD": 9.79,
+      "avgWinRate": 52.8,
+      "positiveRate": "21/30",
+      "score": 0.3383,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 10.83,
+          "sharpe": 1.73,
+          "maxDD": 2.44,
+          "winRate": 77.8,
+          "trades": 9,
+          "signals": 19
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": -3.06,
+          "sharpe": -0.08,
+          "maxDD": 12.14,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": -4.8,
+          "sharpe": -0.85,
+          "maxDD": 8.1,
+          "winRate": 33.3,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 2.56,
+          "sharpe": 0.33,
+          "maxDD": 8.94,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 29.17,
+          "sharpe": 0.94,
+          "maxDD": 7.36,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 6.21,
+          "sharpe": 1.63,
+          "maxDD": 0.73,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 2.16,
+          "sharpe": 0.28,
+          "maxDD": 4.86,
+          "winRate": 20.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 8.04,
+          "sharpe": 0.75,
+          "maxDD": 5.07,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 5.75,
+          "sharpe": 0.33,
+          "maxDD": 15.0,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 3.23,
+          "sharpe": 0.24,
+          "maxDD": 12.66,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -6.19,
+          "sharpe": -0.34,
+          "maxDD": 13.92,
+          "winRate": 41.7,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -3.64,
+          "sharpe": -0.27,
+          "maxDD": 13.87,
+          "winRate": 30.0,
+          "trades": 10,
+          "signals": 21
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 28.53,
+          "sharpe": 1.26,
+          "maxDD": 7.72,
+          "winRate": 42.9,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 10.54,
+          "sharpe": 1.04,
+          "maxDD": 1.62,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 26.67,
+          "sharpe": 1.58,
+          "maxDD": 5.28,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 15
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 5.28,
+          "sharpe": 0.67,
+          "maxDD": 3.47,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": 38.63,
+          "sharpe": 1.66,
+          "maxDD": 9.78,
+          "winRate": 57.1,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -11.43,
+          "sharpe": -0.87,
+          "maxDD": 16.18,
+          "winRate": 16.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 8.96,
+          "sharpe": 0.39,
+          "maxDD": 28.76,
+          "winRate": 85.7,
+          "trades": 7,
+          "signals": 14
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 4.26,
+          "sharpe": 0.33,
+          "maxDD": 11.61,
+          "winRate": 54.5,
+          "trades": 11,
+          "signals": 23
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 11.22,
+          "sharpe": 0.75,
+          "maxDD": 6.58,
+          "winRate": 100.0,
+          "trades": 3,
+          "signals": 7
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -16.49,
+          "sharpe": -0.76,
+          "maxDD": 20.6,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": -7.06,
+          "sharpe": -0.76,
+          "maxDD": 12.5,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.65,
+          "sharpe": 1.56,
+          "maxDD": 0.86,
+          "winRate": 83.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -10.7,
+          "sharpe": -0.92,
+          "maxDD": 19.52,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 3.68,
+          "sharpe": 0.46,
+          "maxDD": 3.55,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 4.78,
+          "sharpe": 0.35,
+          "maxDD": 10.35,
+          "winRate": 58.3,
+          "trades": 12,
+          "signals": 24
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 14.66,
+          "sharpe": 0.89,
+          "maxDD": 10.4,
+          "winRate": 66.7,
+          "trades": 9,
+          "signals": 18
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 20.16,
+          "sharpe": 1.4,
+          "maxDD": 4.68,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -4.99,
+          "sharpe": -0.33,
+          "maxDD": 15.04,
+          "winRate": 29.4,
+          "trades": 17,
+          "signals": 34
+        }
+      ]
+    },
+    {
+      "name": "三投票 MACD+均值回归+网格",
+      "method": "voting",
+      "strategyIds": ["macd", "mean-reversion-cn", "grid"],
+      "avgReturn": 5.18,
+      "avgSharpe": 0.44,
+      "avgMaxDD": 9.16,
+      "avgWinRate": 60.6,
+      "positiveRate": "19/30",
+      "score": 0.3329,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 4.0,
+          "sharpe": 0.58,
+          "maxDD": 4.37,
+          "winRate": 77.3,
+          "trades": 22,
+          "signals": 45
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 1.46,
+          "sharpe": 0.15,
+          "maxDD": 7.85,
+          "winRate": 59.3,
+          "trades": 27,
+          "signals": 55
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": 8.86,
+          "sharpe": 1.23,
+          "maxDD": 3.64,
+          "winRate": 75.0,
+          "trades": 8,
+          "signals": 16
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 0.23,
+          "sharpe": 0.06,
+          "maxDD": 5.39,
+          "winRate": 64.0,
+          "trades": 25,
+          "signals": 50
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 5.86,
+          "sharpe": 0.81,
+          "maxDD": 3.67,
+          "winRate": 66.7,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 8.71,
+          "sharpe": 1.23,
+          "maxDD": 2.71,
+          "winRate": 76.2,
+          "trades": 21,
+          "signals": 43
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 63.14,
+          "sharpe": 2.26,
+          "maxDD": 4.84,
+          "winRate": 82.6,
+          "trades": 23,
+          "signals": 46
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": 3.15,
+          "sharpe": 0.37,
+          "maxDD": 8.67,
+          "winRate": 59.3,
+          "trades": 27,
+          "signals": 54
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": 7.09,
+          "sharpe": 0.86,
+          "maxDD": 4.54,
+          "winRate": 72.7,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": -0.73,
+          "sharpe": 0.02,
+          "maxDD": 11.5,
+          "winRate": 59.3,
+          "trades": 27,
+          "signals": 54
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": -0.89,
+          "sharpe": 0.04,
+          "maxDD": 18.24,
+          "winRate": 40.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": -14.62,
+          "sharpe": -0.85,
+          "maxDD": 23.15,
+          "winRate": 45.8,
+          "trades": 24,
+          "signals": 48
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": 4.12,
+          "sharpe": 1.05,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": 13.55,
+          "sharpe": 1.04,
+          "maxDD": 8.23,
+          "winRate": 72.4,
+          "trades": 29,
+          "signals": 58
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 11.89,
+          "sharpe": 0.87,
+          "maxDD": 7.51,
+          "winRate": 75.0,
+          "trades": 16,
+          "signals": 32
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": -0.71,
+          "sharpe": -0.04,
+          "maxDD": 6.16,
+          "winRate": 60.0,
+          "trades": 25,
+          "signals": 51
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": -0.69,
+          "sharpe": -0.01,
+          "maxDD": 11.39,
+          "winRate": 50.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -0.31,
+          "sharpe": 0.1,
+          "maxDD": 26.72,
+          "winRate": 52.4,
+          "trades": 21,
+          "signals": 43
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 13.19,
+          "sharpe": 0.64,
+          "maxDD": 9.26,
+          "winRate": 50.0,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 2.42,
+          "sharpe": 0.19,
+          "maxDD": 19.11,
+          "winRate": 56.2,
+          "trades": 16,
+          "signals": 33
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": -7.8,
+          "sharpe": -0.29,
+          "maxDD": 10.22,
+          "winRate": 57.1,
+          "trades": 28,
+          "signals": 56
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 2.36,
+          "sharpe": 0.19,
+          "maxDD": 12.54,
+          "winRate": 33.3,
+          "trades": 6,
+          "signals": 12
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 6.35,
+          "sharpe": 1.3,
+          "maxDD": 1.85,
+          "winRate": 81.8,
+          "trades": 11,
+          "signals": 22
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": -2.82,
+          "sharpe": -0.16,
+          "maxDD": 13.09,
+          "winRate": 58.8,
+          "trades": 17,
+          "signals": 34
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": -3.83,
+          "sharpe": -0.54,
+          "maxDD": 5.03,
+          "winRate": 55.6,
+          "trades": 18,
+          "signals": 36
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 5.83,
+          "sharpe": 0.43,
+          "maxDD": 11.34,
+          "winRate": 62.1,
+          "trades": 29,
+          "signals": 58
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 13.78,
+          "sharpe": 0.59,
+          "maxDD": 12.35,
+          "winRate": 63.3,
+          "trades": 30,
+          "signals": 60
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 18.16,
+          "sharpe": 1.32,
+          "maxDD": 4.65,
+          "winRate": 70.0,
+          "trades": 10,
+          "signals": 20
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -6.45,
+          "sharpe": -0.33,
+          "maxDD": 16.9,
+          "winRate": 42.1,
+          "trades": 19,
+          "signals": 39
+        }
+      ]
+    },
+    {
+      "name": "四投票3/4 海龟+RSI+KDJ+均值回归",
+      "method": "voting",
+      "strategyIds": ["turtle", "rsi", "kdj", "mean-reversion-cn"],
+      "avgReturn": 1.62,
+      "avgSharpe": 0.19,
+      "avgMaxDD": 2.87,
+      "avgWinRate": 43.6,
+      "positiveRate": "16/30",
+      "score": 0.3023,
+      "perStock": [
+        {
+          "symbol": "000001",
+          "ok": true,
+          "return": 0.69,
+          "sharpe": 0.2,
+          "maxDD": 3.68,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        },
+        {
+          "symbol": "300059",
+          "ok": true,
+          "return": 7.67,
+          "sharpe": 1.12,
+          "maxDD": 2.03,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 5
+        },
+        {
+          "symbol": "6",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "600016",
+          "ok": true,
+          "return": 1.47,
+          "sharpe": 0.3,
+          "maxDD": 3.51,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "688981",
+          "ok": true,
+          "return": 0.63,
+          "sharpe": 0.17,
+          "maxDD": 2.37,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 3
+        },
+        {
+          "symbol": "000651",
+          "ok": true,
+          "return": 5.12,
+          "sharpe": 0.84,
+          "maxDD": 1.43,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "300750",
+          "ok": true,
+          "return": 7.05,
+          "sharpe": 0.93,
+          "maxDD": 3.32,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600036",
+          "ok": true,
+          "return": -0.51,
+          "sharpe": -0.9,
+          "maxDD": 0.51,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "688170",
+          "ok": true,
+          "return": -4.68,
+          "sharpe": -0.92,
+          "maxDD": 4.68,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002230",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "300760",
+          "ok": true,
+          "return": 0.14,
+          "sharpe": 0.05,
+          "maxDD": 6.89,
+          "winRate": 40.0,
+          "trades": 5,
+          "signals": 10
+        },
+        {
+          "symbol": "600276",
+          "ok": true,
+          "return": 7.89,
+          "sharpe": 0.88,
+          "maxDD": 3.1,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "688282",
+          "ok": true,
+          "return": -3.27,
+          "sharpe": -1.07,
+          "maxDD": 3.78,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "002415",
+          "ok": true,
+          "return": -0.44,
+          "sharpe": -0.11,
+          "maxDD": 2.5,
+          "winRate": 0.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "300323",
+          "ok": true,
+          "return": 9.34,
+          "sharpe": 1.27,
+          "maxDD": 0.03,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "600519",
+          "ok": true,
+          "return": 0.57,
+          "sharpe": 0.16,
+          "maxDD": 2.42,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "688268",
+          "ok": true,
+          "return": -0.64,
+          "sharpe": -0.07,
+          "maxDD": 4.97,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "002475",
+          "ok": true,
+          "return": -10.11,
+          "sharpe": -0.44,
+          "maxDD": 18.09,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "300483",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "600809",
+          "ok": true,
+          "return": 1.14,
+          "sharpe": 0.21,
+          "maxDD": 3.55,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "688021",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "000063",
+          "ok": true,
+          "return": 4.42,
+          "sharpe": 0.99,
+          "maxDD": 2.12,
+          "winRate": 100.0,
+          "trades": 1,
+          "signals": 2
+        },
+        {
+          "symbol": "301105",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "600900",
+          "ok": true,
+          "return": 0.56,
+          "sharpe": 0.3,
+          "maxDD": 1.04,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "688032",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "000333",
+          "ok": true,
+          "return": 0,
+          "sharpe": 0,
+          "maxDD": 0,
+          "winRate": 0,
+          "trades": 0,
+          "signals": 0
+        },
+        {
+          "symbol": "301179",
+          "ok": true,
+          "return": 16.09,
+          "sharpe": 1.0,
+          "maxDD": 3.29,
+          "winRate": 100.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "601012",
+          "ok": true,
+          "return": 1.52,
+          "sharpe": 0.2,
+          "maxDD": 5.35,
+          "winRate": 66.7,
+          "trades": 3,
+          "signals": 6
+        },
+        {
+          "symbol": "688048",
+          "ok": true,
+          "return": 10.84,
+          "sharpe": 1.39,
+          "maxDD": 0.38,
+          "winRate": 50.0,
+          "trades": 2,
+          "signals": 4
+        },
+        {
+          "symbol": "000858",
+          "ok": true,
+          "return": -6.92,
+          "sharpe": -0.84,
+          "maxDD": 6.92,
+          "winRate": 25.0,
+          "trades": 4,
+          "signals": 8
+        }
+      ]
+    }
+  ]
+}

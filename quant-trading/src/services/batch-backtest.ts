@@ -136,26 +136,33 @@ export async function runBatchBacktest(
 
 /**
  * Composite score: weighted blend of key backtest metrics.
- * Higher = better. Matches the daily-picks scoring pattern.
+ * Higher = better.
+ *
+ * Formula: baseScore × activityFactor
+ *   baseScore = 年化收益×0.5 + 夏普比率×10 + 胜率×0.3 + min(盈亏比,4)×4 − 最大回撤×1.0
+ *   activityFactor = clamp(trades / 15, 0.05, 1.0)
+ *
+ * The activity factor ensures strategies with few/no trades are penalized:
+ *   0 trades → 0.05 (nearly zeroed), 5 → 0.33, 10 → 0.67, 15+ → 1.0
  */
 function computeCompositeScore(r: BatchBacktestResultItem): number {
-  const totalReturn = r.totalReturn ?? 0;
   const annualizedReturn = r.annualizedReturn ?? 0;
   const sharpe = r.sharpeRatio ?? 0;
   const winRate = r.winRate ?? 0;
   const profitFactor = Math.min(r.profitFactor ?? 0, 4);
   const maxDrawdown = r.maxDrawdown ?? 0;
-  const trades = Math.min(r.totalTrades ?? 0, 120);
+  const trades = r.totalTrades ?? 0;
 
-  return round2(
-    totalReturn * 1.0 +
-      annualizedReturn * 0.35 +
-      sharpe * 12 +
-      winRate * 0.28 +
-      profitFactor * 4 -
-      maxDrawdown * 0.85 +
-      trades * 0.03,
-  );
+  const baseScore =
+    annualizedReturn * 0.5 +
+    sharpe * 10 +
+    winRate * 0.3 +
+    profitFactor * 4 -
+    maxDrawdown * 1.0;
+
+  const activityFactor = Math.min(1.0, Math.max(0.05, trades / 15));
+
+  return round2(baseScore * activityFactor);
 }
 
 function round2(n: number): number {

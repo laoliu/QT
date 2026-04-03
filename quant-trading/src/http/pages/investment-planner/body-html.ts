@@ -1359,11 +1359,11 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="card" style="margin-bottom:14px">
       <h3>📊 策略对比排名</h3>
       <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
-        📐 <strong>综合评分公式</strong>：总收益×1.0 + 年化收益×0.35 + 夏普比率×12 + 胜率×0.28 + min(盈亏比,4)×4 − 最大回撤×0.85 + min(交易次数,120)×0.03
+        📐 <strong>综合评分公式</strong>：(年化收益×0.5 + 夏普比率×10 + 胜率×0.3 + min(盈亏比,4)×4 − 最大回撤×1.0) × 活跃度系数　　活跃度系数 = min(1, max(0.05, 交易次数/15))
       </div>
       <div style="overflow-x:auto">
         <table id="pbt-comparison-table">
-          <thead><tr><th>排名</th><th>策略</th><th title="综合评分 = 总收益×1.0 + 年化收益×0.35 + 夏普比率×12 + 胜率×0.28 + min(盈亏比,4)×4 − 最大回撤×0.85 + min(交易次数,120)×0.03">综合评分 ⓘ</th><th>总收益</th><th>年化收益</th><th>最终市值</th><th>盈亏</th><th>最大回撤</th><th>夏普比率</th><th>胜率</th><th>交易次数</th></tr></thead>
+          <thead><tr><th>排名</th><th>策略</th><th title="综合评分 = (年化收益×0.5 + 夏普比率×10 + 胜率×0.3 + min(盈亏比,4)×4 − 最大回撤×1.0) × 活跃度系数">综合评分 ⓘ</th><th>年化收益</th><th>最终市值</th><th>盈亏</th><th>最大回撤</th><th>夏普比率</th><th>胜率</th><th>交易次数</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

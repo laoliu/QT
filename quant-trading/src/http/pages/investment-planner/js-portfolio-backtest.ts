@@ -205,7 +205,6 @@ function renderPbtResults(data){
     row+='<td><span class="badge '+(r.rank===1?'badge-green':r.rank<=3?'badge-blue':'badge-purple')+'">#'+r.rank+'</span></td>';
     row+='<td><strong>'+esc(r.strategy)+'</strong><br><span style="font-size:11px;color:var(--text-dim)">'+esc(r.strategyId)+'</span></td>';
     row+='<td><span style="font-weight:600;color:'+(r.compositeScore>=50?'var(--green)':r.compositeScore>=20?'var(--yellow)':'var(--red)')+'">'+pbtFmt(r.compositeScore)+'</span></td>';
-    row+='<td class="'+cl+'">'+pbtFmt(r.totalReturn)+'%</td>';
     row+='<td class="'+cl+'">'+pbtFmt(r.annualizedReturn)+'%</td>';
     row+='<td>&yen;'+pbtFmtMoney(r.finalValue)+'</td>';
     row+='<td class="'+cl+'">&yen;'+pbtFmtMoney(profit)+'</td>';

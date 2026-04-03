@@ -117,7 +117,6 @@ canvas{width:100%!important;height:100%!important}
           <tr>
             <th>排名</th>
             <th>策略</th>
-            <th>总收益</th>
             <th>年化收益</th>
             <th>最终市值</th>
             <th>盈亏</th>
@@ -288,7 +287,6 @@ function renderResults(data){
     var row='<tr>';
     row+='<td><span class="badge '+(r.rank===1?'badge-green':r.rank<=3?'badge-blue':'badge-purple')+'">#'+r.rank+'</span></td>';
     row+='<td><strong>'+r.strategy+'</strong><br><span style="font-size:11px;color:var(--text-dim)">'+r.strategyId+'</span></td>';
-    row+='<td class="'+cl+'">'+fmt(r.totalReturn)+'%</td>';
     row+='<td class="'+cl+'">'+fmt(r.annualizedReturn)+'%</td>';
     row+='<td>&yen;'+fmtMoney(r.finalValue)+'</td>';
     row+='<td class="'+cl+'">&yen;'+fmtMoney(profit)+'</td>';

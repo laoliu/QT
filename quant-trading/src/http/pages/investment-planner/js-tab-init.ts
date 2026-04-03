@@ -17,7 +17,7 @@ function activateTab(tabName){
 }
 function _onTabDataLoad(tabName){
   try{
-    if(tabName==='portfolio')refreshPortfolio();
+    if(tabName==='portfolio'){refreshPortfolio();loadEquityCurve();}
     if(tabName==='signals')loadSignals();
     if(tabName==='milestones')loadMilestones();
     if(tabName==='screen'){loadScreenerHistory();restoreScreenResults();}

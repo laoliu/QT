@@ -579,6 +579,9 @@ function executeRecommend(dryRun,forcePremarket){
         failHtml+
         '</div>';
       toast(rejected>0?'⚠️ 已执行，存在部分失败':'✅ 建仓委托已提交，正在等待成交确认…');
+      // Track batch execution
+      _recCurrentBatch=1;
+      _recBatchHistory=[{batch:1,pct:pctVal,submitted:submitted}];
       // Start fill confirmation polling
       if(submitted>0){
         startFillConfirmPolling(exec.orders||[]);
@@ -740,6 +743,11 @@ function pollFillStatusOnce(){
       document.getElementById('btn-fill-monitor').disabled=false;
       document.getElementById('rec-fill-confirm').style.borderColor='rgba(63,185,80,.5)';
       toast('✅ 所有订单已成交，可进入实盘监控');
+      // Auto-refresh portfolio tab data so user sees updated positions immediately
+      try{refreshPortfolio();}catch(_e){}
+      try{loadConditionalOrders();}catch(_e){}
+      // Show next batch button if more batches remain
+      updateBatchUI();
     }else if(d.anyFilled||filledCount>0){
       statusEl.style.color='var(--accent)';
       statusEl.textContent='部分成交 ('+filledCount+'/'+_fillPollOrderIds.length+')'+
@@ -799,6 +807,92 @@ function skipFillConfirm(){
   if(!ok)return;
   toast('⏭️ 已跳过成交确认，进入实盘监控');
   startMonitoring();
+}
+
+/* ══════ SEQUENTIAL BATCH EXECUTION ══════ */
+function executeNextBatch(){
+  var data=_lastRecommendData;
+  if(!data||!Array.isArray(data.allocations)||data.allocations.length===0){
+    toast('推荐数据已丢失，请重新生成');
+    return;
+  }
+  var nextBatch=_recCurrentBatch+1;
+  if(nextBatch>3){
+    toast('已完成所有 3 个批次建仓');
+    return;
+  }
+  // Determine the batch percentage from allocation entryPrices (batch2=25%, batch3=15%)
+  var batchKey='batch'+nextBatch;
+  var sampleAlloc=data.allocations[0];
+  var entryPrices=sampleAlloc&&sampleAlloc.entryPrices||{};
+  var batchInfo=entryPrices[batchKey];
+  var batchPct=batchInfo&&batchInfo.pct?batchInfo.pct:(nextBatch===2?25:15);
+  var ok=confirm('当前已完成第 '+_recCurrentBatch+' 批次建仓。\\n即将执行第 '+nextBatch+' 批次（约 '+batchPct+'% 仓位），是否继续？');
+  if(!ok)return;
+
+  var trailingVal=Number(document.getElementById('rec-exec-trailing').value);
+  if(!isFinite(trailingVal))trailingVal=8;
+  trailingVal=Math.max(2,Math.min(20,trailingVal));
+  var createCond=document.getElementById('rec-exec-conds').checked;
+
+  var statusEl=document.getElementById('rec-exec-status');
+  var resultEl=document.getElementById('rec-exec-result');
+  statusEl.style.color='var(--text-dim)';
+  statusEl.textContent='正在提交第 '+nextBatch+' 批次委托…';
+
+  // Override execute_pct with the batch-specific percentage
+  api('/quant/admin/api/recommend-execute',{
+    method:'POST',
+    body:JSON.stringify({
+      dry_run:false,
+      execute_pct:batchPct,
+      batch_number:nextBatch,
+      create_conditional_orders:createCond,
+      trailing_stop_pct:trailingVal,
+      allocations:data.allocations
+    })
+  }).then(function(resp){
+    if(resp.error){
+      statusEl.style.color='var(--red)';
+      statusEl.textContent='第 '+nextBatch+' 批次执行失败: '+resp.error;
+      toast('❌ '+resp.error);
+      return;
+    }
+    var exec=resp.execution||{};
+    _recCurrentBatch=nextBatch;
+    _recBatchHistory.push({batch:nextBatch,pct:batchPct,submitted:exec.submitted||0});
+    statusEl.style.color='var(--green)';
+    statusEl.textContent='第 '+nextBatch+' 批次已提交 '+(exec.submitted||0)+' 笔委托';
+    toast('✅ 第 '+nextBatch+' 批次已提交');
+    // Restart fill polling for the new batch
+    if(exec.submitted>0){
+      startFillConfirmPolling(exec.orders||[]);
+    }
+    updateBatchUI();
+  }).catch(function(e){
+    statusEl.style.color='var(--red)';
+    statusEl.textContent='第 '+nextBatch+' 批次执行失败: '+e.message;
+  });
+}
+
+function updateBatchUI(){
+  var nextBtn=document.getElementById('btn-fill-next-batch');
+  var batchInfo=document.getElementById('fill-batch-info');
+  if(!nextBtn||!batchInfo)return;
+  if(_recCurrentBatch<3&&_fillConfirmed){
+    nextBtn.style.display='';
+    nextBtn.textContent='📦 执行第 '+(_recCurrentBatch+1)+' 批次';
+    batchInfo.style.display='';
+    batchInfo.textContent='已完成: '+_recBatchHistory.map(function(b){return '第'+b.batch+'批('+b.pct+'%, '+b.submitted+'笔)'}).join(' → ')+' | 下一批次: 第'+(_recCurrentBatch+1)+'批';
+  }else if(_recCurrentBatch>=3){
+    nextBtn.style.display='none';
+    batchInfo.style.display='';
+    batchInfo.textContent='✅ 全部 3 个批次建仓已完成';
+    batchInfo.style.color='var(--green)';
+  }else{
+    nextBtn.style.display='none';
+    batchInfo.style.display='none';
+  }
 }
 
 `;

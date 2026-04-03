@@ -164,6 +164,37 @@ export function getPlannerBodyHtml(b: string): string {
       <tbody></tbody>
     </table></div>
   </div>
+
+  <!-- Conditional order tracking for portfolio positions -->
+  <div class="card" style="margin-top:14px">
+    <h3 style="cursor:pointer;user-select:none" onclick="togglePortfolioConds()">
+      🛡️ 持仓条件单状态
+      <span id="pf-cond-toggle" style="float:right;font-size:12px;color:var(--text-dim)">▶ 展开</span>
+    </h3>
+    <div id="pf-cond-panel" style="display:none;margin-top:8px">
+      <div class="btn-group" style="margin-bottom:8px;gap:6px">
+        <button class="btn btn-sm" onclick="loadPortfolioConditionals()">🔄 刷新</button>
+        <button class="btn btn-sm" onclick="checkConditionalNow()">⚡ 立即检查触发</button>
+      </div>
+      <div id="pf-cond-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
+      <div style="overflow-x:auto"><table id="pf-cond-table" style="font-size:12px">
+        <thead><tr><th>代码</th><th>类型</th><th>入场价</th><th>触发价/比例</th><th>当前止损价</th><th>峰值价</th><th>数量</th><th>创建时间</th><th>状态</th><th>触发结果</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <!-- Equity curve chart -->
+  <div class="card" style="margin-top:14px">
+    <h3>📈 收益曲线 <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="loadEquityCurve()">🔄 刷新</button>
+    </h3>
+    <div id="equity-curve-kpis" class="kpi-row" style="margin-bottom:8px"></div>
+    <div id="equity-curve-chart" style="height:300px;width:100%;position:relative">
+      <canvas id="equity-canvas" style="width:100%;height:100%"></canvas>
+    </div>
+    <div id="equity-curve-status" style="font-size:12px;color:var(--text-dim);margin-top:4px"></div>
+  </div>
 </div>
 
 <!-- ═══ Screen Tab ═══ -->
@@ -1165,9 +1196,11 @@ export function getPlannerBodyHtml(b: string): string {
       </table></div>
       <div class="btn-group" style="margin-top:10px;gap:8px">
         <button class="btn btn-primary" id="btn-fill-monitor" disabled onclick="startMonitoringAfterFill()">🚀 进入实盘监控</button>
+        <button class="btn" id="btn-fill-next-batch" style="display:none" onclick="executeNextBatch()">📦 执行下一批次</button>
         <button class="btn" id="btn-fill-skip" onclick="skipFillConfirm()">⏭️ 跳过确认，直接监控</button>
         <button class="btn" id="btn-fill-refresh" onclick="pollFillStatusOnce()">🔄 手动刷新</button>
       </div>
+      <div id="fill-batch-info" style="font-size:12px;color:var(--accent);margin-top:6px;display:none"></div>
       <div id="fill-confirm-hint" style="font-size:11px;color:var(--text-dim);margin-top:6px">自动每 5 秒轮询订单状态，全部成交或有持仓后可进入实盘监控。</div>
     </div>
 

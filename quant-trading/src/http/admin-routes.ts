@@ -1239,6 +1239,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const dryRun = body.dry_run === true || body.dryRun === true;
         const forcePremarket = body.force_premarket === true || body.forcePremarket === true;
         const executePct = Math.min(100, Math.max(10, toFiniteNumber(body.execute_pct, 60)));
+        const batchNumber = Math.min(3, Math.max(1, clampInteger(body.batch_number, 1, 3, 1)));
         const createConditionalOrders =
           body.create_conditional_orders !== false && body.createConditionalOrders !== false;
         const trailingStopPct =
@@ -1284,11 +1285,14 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             raw.entryPrices && typeof raw.entryPrices === "object"
               ? (raw.entryPrices as Record<string, unknown>)
               : undefined;
-          const batch1 =
-            entryPrices?.batch1 && typeof entryPrices.batch1 === "object"
-              ? (entryPrices.batch1 as Record<string, unknown>)
-              : undefined;
-          const rawBatchPct = toFiniteNumber(batch1?.pct, executePct);
+          const batchKey = `batch${batchNumber}`;
+          const batchEntry =
+            entryPrices?.[batchKey] && typeof entryPrices[batchKey] === "object"
+              ? (entryPrices[batchKey] as Record<string, unknown>)
+              : entryPrices?.batch1 && typeof entryPrices.batch1 === "object"
+                ? (entryPrices.batch1 as Record<string, unknown>)
+                : undefined;
+          const rawBatchPct = toFiniteNumber(batchEntry?.pct, executePct);
           const batchPct = Math.min(100, Math.max(10, rawBatchPct));
 
           const targetShares = Math.max(1, Math.floor((sourceShares * batchPct) / 100));
@@ -1301,7 +1305,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             continue;
           }
 
-          const limitPrice = toFiniteNumber(batch1?.price, toFiniteNumber(raw.price, 0));
+          const limitPrice = toFiniteNumber(batchEntry?.price, toFiniteNumber(raw.price, 0));
           if (limitPrice <= 0) {
             skipped.push({ code, reason: "无有效入场价格" });
             continue;
@@ -1692,11 +1696,11 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             raw.entryPrices && typeof raw.entryPrices === "object"
               ? (raw.entryPrices as Record<string, unknown>)
               : undefined;
-          const batch1 =
+          const schedBatchEntry =
             entryPrices?.batch1 && typeof entryPrices.batch1 === "object"
               ? (entryPrices.batch1 as Record<string, unknown>)
               : undefined;
-          const rawBatchPct = toFiniteNumber(batch1?.pct, executePct);
+          const rawBatchPct = toFiniteNumber(schedBatchEntry?.pct, executePct);
           const batchPct = Math.min(100, Math.max(10, rawBatchPct));
 
           const targetShares = Math.max(1, Math.floor((sourceShares * batchPct) / 100));
@@ -1709,7 +1713,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             continue;
           }
 
-          const limitPrice = toFiniteNumber(batch1?.price, toFiniteNumber(raw.price, 0));
+          const limitPrice = toFiniteNumber(schedBatchEntry?.price, toFiniteNumber(raw.price, 0));
           if (limitPrice <= 0) {
             skipped.push({ code, reason: "无有效入场价格" });
             continue;

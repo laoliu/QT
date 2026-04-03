@@ -50,6 +50,171 @@ function refreshPortfolio(){
   });
 }
 
+/* ══════ PORTFOLIO CONDITIONAL ORDER TRACKING ══════ */
+var _pfCondExpanded=false;
+function togglePortfolioConds(){
+  _pfCondExpanded=!_pfCondExpanded;
+  document.getElementById('pf-cond-panel').style.display=_pfCondExpanded?'block':'none';
+  document.getElementById('pf-cond-toggle').textContent=_pfCondExpanded?'▼ 收起':'▶ 展开';
+  if(_pfCondExpanded)loadPortfolioConditionals();
+}
+
+function loadPortfolioConditionals(){
+  var statusEl=document.getElementById('pf-cond-status');
+  statusEl.textContent='加载中…';
+  api('/quant/admin/api/conditional-orders?active=false')
+    .then(function(d){
+      var orders=d.orders||[];
+      var active=orders.filter(function(o){return !o.triggered});
+      var triggered=orders.filter(function(o){return o.triggered});
+      statusEl.textContent='共 '+orders.length+' 条 | 监控中 '+active.length+' 条 | 已触发 '+triggered.length+' 条';
+      var tbody=document.querySelector('#pf-cond-table tbody');
+      if(!orders.length){
+        tbody.innerHTML='<tr><td colspan="10" style="color:var(--text-dim)">暂无条件单</td></tr>';
+        return;
+      }
+      var rows='';
+      orders.forEach(function(o){
+        var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
+          o.type==='trailing_stop'?'<span class="badge badge-blue">跟踪止损</span>':
+          o.type==='trailing_atr'?'<span class="badge badge-blue">ATR止损</span>':
+          o.type==='trailing_tp'?'<span class="badge badge-green">跟踪止盈</span>':
+          o.type==='staged_tp'?'<span class="badge badge-green">分段止盈</span>':
+          '<span class="badge">'+esc(o.type)+'</span>';
+        var triggerDisplay=o.type==='trailing_stop'||o.type==='trailing_atr'?((o.triggerValue*100).toFixed(1)+'%'):num(o.triggerValue);
+        var trailingPrice=o.trailingStopPrice?num(o.trailingStopPrice):'-';
+        var peakPrice=o.peakPrice?num(o.peakPrice):'-';
+        var statusHtml;
+        if(o.triggered){
+          statusHtml='<span class="badge badge-yellow">已触发</span>';
+          if(o.triggeredAt)statusHtml+='<br><span style="font-size:10px">'+(new Date(o.triggeredAt)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})+'</span>';
+        }else{
+          statusHtml='<span class="badge badge-green">监控中</span>';
+        }
+        var resultHtml=o.triggerResult?'<span style="font-size:11px">'+esc(o.triggerResult)+'</span>':'-';
+        var time=o.createdAt?(new Date(o.createdAt)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+        var rowStyle=o.triggered?'background:rgba(251,191,36,.06)':'';
+        rows+='<tr style="'+rowStyle+'">'+
+          '<td><strong>'+esc(o.symbol)+'</strong></td>'+
+          '<td>'+typeLabel+'</td>'+
+          '<td>'+num(o.entryPrice)+'</td>'+
+          '<td>'+triggerDisplay+'</td>'+
+          '<td>'+trailingPrice+'</td>'+
+          '<td>'+peakPrice+'</td>'+
+          '<td>'+numInt(o.quantity)+'</td>'+
+          '<td style="font-size:11px">'+time+'</td>'+
+          '<td>'+statusHtml+'</td>'+
+          '<td>'+resultHtml+'</td>'+
+          '</tr>';
+      });
+      tbody.innerHTML=rows;
+    })
+    .catch(function(e){
+      statusEl.textContent='加载失败: '+e.message;
+    });
+}
+
+/* ══════ EQUITY CURVE ══════ */
+function loadEquityCurve(){
+  var statusEl=document.getElementById('equity-curve-status');
+  statusEl.textContent='加载中…';
+  // Load snapshots and summary in parallel
+  Promise.all([
+    api('/quant/api/equity-history?mode=paper'),
+    api('/quant/api/equity-history/summary?mode=paper')
+  ]).then(function(results){
+    var snapshots=results[0].data||[];
+    var summary=results[1].data||{};
+    if(!snapshots.length){
+      statusEl.textContent='暂无权益历史数据（需要引擎运行后自动记录）';
+      document.getElementById('equity-curve-kpis').innerHTML='';
+      return;
+    }
+      // Render KPIs
+      var kpiRow=document.getElementById('equity-curve-kpis');
+      kpiRow.innerHTML=[
+        kpiHtml(summary.totalDays+'天','记录天数'),
+        kpiHtml('¥'+numInt(summary.startEquity||0),'起始权益'),
+        kpiHtml('¥'+numInt(summary.endEquity||0),'当前权益'),
+        kpiHtml('<span style="color:'+pctColor(summary.totalReturnPct)+'">'+pct(summary.totalReturnPct/100)+'</span>','总收益率'),
+        kpiHtml('<span style="color:var(--red)">-'+pct(summary.maxDrawdownPct/100)+'</span>','最大回撤'),
+        kpiHtml(summary.winRate?summary.winRate.toFixed(1)+'%':'-','日胜率'),
+      ].join('');
+      // Draw chart
+      drawEquityCurve(snapshots);
+      statusEl.textContent='最近更新: '+(snapshots[snapshots.length-1].date||'');
+    })
+    .catch(function(e){
+      statusEl.textContent='加载失败: '+e.message;
+    });
+}
+
+function drawEquityCurve(snapshots){
+  var canvas=document.getElementById('equity-canvas');
+  if(!canvas||!canvas.getContext)return;
+  var ctx=canvas.getContext('2d');
+  var rect=canvas.parentElement.getBoundingClientRect();
+  var w=rect.width||800;
+  var h=rect.height||300;
+  canvas.width=w*2;canvas.height=h*2;
+  canvas.style.width=w+'px';canvas.style.height=h+'px';
+  ctx.scale(2,2);
+  ctx.clearRect(0,0,w,h);
+
+  var equities=snapshots.map(function(s){return s.equity});
+  var minE=Math.min.apply(null,equities);
+  var maxE=Math.max.apply(null,equities);
+  var range=maxE-minE||1;
+  var padL=60,padR=20,padT=20,padB=30;
+  var chartW=w-padL-padR;
+  var chartH=h-padT-padB;
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.06)';
+  ctx.lineWidth=0.5;
+  for(var gi=0;gi<=4;gi++){
+    var gy=padT+chartH*(1-gi/4);
+    ctx.beginPath();ctx.moveTo(padL,gy);ctx.lineTo(w-padR,gy);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.4)';
+    ctx.font='10px sans-serif';
+    ctx.textAlign='right';
+    ctx.fillText('¥'+numInt(minE+range*gi/4),padL-4,gy+4);
+  }
+
+  // Equity line
+  ctx.strokeStyle='#0d9488';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(var i=0;i<snapshots.length;i++){
+    var x=padL+chartW*(i/(snapshots.length-1||1));
+    var y=padT+chartH*(1-(equities[i]-minE)/range);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Fill gradient
+  var grad=ctx.createLinearGradient(0,padT,0,h-padB);
+  grad.addColorStop(0,'rgba(13,148,136,0.3)');
+  grad.addColorStop(1,'rgba(13,148,136,0.02)');
+  ctx.lineTo(padL+chartW,h-padB);
+  ctx.lineTo(padL,h-padB);
+  ctx.closePath();
+  ctx.fillStyle=grad;
+  ctx.fill();
+
+  // Date labels
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.font='10px sans-serif';
+  ctx.textAlign='center';
+  var labelCount=Math.min(6,snapshots.length);
+  for(var li=0;li<labelCount;li++){
+    var idx=Math.floor(li*(snapshots.length-1)/(labelCount-1||1));
+    var lx=padL+chartW*(idx/(snapshots.length-1||1));
+    ctx.fillText(snapshots[idx].date.slice(5),lx,h-padB+14);
+  }
+}
+
 /* ══════ SCREENING ══════ */
 function runScreening(){
   var el=document.getElementById('screen-status');

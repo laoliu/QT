@@ -532,16 +532,43 @@ export class RemoteQMTBroker implements IBrokerAdapter {
 
   private mapRawPosition(r: Record<string, unknown>): LivePosition {
     const symbol = fromQmtSymbol(String(r.stock_code ?? ""));
+    const volume = (r.volume as number) ?? 0;
+    const marketValue = (r.market_value as number) ?? 0;
+    const avgPrice = (r.avg_price as number) ?? 0;
+
+    // Prefer last_price; derive from market_value/volume otherwise
+    let currentPrice: number | undefined;
+    const lastPrice = r.last_price as number | undefined;
+    if (lastPrice != null && lastPrice > 0) {
+      currentPrice = lastPrice;
+    } else if (volume > 0 && marketValue > 0) {
+      currentPrice = marketValue / volume;
+    }
+
+    // Prefer pre-calculated PnL from remote; derive from price otherwise
+    let unrealizedPnl: number | undefined;
+    let unrealizedPnlPct: number | undefined;
+    if (r.unrealized_pnl != null) {
+      unrealizedPnl = r.unrealized_pnl as number;
+      unrealizedPnlPct = (r.unrealized_pnl_pct as number) ?? undefined;
+    } else if (currentPrice != null && currentPrice > 0 && avgPrice > 0) {
+      unrealizedPnl = (currentPrice - avgPrice) * volume;
+      unrealizedPnlPct = (currentPrice - avgPrice) / avgPrice;
+    }
+
     return {
       symbol,
       name: String(r.stock_name ?? ""),
       market: detectMarketFromSymbol(symbol),
-      quantity: (r.volume as number) ?? 0,
+      quantity: volume,
       availableQty: (r.can_use_volume as number) ?? 0,
       frozenQty: (r.frozen_volume as number) ?? 0,
-      todayBuyQty: 0,
-      avgCost: (r.avg_price as number) ?? 0,
-      marketValue: (r.market_value as number) ?? 0,
+      todayBuyQty: (r.today_buy_volume as number) ?? 0,
+      avgCost: avgPrice,
+      currentPrice,
+      marketValue: marketValue > 0 ? marketValue : undefined,
+      unrealizedPnl,
+      unrealizedPnlPct,
       source: "broker",
       lastSyncAt: new Date().toISOString(),
     };

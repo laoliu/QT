@@ -233,6 +233,14 @@ export class LiveEngine implements OpenClawPluginService {
       if (allSymbols.length > 0) {
         this.stalenessMonitor.registerSymbols(allSymbols);
       }
+      // Also register symbols from broker positions so staleness tracks them
+      if (this.lastPositions.length > 0) {
+        const posSymbols = this.lastPositions.map((p) => p.symbol);
+        const extra = posSymbols.filter((s) => !allSymbols.includes(s));
+        if (extra.length > 0) {
+          this.stalenessMonitor.registerSymbols(extra);
+        }
+      }
       this.stalenessMonitor.start();
 
       this.setStatus("running");

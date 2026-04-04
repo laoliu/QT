@@ -80,6 +80,23 @@ export async function handlePortfolioApi(
     // Force a fresh broker sync so the API always returns up-to-date data
     const { account, positions } = await engine.syncNow();
     if (account) {
+      // When broker reports 0 profit, compute from position-level unrealized PnL
+      let profit = account.profit;
+      let profitPct = account.profitPct;
+      if (profit === 0 && positions.length > 0) {
+        const totalUnrealized = positions.reduce(
+          (sum, p) => sum + (p.unrealizedPnl ?? 0),
+          0,
+        );
+        if (totalUnrealized !== 0) {
+          profit = totalUnrealized;
+          const totalCost = positions.reduce(
+            (sum, p) => sum + (p.avgCost ?? 0) * (p.quantity ?? 0),
+            0,
+          );
+          profitPct = totalCost > 0 ? totalUnrealized / totalCost : 0;
+        }
+      }
       return {
         status: "ok",
         source: account.brokerType,
@@ -90,9 +107,9 @@ export async function handlePortfolioApi(
           frozenCash: account.frozenCash,
           totalValue: account.totalAssets,
           marketValue: account.marketValue,
-          initialCash: account.totalAssets - account.profit,
-          profit: account.profit,
-          profitPct: account.profitPct,
+          initialCash: account.totalAssets - profit,
+          profit,
+          profitPct,
           todayProfit: account.todayProfit ?? 0,
           lastSyncAt: account.lastSyncAt,
           brokerType: account.brokerType,

@@ -592,6 +592,14 @@ export function getDashboardHtml(baseUrl: string): string {
         return;
       }
 
+      // Single data point — show current value instead of empty chart
+      if (history && Array.isArray(history) && history.length === 1) {
+        const h = history[0];
+        document.getElementById('equityChart').innerHTML =
+          '<div class="stats"><div class="stat"><span class="value">¥'+fmt(h.equity)+'</span><span class="label">'+h.date+' 净值（首日，暂无趋势）</span></div></div>';
+        return;
+      }
+
       // Fallback: try pnl endpoint for legacy data
       const pr = await api('/quant/api/pnl' + modeParam(false)); const d=pr?.data;
       const legacyHistory = d?.equityHistory ?? d?.history;

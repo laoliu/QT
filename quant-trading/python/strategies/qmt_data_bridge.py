@@ -1203,12 +1203,17 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 pass  # client disconnected mid-response
 
         def log_message(self, fmt, *args):
+            msg = fmt % args if args else fmt
+            # Suppress health-check noise
             if len(args) > 0 and "/health" in str(args[0]):
                 return
             # Suppress high-frequency long-poll access logs; keep errors/non-200 visible.
             if len(args) > 1 and "/trading/events" in str(args[0]) and str(args[1]) == "200":
                 return
-            _log("[serve] " + (fmt % args))
+            # Suppress external scanner noise (RDP probes, TLS handshakes, etc.)
+            if "Bad HTTP" in msg or "\\x03\\x00" in msg or "mstshash" in msg:
+                return
+            _log("[serve] " + msg)
 
     server = ThreadingHTTPServer((host, port), BridgeHandler)
     _log("HTTP serve mode started -- http://%s:%d (threaded)" % (host, port))

@@ -331,6 +331,7 @@ def _fetch_cn_klines_baidu(ak, symbol: str, period: str, gap_start: str, gap_end
 # ── QMT Bridge K-line fetcher ─────────────────────────────────────
 
 _qmt_bridge_url_cache: str | None = None
+_qmt_bridge_failed: bool = False  # fast-fail: skip QMT after first connection error
 
 
 def _read_qmt_bridge_url() -> str:
@@ -384,6 +385,10 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
 
     Returns list of bar dicts, or empty list if bridge unavailable.
     """
+    global _qmt_bridge_failed
+    if _qmt_bridge_failed:
+        return []
+
     bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "").rstrip("/")
     if not bridge_url:
         bridge_url = _read_qmt_bridge_url()
@@ -400,7 +405,7 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
         else:
             qmt_code = symbol
 
-        # Estimate count from date range
+        # Estimate count from date range (dates already normalized to %Y-%m-%d by get_klines)
         start_dt = datetime.strptime(start, "%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
         days_diff = max(1, (end_dt - start_dt).days)
@@ -416,6 +421,9 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
             return []
 
         raw_bars = data.get("data", {}).get(qmt_code, [])
+        if not raw_bars:
+            # Try with plain symbol as key (bridge may return without .SH/.SZ suffix)
+            raw_bars = data.get("data", {}).get(symbol, [])
         if not raw_bars:
             # Try with plain symbol as key
             raw_bars = list(data.get("data", {}).values())
@@ -448,6 +456,10 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
                 "amount": float(b.get("amount", 0)),
             })
         return bars
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+        _qmt_bridge_failed = True
+        print(f"[QMT] 桥接连接失败，本次运行跳过QMT: {e}", file=sys.stderr)
+        return []
     except Exception as e:
         print(f"[QMT] K线获取失败: {e}", file=sys.stderr)
         return []
@@ -500,6 +512,9 @@ def _fetch_tdx_klines(symbol: str, start: str, end: str, market: str = "cn_stock
     try:
         start_dt = datetime.strptime(start, "%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
+        # Normalize for comparisons below
+        start = start_dt.strftime("%Y-%m-%d")
+        end = end_dt.strftime("%Y-%m-%d")
         days_needed = (end_dt - start_dt).days + 10
 
         # pytdx get_security_bars: category 9=daily, max 800 bars per call
@@ -557,6 +572,16 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
       5. Baidu Finance   — stock_zh_a_daily (akshare fallback)
     """
     import akshare as ak
+
+    # Normalize dates to %Y-%m-%d (cache, QMT, TDX all use this format)
+    def _norm_date(d: str) -> str:
+        d = d.strip()
+        if len(d) == 8 and d.isdigit():
+            return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        return d[:10]  # already %Y-%m-%d or longer
+
+    start = _norm_date(start)
+    end = _norm_date(end)
 
     period_map = {"1d": "daily", "1w": "weekly", "1M": "monthly"}
     period = period_map.get(interval, "daily")

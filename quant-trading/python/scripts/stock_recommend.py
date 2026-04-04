@@ -220,24 +220,34 @@ def _compute_technicals(klines: list[dict]) -> dict:
 
 
 def _fetch_klines_for_codes(codes: list[str]) -> dict[str, list[dict]]:
-    """Fetch 90-day klines for a batch of stock codes. Returns {code: klines}."""
+    """Fetch 90-day klines for a batch of stock codes concurrently. Returns {code: klines}."""
     result = {}
     try:
         from data_providers.akshare_provider import get_klines
     except ImportError:
         return result
 
-    end_date = datetime.now().strftime("%Y%m%d")
+    end_date = datetime.now().strftime("%Y-%m-%d")
     start_dt = datetime.now() - timedelta(days=90)
-    start_date = start_dt.strftime("%Y%m%d")
+    start_date = start_dt.strftime("%Y-%m-%d")
 
-    for code in codes:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _fetch_one(code: str):
         try:
             klines = get_klines(code, "1d", start_date, end_date, "cn_stock")
             if klines and len(klines) >= 20:
-                result[code] = klines
+                return code, klines
         except Exception:
             pass
+        return code, None
+
+    with ThreadPoolExecutor(max_workers=min(len(codes), 4)) as pool:
+        futures = {pool.submit(_fetch_one, c): c for c in codes}
+        for fut in as_completed(futures):
+            code, klines = fut.result()
+            if klines:
+                result[code] = klines
     return result
 
 
@@ -748,12 +758,46 @@ def recommend(
     summary = bt_result.get("summary", {})
     pos_map = {p["symbol"]: p for p in final_positions}
 
-    # ── 2. Fetch real-time quotes ──
-    quotes = _fetch_sina_quotes(pool)
-    fundamentals = _fetch_tencent_fundamentals(pool)
+    # ── 2. Fetch real-time quotes + klines + chip data concurrently ──
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # ── 2.5 Fetch 90-day klines for technical analysis ──
-    klines_map = _fetch_klines_for_codes(pool)
+    _quotes_result = {}
+    _fund_result = {}
+    _klines_result = {}
+    _cyq_results = {}
+
+    def _fetch_quotes():
+        return _fetch_sina_quotes(pool)
+
+    def _fetch_fund():
+        return _fetch_tencent_fundamentals(pool)
+
+    def _fetch_klines():
+        return _fetch_klines_for_codes(pool)
+
+    def _fetch_cyq_one(code):
+        try:
+            return code, fetch_chip_distribution(code)
+        except Exception:
+            return code, None
+
+    with ThreadPoolExecutor(max_workers=min(4 + len(pool), 10)) as executor:
+        fq = executor.submit(_fetch_quotes)
+        ff = executor.submit(_fetch_fund)
+        fk = executor.submit(_fetch_klines)
+        cyq_futures = {executor.submit(_fetch_cyq_one, c): c for c in pool}
+
+        _quotes_result = fq.result()
+        _fund_result = ff.result()
+        _klines_result = fk.result()
+        for fut in as_completed(cyq_futures):
+            code, cyq = fut.result()
+            if cyq:
+                _cyq_results[code] = cyq
+
+    quotes = _quotes_result
+    fundamentals = _fund_result
+    klines_map = _klines_result
 
     # ── 3. Multi-dimensional scoring ──
     scored = []
@@ -910,7 +954,7 @@ def recommend(
                     reasons.extend(manip["signals"])
 
         # --- (H) Chip distribution (筹码分布 CYQ) ---
-        cyq = fetch_chip_distribution(code)
+        cyq = _cyq_results.get(code)
         if cyq:
             cyq_score, cyq_reasons, _ = score_chip_distribution(cyq, price)
             score += cyq_score

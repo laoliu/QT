@@ -27,12 +27,11 @@ try {
 
 # 2) Kill by PID file
 if (Test-Path $PidFile) {
-    $pid = Get-Content $PidFile -Raw
-    $pid = $pid.Trim()
-    if ($pid -match '^\d+$') {
-        $proc = Get-Process -Id ([int]$pid) -ErrorAction SilentlyContinue
+    $gatewayPid = (Get-Content $PidFile -Raw).Trim()
+    if ($gatewayPid -match '^\d+$') {
+        $proc = Get-Process -Id ([int]$gatewayPid) -ErrorAction SilentlyContinue
         if ($proc -and -not $proc.HasExited) {
-            Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id ([int]$gatewayPid) -Force -ErrorAction SilentlyContinue
             $stopped = $true
         }
     }

@@ -245,7 +245,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 top_n: topNPerStrategy,
               },
               config,
-              { timeoutMs: 240_000 },
+              { timeoutMs: 360_000 },
             );
 
             if (!screenResult.ok) {
@@ -332,7 +332,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 stamp_tax: stampTax,
               },
               config,
-              { timeoutMs: 240_000 },
+              { timeoutMs: 360_000 },
             );
 
             if (!backtestResult.ok) {
@@ -521,7 +521,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                   stamp_tax: stampTax,
                 },
                 config,
-                { timeoutMs: 240_000 },
+                { timeoutMs: 360_000 },
               );
 
               if (!btResult.ok) {
@@ -710,7 +710,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
               stamp_tax: stampTax,
             },
             config,
-            { timeoutMs: 300_000 },
+            { timeoutMs: 420_000 },
           );
 
           if (compareResult.ok) {
@@ -773,7 +773,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 endDate,
               },
               config,
-              { timeoutMs: 60_000 },
+              { timeoutMs: 120_000 },
             );
             if (enrichResult.ok && enrichResult.data) {
               const enriched = enrichResult.data.enriched as

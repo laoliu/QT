@@ -228,7 +228,7 @@ function runDailyCompositePick(){
   setDailyPickLoading(true,'正在执行：策略筛选 → 策略回测排行 → 合并候选 → 8股内回测排行（约1-4分钟）…');
   toast('正在运行每日综合选股…');
 
-  api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:600000})
+  api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:900000})
     .then(function(d){
       _dailyPickRunning=false;
       setDailyPickLoading(false,'每日综合选股完成');
@@ -449,7 +449,7 @@ function runRecommend(){
   };
   if(endVal)body.end_date=endVal;
 
-  api('/quant/admin/api/recommend',{method:'POST',body:JSON.stringify(body),_timeout:120000})
+  api('/quant/admin/api/recommend',{method:'POST',body:JSON.stringify(body),_timeout:600000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🎯 生成建仓推荐';
       document.getElementById('rec-status').textContent='分析完成';

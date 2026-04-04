@@ -22,6 +22,7 @@ import json
 import os
 import sqlite3
 import sys
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -188,11 +189,12 @@ class StockCache:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._db_path = self._cache_dir / "stock_data.db"
         self._conn: Optional[sqlite3.Connection] = None
+        self._lock = threading.Lock()
         self._init_db()
 
     def _init_db(self):
         """Initialize database and create schema."""
-        self._conn = sqlite3.connect(str(self._db_path), timeout=10)
+        self._conn = sqlite3.connect(str(self._db_path), timeout=10, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA cache_size=-8000")  # 8MB cache
@@ -200,10 +202,11 @@ class StockCache:
         self._conn.commit()
 
     def _ensure_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._init_db()
-        assert self._conn is not None
-        return self._conn
+        with self._lock:
+            if self._conn is None:
+                self._init_db()
+            assert self._conn is not None
+            return self._conn
 
     def close(self):
         if self._conn:
@@ -475,14 +478,15 @@ class StockCache:
             ))
 
         if records:
-            conn.executemany("""
-                INSERT OR REPLACE INTO kline_data
-                    (symbol, market, period, trade_date,
-                     open_price, high, low, close_price,
-                     volume, amount, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, records)
-            conn.commit()
+            with self._lock:
+                conn.executemany("""
+                    INSERT OR REPLACE INTO kline_data
+                        (symbol, market, period, trade_date,
+                         open_price, high, low, close_price,
+                         volume, amount, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, records)
+                conn.commit()
             print(f"[缓存] 已缓存 {symbol} 的 {len(records)} 条K线数据", file=sys.stderr)
 
     def get_klines_missing_range(

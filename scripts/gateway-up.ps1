@@ -29,7 +29,11 @@ Write-Host "Starting QT gateway on port $Port ..."
 
 Push-Location $ProjectDir
 try {
-    $process = Start-Process -FilePath 'pnpm' `
+    # Resolve pnpm executable — prefer .cmd/.exe over .ps1 for Start-Process compatibility
+    $pnpmCmd = (Get-Command pnpm.cmd -ErrorAction SilentlyContinue)?.Source ??
+               (Get-Command pnpm.exe -ErrorAction SilentlyContinue)?.Source ??
+               'pnpm.cmd'
+    $process = Start-Process -FilePath $pnpmCmd `
         -ArgumentList "openclaw gateway run --bind loopback --port $Port --force" `
         -WindowStyle Hidden `
         -RedirectStandardOutput $LogFile `

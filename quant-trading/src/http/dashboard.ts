@@ -782,7 +782,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const sym = a.metadata?.symbol ?? '';
         const price = a.metadata?.price ?? '';
         const changePct = a.metadata?.changePct ?? '';
-        const hasSymbol = !!sym;
+        const hasSymbol = !!sym && sym !== '*';
         const actions = hasSymbol ? (
           '<div class="alert-actions">' +
           '<button class="btn" onclick="viewStock(\\''+esc(sym)+'\\')" title="查看 K线/行情">📈 行情</button>' +

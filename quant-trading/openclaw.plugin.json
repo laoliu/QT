@@ -296,6 +296,24 @@
       "openclawProxyPort": {
         "type": "number",
         "description": "Port for the OpenClaw iframe reverse proxy. When set, a proxy is started that strips X-Frame-Options/CSP headers, allowing the admin panel to embed the OpenClaw chat UI via iframe. Example: 18890"
+      },
+      "receiver": {
+        "type": "object",
+        "description": "RECEIVER.py bridge service configuration",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether to auto-start RECEIVER.py (default: true)"
+          },
+          "port": {
+            "type": "number",
+            "description": "Listen port for RECEIVER.py (default: 58088)"
+          },
+          "host": {
+            "type": "string",
+            "description": "Listen host for RECEIVER.py (default: 0.0.0.0)"
+          }
+        }
       }
     }
   }

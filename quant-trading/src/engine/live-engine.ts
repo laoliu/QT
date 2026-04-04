@@ -23,6 +23,7 @@ import type { IBrokerAdapter } from "../broker/adapter.js";
 import { createBrokerAdapter } from "../broker/index.js";
 import { DataStalenessMonitor } from "../services/data-staleness-monitor.js";
 import type { StalenessAlertCallback } from "../services/data-staleness-monitor.js";
+import { isCnMarketOpen } from "../broker/paper-broker.js";
 import { tryNotify } from "../services/notify-helper.js";
 import { OrderManager } from "../services/order-manager.js";
 import type {
@@ -225,7 +226,7 @@ export class LiveEngine implements OpenClawPluginService {
 
       // Start data staleness monitor
       this.stalenessMonitor = new DataStalenessMonitor(
-        this.cfg.dataStaleness,
+        { ...this.cfg.dataStaleness, isMarketOpen: isCnMarketOpen },
         this.api.logger,
         { notify: (msg: string) => tryNotify(this.api, msg) },
         this.stalenessAlertCb,

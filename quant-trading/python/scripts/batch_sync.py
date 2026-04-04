@@ -74,6 +74,26 @@ def _qmt_to_plain(qmt: str) -> str:
     return qmt.split(".")[0]
 
 
+def fetch_stock_list_from_bridge() -> dict:
+    """Fetch full A-stock list from the xtdata bridge via /sector_members."""
+    try:
+        body = json.dumps({"sector": "沪深A股"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{WINDOWS_XTDATA_URL}/sector_members",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read())
+            codes = result.get("data", [])
+            if codes:
+                return {s: {} for s in codes}
+    except Exception as e:
+        print(f"[batch_sync] fetch stock list from bridge failed: {e}", file=sys.stderr)
+    return {}
+
+
 def check_bridge() -> dict:
     """Check if Windows xtdata bridge is reachable."""
     try:
@@ -214,6 +234,46 @@ def fetch_via_akshare(codes: list[str], kline_days: int) -> tuple[dict, int, int
     return result, failed, skipped
 
 
+def _populate_missing_cache(cache) -> dict:
+    """Auto-populate stock_list and code_name_map if empty."""
+    extras = {}
+    try:
+        from cache.stock_cache import StockCache
+        conn = cache._ensure_conn()
+
+        # Populate stock_list from kline symbols if empty
+        sl_count = conn.execute("SELECT COUNT(*) FROM stock_list").fetchone()[0]
+        if sl_count == 0:
+            rows = conn.execute(
+                "SELECT DISTINCT symbol FROM kline_data WHERE market = 'cn_stock'"
+            ).fetchall()
+            if rows:
+                stock_data = {}
+                for (sym,) in rows:
+                    ex = "SH" if sym.startswith("6") else "SZ" if sym.startswith(("0", "3")) else "BJ"
+                    stock_data[sym] = {"stock_id": sym, "name": "", "exchange": ex}
+                cache.save_stock_list(stock_data)
+                extras["stock_list"] = len(stock_data)
+                print(f"[batch_sync] auto-populated stock_list with {len(stock_data)} symbols", file=sys.stderr)
+
+        # Populate code_name_map via AKShare if empty
+        cn_count = conn.execute("SELECT COUNT(*) FROM stock_code_name").fetchone()[0]
+        if cn_count == 0:
+            try:
+                import akshare as ak
+                df = ak.stock_info_a_code_name()
+                mapping = {str(r["code"]): str(r["name"]) for _, r in df.iterrows()}
+                if mapping:
+                    cache.save_code_name_map(mapping)
+                    extras["code_name_map"] = len(mapping)
+                    print(f"[batch_sync] auto-populated code_name_map with {len(mapping)} entries", file=sys.stderr)
+            except Exception as e:
+                print(f"[batch_sync] code_name_map fetch failed: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"[batch_sync] _populate_missing_cache error: {e}", file=sys.stderr)
+    return extras
+
+
 def do_sync(config: dict) -> dict:
     """Main sync entrypoint."""
     from cache.stock_cache import StockCache
@@ -237,6 +297,13 @@ def do_sync(config: dict) -> dict:
                 "SELECT DISTINCT symbol FROM kline_data WHERE market = 'cn_stock'"
             ).fetchall()
             stock_list = {r[0]: {} for r in rows} if rows else {}
+        if not stock_list:
+            # Auto-fetch full A-stock list from bridge
+            bridge_info = check_bridge()
+            if bridge_info["online"]:
+                stock_list = fetch_stock_list_from_bridge()
+                if stock_list:
+                    print(f"[batch_sync] auto-fetched {len(stock_list)} stocks from bridge", file=sys.stderr)
 
     if not stock_list:
         return {"status": "error", "message": "无股票列表，请先执行选股或手动指定代码"}
@@ -302,6 +369,7 @@ def do_sync(config: dict) -> dict:
         "fetched": fetched,
         "failed": failed_count,
         "skipped": skipped_count,
+        "extras": _populate_missing_cache(cache),
     }
 
 
@@ -323,9 +391,14 @@ def do_check(config: dict) -> dict:
                 "SELECT DISTINCT symbol FROM kline_data WHERE market = 'cn_stock'"
             ).fetchall()
             stock_list = {r[0]: {} for r in rows} if rows else {}
+        if not stock_list:
+            bridge_info = check_bridge()
+            if bridge_info["online"]:
+                stock_list = fetch_stock_list_from_bridge()
 
     if not stock_list:
-        return {"status": "ok", "total": 0, "fresh": 0, "stale": 0, "no_cache": 0, "need_fetch": 0}
+        bridge_info = check_bridge()
+        return {"status": "ok", "total": 0, "fresh": 0, "stale": 0, "no_cache": 0, "need_fetch": 0, "bridge": bridge_info}
 
     codes, fresh, stale, no_cache = get_stale_symbols(cache, stock_list, kline_days)
 

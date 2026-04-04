@@ -211,6 +211,9 @@ function doSync(){
     el.innerHTML=html;
     toast('✅ 同步完成: '+r.fetched+' 只已更新');
     loadData();
+  }).catch(function(err){
+    el.innerHTML='<span style="color:var(--red)">❌ 请求超时或失败: '+esc(String(err.message||err))+'</span>';
+    toast('❌ 同步请求失败');
   });
 }
 function invalidateCache(symbol,interval){
@@ -628,7 +631,7 @@ function chatConnect(){
         type:'req',id:'connect-'+(++_chatReqId),method:'connect',
         params:{
           minProtocol:3,maxProtocol:3,
-          client:{id:'openclaw-control-ui',displayName:'量化管理面板',version:'1.0',platform:'browser',mode:'ui'},
+          client:{id:'openclaw-control-ui',displayName:'量化管理面板',version:'1.0',platform:'browser',mode:'webchat'},
           role:'operator',
           scopes:['operator.read','operator.write','operator.admin'],
           caps:[],

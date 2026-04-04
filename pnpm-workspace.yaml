@@ -1,3 +1,38 @@
 packages:
   - .
   - quant-trading
+allowBuilds:
+  ' ': true
+  '-': true
+  /: true
+  '@': true
+  '@matrix-org/matrix-sdk-crypto-nodejs': false
+  a: true
+  b: true
+  c: true
+  d: true
+  e: true
+  esbuild: false
+  f: true
+  g: true
+  h: true
+  i: true
+  j: true
+  k: true
+  koffi: false
+  l: true
+  m: true
+  n: true
+  o: true
+  openclaw: false
+  p: true
+  protobufjs: false
+  r: true
+  s: true
+  sharp: false
+  t: true
+  u: true
+  w: true
+  x: true
+  y: true
+scriptShell: C:\WINDOWS\System32\cmd.exe

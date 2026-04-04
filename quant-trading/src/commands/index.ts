@@ -1144,7 +1144,7 @@ export function createQuantCommands(
     // ── Dragon Tiger Board ──────────────────────────────────────────────
     {
       name: "/龙虎榜",
-      aliases: ["/lhb", "/dragon"],
+      aliases: ["/lhb", "/dragon_tiger"],
       description:
         "龙虎榜查询。用法:\n" +
         "  /龙虎榜          — 今日龙虎榜\n" +

@@ -17,11 +17,18 @@ export interface OpenClawProxyOptions {
   gatewayToken?: string;
 }
 
+let _activeProxy: http.Server | undefined;
+
 /**
  * Start the OpenClaw iframe proxy.
  * Returns the `http.Server` so callers can close it on shutdown.
+ * If a proxy is already running, closes it first to avoid EADDRINUSE.
  */
 export function startOpenClawProxy(opts: OpenClawProxyOptions): http.Server {
+  if (_activeProxy) {
+    try { _activeProxy.close(); } catch { /* ignore */ }
+    _activeProxy = undefined;
+  }
   const { target, port, gatewayToken } = opts;
   const targetUrl = new URL(target);
   const targetHost = targetUrl.hostname;
@@ -124,9 +131,18 @@ export function startOpenClawProxy(opts: OpenClawProxyOptions): http.Server {
     proxyReq.end();
   });
 
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.warn(`[openclaw-proxy] port ${port} already in use — skipping`);
+    } else {
+      console.error(`[openclaw-proxy] error:`, err.message);
+    }
+  });
+
   server.listen(port, () => {
     console.log(`[openclaw-proxy] iframe proxy on http://localhost:${port} → ${target}`);
   });
 
+  _activeProxy = server;
   return server;
 }

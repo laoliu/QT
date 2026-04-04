@@ -14,13 +14,29 @@
     "gateway:up": "QT_GATEWAY_PORT=18889 ./scripts/gateway-up.sh",
     "gateway:down": "QT_GATEWAY_PORT=18889 ./scripts/gateway-down.sh",
     "gateway:up:prod": "QT_GATEWAY_PORT=18789 ./scripts/gateway-up.sh",
-    "gateway:down:prod": "QT_GATEWAY_PORT=18789 ./scripts/gateway-down.sh"
+    "gateway:down:prod": "QT_GATEWAY_PORT=18789 ./scripts/gateway-down.sh",
+    "gateway:up:win": "powershell -ExecutionPolicy Bypass -File scripts/gateway-up.ps1 -Port 18889",
+    "gateway:down:win": "powershell -ExecutionPolicy Bypass -File scripts/gateway-down.ps1 -Port 18889",
+    "gateway:up:win:prod": "powershell -ExecutionPolicy Bypass -File scripts/gateway-up.ps1 -Port 18789",
+    "gateway:down:win:prod": "powershell -ExecutionPolicy Bypass -File scripts/gateway-down.ps1 -Port 18789"
   },
   "devDependencies": {
     "typescript": "^5.8.0",
     "vitest": "^3.1.0"
   },
   "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.60.0",
+    "@slack/bolt": "^4.6.0",
     "@slack/web-api": "^7.15.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@matrix-org/matrix-sdk-crypto-nodejs",
+      "esbuild",
+      "koffi",
+      "openclaw",
+      "protobufjs",
+      "sharp"
+    ]
   }
 }

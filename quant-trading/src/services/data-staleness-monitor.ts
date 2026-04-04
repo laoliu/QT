@@ -23,6 +23,12 @@ export type DataStalenessConfig = {
   warningThresholdMs?: number;
   /** Critical threshold per symbol (ms, default 300_000) */
   criticalThresholdMs?: number;
+  /**
+   * Optional callback that returns true when the market is open.
+   * When provided, staleness checks are skipped outside trading hours
+   * to avoid false alarms on weekends / holidays / after-hours.
+   */
+  isMarketOpen?: () => boolean;
 };
 
 const DEFAULTS: Required<DataStalenessConfig> = {
@@ -203,6 +209,15 @@ export class DataStalenessMonitor {
 
   /** Periodic staleness check — called by the interval timer. */
   check(): void {
+    // Skip checks outside trading hours to avoid false alarms
+    if (this.config.isMarketOpen && !this.config.isMarketOpen()) {
+      // Clear any previously fired alerts so they can re-fire next session
+      if (this.firedAlerts.size > 0) {
+        this.firedAlerts.clear();
+      }
+      return;
+    }
+
     const report = this.getReport();
 
     for (const sym of report.symbols) {

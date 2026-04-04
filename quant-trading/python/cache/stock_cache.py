@@ -578,6 +578,68 @@ class StockCache:
         )
         conn.commit()
 
+    def auto_populate(self) -> dict[str, int]:
+        """Auto-populate stock_list, code_name_map, and fundamentals from existing kline data if empty."""
+        conn = self._ensure_conn()
+        populated: dict[str, int] = {}
+
+        # Populate stock_list from kline symbols if empty
+        sl_count = conn.execute("SELECT COUNT(*) FROM stock_list").fetchone()[0]
+        if sl_count == 0:
+            rows = conn.execute(
+                "SELECT DISTINCT symbol FROM kline_data WHERE market = 'cn_stock'"
+            ).fetchall()
+            if rows:
+                stock_data = {}
+                for (sym,) in rows:
+                    ex = "SH" if sym.startswith("6") else "SZ" if sym.startswith(("0", "3")) else "BJ"
+                    stock_data[sym] = {"stock_id": sym, "name": "", "exchange": ex}
+                self.save_stock_list(stock_data)
+                populated["stock_list"] = len(stock_data)
+                print(f"[缓存] 从K线数据自动填充股票列表: {len(stock_data)} 只", file=sys.stderr)
+
+        # Populate code_name_map via AKShare if empty
+        cn_count = conn.execute("SELECT COUNT(*) FROM stock_code_name").fetchone()[0]
+        if cn_count == 0:
+            try:
+                import akshare as ak
+                df = ak.stock_info_a_code_name()
+                mapping = {str(r["code"]).zfill(6): str(r["name"]) for _, r in df.iterrows()}
+                if mapping:
+                    self.save_code_name_map(mapping)
+                    populated["code_name_map"] = len(mapping)
+                    print(f"[缓存] 从AKShare自动填充代码名称映射: {len(mapping)} 条", file=sys.stderr)
+
+                    # Backfill stock_list names from code_name_map
+                    sl_rows = conn.execute("SELECT code FROM stock_list WHERE name = '' OR name IS NULL").fetchall()
+                    if sl_rows:
+                        updates = [(mapping.get(code, ""), code) for (code,) in sl_rows if code in mapping]
+                        if updates:
+                            conn.executemany(
+                                "UPDATE stock_list SET name = ? WHERE code = ?", updates
+                            )
+                            conn.commit()
+                            print(f"[缓存] 回填股票名称: {len(updates)} 条", file=sys.stderr)
+            except Exception as e:
+                print(f"[缓存] AKShare代码名称映射获取失败: {e}", file=sys.stderr)
+
+        # Populate fundamentals via Xueqiu if empty
+        fund_count = conn.execute("SELECT COUNT(*) FROM stock_fundamentals").fetchone()[0]
+        if fund_count == 0:
+            try:
+                from cache.prefetch import prefetch_fundamentals
+                stock_list = self.get_stock_list() or {}
+                if stock_list:
+                    prefetch_fundamentals(stock_list, top_n=len(stock_list))
+                    new_count = conn.execute("SELECT COUNT(DISTINCT code) FROM stock_fundamentals").fetchone()[0]
+                    if new_count:
+                        populated["fundamentals"] = new_count
+                        print(f"[缓存] 从雪球自动填充基本面数据: {new_count} 只", file=sys.stderr)
+            except Exception as e:
+                print(f"[缓存] 基本面数据获取失败: {e}", file=sys.stderr)
+
+        return populated
+
     def stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         conn = self._ensure_conn()
@@ -695,6 +757,11 @@ if __name__ == "__main__":
 
     if action == "stats":
         result = cache.stats()
+    elif action == "refresh":
+        populated = cache.auto_populate()
+        stats = cache.stats()
+        stats["populated"] = populated
+        result = stats
     elif action == "symbols_detail":
         result = cache.symbols_detail()
     elif action == "query_klines":

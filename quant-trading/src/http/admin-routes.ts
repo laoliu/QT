@@ -2858,7 +2858,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const [statsResult, detailResult] = await Promise.all([
           runPythonScript<Record<string, unknown>>(
             "cache/stock_cache.py",
-            { action: "stats" },
+            { action: "refresh" },
             config,
           ),
           runPythonScript<

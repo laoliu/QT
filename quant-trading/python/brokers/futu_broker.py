@@ -137,6 +137,13 @@ def map_order_type_to_futu(order_type: str):
         return OrderType.STOP
     elif order_type == "stop_limit":
         return OrderType.STOP_LIMIT
+    elif order_type == "auction":
+        return OrderType.AUCTION
+    elif order_type == "auction_limit":
+        return OrderType.AUCTION_LIMIT
+    elif order_type == "special_limit":
+        # HK odd-lot / special limit order
+        return OrderType.SPECIAL_LIMIT
     return OrderType.NORMAL
 
 
@@ -273,6 +280,30 @@ class FutuDealHandler(TradeDealHandlerBase if HAS_FUTU else object):
         return ret, data
 
 
+class FutuOrderBookHandler(OrderBookHandlerBase if HAS_FUTU else object):
+    """Receives order book push notifications and forwards as NDJSON events."""
+
+    def on_recv_rsp(self, rsp_pb):
+        ret, data = super().on_recv_rsp(rsp_pb)
+        if ret != RET_OK:
+            return ret, data
+        stock_code = data.get("code", "")
+        bids = []
+        asks = []
+        for item in data.get("Bid", []):
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                bids.append({"price": float(item[0]), "volume": int(item[1]), "order_num": int(item[2]) if len(item) > 2 else 0})
+        for item in data.get("Ask", []):
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                asks.append({"price": float(item[0]), "volume": int(item[1]), "order_num": int(item[2]) if len(item) > 2 else 0})
+        push_event("orderbook", {
+            "stock_code": stock_code,
+            "bids": bids,
+            "asks": asks,
+        })
+        return ret, data
+
+
 # ── Main broker class ─────────────────────────────────────────────
 
 class FutuBrokerBridge:
@@ -315,6 +346,7 @@ class FutuBrokerBridge:
         self.trade_ctx.set_handler(FutuOrderHandler())
         self.trade_ctx.set_handler(FutuDealHandler())
         self.quote_ctx.set_handler(FutuQuoteHandler())
+        self.quote_ctx.set_handler(FutuOrderBookHandler())
 
         return {"status": "connected", "host": self.host, "port": self.port}
 
@@ -762,13 +794,28 @@ class FutuBrokerBridge:
             raise RuntimeError(f"query_option_positions failed: {data}")
 
         result = []
+        if HAS_FUTU:
+            from futu import SecurityType
+            # Futu SecurityType constants for option-like instruments
+            option_types = set()
+            for attr in ("WARRANT", "DRVT", "FUTURE", "PLATE_SET"):
+                if hasattr(SecurityType, attr):
+                    option_types.add(getattr(SecurityType, attr))
+
         for _, row in data.iterrows():
             code = row.get("code", "")
-            # Filter to option contracts only (typically contain option-related identifiers)
-            sec_type = row.get("sec_type", "")
-            if sec_type and HAS_FUTU:
-                from futu import SecurityType
-                if sec_type not in (SecurityType.WARRANT, SecurityType.DRVT):
+            # Filter to option/warrant/derivative contracts
+            if HAS_FUTU and "sec_type" in data.columns:
+                sec_type = row.get("sec_type", "")
+                if sec_type and sec_type not in option_types:
+                    continue
+            else:
+                # Fallback: detect by code pattern (options typically have longer codes or special prefixes)
+                # Skip plain equity codes (5-digit HK, 6-digit CN, short alpha US)
+                plain = code.split(".")[-1] if "." in code else code
+                if plain.isdigit() and len(plain) <= 6:
+                    continue
+                if plain.isalpha() and len(plain) <= 5:
                     continue
             result.append(self._serialize_position(row))
         return result
@@ -919,6 +966,110 @@ class FutuBrokerBridge:
         except Exception as e:
             return {"success": False, "message": f"调整持仓成本异常: {str(e)}"}
 
+    # ── Option chain methods ──────────────────────────────────
+
+    def get_option_expiration(self, params: dict) -> list:
+        """Get available option expiration dates for an underlying."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        stock_code = params["stock_code"]
+        try:
+            ret, data = self.quote_ctx.get_option_expiration_date(code=stock_code)
+            if ret != RET_OK:
+                raise RuntimeError(f"get_option_expiration failed: {data}")
+            result = []
+            for _, row in data.iterrows():
+                result.append({
+                    "strike_time": row.get("strike_time", ""),
+                    "option_expiry_date_distance": int(row.get("option_expiry_date_distance", 0)),
+                })
+            return result
+        except AttributeError:
+            raise RuntimeError("当前 futu-api 版本不支持期权到期日查询")
+
+    def get_option_chain(self, params: dict) -> list:
+        """Get option chain for an underlying at a specific expiration date."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        stock_code = params["stock_code"]
+        start = params.get("start", "")
+        end = params.get("end", "")
+
+        try:
+            ret, data = self.quote_ctx.get_option_chain(
+                code=stock_code,
+                start=start,
+                end=end,
+            )
+            if ret != RET_OK:
+                raise RuntimeError(f"get_option_chain failed: {data}")
+            result = []
+            for _, row in data.iterrows():
+                result.append({
+                    "code": row.get("code", ""),
+                    "name": row.get("name", ""),
+                    "lot_size": int(row.get("lot_size", 0)),
+                    "stock_type": row.get("stock_type", ""),
+                    "option_type": row.get("option_type", ""),
+                    "stock_owner": row.get("stock_owner", ""),
+                    "strike_time": row.get("strike_time", ""),
+                    "strike_price": float(row.get("strike_price", 0)),
+                    "suspension": bool(row.get("suspension", False)),
+                    "stock_id": int(row.get("stock_id", 0)),
+                })
+            return result
+        except AttributeError:
+            raise RuntimeError("当前 futu-api 版本不支持期权链查询")
+
+    def get_stock_basicinfo(self, params: dict) -> list:
+        """Get basic info for stocks (name, lot size, listing status, etc.)."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        from futu import SecurityType as SecType
+        market_str = params.get("market", "HK")
+        sec_type = params.get("sec_type", "STOCK")
+
+        market_map = {"HK": "HK", "US": "US", "SH": "SH", "SZ": "SZ", "CN": "SH"}
+        sec_type_map = {
+            "STOCK": SecType.STOCK,
+            "WARRANT": SecType.WARRANT,
+            "ETF": SecType.ETF,
+            "BOND": SecType.BOND,
+        }
+
+        futu_market = market_map.get(market_str.upper(), "HK")
+        futu_sec_type = sec_type_map.get(sec_type.upper(), SecType.STOCK)
+        codes = params.get("stock_codes", [])
+
+        try:
+            if codes:
+                ret, data = self.quote_ctx.get_stock_basicinfo(futu_market, futu_sec_type, codes)
+            else:
+                ret, data = self.quote_ctx.get_stock_basicinfo(futu_market, futu_sec_type)
+            if ret != RET_OK:
+                raise RuntimeError(f"get_stock_basicinfo failed: {data}")
+            result = []
+            for _, row in data.iterrows():
+                result.append({
+                    "code": row.get("code", ""),
+                    "name": row.get("name", ""),
+                    "lot_size": int(row.get("lot_size", 0)),
+                    "stock_type": row.get("stock_type", ""),
+                    "listing_date": row.get("listing_date", ""),
+                })
+            return result
+        except AttributeError:
+            raise RuntimeError("当前 futu-api 版本不支持股票基本信息查询")
+
     # ── Serialisers ────────────────────────────────────────────
 
     @staticmethod
@@ -1008,6 +1159,9 @@ METHODS = {
     "get_market_snapshot": "get_market_snapshot",
     "exercise_option": "exercise_option",
     "query_option_positions": "query_option_positions",
+    "get_option_expiration": "get_option_expiration",
+    "get_option_chain": "get_option_chain",
+    "get_stock_basicinfo": "get_stock_basicinfo",
 }
 
 

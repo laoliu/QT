@@ -319,7 +319,14 @@ export type OrderSide =
   | "buy_close" // 买入平仓
   | "sell_open"; // 卖出开仓
 
-export type OrderType = "market" | "limit" | "stop" | "stop_limit";
+export type OrderType =
+  | "market"
+  | "limit"
+  | "stop"
+  | "stop_limit"
+  | "auction" // HK: pre-market/closing auction order (竞价单)
+  | "auction_limit" // HK: auction limit order (竞价限价单)
+  | "special_limit"; // HK: special limit / odd-lot order
 
 export type OrderStatus =
   | "pending" // created locally, not yet submitted

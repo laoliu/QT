@@ -271,13 +271,20 @@ export class FutuBroker implements IBrokerAdapter {
     if (req.orderType === "limit" && (!req.price || req.price <= 0)) {
       throw new Error("限价单必须指定正数 price");
     }
+    if ((req.orderType === "auction_limit" || req.orderType === "special_limit") && (!req.price || req.price <= 0)) {
+      throw new Error("竞价限价单/碎股单必须指定正数 price");
+    }
+    if ((req.orderType === "stop" || req.orderType === "stop_limit") && (!req.stopPrice || req.stopPrice <= 0)) {
+      throw new Error("止损单必须指定正数 stopPrice");
+    }
 
     const futuSymbol = toFutuSymbol(req.symbol);
+    const needsPrice = req.orderType !== "market" && req.orderType !== "auction";
     const result = await this.proc.call<{ broker_order_id: string }>("place_order", {
       stock_code: futuSymbol,
       side: req.side,
       order_type: req.orderType,
-      price: req.orderType === "market" ? 0 : (req.price ?? 0),
+      price: needsPrice ? (req.price ?? 0) : 0,
       volume: req.quantity,
     });
 
@@ -762,6 +769,115 @@ export class FutuBroker implements IBrokerAdapter {
       maxPowerShort: raw.max_power_short ?? null,
       maintenanceMargin: raw.maintenance_margin ?? null,
     };
+  }
+
+  // ── Extended: option chain ─────────────────────────────────
+
+  /**
+   * Get available option expiration dates for an underlying.
+   * @param symbol Underlying stock code (e.g. "00700" for Tencent HK options)
+   */
+  async getOptionExpiration(symbol: string): Promise<
+    Array<{
+      strikeTime: string;
+      daysToExpiry: number;
+    }>
+  > {
+    const futuSymbol = toFutuSymbol(symbol);
+    const raw = await this.proc.call<
+      Array<{ strike_time: string; option_expiry_date_distance: number }>
+    >("get_option_expiration", { stock_code: futuSymbol });
+    return raw.map((r) => ({
+      strikeTime: r.strike_time,
+      daysToExpiry: r.option_expiry_date_distance,
+    }));
+  }
+
+  /**
+   * Get option chain (all call/put contracts) for an underlying.
+   * @param symbol Underlying stock code
+   * @param start Start expiration date (YYYY-MM-DD)
+   * @param end End expiration date (YYYY-MM-DD)
+   */
+  async getOptionChain(
+    symbol: string,
+    start?: string,
+    end?: string,
+  ): Promise<
+    Array<{
+      code: string;
+      name: string;
+      lotSize: number;
+      optionType: string;
+      underlying: string;
+      strikeTime: string;
+      strikePrice: number;
+      suspended: boolean;
+    }>
+  > {
+    const futuSymbol = toFutuSymbol(symbol);
+    const params: Record<string, unknown> = { stock_code: futuSymbol };
+    if (start) params.start = start;
+    if (end) params.end = end;
+    const raw = await this.proc.call<
+      Array<{
+        code: string;
+        name: string;
+        lot_size: number;
+        option_type: string;
+        stock_owner: string;
+        strike_time: string;
+        strike_price: number;
+        suspension: boolean;
+      }>
+    >("get_option_chain", params);
+    return raw.map((r) => ({
+      code: fromFutuSymbol(r.code),
+      name: r.name,
+      lotSize: r.lot_size,
+      optionType: r.option_type,
+      underlying: fromFutuSymbol(r.stock_owner),
+      strikeTime: r.strike_time,
+      strikePrice: r.strike_price,
+      suspended: r.suspension,
+    }));
+  }
+
+  /**
+   * Get basic info for stocks (name, lot size, listing status).
+   * Useful for HK/US where AKShare has weaker coverage.
+   */
+  async getStockBasicInfo(
+    market: string = "HK",
+    secType: string = "STOCK",
+    codes?: string[],
+  ): Promise<
+    Array<{
+      code: string;
+      name: string;
+      lotSize: number;
+      stockType: string;
+      listingDate: string;
+    }>
+  > {
+    const params: Record<string, unknown> = { market, sec_type: secType };
+    if (codes) params.stock_codes = codes.map(toFutuSymbol);
+    const raw = await this.proc.call<
+      Array<{
+        code: string;
+        name: string;
+        lot_size: number;
+        stock_type: string;
+        listing_date: string;
+      }>
+    >("get_stock_basicinfo", params);
+    return raw.map((r) => ({
+      code: fromFutuSymbol(r.code),
+      name: r.name,
+      lotSize: r.lot_size,
+      stockType: r.stock_type,
+      listingDate: r.listing_date,
+    }));
   }
 
   // ── Private ──────────────────────────────────────────────────

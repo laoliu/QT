@@ -814,15 +814,16 @@ const quantTradingPlugin = {
       if (!quote) return null;
       return { price: quote.price };
     });
-    // Wire exit function to OrderManager (places market sell order)
-    conditionalOrderService.setExitFn(async (symbol, quantity, reason, strategyId) => {
+    // Wire exit function to OrderManager (places market exit order with correct side)
+    conditionalOrderService.setExitFn(async (symbol, quantity, reason, strategyId, exitSide) => {
       const mgr = liveEngine.orderManager;
       if (!mgr) return { ok: false, reason: "引擎未启动" };
       const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
+      const side = (exitSide as "sell" | "cover" | "buy_close" | "sell_close") ?? "sell";
       const result = await mgr.submit({
         symbol,
         market: detectMarketFromSymbol(symbol),
-        side: "sell",
+        side,
         orderType: "market",
         quantity,
         strategyId: strategyId ?? "conditional_exit",

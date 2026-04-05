@@ -117,8 +117,14 @@ export function createLiveTradingTool(
         },
         order_type: {
           type: "string",
-          enum: ["market", "limit"],
-          description: "订单类型",
+          enum: ["market", "limit", "stop", "stop_limit", "auction", "auction_limit", "special_limit"],
+          description:
+            "订单类型: market=市价, limit=限价, stop=止损(触发后市价), stop_limit=止损限价, " +
+            "auction=港股竞价单, auction_limit=港股竞价限价单, special_limit=港股碎股单",
+        },
+        stop_price: {
+          type: "number",
+          description: "止损触发价格（stop / stop_limit 必填）",
         },
         quantity: { type: "number", description: "数量（股）" },
         price: { type: "number", description: "价格（limit order 必填）" },
@@ -263,15 +269,22 @@ export function createLiveTradingTool(
 
           const symbol = args.symbol as string;
           const side = args.side as "buy" | "sell" | "short" | "cover";
-          const orderType = (args.order_type as "market" | "limit") ?? "limit";
+          const orderType = (args.order_type as OrderRequest["orderType"]) ?? "limit";
           const quantity = args.quantity as number;
           const price = args.price as number | undefined;
+          const stopPrice = args.stop_price as number | undefined;
 
           if (!symbol || !side || !quantity) {
             return { error: "请提供 symbol, side, quantity" };
           }
           if (orderType === "limit" && !price) {
             return { error: "限价单请提供 price" };
+          }
+          if ((orderType === "stop" || orderType === "stop_limit") && !stopPrice) {
+            return { error: "止损单请提供 stop_price" };
+          }
+          if (orderType === "stop_limit" && !price) {
+            return { error: "止损限价单请提供 price 和 stop_price" };
           }
 
           const req: OrderRequest = {
@@ -281,6 +294,7 @@ export function createLiveTradingTool(
             orderType,
             quantity,
             price,
+            stopPrice,
             strategyId: "manual",
           };
           const expiresMins = args.expires_minutes as number | undefined;

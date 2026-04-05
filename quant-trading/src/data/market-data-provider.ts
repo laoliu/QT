@@ -893,6 +893,7 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
 
   // When broker is remote-qmt, use QMT bridge for CN stock data with akshare fallback
   const isRemoteQmt = config.tradingAccount?.broker === "remote-qmt";
+  const isFutu = config.tradingAccount?.broker === "futu";
 
   let inner: MarketDataProvider;
   if (config.dataProviders?.tushare?.enabled) {
@@ -901,6 +902,10 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
     // QMT bridge as primary for CN stocks, with SmartProvider fallback for
     // search, HK/US, and when QMT bridge times out
     inner = new QMTFallbackProvider(config);
+  } else if (isFutu) {
+    // Futu OpenD as primary for HK/US stocks, with SmartProvider fallback for
+    // CN stocks (akshare is better for A-share data) and search
+    inner = new FutuFallbackProvider(config);
   } else {
     inner = new SmartProvider(config);
   }
@@ -950,5 +955,167 @@ class QMTFallbackProvider implements MarketDataProvider {
 
   async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
     return this.smart.searchSymbols(keyword, market);
+  }
+}
+
+/**
+ * Uses Futu OpenD as primary data source for HK/US stocks,
+ * falls back to SmartProvider (akshare) for CN stocks and search.
+ * Futu OpenD provides real-time Level-1 quotes for HK/US markets
+ * which are faster and more reliable than Yahoo Finance.
+ */
+class FutuFallbackProvider implements MarketDataProvider {
+  name = "futu-fallback";
+  private futuBridge: import("../bridge/persistent-python.js").PersistentPythonProcess | null = null;
+  private smart: SmartProvider;
+  private config: QuantTradingConfig;
+  private connecting = false;
+
+  constructor(config: QuantTradingConfig) {
+    this.config = config;
+    this.smart = new SmartProvider(config);
+  }
+
+  private async getBridge(): Promise<
+    import("../bridge/persistent-python.js").PersistentPythonProcess
+  > {
+    if (this.futuBridge) return this.futuBridge;
+    if (this.connecting) {
+      // Wait for concurrent initialization to complete
+      await new Promise((r) => setTimeout(r, 500));
+      if (this.futuBridge) return this.futuBridge;
+    }
+    this.connecting = true;
+    try {
+      const { PersistentPythonProcess } = await import("../bridge/persistent-python.js");
+      const futuCfg = this.config.tradingAccount?.futu ?? {};
+      this.futuBridge = new PersistentPythonProcess("brokers.futu_broker", this.config, {
+        host: futuCfg.openDHost ?? "127.0.0.1",
+        port: futuCfg.openDPort ?? 11111,
+        trade_env: "SIMULATE", // data-only, no real trades
+        trade_pwd: "",
+        account_id: "",
+      });
+      await this.futuBridge.start();
+      await this.futuBridge.call("connect");
+      return this.futuBridge;
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
+    const m = market ?? detectMarketFromSymbol(symbol);
+    // Route HK/US stocks through Futu for live data
+    if (m === "hk_stock" || m === "us_stock") {
+      try {
+        const bridge = await this.getBridge();
+        const futuSymbol = this.toFutuSymbol(symbol, m);
+        const snapshots = await bridge.call<
+          Array<{
+            stock_code: string;
+            stock_name: string;
+            last_price: number;
+            open: number;
+            high: number;
+            low: number;
+            prev_close: number;
+            volume: number;
+            turnover: number;
+            time: number;
+          }>
+        >("get_market_snapshot", { stock_codes: [futuSymbol] });
+        if (snapshots.length > 0) {
+          const s = snapshots[0];
+          const price = s.last_price;
+          const change = price - s.prev_close;
+          return {
+            symbol: { code: symbol, name: s.stock_name || symbol, market: m },
+            price,
+            change,
+            changePct: s.prev_close ? (change / s.prev_close) * 100 : 0,
+            open: s.open,
+            high: s.high,
+            low: s.low,
+            prevClose: s.prev_close,
+            volume: s.volume,
+            amount: s.turnover,
+            timestamp: s.time,
+          };
+        }
+      } catch {
+        // Fall through to SmartProvider on Futu failure
+      }
+    }
+    return this.smart.getQuote(symbol, market);
+  }
+
+  async getKlines(
+    symbol: string,
+    interval: KlineInterval,
+    start: string,
+    end: string,
+    market?: MarketType,
+  ): Promise<KlineBar[]> {
+    const m = market ?? detectMarketFromSymbol(symbol);
+    // Route HK/US K-line requests through Futu
+    if (m === "hk_stock" || m === "us_stock") {
+      try {
+        const bridge = await this.getBridge();
+        const futuSymbol = this.toFutuSymbol(symbol, m);
+        const klTypeMap: Record<string, string> = {
+          "1m": "K_1M",
+          "5m": "K_5M",
+          "15m": "K_15M",
+          "30m": "K_30M",
+          "60m": "K_60M",
+          "1d": "K_DAY",
+          "1w": "K_WEEK",
+          "1M": "K_MON",
+        };
+        const klType = klTypeMap[interval] ?? "K_DAY";
+        const bars = await bridge.call<
+          Array<{
+            time_key: string;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            volume: number;
+            turnover: number;
+          }>
+        >("get_klines", { stock_code: futuSymbol, kl_type: klType, count: 1000 });
+        if (bars.length > 0) {
+          return bars
+            .filter((b) => b.time_key >= start && b.time_key <= end + "T99")
+            .map((b) => ({
+              timestamp: new Date(b.time_key).getTime(),
+              open: b.open,
+              high: b.high,
+              low: b.low,
+              close: b.close,
+              volume: b.volume,
+              amount: b.turnover,
+            }));
+        }
+      } catch {
+        // Fall through to SmartProvider
+      }
+    }
+    return this.smart.getKlines(symbol, interval, start, end, market);
+  }
+
+  async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
+    return this.smart.searchSymbols(keyword, market);
+  }
+
+  private toFutuSymbol(symbol: string, market: MarketType): string {
+    if (/^(HK|US|SH|SZ)\./.test(symbol)) return symbol;
+    if (market === "hk_stock") return `HK.${symbol.padStart(5, "0")}`;
+    if (market === "us_stock") return `US.${symbol.toUpperCase()}`;
+    if (symbol.length === 6 && /^\d+$/.test(symbol)) {
+      return parseInt(symbol) >= 500000 ? `SH.${symbol}` : `SZ.${symbol}`;
+    }
+    return symbol;
   }
 }

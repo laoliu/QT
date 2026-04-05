@@ -51,6 +51,9 @@ export interface ConditionalOrder {
   triggerValue: number;
   /** Shares to sell on trigger. */
   quantity: number;
+  /** Exit side when triggered. Defaults to "sell" for long positions.
+   *  Use "cover" for short positions, "sell_close" for options. */
+  exitSide?: "sell" | "cover" | "buy_close" | "sell_close";
   /** Strategy that created this conditional order (optional). */
   strategyId?: string;
   /** Human-readable description. */
@@ -130,6 +133,7 @@ export class ConditionalOrderService {
     quantity: number,
     reason: string,
     strategyId?: string,
+    exitSide?: string,
   ) => Promise<{ ok: boolean; reason?: string }>;
 
   constructor(opts: ConditionalOrderServiceOptions = {}) {
@@ -156,6 +160,7 @@ export class ConditionalOrderService {
       quantity: number,
       reason: string,
       strategyId?: string,
+      exitSide?: string,
     ) => Promise<{ ok: boolean; reason?: string }>,
   ): void {
     this.exitFn = fn;
@@ -646,6 +651,7 @@ export class ConditionalOrderService {
                     tier.quantity,
                     reason,
                     order.strategyId,
+                    order.exitSide,
                   );
                   const resultSuffix = result.ok
                     ? "，卖出委托已提交"
@@ -695,6 +701,7 @@ export class ConditionalOrderService {
             order.quantity,
             triggerReason,
             order.strategyId,
+            order.exitSide,
           );
           order.triggerResult = result.ok ? "exit_submitted" : `exit_failed: ${result.reason}`;
         } else {

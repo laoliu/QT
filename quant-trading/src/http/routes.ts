@@ -494,6 +494,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
   // ── Strategy Ecosystem (comparison, ranking, import/export) ────
   registerStrategyEcosystemRoutes(deps);
 
+  // ── Live vs Backtest Comparison ─────────────────────────────
+  registerLiveBacktestRoutes(deps);
+
   // ── Signals Feed ───────────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -1478,6 +1481,180 @@ function registerPythonToolRoutes({ api, config, secure }: RouteDeps): void {
         json(res, { status: "ok", data: result.data });
       } catch (err) {
         json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+}
+
+// ── Live vs Backtest Comparison routes ───────────────────────
+
+function registerLiveBacktestRoutes({
+  api,
+  config,
+  equityHistory,
+  equityHistoryPaper,
+  equityHistoryLive,
+  backtestStore,
+  secure,
+}: RouteDeps): void {
+  /** Resolve equity history instance by ?mode= param. */
+  function resolveEH(params: URLSearchParams): EquityHistory {
+    const mode = params.get("mode");
+    if (mode === "paper" && equityHistoryPaper) return equityHistoryPaper;
+    if (mode === "live" && equityHistoryLive) return equityHistoryLive;
+    return equityHistory;
+  }
+
+  // GET /quant/api/live-backtest/summary — live performance summary
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest/summary",
+    handler: secure(async (_req, res) => {
+      const { computeLivePerformance } = await import(
+        "../services/live-backtest-comparison.js"
+      );
+      const params = urlParams(_req);
+      const eh = resolveEH(params);
+      const snapshots = eh.getAll();
+      if (snapshots.length < 2) {
+        json(res, { status: "error", message: "实盘权益数据不足（至少需要2天记录）" }, 400);
+        return;
+      }
+      const startDate = params.get("startDate") ?? undefined;
+      const endDate = params.get("endDate") ?? undefined;
+      const perf = computeLivePerformance(snapshots, startDate, endDate);
+      if (!perf) {
+        json(res, { status: "error", message: "指定日期范围内数据不足" }, 400);
+        return;
+      }
+      json(res, { status: "ok", data: perf });
+    }),
+  });
+
+  // GET /quant/api/live-backtest/compare?backtestId=xxx — compare against stored backtest
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest/compare",
+    handler: secure(async (_req, res) => {
+      const { compareLiveVsBacktest } = await import(
+        "../services/live-backtest-comparison.js"
+      );
+      const params = urlParams(_req);
+      const backtestId = params.get("backtestId");
+      if (!backtestId) {
+        json(res, { status: "error", message: "缺少 backtestId 参数" }, 400);
+        return;
+      }
+      const record = backtestStore.getFullResult(backtestId);
+      if (!record) {
+        json(res, { status: "error", message: `未找到回测记录: ${backtestId}` }, 404);
+        return;
+      }
+      const eh = resolveEH(params);
+      const snapshots = eh.getAll();
+      if (snapshots.length < 2) {
+        json(res, { status: "error", message: "实盘权益数据不足" }, 400);
+        return;
+      }
+      const thresholdStr = params.get("divergenceThreshold");
+      const result = compareLiveVsBacktest(snapshots, record.result, {
+        startDate: params.get("startDate") ?? undefined,
+        endDate: params.get("endDate") ?? undefined,
+        divergenceThresholdPct: thresholdStr ? Number(thresholdStr) : undefined,
+      });
+      if (!result) {
+        json(res, { status: "error", message: "实盘与回测数据重叠不足，无法对比" }, 400);
+        return;
+      }
+      json(res, {
+        status: "ok",
+        data: {
+          ...result,
+          strategyId: record.result.strategyId,
+          backtestId,
+        },
+      });
+    }),
+  });
+
+  // POST /quant/api/live-backtest/run-compare — run backtest then compare
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest/run-compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+      const { compareLiveVsBacktest } = await import(
+        "../services/live-backtest-comparison.js"
+      );
+      const { runBacktest } = await import("../engine/strategy-registry.js");
+
+      const body = (await parseJsonBody(req)) as Record<string, unknown>;
+      const strategyId = body.strategyId as string;
+      if (!strategyId) {
+        json(res, { status: "error", message: "缺少 strategyId" }, 400);
+        return;
+      }
+
+      const params = urlParams(req);
+      const eh = resolveEH(params);
+      const snapshots = eh.getAll();
+      if (snapshots.length < 2) {
+        json(res, { status: "error", message: "实盘权益数据不足" }, 400);
+        return;
+      }
+
+      const sorted = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+      const liveStart = (body.startDate as string) ?? sorted[0]!.date;
+      const liveEnd = (body.endDate as string) ?? sorted[sorted.length - 1]!.date;
+      const liveStartSnap = sorted.find((s) => s.date >= liveStart);
+      const initialCash =
+        (body.initialCash as number) ?? liveStartSnap?.equity ?? 100_000;
+      const symbols = ((body.symbols as string) ?? "000300")
+        .split(",")
+        .map((s) => s.trim());
+
+      try {
+        const btResult = await runBacktest(
+          { strategyId, symbols, startDate: liveStart, endDate: liveEnd, initialCash },
+          config,
+        );
+
+        let savedId: string | undefined;
+        if (backtestStore) {
+          try {
+            savedId = await backtestStore.save(btResult, {
+              tags: ["live-compare"],
+              engine: config.backtestEngine ?? "builtin",
+            });
+          } catch {
+            // Best-effort
+          }
+        }
+
+        const comparison = compareLiveVsBacktest(snapshots, btResult, {
+          startDate: liveStart,
+          endDate: liveEnd,
+          divergenceThresholdPct: body.divergenceThreshold as number | undefined,
+        });
+
+        if (!comparison) {
+          json(res, { status: "error", message: "实盘与回测数据重叠不足" }, 400);
+          return;
+        }
+
+        json(res, {
+          status: "ok",
+          data: {
+            ...comparison,
+            strategyId,
+            savedBacktestId: savedId,
+          },
+        });
+      } catch (err) {
+        json(res, { status: "error", message: `回测失败: ${(err as Error).message}` }, 500);
       }
     }),
   });

@@ -335,6 +335,16 @@ export function getDashboardHtml(baseUrl: string): string {
       <h2>回测记录</h2>
       <div id="backtestHistoryPanel"><div class="empty">暂无回测记录</div></div>
     </div>
+
+    <!-- Live vs Backtest Comparison -->
+    <div class="card span-2">
+      <h2>实盘 vs 回测对比
+        <select id="compareBacktestSelect" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:4px;margin-left:8px;" onchange="loadLiveBacktestCompare()">
+          <option value="">选择回测记录</option>
+        </select>
+      </h2>
+      <div id="liveBacktestPanel"><div class="empty">选择回测记录以对比实盘表现</div></div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -921,12 +931,96 @@ export function getDashboardHtml(baseUrl: string): string {
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';
     }
 
+    // ── Live vs Backtest Comparison ───────────────────────
+    async function populateCompareSelect() {
+      const r = await api('/quant/api/backtests?limit=20');
+      const runs = r?.data ?? [];
+      const sel = document.getElementById('compareBacktestSelect');
+      if (!sel || !runs.length) return;
+      // Keep the first option, remove old dynamic options
+      while (sel.options.length > 1) sel.remove(1);
+      for (const b of runs) {
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        const ret = b.totalReturn != null ? (b.totalReturn*100).toFixed(1)+'%' : '';
+        const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN') : '';
+        opt.textContent = (b.strategyId??'')+ ' ' + (b.symbols?b.symbols.join(','):'') + ' ' + ret + ' (' + dt + ')';
+        sel.appendChild(opt);
+      }
+    }
+
+    async function loadLiveBacktestCompare() {
+      const sel = document.getElementById('compareBacktestSelect');
+      const backtestId = sel ? sel.value : '';
+      const panel = document.getElementById('liveBacktestPanel');
+      if (!backtestId || !panel) {
+        if (panel) panel.innerHTML = '<div class="empty">选择回测记录以对比实盘表现</div>';
+        return;
+      }
+      panel.innerHTML = '<div class="empty">加载中...</div>';
+      const r = await api('/quant/api/live-backtest/compare?backtestId=' + encodeURIComponent(backtestId) + modeParam(true));
+      if (!r || r.status !== 'ok' || !r.data) {
+        panel.innerHTML = '<div class="empty">' + esc(r?.message ?? '对比失败，请确保有足够的实盘数据') + '</div>';
+        return;
+      }
+      const d = r.data;
+      // Metrics table
+      let h = '<div style="margin-bottom:12px;font-size:12px;color:var(--text-dim)">对比周期: '+esc(d.comparisonPeriod.startDate)+' ~ '+esc(d.comparisonPeriod.endDate)+'</div>';
+      h += '<table><tr><th>指标</th><th>实盘</th><th>回测</th><th>差异</th><th>判定</th></tr>';
+      for (const m of d.metrics) {
+        const lv = typeof m.live==='number' ? (m.metric==='maxDrawdown'||m.metric.includes('Return')||m.metric==='winRate' ? (m.live*100).toFixed(2)+'%' : m.live.toFixed(4)) : '--';
+        const bv = typeof m.backtest==='number' ? (m.metric==='maxDrawdown'||m.metric.includes('Return')||m.metric==='winRate' ? (m.backtest*100).toFixed(2)+'%' : m.backtest.toFixed(4)) : '--';
+        const diffStr = typeof m.diff==='number' ? (m.diff>0?'+':'')+m.diff.toFixed(4) : '--';
+        const verdict = m.liveWins ? '<span class="positive">实盘优</span>' : '<span class="negative">回测优</span>';
+        h += '<tr><td>'+esc(m.label)+'</td><td>'+lv+'</td><td>'+bv+'</td><td>'+diffStr+'</td><td>'+verdict+'</td></tr>';
+      }
+      h += '</table>';
+      // Tracking score
+      const score = d.trackingScore ?? 0;
+      const scoreColor = score >= 80 ? 'var(--green)' : score >= 50 ? 'var(--yellow)' : 'var(--red)';
+      h += '<div style="margin-top:12px;display:flex;gap:24px;flex-wrap:wrap">';
+      h += '<div class="stat"><span class="value" style="color:'+scoreColor+'">'+score+'</span><span class="label">跟踪得分 (0-100)</span></div>';
+      h += '<div class="stat"><span class="value">'+(d.executionGap.avgSlippagePct!=null?d.executionGap.avgSlippagePct.toFixed(2)+'%':'--')+'</span><span class="label">平均滑点</span></div>';
+      const retGap = d.executionGap.returnGap;
+      h += '<div class="stat"><span class="value '+pctClass(retGap)+'">'+(retGap!=null?(retGap>0?'+':'')+(retGap*100).toFixed(2)+'%':'--')+'</span><span class="label">收益差距</span></div>';
+      h += '</div>';
+      // Divergence windows
+      if (d.divergenceWindows && d.divergenceWindows.length > 0) {
+        h += '<div style="margin-top:10px;font-size:12px;color:var(--text-dim)">偏离窗口:</div>';
+        h += '<table style="font-size:12px"><tr><th>周期</th><th>天数</th><th>最大偏差</th><th>方向</th></tr>';
+        for (const w of d.divergenceWindows) {
+          h += '<tr><td>'+esc(w.startDate)+'~'+esc(w.endDate)+'</td><td>'+w.days+'</td><td>'+w.maxGapPct.toFixed(1)+'%</td><td>'+(w.liveAbove?'实盘高于回测':'实盘低于回测')+'</td></tr>';
+        }
+        h += '</table>';
+      }
+      // Warnings
+      if (d.warnings && d.warnings.length > 0) {
+        h += '<div style="margin-top:10px">';
+        for (const w of d.warnings) {
+          h += '<div style="padding:4px 8px;font-size:12px;color:var(--yellow);border-left:2px solid var(--yellow);margin-bottom:4px">'+esc(w)+'</div>';
+        }
+        h += '</div>';
+      }
+      // Equity curve overlay
+      if (d.live?.equityCurve?.length >= 2 && d.backtest?.equityCurve?.length >= 2) {
+        h += '<div style="margin-top:12px"><div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">权益曲线叠加</div><div id="compareChart"></div></div>';
+      }
+      panel.innerHTML = h;
+      // Render overlay chart if data available
+      if (d.live?.equityCurve?.length >= 2 && d.backtest?.equityCurve?.length >= 2) {
+        const liveData = d.live.equityCurve.map(p => ({x: p.date, y: p.value}));
+        const btData = d.backtest.equityCurve.map(p => ({x: p.date, y: p.value}));
+        renderSvgChart('compareChart', liveData, btData);
+      }
+    }
+
     // ── Refresh all ─────────────────────────────────────────
     async function refreshAll() {
       await Promise.all([
         loadPortfolio(), loadOrders(), loadSignals(), loadStatus(),
         loadPnl(), loadEquityChart(), loadHealth(), loadStaleness(), loadAlerts(),
         loadPriceAlerts(), loadScheduledTasks(), loadBacktestHistory(),
+        populateCompareSelect(),
       ]);
     }
     refreshAll();
@@ -971,6 +1065,9 @@ export function handleDashboardRequest(): Record<string, unknown> {
       "GET  /quant/api/confirmations",
       "GET  /quant/api/health",
       "GET  /quant/api/staleness",
+      "GET  /quant/api/live-backtest/summary[?mode=&startDate=&endDate=]",
+      "GET  /quant/api/live-backtest/compare?backtestId=[&mode=&startDate=&endDate=&divergenceThreshold=]",
+      "POST /quant/api/live-backtest/run-compare",
       "GET    /quant/api/alerts[?severity=&source=&after=&before=&acknowledged=&limit=&offset=]",
       "DELETE /quant/api/alerts",
       "GET  /quant/api/alerts/summary",

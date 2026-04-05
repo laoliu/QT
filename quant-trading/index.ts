@@ -595,7 +595,7 @@ const quantTradingPlugin = {
       futures_straddle: createFuturesStraddleTool(api, config),
       data_cache: createDataCacheTool(api, config),
       live_trading: createLiveTradingTool(api, config, getEngine, equityHistory),
-      live_backtest_compare: createLiveBacktestCompareTool(api, config, equityHistory, backtestStore),
+      live_backtest_compare: createLiveBacktestCompareTool(api, config, getActiveEquityHistory, backtestStore),
       strategy_optimizer: createStrategyOptimizerTool(api, config, composedStrategyStore),
       strategy_composer: createStrategyComposerTool(api, config, composedStrategyStore),
       custom_strategy: createCustomStrategyTool(api, customStrategyStore),

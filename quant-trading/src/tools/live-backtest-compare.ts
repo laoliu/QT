@@ -31,9 +31,11 @@ function pct(v: unknown, digits = 2): string {
 export function createLiveBacktestCompareTool(
   _api: OpenClawPluginApi,
   config: QuantTradingConfig,
-  equityHistory?: EquityHistory,
+  equityHistory?: EquityHistory | (() => EquityHistory),
   backtestStore?: BacktestStore,
 ) {
+  const resolveEH = (): EquityHistory | undefined =>
+    typeof equityHistory === "function" ? equityHistory() : equityHistory;
   return {
     name: "live_backtest_compare",
     description:
@@ -84,13 +86,14 @@ export function createLiveBacktestCompareTool(
     },
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
+      const eh = resolveEH();
 
       // ── live_summary ──────────────────────────────────────
       if (action === "live_summary") {
-        if (!equityHistory) {
+        if (!eh) {
           return { error: "实盘权益历史服务未启用，请先启动交易引擎。" };
         }
-        const snapshots = equityHistory.getAll();
+        const snapshots = eh.getAll();
         if (snapshots.length < 2) {
           return { error: "实盘权益数据不足（至少需要2天记录），请先运行一段时间的实盘交易。" };
         }
@@ -119,7 +122,7 @@ export function createLiveBacktestCompareTool(
 
       // ── compare_existing ──────────────────────────────────
       if (action === "compare_existing") {
-        if (!equityHistory) {
+        if (!eh) {
           return { error: "实盘权益历史服务未启用。" };
         }
         const backtestId = args.backtestId as string;
@@ -134,7 +137,7 @@ export function createLiveBacktestCompareTool(
           return { error: `未找到回测记录: ${backtestId}` };
         }
 
-        const snapshots = equityHistory.getAll();
+        const snapshots = eh.getAll();
         const result = compareLiveVsBacktest(snapshots, record.result, {
           startDate: args.startDate as string | undefined,
           endDate: args.endDate as string | undefined,
@@ -150,7 +153,7 @@ export function createLiveBacktestCompareTool(
 
       // ── compare (run backtest then compare) ───────────────
       if (action === "compare") {
-        if (!equityHistory) {
+        if (!eh) {
           return { error: "实盘权益历史服务未启用，请先启动交易引擎。" };
         }
 
@@ -159,7 +162,7 @@ export function createLiveBacktestCompareTool(
           return { error: "请提供策略ID (strategyId)。" };
         }
 
-        const snapshots = equityHistory.getAll();
+        const snapshots = eh.getAll();
         if (snapshots.length < 2) {
           return { error: "实盘权益数据不足（至少需要2天记录）。" };
         }

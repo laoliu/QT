@@ -363,6 +363,22 @@ async function generateWeeklyReview(
     // Scan frequency not available — skip
   }
 
+  // Weekly live performance summary (FR-8)
+  try {
+    const liveRaw = await executeTool("live_backtest_compare", { action: "live_summary" });
+    const liveData = JSON.parse(liveRaw);
+    if (liveData.summary) {
+      const s = liveData.summary;
+      sections.push("**本周实盘绩效**");
+      sections.push(`  总收益: ${String(s.totalReturn)} | 最大回撤: ${String(s.maxDrawdown)}`);
+      sections.push(`  夏普: ${String(s.sharpeRatio)} | 胜率: ${String(s.winRate)}`);
+      sections.push(`  日均盈亏: ${String(s.avgDailyPnl)}`);
+      sections.push("");
+    }
+  } catch {
+    // Live performance not available — skip
+  }
+
   return sections.join("\n");
 }
 
@@ -1163,6 +1179,27 @@ async function generateMonthlyReport(
     }
   } catch {
     // Risk snapshot not available — skip
+  }
+
+  // 5. Live vs backtest comparison (FR-8)
+  try {
+    const compareRaw = await executeTool("live_backtest_compare", { action: "live_summary" });
+    const compareData = JSON.parse(compareRaw);
+    if (compareData.summary) {
+      sections.push("**实盘绩效概览**");
+      const s = compareData.summary;
+      sections.push(`  周期: ${String(s.period)}`);
+      sections.push(`  交易天数: ${String(s.tradingDays)}`);
+      sections.push(`  总收益率: ${String(s.totalReturn)}`);
+      sections.push(`  年化收益: ${String(s.annualizedReturn)}`);
+      sections.push(`  最大回撤: ${String(s.maxDrawdown)}`);
+      sections.push(`  夏普比率: ${String(s.sharpeRatio)}`);
+      sections.push(`  胜率: ${String(s.winRate)}`);
+      sections.push(`  日均盈亏: ${String(s.avgDailyPnl)}`);
+      sections.push("");
+    }
+  } catch {
+    // Live performance not available — skip
   }
 
   if (sections.length <= 3) {

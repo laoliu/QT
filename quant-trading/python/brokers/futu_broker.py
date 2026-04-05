@@ -96,6 +96,11 @@ def _map_side_to_futu(side: str):
         "sell": TrdSide.SELL,
         "short": TrdSide.SELL_SHORT,
         "cover": TrdSide.BUY_BACK,
+        # Option/futures sides: map to base Futu sides
+        "buy_open": TrdSide.BUY,
+        "sell_close": TrdSide.SELL,
+        "buy_close": TrdSide.BUY,
+        "sell_open": TrdSide.SELL,
     }
     return mapping.get(side, TrdSide.BUY)
 
@@ -113,14 +118,25 @@ def _map_futu_side(trd_side) -> str:
     return mapping.get(trd_side, "buy")
 
 
+def _map_futu_order_type(order_type_str) -> str:
+    """Map Futu OrderType to string for serialisation."""
+    if not HAS_FUTU:
+        return "NORMAL"
+    # order_type_str from Futu is already a string like "NORMAL", "MARKET", etc.
+    return str(order_type_str)
+
+
 def _map_order_type_to_futu(order_type: str):
     """Map our canonical order type to Futu OrderType."""
     if not HAS_FUTU:
         return None
-    if order_type == "market":
-        return FutuOrderType.MARKET
-    # Default to NORMAL (limit order)
-    return FutuOrderType.NORMAL
+    mapping = {
+        "market": FutuOrderType.MARKET,
+        "limit": FutuOrderType.NORMAL,
+        "stop": FutuOrderType.STOP,
+        "stop_limit": FutuOrderType.STOP_LIMIT,
+    }
+    return mapping.get(order_type, FutuOrderType.NORMAL)
 
 
 def _get_trd_env(env_str: str):
@@ -231,13 +247,15 @@ if HAS_FUTU:
                 push_event("order_status", {
                     "order_id": str(row.get("order_id", "")),
                     "stock_code": row.get("code", ""),
-                    "order_type": str(row.get("trd_side", "")),
+                    "trd_side": str(row.get("trd_side", "")),
                     "price": float(row.get("price", 0)),
                     "order_volume": int(row.get("qty", 0)),
                     "traded_volume": int(row.get("dealt_qty", 0)),
                     "traded_price": float(row.get("dealt_avg_price", 0)),
                     "order_status": str(row.get("order_status", "")),
                     "order_time": str(row.get("create_time", "")),
+                    "order_type": str(row.get("order_type", "")),
+                    "aux_price": float(row.get("aux_price", 0)) if row.get("aux_price") else None,
                 })
             return RET_OK, data
 
@@ -324,12 +342,14 @@ class FutuBrokerBridge:
         order_type = params.get("order_type", "limit")
         price = float(params.get("price", 0))
         volume = int(params["volume"])
+        stop_price = params.get("stop_price")
         trd_env = _get_trd_env(self.trade_env_str)
 
         futu_side = _map_side_to_futu(side)
         futu_order_type = _map_order_type_to_futu(order_type)
 
-        ret, data = self.trade_ctx.place_order(
+        # Build kwargs for place_order
+        kwargs = dict(
             price=price,
             qty=volume,
             code=futu_code,
@@ -338,6 +358,11 @@ class FutuBrokerBridge:
             trd_env=trd_env,
             remark=params.get("remark", ""),
         )
+        # For stop / stop_limit orders, pass aux_price as the trigger price
+        if stop_price is not None and order_type in ("stop", "stop_limit"):
+            kwargs["aux_price"] = float(stop_price)
+
+        ret, data = self.trade_ctx.place_order(**kwargs)
 
         if ret != RET_OK:
             raise RuntimeError(f"place_order failed: {data}")
@@ -467,6 +492,68 @@ class FutuBrokerBridge:
             "profit_ratio": float(row.get("unrealized_pl", 0)) / max(float(row.get("total_assets", 1)), 1),
         }
 
+    def exercise_option(self, params: dict) -> dict:
+        """Exercise an option position (American-style)."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        futu_code = params["stock_code"]
+        volume = int(params["volume"])
+        trd_env = _get_trd_env(self.trade_env_str)
+
+        # Futu exercises via place_order with EXERCISE side
+        # For HK/US options, the exercise is typically done through modify_order
+        # or a direct exercise API if available
+        ret, data = self.trade_ctx.exercise(
+            code=futu_code,
+            qty=volume,
+            trd_env=trd_env,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"exercise_option failed: {data}")
+
+        return {"status": "exercise_submitted"}
+
+    def query_option_positions(self, _params: dict = {}) -> list:
+        """Query option positions specifically."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        trd_env = _get_trd_env(self.trade_env_str)
+
+        ret, data = self.trade_ctx.position_list_query(trd_env=trd_env)
+
+        if ret != RET_OK:
+            raise RuntimeError(f"query_option_positions failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            code = str(row.get("code", ""))
+            # Filter: only include positions that look like options
+            # Option codes in Futu typically have longer formats or specific patterns
+            if self._is_option_code(code):
+                result.append(self._serialize_position(row))
+        return result
+
+    @staticmethod
+    def _is_option_code(code: str) -> bool:
+        """Check if a Futu code represents an option contract."""
+        # HK options: e.g. HK.TCH210630C500000
+        # US options: e.g. US.AAPL230120C150000
+        # CN options (ETF): e.g. SH.10004547
+        parts = code.split(".")
+        if len(parts) != 2:
+            return False
+        prefix, symbol = parts
+        # HK/US options have C/P (call/put) in the code
+        if prefix in ("HK", "US"):
+            return bool(len(symbol) > 6 and ("C" in symbol[3:] or "P" in symbol[3:]))
+        # CN ETF options: 1000xxxx pattern on SH
+        if prefix == "SH" and symbol.startswith("1000"):
+            return True
+        return False
+
     def subscribe_quote(self, params: dict) -> dict:
         if not self.quote_ctx:
             raise RuntimeError("Not connected")
@@ -510,6 +597,8 @@ class FutuBrokerBridge:
             "traded_price": float(row.get("dealt_avg_price", 0)),
             "order_status": str(row.get("order_status", "")),
             "order_time": str(row.get("create_time", "")),
+            "order_type": str(row.get("order_type", "")),
+            "aux_price": float(row.get("aux_price", 0)) if row.get("aux_price") else None,
         }
 
     @staticmethod
@@ -562,6 +651,8 @@ METHODS = {
     "query_account": "query_account",
     "subscribe_quote": "subscribe_quote",
     "unsubscribe_quote": "unsubscribe_quote",
+    "exercise_option": "exercise_option",
+    "query_option_positions": "query_option_positions",
 }
 
 def main():
@@ -599,7 +690,7 @@ def main():
 
         try:
             fn = getattr(bridge, METHODS[method])
-            if method in ("query_positions", "query_account", "disconnect", "connect"):
+            if method in ("query_positions", "query_account", "query_option_positions", "disconnect", "connect"):
                 result = fn()
             else:
                 result = fn(params)

@@ -23,6 +23,7 @@ import type {
   LivePosition,
   MarketType,
   Order,
+  OrderSide,
   OrderStatus,
   QuoteSnapshot,
   QuantTradingConfig,
@@ -51,6 +52,8 @@ type RawOrder = {
   traded_price: number;
   order_status: string; // Futu status string
   order_time?: string;
+  order_type?: string; // Futu order type string (NORMAL, MARKET, STOP, STOP_LIMIT, etc.)
+  aux_price?: number; // stop trigger price (for stop/stop_limit orders)
 };
 
 type RawPosition = {
@@ -134,7 +137,7 @@ function mapFutuStatus(s: string): OrderStatus {
 
 // ── Futu side mapping ───────────────────────────────────────────────
 
-function mapFutuSide(s: string): "buy" | "sell" | "short" | "cover" {
+function mapFutuSide(s: string): OrderSide {
   switch (s) {
     case "BUY":
       return "buy";
@@ -144,6 +147,33 @@ function mapFutuSide(s: string): "buy" | "sell" | "short" | "cover" {
       return "short";
     case "BUY_BACK":
       return "cover";
+    default:
+      return "buy";
+  }
+}
+
+/**
+ * Map our canonical OrderSide to Futu side string for outbound orders.
+ * Option sides (buy_open, sell_close, etc.) are mapped to Futu equivalents.
+ */
+function toFutuSide(side: OrderSide): string {
+  switch (side) {
+    case "buy":
+      return "buy";
+    case "sell":
+      return "sell";
+    case "short":
+      return "short";
+    case "cover":
+      return "cover";
+    case "buy_open":
+      return "buy_open";
+    case "sell_close":
+      return "sell_close";
+    case "buy_close":
+      return "buy_close";
+    case "sell_open":
+      return "sell_open";
     default:
       return "buy";
   }
@@ -186,7 +216,14 @@ function fromFutuSymbol(s: string): string {
 function detectMarketFromFutu(futuCode: string): MarketType {
   if (futuCode.startsWith("HK.")) return "hk_stock";
   if (futuCode.startsWith("US.")) return "us_stock";
-  if (futuCode.startsWith("SH.") || futuCode.startsWith("SZ.")) return "cn_stock";
+  if (futuCode.startsWith("SH.") || futuCode.startsWith("SZ.")) {
+    // Futures contracts: typically contain month codes or patterns like IF2406, IC2406
+    const code = futuCode.replace(/^(SH|SZ)\./, "");
+    if (/^(IF|IC|IM|IH|T|TF|TS|SC|AU|AG|CU|AL|ZN|PB|NI|SN|RB|HC|BU|RU|FU|MA|TA|CF|SR|OI|RM|SF|SM|FG|SA|UR|PF|SP|SS|EB|EG|PG|LU|NR|BC|SI|LC|AO|BR|EC)\d{3,4}$/.test(code)) {
+      return "futures";
+    }
+    return "cn_stock";
+  }
   return "hk_stock";
 }
 
@@ -251,14 +288,21 @@ export class FutuBroker implements IBrokerAdapter {
     if (req.orderType === "limit" && (!req.price || req.price <= 0)) {
       throw new Error("限价单必须指定正数 price");
     }
+    if ((req.orderType === "stop" || req.orderType === "stop_limit") && (!req.stopPrice || req.stopPrice <= 0)) {
+      throw new Error("止损单必须指定正数 stopPrice");
+    }
+    if (req.orderType === "stop_limit" && (!req.price || req.price <= 0)) {
+      throw new Error("止损限价单必须指定正数 price");
+    }
 
     const result = await this.proc.call<{ broker_order_id: string }>("place_order", {
       stock_code: futuCode,
-      side: req.side,
+      side: toFutuSide(req.side),
       order_type: req.orderType,
       price: req.orderType === "market" ? 0 : (req.price ?? 0),
       volume: req.quantity,
       remark: clientOrderId,
+      stop_price: req.stopPrice,
     });
 
     const order: Order = {
@@ -280,6 +324,11 @@ export class FutuBroker implements IBrokerAdapter {
       createdAt: now,
       updatedAt: now,
       submittedAt: now,
+      // Option-specific fields
+      strike: req.strike,
+      expiry: req.expiry,
+      optionType: req.optionType,
+      underlying: req.underlying,
     };
     this.orderCache.set(orderId, order);
     this.pruneOrderCache();
@@ -424,6 +473,31 @@ export class FutuBroker implements IBrokerAdapter {
     }
   }
 
+  // ── Option support ─────────────────────────────────────────────
+
+  supportsOptions(): boolean {
+    // Futu supports HK/US option trading via OpenD
+    return true;
+  }
+
+  async exerciseOption(symbol: string, quantity: number): Promise<{ success: boolean; message: string }> {
+    const futuCode = toFutuSymbol(symbol);
+    try {
+      const result = await this.proc.call<{ status: string }>("exercise_option", {
+        stock_code: futuCode,
+        volume: quantity,
+      });
+      return { success: true, message: result.status ?? "行权请求已提交" };
+    } catch (err) {
+      return { success: false, message: (err as Error).message ?? "行权失败" };
+    }
+  }
+
+  async queryOptionPositions(): Promise<LivePosition[]> {
+    const raw = await this.proc.call<RawPosition[]>("query_option_positions");
+    return raw.map((r) => this.mapRawPosition(r));
+  }
+
   // ── Private ────────────────────────────────────────────────────
 
   private handleEvent(event: string, data: unknown): void {
@@ -477,14 +551,38 @@ export class FutuBroker implements IBrokerAdapter {
     const now = new Date().toISOString();
     const sym = fromFutuSymbol(r.stock_code);
     const market = detectMarketFromFutu(r.stock_code);
+
+    // Reconstruct order type from Futu's order_type string
+    let orderType: "market" | "limit" | "stop" | "stop_limit" = r.price > 0 ? "limit" : "market";
+    if (r.order_type) {
+      switch (r.order_type) {
+        case "STOP":
+          orderType = "stop";
+          break;
+        case "STOP_LIMIT":
+          orderType = "stop_limit";
+          break;
+        case "MARKET":
+        case "SPECIAL_LIMIT":        // Futu's market-like order for HK
+        case "SPECIAL_LIMIT_ALL":
+          orderType = "market";
+          break;
+        case "NORMAL":
+        case "LIMIT":
+          orderType = "limit";
+          break;
+      }
+    }
+
     return {
       orderId: localId ?? r.order_id,
       brokerOrderId: r.order_id,
       symbol: sym,
       market,
       side: mapFutuSide(r.trd_side),
-      orderType: r.price > 0 ? "limit" : "market",
+      orderType,
       price: r.price,
+      stopPrice: r.aux_price,
       quantity: r.order_volume,
       filledQty: r.traded_volume,
       avgFillPrice: r.traded_price || undefined,

@@ -20,7 +20,7 @@ import type { PriceAlertService } from "../services/price-alert.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
-import type { QuantTradingConfig, TradingSignal } from "../types.js";
+import type { QuantTradingConfig, TradingSignal, TradeRecord } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
 import { parseJsonBody } from "./parse-body.js";
@@ -1538,6 +1538,96 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Live vs Backtest Comparison routes ──────────────────────────
 
+// ── Live-Backtest Compare data resolver ─────────────────────────
+
+async function resolveLiveBacktestData(
+  req: { url?: string },
+  config: QuantTradingConfig,
+  backtestStore: BacktestStore,
+  equityHistory: EquityHistory,
+  equityHistoryPaper: EquityHistory | undefined,
+  equityHistoryLive: EquityHistory | undefined,
+): Promise<
+  | { req: import("../services/live-backtest-compare.js").LiveBacktestCompareRequest }
+  | { error: string; code?: number }
+> {
+  const p = urlParams(req);
+  const backtestId = p.get("backtest_id") ?? undefined;
+  const strategyId = p.get("strategy_id") ?? undefined;
+  const mode = p.get("mode") ?? "paper";
+  const startDate = p.get("start") ?? undefined;
+  const endDate = p.get("end") ?? undefined;
+
+  if (!backtestId && !strategyId) {
+    return { error: "需要 backtest_id 或 strategy_id 参数", code: 400 };
+  }
+
+  let btRecord;
+  if (backtestId) {
+    btRecord = backtestStore.getFullResult(backtestId);
+  } else if (strategyId) {
+    const entries = backtestStore.query({
+      strategyId,
+      sortBy: "createdAt",
+      sortDir: "desc",
+      limit: 1,
+    });
+    if (entries.length > 0) {
+      btRecord = backtestStore.getFullResult(entries[0]!.id);
+    }
+  }
+
+  if (!btRecord) {
+    return { error: "未找到回测记录", code: 404 };
+  }
+
+  const bt = btRecord.result;
+  const sid = strategyId ?? bt.strategyId;
+  const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+  const start = startDate ?? bt.startDate;
+  const end = endDate ?? bt.endDate;
+  const liveEquity = eh.getRange(start, end);
+
+  if (liveEquity.length === 0) {
+    return { error: `${mode === "live" ? "实盘" : "模拟盘"}无权益数据`, code: 404 };
+  }
+
+  const fsP = await import("node:fs/promises");
+  const osM = await import("node:os");
+  const pathM = await import("node:path");
+  const dir = config.dataDir ?? pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+
+  let allTrades: TradeRecord[] = [];
+  let allSignals: TradingSignal[] = [];
+  try {
+    allTrades = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8"));
+  } catch { /* empty */ }
+  try {
+    allSignals = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "signals.json"), "utf-8"));
+  } catch { /* empty */ }
+
+  const liveTrades = allTrades.filter(
+    (t) => t.strategyId === sid && t.entryTime >= start && t.entryTime <= end + "T23:59:59",
+  );
+  const liveSignals = allSignals.filter(
+    (s) => s.strategyId === sid &&
+      new Date(s.timestamp).toISOString().slice(0, 10) >= start &&
+      new Date(s.timestamp).toISOString().slice(0, 10) <= end,
+  );
+
+  return {
+    req: {
+      strategyId: sid,
+      startDate: start,
+      endDate: end,
+      backtestResult: bt,
+      liveEquity,
+      liveTrades,
+      liveSignals,
+    },
+  };
+}
+
 function registerLiveBacktestCompareRoutes({
   api,
   config,
@@ -1659,6 +1749,130 @@ function registerLiveBacktestCompareRoutes({
         });
 
         json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/drift-history?strategy_id=xxx[&mode=paper|live&start=&end=&window_days=30]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/drift-history",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { computeDriftHistory } = await import("../services/live-backtest-compare.js");
+        const p = urlParams(req);
+        const windowDays = Number(p.get("window_days")) || 30;
+        const result = computeDriftHistory(resolved.req, windowDays);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/period?strategy_id=xxx[&granularity=monthly|weekly&...]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/period",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { comparePeriodSegmented } = await import("../services/live-backtest-compare.js");
+        const p = urlParams(req);
+        const granularity = (p.get("granularity") ?? "monthly") as "weekly" | "monthly";
+        const result = comparePeriodSegmented(resolved.req, granularity);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/trade-match?strategy_id=xxx[&...]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/trade-match",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { matchTrades } = await import("../services/live-backtest-compare.js");
+        const result = matchTrades(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/symbol-breakdown?strategy_id=xxx[&...]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/symbol-breakdown",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { compareBySymbol } = await import("../services/live-backtest-compare.js");
+        const result = compareBySymbol(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/report?strategy_id=xxx[&...]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/report",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const {
+          compareLiveVsBacktest,
+          comparePeriodSegmented,
+          matchTrades,
+          computeDriftHistory,
+          compareBySymbol,
+        } = await import("../services/live-backtest-compare.js");
+        const p = urlParams(req);
+        const granularity = (p.get("granularity") ?? "monthly") as "weekly" | "monthly";
+        const comparison = compareLiveVsBacktest(resolved.req);
+        const segmented = comparePeriodSegmented(resolved.req, granularity);
+        const matched = matchTrades(resolved.req);
+        const history = computeDriftHistory(resolved.req);
+        const breakdown = compareBySymbol(resolved.req);
+        json(res, {
+          status: "ok",
+          data: { comparison, segmented, matched, history, breakdown },
+        });
       } catch (err) {
         json(res, { status: "error", message: (err as Error).message }, 500);
       }

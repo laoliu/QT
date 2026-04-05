@@ -17,11 +17,13 @@ import {
   comparePeriodSegmented,
   matchTrades,
   computeDriftHistory,
+  compareBySymbol,
   type LiveBacktestCompareResult,
   type SegmentGranularity,
   type PeriodSegmentedResult,
   type TradeMatchResult,
   type DriftHistory,
+  type PerSymbolBreakdownResult,
 } from "../services/live-backtest-compare.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
 
@@ -52,7 +54,7 @@ async function loadSignals(config: QuantTradingConfig): Promise<TradingSignal[]>
 function formatResult(result: LiveBacktestCompareResult) {
   const { returnComparison: rc, drawdownComparison: dc, riskComparison: rkc, executionQuality: eq, drift } = result;
 
-  return {
+  const base: Record<string, unknown> = {
     策略: result.strategyId,
     比较期间: `${result.period.start} ~ ${result.period.end}`,
     收益对比: {
@@ -94,6 +96,47 @@ function formatResult(result: LiveBacktestCompareResult) {
     },
     权益曲线数据点: result.equityCurveOverlay.points.length,
   };
+
+  // Benchmark comparison (if available)
+  if (result.benchmarkComparison) {
+    const bc = result.benchmarkComparison;
+    base.基准对比 = {
+      基准收益: `${fmt(bc.benchmarkReturn, 2)}%`,
+      实盘Alpha: `${fmt(bc.liveAlpha, 2)}%`,
+      回测Alpha: `${fmt(bc.backtestAlpha, 2)}%`,
+      归因: bc.attribution === "market_decline" ? "市场下跌" :
+        bc.attribution === "strategy_specific" ? "策略自身" :
+        bc.attribution === "both" ? "市场+策略" : "跑赢基准",
+    };
+  }
+
+  // Extended risk metrics
+  if (result.extendedRisk) {
+    const er = result.extendedRisk;
+    base.扩展风险指标 = {
+      回测Sortino: fmt(er.backtestSortino, 2),
+      实盘Sortino: fmt(er.liveSortino, 2),
+      回测Calmar: fmt(er.backtestCalmar, 2),
+      实盘Calmar: fmt(er.liveCalmar, 2),
+      回测盈亏比: fmt(er.backtestProfitFactor, 2),
+      实盘盈亏比: fmt(er.liveProfitFactor, 2),
+    };
+  }
+
+  // Cost decomposition
+  if (result.costDecomposition) {
+    const cd = result.costDecomposition;
+    base.成本分析 = {
+      实盘佣金: `¥${fmt(cd.totalCommission, 2)}`,
+      实盘税费: `¥${fmt(cd.totalTax, 2)}`,
+      成本占比: `${fmt(cd.costPct, 3)}%`,
+      回测费用: `¥${fmt(cd.backtestFees, 2)}`,
+      费用差异: `¥${fmt(cd.costDiff, 2)}`,
+      成本解释收益差距: `${fmt(cd.costExplainedGapPct, 1)}%`,
+    };
+  }
+
+  return base;
 }
 
 export function createLiveBacktestCompareTool(
@@ -113,13 +156,14 @@ export function createLiveBacktestCompareTool(
       "action=period_compare 按月/周分段对比, " +
       "action=trade_match 逐笔交易匹配分析, " +
       "action=drift_history 漂移趋势跟踪, " +
+      "action=symbol_breakdown 按标的分拆对比, " +
       "action=report 生成完整对比报告。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "report"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report"],
           description: "操作类型",
         },
         backtest_id: {
@@ -275,14 +319,36 @@ export function createLiveBacktestCompareTool(
           };
         }
 
+        case "symbol_breakdown": {
+          const breakdown = compareBySymbol(req);
+          return {
+            策略: breakdown.strategyId,
+            期间: `${breakdown.period.start}~${breakdown.period.end}`,
+            标的数: breakdown.symbols.length,
+            漂移最大标的: breakdown.worstSymbol ?? "N/A",
+            表现最好标的: breakdown.bestSymbol ?? "N/A",
+            标的明细: breakdown.symbols.map((s) => ({
+              标的: s.symbol,
+              实盘收益: `¥${fmt(s.liveReturn, 2)}`,
+              回测交易数: s.backtestTrades,
+              实盘交易数: s.liveTrades,
+              未执行信号: s.missedSignals,
+              平均滑点: `${fmt(s.avgSlippagePct, 3)}%`,
+              交易成本: `¥${fmt(s.totalCost, 2)}`,
+              漂移贡献: fmt(s.driftContribution, 1),
+            })),
+          };
+        }
+
         case "report": {
           const result = compareLiveVsBacktest(req);
           const granularity = (args.granularity as SegmentGranularity) ?? "monthly";
           const segmented = comparePeriodSegmented(req, granularity);
           const matched = matchTrades(req);
           const history = computeDriftHistory(req);
+          const breakdown = compareBySymbol(req);
 
-          return {
+          const report: Record<string, unknown> = {
             标题: `策略 ${req.strategyId} 实盘回测对比报告`,
             期间: `${req.startDate} ~ ${req.endDate}`,
             综合对比: formatResult(result),
@@ -302,6 +368,16 @@ export function createLiveBacktestCompareTool(
               额外交易: matched.summary.extraLiveCount,
               问题标的: matched.summary.problematicSymbols,
             },
+            标的分拆: {
+              漂移最大标的: breakdown.worstSymbol ?? "N/A",
+              标的数: breakdown.symbols.length,
+              明细: breakdown.symbols.slice(0, 10).map((s) => ({
+                标的: s.symbol,
+                实盘收益: `¥${fmt(s.liveReturn, 2)}`,
+                未执行: s.missedSignals,
+                滑点: `${fmt(s.avgSlippagePct, 3)}%`,
+              })),
+            },
             漂移趋势: {
               趋势: history.trend === "improving" ? "改善中" : history.trend === "worsening" ? "恶化中" : "稳定",
               平均漂移: history.avgDrift,
@@ -309,6 +385,8 @@ export function createLiveBacktestCompareTool(
             },
             建议: generateRecommendations(result, segmented, matched, history),
           };
+
+          return report;
         }
 
         default:

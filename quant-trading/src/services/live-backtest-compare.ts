@@ -115,6 +115,80 @@ export interface LiveBacktestCompareResult {
   executionQuality: ExecutionQuality;
   equityCurveOverlay: EquityCurveOverlay;
   drift: DriftAnalysis;
+  /** Benchmark comparison (if benchmark data available) */
+  benchmarkComparison?: BenchmarkComparison;
+  /** Extended risk metrics (Sortino, Calmar, profitFactor) */
+  extendedRisk?: ExtendedRiskComparison;
+  /** Commission/tax drag decomposition */
+  costDecomposition?: CostDecomposition;
+}
+
+// ── Benchmark comparison ───────────────────────────────────
+
+export interface BenchmarkComparison {
+  /** Benchmark total return (%) */
+  benchmarkReturn: number;
+  /** Alpha: live return - benchmark return */
+  liveAlpha: number;
+  /** Alpha: backtest return - benchmark return */
+  backtestAlpha: number;
+  /** Did underperformance come from the market or the strategy? */
+  attribution: "market_decline" | "strategy_specific" | "both" | "outperforming";
+  /** Benchmark equity curve for overlay */
+  benchmarkCurve: Array<{ date: string; value: number }>;
+}
+
+// ── Extended risk metrics ──────────────────────────────────
+
+export interface ExtendedRiskComparison {
+  backtestSortino: number;
+  liveSortino: number;
+  backtestCalmar: number;
+  liveCalmar: number;
+  backtestProfitFactor: number;
+  liveProfitFactor: number;
+}
+
+// ── Cost decomposition ─────────────────────────────────────
+
+export interface CostDecomposition {
+  /** Total commission paid in live trading */
+  totalCommission: number;
+  /** Total tax (stamp duty) paid */
+  totalTax: number;
+  /** Commission + tax as % of starting equity */
+  costPct: number;
+  /** How much of the live-vs-backtest gap is explained by costs */
+  costExplainedGapPct: number;
+  /** Estimated backtest cost assumption (from BacktestResult.totalFees) */
+  backtestFees: number;
+  /** Cost difference: live costs - backtest costs */
+  costDiff: number;
+}
+
+// ── Per-symbol breakdown ───────────────────────────────────
+
+export interface PerSymbolBreakdown {
+  symbol: string;
+  backtestReturn: number;
+  liveReturn: number;
+  returnDiff: number;
+  backtestTrades: number;
+  liveTrades: number;
+  missedSignals: number;
+  avgSlippagePct: number;
+  totalCost: number;
+  driftContribution: number;
+}
+
+export interface PerSymbolBreakdownResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  symbols: PerSymbolBreakdown[];
+  /** Symbol contributing the most to overall drift */
+  worstSymbol: string | null;
+  /** Symbol with the best live performance relative to backtest */
+  bestSymbol: string | null;
 }
 
 // ── Period-segmented comparison ──────────────────────────────
@@ -217,7 +291,7 @@ export function compareLiveVsBacktest(
   const overlay = buildEquityCurveOverlay(backtestResult, liveEquity);
   const drift = computeDrift(returnComp, drawdownComp, riskComp, execQuality);
 
-  return {
+  const result: LiveBacktestCompareResult = {
     strategyId,
     period: { start: startDate, end: endDate },
     returnComparison: returnComp,
@@ -227,6 +301,18 @@ export function compareLiveVsBacktest(
     equityCurveOverlay: overlay,
     drift,
   };
+
+  // Benchmark comparison (if benchmark data available in equity snapshots or backtest)
+  const benchComp = computeBenchmarkComparison(backtestResult, liveEquity, returnComp);
+  if (benchComp) result.benchmarkComparison = benchComp;
+
+  // Extended risk metrics
+  result.extendedRisk = computeExtendedRisk(backtestResult, liveEquity, liveTrades, drawdownComp);
+
+  // Cost decomposition
+  result.costDecomposition = computeCostDecomposition(backtestResult, liveTrades, liveEquity, returnComp);
+
+  return result;
 }
 
 function computeReturnComparison(
@@ -852,5 +938,266 @@ function computeDrift(
       riskDrift: Math.round(riskDrift),
     },
     observations,
+  };
+}
+
+// ── Benchmark comparison ──────────────────────────────────
+
+function computeBenchmarkComparison(
+  bt: BacktestResult,
+  liveEquity: EquitySnapshot[],
+  returnComp: ReturnComparison,
+): BenchmarkComparison | null {
+  // Try benchmark from backtest result first, then from equity snapshots
+  const hasBtBenchmark = bt.benchmarkCurve && bt.benchmarkCurve.length >= 2;
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const hasBenchmarkInEquity = sortedLive.some((s) => s.benchmark != null && s.benchmark > 0);
+
+  if (!hasBtBenchmark && !hasBenchmarkInEquity) return null;
+
+  let benchmarkReturn = 0;
+  let benchmarkCurve: Array<{ date: string; value: number }> = [];
+
+  if (hasBtBenchmark) {
+    const bc = bt.benchmarkCurve!;
+    const first = bc[0]!;
+    const last = bc[bc.length - 1]!;
+    benchmarkReturn = first.value > 0 ? ((last.value - first.value) / first.value) * 100 : 0;
+    // Normalize to percentage of initial
+    benchmarkCurve = bc.map((p) => ({
+      date: p.date,
+      value: first.value > 0 ? (p.value / first.value) * 100 : 0,
+    }));
+  } else if (hasBenchmarkInEquity) {
+    const withBench = sortedLive.filter((s) => s.benchmark != null && s.benchmark > 0);
+    if (withBench.length >= 2) {
+      const first = withBench[0]!.benchmark!;
+      const last = withBench[withBench.length - 1]!.benchmark!;
+      benchmarkReturn = first > 0 ? ((last - first) / first) * 100 : 0;
+      benchmarkCurve = withBench.map((s) => ({
+        date: s.date,
+        value: first > 0 ? (s.benchmark! / first) * 100 : 0,
+      }));
+    }
+  }
+
+  const liveAlpha = returnComp.liveReturn - benchmarkReturn;
+  const backtestAlpha = returnComp.backtestReturn - benchmarkReturn;
+
+  // Determine attribution
+  let attribution: BenchmarkComparison["attribution"];
+  if (liveAlpha >= 0) {
+    attribution = "outperforming";
+  } else if (benchmarkReturn < -2 && returnComp.returnDiff < -3) {
+    attribution = "both";
+  } else if (benchmarkReturn < -2) {
+    attribution = "market_decline";
+  } else {
+    attribution = "strategy_specific";
+  }
+
+  return { benchmarkReturn, liveAlpha, backtestAlpha, attribution, benchmarkCurve };
+}
+
+// ── Extended risk metrics ──────────────────────────────────
+
+function computeExtendedRisk(
+  bt: BacktestResult,
+  liveEquity: EquitySnapshot[],
+  liveTrades: TradeRecord[],
+  drawdownComp: DrawdownComparison,
+): ExtendedRiskComparison {
+  const sorted = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Live Sortino: downside deviation only
+  let liveSortino = 0;
+  if (sorted.length >= 5) {
+    const dailyReturns: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]!;
+      if (prev.equity > 0) {
+        dailyReturns.push((sorted[i]!.equity - prev.equity) / prev.equity);
+      }
+    }
+    if (dailyReturns.length > 1) {
+      const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+      const downsideReturns = dailyReturns.filter((r) => r < 0);
+      const downsideVariance = downsideReturns.length > 0
+        ? downsideReturns.reduce((a, r) => a + r ** 2, 0) / downsideReturns.length
+        : 0;
+      const downsideStd = Math.sqrt(downsideVariance);
+      if (downsideStd > 0) {
+        liveSortino = (mean / downsideStd) * Math.sqrt(252);
+      }
+    }
+  }
+
+  // Live Calmar: annualized return / max drawdown
+  let liveCalmar = 0;
+  if (sorted.length >= 2 && drawdownComp.liveMaxDrawdown > 0) {
+    const first = sorted[0]!;
+    const last = sorted[sorted.length - 1]!;
+    const days = Math.max(1, (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000);
+    const totalReturn = first.equity > 0 ? (last.equity - first.equity) / first.equity : 0;
+    const annualizedReturn = (Math.pow(1 + totalReturn, 365 / days) - 1) * 100;
+    liveCalmar = annualizedReturn / drawdownComp.liveMaxDrawdown;
+  }
+
+  // Live profit factor: gross profit / gross loss
+  const closedTrades = liveTrades.filter((t) => t.exitPrice != null);
+  let grossProfit = 0;
+  let grossLoss = 0;
+  for (const t of closedTrades) {
+    if (t.netPnl > 0) grossProfit += t.netPnl;
+    else grossLoss += Math.abs(t.netPnl);
+  }
+  const liveProfitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+
+  return {
+    backtestSortino: bt.sortinoRatio ?? 0,
+    liveSortino,
+    backtestCalmar: bt.calmarRatio ?? 0,
+    liveCalmar,
+    backtestProfitFactor: bt.profitFactor ?? 0,
+    liveProfitFactor: Number.isFinite(liveProfitFactor) ? liveProfitFactor : 0,
+  };
+}
+
+// ── Cost decomposition ─────────────────────────────────────
+
+function computeCostDecomposition(
+  bt: BacktestResult,
+  liveTrades: TradeRecord[],
+  liveEquity: EquitySnapshot[],
+  returnComp: ReturnComparison,
+): CostDecomposition {
+  let totalCommission = 0;
+  let totalTax = 0;
+  for (const t of liveTrades) {
+    totalCommission += t.commission;
+    // tax = grossPnl - netPnl - commission (when grossPnl > netPnl + commission)
+    const impliedTax = t.grossPnl - t.netPnl - t.commission;
+    if (impliedTax > 0) totalTax += impliedTax;
+  }
+
+  const sorted = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const startEquity = sorted.length > 0 ? sorted[0]!.equity : 1;
+  const totalLiveCost = totalCommission + totalTax;
+  const costPct = startEquity > 0 ? (totalLiveCost / startEquity) * 100 : 0;
+
+  const backtestFees = bt.totalFees ?? 0;
+  const costDiff = totalLiveCost - backtestFees;
+
+  // How much of the return gap is explained by cost difference
+  const returnGap = Math.abs(returnComp.returnDiff);
+  const costDiffPct = startEquity > 0 ? (costDiff / startEquity) * 100 : 0;
+  const costExplainedGapPct = returnGap > 0 ? Math.min(100, (Math.abs(costDiffPct) / returnGap) * 100) : 0;
+
+  return {
+    totalCommission,
+    totalTax,
+    costPct,
+    costExplainedGapPct,
+    backtestFees,
+    costDiff,
+  };
+}
+
+// ── Per-symbol breakdown ───────────────────────────────────
+
+/**
+ * Break down comparison metrics by individual symbol.
+ */
+export function compareBySymbol(
+  req: LiveBacktestCompareRequest,
+): PerSymbolBreakdownResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades, liveSignals } = req;
+
+  // Collect all symbols from backtest signals and live trades
+  const symbolSet = new Set<string>();
+  for (const s of backtestResult.signals) symbolSet.add(s.symbol);
+  for (const t of liveTrades) symbolSet.add(t.symbol);
+
+  const symbols: PerSymbolBreakdown[] = [];
+
+  for (const symbol of symbolSet) {
+    // Backtest signals for this symbol in range
+    const btSignals = backtestResult.signals.filter((s) => {
+      if (s.symbol !== symbol) return false;
+      const d = new Date(s.timestamp).toISOString().slice(0, 10);
+      return d >= startDate && d <= endDate;
+    });
+
+    // Live trades for this symbol
+    const symLiveTrades = liveTrades.filter((t) => t.symbol === symbol);
+    const closedLive = symLiveTrades.filter((t) => t.exitPrice != null);
+
+    // Live return from closed trades
+    const liveGross = closedLive.reduce((a, t) => a + t.netPnl, 0);
+    const liveCost = closedLive.reduce((a, t) => a + t.commission, 0);
+
+    // Estimate backtest per-symbol return from signals (buy count × avg expected movement)
+    // Since backtest doesn't store per-symbol returns, use signal count as proxy
+    const buySignals = btSignals.filter((s) => s.direction === "buy" || s.direction === "cover");
+    const sellSignals = btSignals.filter((s) => s.direction === "sell" || s.direction === "short");
+
+    // Match signals to find missed ones
+    const matchedLiveIds = new Set<string>();
+    let missedSignals = 0;
+    let totalSlippage = 0;
+    let slippageCount = 0;
+
+    for (const btSig of btSignals) {
+      let found = false;
+      for (const trade of symLiveTrades) {
+        if (matchedLiveIds.has(trade.tradeId)) continue;
+        const isSameDir =
+          (btSig.direction === "buy" && trade.side === "buy") ||
+          (btSig.direction === "sell" && trade.side === "sell") ||
+          (btSig.direction === "short" && trade.side === "short") ||
+          (btSig.direction === "cover" && trade.side === "cover");
+        if (!isSameDir) continue;
+        const timeDiff = Math.abs(new Date(trade.entryTime).getTime() - btSig.timestamp);
+        if (timeDiff < 24 * 60 * 60 * 1000) {
+          matchedLiveIds.add(trade.tradeId);
+          if (btSig.price > 0) {
+            totalSlippage += Math.abs(trade.entryPrice - btSig.price) / btSig.price * 100;
+            slippageCount++;
+          }
+          found = true;
+          break;
+        }
+      }
+      if (!found) missedSignals++;
+    }
+
+    // Estimate backtest return proportionally from equity curve is not possible per-symbol,
+    // so use signal-based heuristic
+    const backtestReturn = 0; // Not available per-symbol from aggregate backtest
+    const liveReturn = liveGross;
+
+    symbols.push({
+      symbol,
+      backtestReturn,
+      liveReturn,
+      returnDiff: liveReturn - backtestReturn,
+      backtestTrades: buySignals.length + sellSignals.length,
+      liveTrades: symLiveTrades.length,
+      missedSignals,
+      avgSlippagePct: slippageCount > 0 ? totalSlippage / slippageCount : 0,
+      totalCost: liveCost,
+      driftContribution: missedSignals + (slippageCount > 0 ? totalSlippage / slippageCount : 0),
+    });
+  }
+
+  // Sort by drift contribution descending
+  symbols.sort((a, b) => b.driftContribution - a.driftContribution);
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    symbols,
+    worstSymbol: symbols.length > 0 ? symbols[0]!.symbol : null,
+    bestSymbol: symbols.length > 0 ? symbols[symbols.length - 1]!.symbol : null,
   };
 }

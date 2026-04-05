@@ -117,6 +117,88 @@ export interface LiveBacktestCompareResult {
   drift: DriftAnalysis;
 }
 
+// ── Period-segmented comparison ──────────────────────────────
+
+export type SegmentGranularity = "weekly" | "monthly";
+
+export interface PeriodSegment {
+  /** Segment label (e.g. "2024-01" for monthly, "2024-W03" for weekly) */
+  label: string;
+  startDate: string;
+  endDate: string;
+  backtestReturn: number;
+  liveReturn: number;
+  returnDiff: number;
+  backtestTrades: number;
+  liveTrades: number;
+  driftScore: number;
+}
+
+export interface PeriodSegmentedResult {
+  strategyId: string;
+  granularity: SegmentGranularity;
+  segments: PeriodSegment[];
+  /** Segment where drift first exceeded 'moderate' threshold */
+  driftOnset: string | null;
+  /** Segment with the worst drift */
+  worstSegment: string | null;
+}
+
+// ── Trade-level matching ────────────────────────────────────
+
+export interface TradeMatch {
+  /** Backtest signal that generated this expected trade */
+  backtestSignal: TradingSignal;
+  /** Matched live trade (null if signal was not executed) */
+  liveTrade: TradeRecord | null;
+  /** Match quality: "matched", "missed" (no live trade), "extra" (live trade without backtest signal) */
+  matchType: "matched" | "missed" | "extra";
+  /** Time delay between signal and execution (ms), null if unmatched */
+  latencyMs: number | null;
+  /** Price slippage (%), null if unmatched */
+  slippagePct: number | null;
+  /** P&L difference between backtest expectation and live result */
+  pnlDiff: number | null;
+}
+
+export interface TradeMatchResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  matches: TradeMatch[];
+  /** Summary statistics */
+  summary: {
+    totalBacktestSignals: number;
+    matchedCount: number;
+    missedCount: number;
+    extraLiveCount: number;
+    matchRate: number;
+    avgLatencyMs: number;
+    avgSlippagePct: number;
+    /** Symbols with the most missed signals */
+    problematicSymbols: Array<{ symbol: string; missedCount: number }>;
+  };
+}
+
+// ── Historical drift tracking ───────────────────────────────
+
+export interface DriftSnapshot {
+  date: string;
+  score: number;
+  severity: DriftSeverity;
+  components: DriftAnalysis["components"];
+}
+
+export interface DriftHistory {
+  strategyId: string;
+  snapshots: DriftSnapshot[];
+  /** Trend: is drift improving, stable, or worsening? */
+  trend: "improving" | "stable" | "worsening";
+  /** Average drift over the period */
+  avgDrift: number;
+  /** Number of times severity crossed into 'high' or 'critical' */
+  alertCount: number;
+}
+
 // ── Implementation ──────────────────────────────────────────
 
 /**
@@ -322,6 +404,352 @@ function buildEquityCurveOverlay(
 
   return { points };
 }
+
+// ── Period-segmented comparison ──────────────────────────────
+
+/**
+ * Break a comparison into weekly or monthly segments to identify when drift started.
+ */
+export function comparePeriodSegmented(
+  req: LiveBacktestCompareRequest,
+  granularity: SegmentGranularity = "monthly",
+): PeriodSegmentedResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity, liveTrades } = req;
+
+  const segments: PeriodSegment[] = [];
+  const boundaries = computeSegmentBoundaries(startDate, endDate, granularity);
+
+  for (const { label, start, end } of boundaries) {
+    // Filter backtest equity curve for this segment
+    const btPoints = backtestResult.equityCurve.filter(
+      (p) => p.date >= start && p.date <= end,
+    );
+    const btReturn = computeSegmentReturn(btPoints.map((p) => p.value));
+
+    // Filter live equity for this segment
+    const livePoints = liveEquity
+      .filter((s) => s.date >= start && s.date <= end)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const liveReturn = computeSegmentReturn(livePoints.map((p) => p.equity));
+
+    // Count trades in this segment
+    const btSignals = backtestResult.signals.filter((s) => {
+      const d = new Date(s.timestamp).toISOString().slice(0, 10);
+      return d >= start && d <= end;
+    });
+    const lTrades = liveTrades.filter(
+      (t) => t.entryTime >= start && t.entryTime <= end + "T23:59:59",
+    );
+
+    const returnDiff = liveReturn - btReturn;
+    const driftScore = Math.min(100, Math.abs(returnDiff) * 2);
+
+    segments.push({
+      label,
+      startDate: start,
+      endDate: end,
+      backtestReturn: btReturn,
+      liveReturn,
+      returnDiff,
+      backtestTrades: btSignals.length,
+      liveTrades: lTrades.length,
+      driftScore: Math.round(driftScore),
+    });
+  }
+
+  // Find drift onset (first segment where drift > 35 = "high")
+  const driftOnset = segments.find((s) => s.driftScore > 35)?.label ?? null;
+  // Find worst segment
+  const worstSegment = segments.length > 0
+    ? segments.reduce((a, b) => (b.driftScore > a.driftScore ? b : a)).label
+    : null;
+
+  return { strategyId, granularity, segments, driftOnset, worstSegment };
+}
+
+function computeSegmentBoundaries(
+  startDate: string,
+  endDate: string,
+  granularity: SegmentGranularity,
+): Array<{ label: string; start: string; end: string }> {
+  const boundaries: Array<{ label: string; start: string; end: string }> = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (granularity === "monthly") {
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cursor <= end) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth();
+      const segStart = new Date(year, month, 1);
+      const segEnd = new Date(year, month + 1, 0); // last day of month
+      const label = `${year}-${String(month + 1).padStart(2, "0")}`;
+      boundaries.push({
+        label,
+        start: Math.max(segStart.getTime(), start.getTime()) === start.getTime() && segStart < start
+          ? startDate
+          : segStart.toISOString().slice(0, 10),
+        end: segEnd > end ? endDate : segEnd.toISOString().slice(0, 10),
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+  } else {
+    // Weekly
+    const cursor = new Date(start);
+    // Align to Monday
+    const dayOfWeek = cursor.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    cursor.setDate(cursor.getDate() + mondayOffset);
+
+    let weekNum = 1;
+    while (cursor <= end) {
+      const weekStart = new Date(cursor);
+      const weekEnd = new Date(cursor);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const label = `${weekStart.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+      boundaries.push({
+        label,
+        start: weekStart < start ? startDate : weekStart.toISOString().slice(0, 10),
+        end: weekEnd > end ? endDate : weekEnd.toISOString().slice(0, 10),
+      });
+      cursor.setDate(cursor.getDate() + 7);
+      weekNum++;
+    }
+  }
+
+  return boundaries;
+}
+
+function computeSegmentReturn(values: number[]): number {
+  if (values.length < 2) return 0;
+  const first = values[0]!;
+  const last = values[values.length - 1]!;
+  return first > 0 ? ((last - first) / first) * 100 : 0;
+}
+
+// ── Trade-level matching ────────────────────────────────────
+
+/**
+ * Match backtest signals with live trades to find individual divergences.
+ */
+export function matchTrades(
+  req: LiveBacktestCompareRequest,
+): TradeMatchResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades, liveSignals } = req;
+
+  const matches: TradeMatch[] = [];
+  const matchedLiveTradeIds = new Set<string>();
+
+  // For each backtest signal, try to find a matching live trade
+  for (const btSignal of backtestResult.signals) {
+    const signalDate = new Date(btSignal.timestamp).toISOString().slice(0, 10);
+    if (signalDate < startDate || signalDate > endDate) continue;
+
+    // Find closest matching live trade (same symbol, same direction, within 1 day)
+    let bestMatch: TradeRecord | null = null;
+    let bestTimeDiff = Infinity;
+
+    for (const trade of liveTrades) {
+      if (matchedLiveTradeIds.has(trade.tradeId)) continue;
+      if (trade.symbol !== btSignal.symbol) continue;
+
+      const isSameDirection =
+        (btSignal.direction === "buy" && trade.side === "buy") ||
+        (btSignal.direction === "sell" && trade.side === "sell") ||
+        (btSignal.direction === "short" && trade.side === "short") ||
+        (btSignal.direction === "cover" && trade.side === "cover");
+      if (!isSameDirection) continue;
+
+      const timeDiff = Math.abs(
+        new Date(trade.entryTime).getTime() - btSignal.timestamp,
+      );
+      if (timeDiff < 24 * 60 * 60 * 1000 && timeDiff < bestTimeDiff) {
+        bestTimeDiff = timeDiff;
+        bestMatch = trade;
+      }
+    }
+
+    if (bestMatch) {
+      matchedLiveTradeIds.add(bestMatch.tradeId);
+      const slippage =
+        btSignal.price > 0
+          ? ((bestMatch.entryPrice - btSignal.price) / btSignal.price) * 100
+          : 0;
+
+      matches.push({
+        backtestSignal: btSignal,
+        liveTrade: bestMatch,
+        matchType: "matched",
+        latencyMs: bestTimeDiff,
+        slippagePct: slippage,
+        pnlDiff: bestMatch.netPnl, // live PnL (backtest per-trade PnL is not tracked individually)
+      });
+    } else {
+      matches.push({
+        backtestSignal: btSignal,
+        liveTrade: null,
+        matchType: "missed",
+        latencyMs: null,
+        slippagePct: null,
+        pnlDiff: null,
+      });
+    }
+  }
+
+  // Find extra live trades (not matched to any backtest signal)
+  for (const trade of liveTrades) {
+    if (matchedLiveTradeIds.has(trade.tradeId)) continue;
+    matches.push({
+      backtestSignal: {
+        timestamp: new Date(trade.entryTime).getTime(),
+        symbol: trade.symbol,
+        direction: trade.side as TradingSignal["direction"],
+        price: trade.entryPrice,
+        strategyId,
+      },
+      liveTrade: trade,
+      matchType: "extra",
+      latencyMs: null,
+      slippagePct: null,
+      pnlDiff: trade.netPnl,
+    });
+  }
+
+  // Summary
+  const matched = matches.filter((m) => m.matchType === "matched");
+  const missed = matches.filter((m) => m.matchType === "missed");
+  const extra = matches.filter((m) => m.matchType === "extra");
+
+  const avgLatency = matched.length > 0
+    ? matched.reduce((a, m) => a + (m.latencyMs ?? 0), 0) / matched.length
+    : 0;
+  const avgSlippage = matched.length > 0
+    ? matched.reduce((a, m) => a + Math.abs(m.slippagePct ?? 0), 0) / matched.length
+    : 0;
+
+  // Find problematic symbols
+  const missedBySymbol = new Map<string, number>();
+  for (const m of missed) {
+    const sym = m.backtestSignal.symbol;
+    missedBySymbol.set(sym, (missedBySymbol.get(sym) ?? 0) + 1);
+  }
+  const problematicSymbols = [...missedBySymbol.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([symbol, missedCount]) => ({ symbol, missedCount }));
+
+  const totalBtSignals = backtestResult.signals.filter((s) => {
+    const d = new Date(s.timestamp).toISOString().slice(0, 10);
+    return d >= startDate && d <= endDate;
+  }).length;
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    matches,
+    summary: {
+      totalBacktestSignals: totalBtSignals,
+      matchedCount: matched.length,
+      missedCount: missed.length,
+      extraLiveCount: extra.length,
+      matchRate: totalBtSignals > 0 ? matched.length / totalBtSignals : 0,
+      avgLatencyMs: avgLatency,
+      avgSlippagePct: avgSlippage,
+      problematicSymbols,
+    },
+  };
+}
+
+// ── Historical drift tracking ───────────────────────────────
+
+/**
+ * Compute drift snapshots over rolling windows to track strategy degradation.
+ */
+export function computeDriftHistory(
+  req: LiveBacktestCompareRequest,
+  windowDays = 30,
+  stepDays = 7,
+): DriftHistory {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity, liveTrades, liveSignals } = req;
+
+  const snapshots: DriftSnapshot[] = [];
+  const startMs = new Date(startDate).getTime();
+  const endMs = new Date(endDate).getTime();
+  const dayMs = 86_400_000;
+
+  let cursor = startMs;
+  while (cursor + windowDays * dayMs <= endMs + dayMs) {
+    const winStart = new Date(cursor).toISOString().slice(0, 10);
+    const winEnd = new Date(cursor + windowDays * dayMs).toISOString().slice(0, 10);
+
+    // Filter data for this window
+    const windowEquity = liveEquity.filter((s) => s.date >= winStart && s.date <= winEnd);
+    const windowTrades = liveTrades.filter(
+      (t) => t.entryTime >= winStart && t.entryTime <= winEnd + "T23:59:59",
+    );
+    const windowSignals = liveSignals.filter((s) => {
+      const d = new Date(s.timestamp).toISOString().slice(0, 10);
+      return d >= winStart && d <= winEnd;
+    });
+
+    if (windowEquity.length >= 2) {
+      // Build a windowed backtest result with only the relevant equity curve
+      const windowBtEquity = backtestResult.equityCurve.filter(
+        (p) => p.date >= winStart && p.date <= winEnd,
+      );
+      const windowBtSignals = backtestResult.signals.filter((s) => {
+        const d = new Date(s.timestamp).toISOString().slice(0, 10);
+        return d >= winStart && d <= winEnd;
+      });
+
+      const windowBt: BacktestResult = {
+        ...backtestResult,
+        startDate: winStart,
+        endDate: winEnd,
+        equityCurve: windowBtEquity,
+        signals: windowBtSignals,
+        totalTrades: windowBtSignals.filter((s) => s.direction === "buy" || s.direction === "cover").length,
+      };
+
+      const returnComp = computeReturnComparison(windowBt, windowEquity);
+      const drawdownComp = computeDrawdownComparison(windowBt, windowEquity);
+      const riskComp = computeRiskComparison(windowBt, windowEquity, windowTrades);
+      const execQuality = computeExecutionQuality(windowBt, windowTrades, windowSignals);
+      const drift = computeDrift(returnComp, drawdownComp, riskComp, execQuality);
+
+      snapshots.push({
+        date: winEnd,
+        score: drift.score,
+        severity: drift.severity,
+        components: drift.components,
+      });
+    }
+
+    cursor += stepDays * dayMs;
+  }
+
+  // Determine trend
+  let trend: DriftHistory["trend"] = "stable";
+  if (snapshots.length >= 3) {
+    const firstHalf = snapshots.slice(0, Math.floor(snapshots.length / 2));
+    const secondHalf = snapshots.slice(Math.floor(snapshots.length / 2));
+    const avgFirst = firstHalf.reduce((a, s) => a + s.score, 0) / firstHalf.length;
+    const avgSecond = secondHalf.reduce((a, s) => a + s.score, 0) / secondHalf.length;
+    if (avgSecond - avgFirst > 5) trend = "worsening";
+    else if (avgFirst - avgSecond > 5) trend = "improving";
+  }
+
+  const avgDrift = snapshots.length > 0
+    ? snapshots.reduce((a, s) => a + s.score, 0) / snapshots.length
+    : 0;
+  const alertCount = snapshots.filter(
+    (s) => s.severity === "high" || s.severity === "critical",
+  ).length;
+
+  return { strategyId, snapshots, trend, avgDrift: Math.round(avgDrift), alertCount };
+}
+
+// ── Core drift computation (unchanged) ──────────────────────
 
 function computeDrift(
   returnComp: ReturnComparison,

@@ -14,7 +14,14 @@ import type { BacktestStore } from "../services/backtest-store.js";
 import type { EquityHistory } from "../services/equity-history.js";
 import {
   compareLiveVsBacktest,
+  comparePeriodSegmented,
+  matchTrades,
+  computeDriftHistory,
   type LiveBacktestCompareResult,
+  type SegmentGranularity,
+  type PeriodSegmentedResult,
+  type TradeMatchResult,
+  type DriftHistory,
 } from "../services/live-backtest-compare.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
 
@@ -102,13 +109,17 @@ export function createLiveBacktestCompareTool(
       "实盘回测对比分析。将实盘/模拟盘的实际交易表现与回测预测进行对比，" +
       "检测收益漂移、回撤偏差、执行质量和信号填充率。" +
       "action=compare 完整对比, action=drift_check 快速漂移检查, " +
-      "action=list_backtests 列出可对比的回测记录。",
+      "action=list_backtests 列出可对比的回测记录, " +
+      "action=period_compare 按月/周分段对比, " +
+      "action=trade_match 逐笔交易匹配分析, " +
+      "action=drift_history 漂移趋势跟踪, " +
+      "action=report 生成完整对比报告。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "report"],
           description: "操作类型",
         },
         backtest_id: {
@@ -126,6 +137,15 @@ export function createLiveBacktestCompareTool(
           enum: ["paper", "live"],
           description: "实盘模式: paper=模拟盘, live=实盘 (默认paper)",
         },
+        granularity: {
+          type: "string",
+          enum: ["weekly", "monthly"],
+          description: "分段粒度 (period_compare使用，默认monthly)",
+        },
+        window_days: {
+          type: "number",
+          description: "漂移跟踪滚动窗口天数 (drift_history使用，默认30)",
+        },
       },
       required: ["action"],
     },
@@ -133,120 +153,162 @@ export function createLiveBacktestCompareTool(
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
 
+      if (action === "list_backtests") {
+        const strategyId = args.strategy_id as string | undefined;
+        const entries = backtestStore.query({
+          strategyId,
+          sortBy: "createdAt",
+          sortDir: "desc",
+          limit: 20,
+        });
+        if (entries.length === 0) {
+          return { message: strategyId ? `策略 ${strategyId} 无回测记录` : "暂无回测记录" };
+        }
+        return {
+          count: entries.length,
+          records: entries.map((e) => ({
+            id: e.id,
+            策略: e.strategyId,
+            标的: e.symbols.join(","),
+            期间: `${e.startDate}~${e.endDate}`,
+            收益: `${fmt(e.totalReturn, 2)}%`,
+            Sharpe: fmt(e.sharpeRatio, 2),
+            创建时间: e.createdAt,
+          })),
+        };
+      }
+
+      // All other actions need backtest + live data
+      const resolved = await resolveCompareData(args);
+      if ("error" in resolved) return resolved;
+      const { req } = resolved;
+
       switch (action) {
-        case "list_backtests": {
-          const strategyId = args.strategy_id as string | undefined;
-          const entries = backtestStore.query({
-            strategyId,
-            sortBy: "createdAt",
-            sortDir: "desc",
-            limit: 20,
-          });
-          if (entries.length === 0) {
-            return { message: strategyId ? `策略 ${strategyId} 无回测记录` : "暂无回测记录" };
-          }
+        case "compare": {
+          const result = compareLiveVsBacktest(req);
+          return formatResult(result);
+        }
+
+        case "drift_check": {
+          const result = compareLiveVsBacktest(req);
           return {
-            count: entries.length,
-            records: entries.map((e) => ({
-              id: e.id,
-              策略: e.strategyId,
-              标的: e.symbols.join(","),
-              期间: `${e.startDate}~${e.endDate}`,
-              收益: `${fmt(e.totalReturn, 2)}%`,
-              Sharpe: fmt(e.sharpeRatio, 2),
-              创建时间: e.createdAt,
+            策略: result.strategyId,
+            漂移得分: `${result.drift.score}/100`,
+            严重程度: result.drift.severity,
+            收益偏差: `${fmt(result.returnComparison.returnDiff, 2)}%`,
+            执行率: `${fmt(result.executionQuality.fillRate * 100, 0)}%`,
+            观察: result.drift.observations,
+          };
+        }
+
+        case "period_compare": {
+          const granularity = (args.granularity as SegmentGranularity) ?? "monthly";
+          const segmented = comparePeriodSegmented(req, granularity);
+          return {
+            策略: segmented.strategyId,
+            粒度: segmented.granularity === "monthly" ? "月度" : "周度",
+            分段数: segmented.segments.length,
+            漂移起始: segmented.driftOnset ?? "未检测到明显漂移",
+            最差分段: segmented.worstSegment ?? "N/A",
+            分段详情: segmented.segments.map((s) => ({
+              区间: s.label,
+              日期: `${s.startDate}~${s.endDate}`,
+              回测收益: `${fmt(s.backtestReturn, 2)}%`,
+              实盘收益: `${fmt(s.liveReturn, 2)}%`,
+              收益偏差: `${fmt(s.returnDiff, 2)}%`,
+              回测交易数: s.backtestTrades,
+              实盘交易数: s.liveTrades,
+              漂移得分: s.driftScore,
             })),
           };
         }
 
-        case "compare":
-        case "drift_check": {
-          const backtestId = args.backtest_id as string | undefined;
-          const strategyId = args.strategy_id as string | undefined;
-          const mode = (args.mode as string) ?? "paper";
-          const startDate = args.start_date as string | undefined;
-          const endDate = args.end_date as string | undefined;
+        case "trade_match": {
+          const matched = matchTrades(req);
+          const s = matched.summary;
+          return {
+            策略: matched.strategyId,
+            期间: `${matched.period.start}~${matched.period.end}`,
+            匹配统计: {
+              回测信号总数: s.totalBacktestSignals,
+              已匹配: s.matchedCount,
+              未执行: s.missedCount,
+              额外实盘交易: s.extraLiveCount,
+              匹配率: `${fmt(s.matchRate * 100, 1)}%`,
+              平均延迟: s.avgLatencyMs > 0 ? `${fmt(s.avgLatencyMs / 1000, 1)}秒` : "N/A",
+              平均滑点: `${fmt(s.avgSlippagePct, 3)}%`,
+            },
+            问题标的: s.problematicSymbols.length > 0
+              ? s.problematicSymbols.map((p) => `${p.symbol}: 未执行${p.missedCount}次`)
+              : "无",
+            逐笔明细: matched.matches.slice(0, 20).map((m) => ({
+              类型: m.matchType === "matched" ? "已匹配" : m.matchType === "missed" ? "未执行" : "额外交易",
+              标的: m.backtestSignal.symbol,
+              方向: m.backtestSignal.direction,
+              信号价格: fmt(m.backtestSignal.price, 2),
+              成交价格: m.liveTrade ? fmt(m.liveTrade.entryPrice, 2) : "N/A",
+              滑点: m.slippagePct != null ? `${fmt(m.slippagePct, 3)}%` : "N/A",
+              实盘盈亏: m.liveTrade ? fmt(m.liveTrade.netPnl, 2) : "N/A",
+            })),
+            提示: matched.matches.length > 20 ? `仅显示前20条，共${matched.matches.length}条` : undefined,
+          };
+        }
 
-          // Resolve backtest result
-          let backtestRecord;
-          if (backtestId) {
-            backtestRecord = backtestStore.getFullResult(backtestId);
-          } else if (strategyId) {
-            // Find most recent backtest for this strategy
-            const entries = backtestStore.query({
-              strategyId,
-              sortBy: "createdAt",
-              sortDir: "desc",
-              limit: 1,
-            });
-            if (entries.length > 0) {
-              backtestRecord = backtestStore.getFullResult(entries[0]!.id);
-            }
-          }
+        case "drift_history": {
+          const windowDays = (args.window_days as number) ?? 30;
+          const history = computeDriftHistory(req, windowDays);
+          return {
+            策略: history.strategyId,
+            趋势: history.trend === "improving" ? "改善中" : history.trend === "worsening" ? "恶化中" : "稳定",
+            平均漂移: `${history.avgDrift}/100`,
+            高风险次数: history.alertCount,
+            快照数: history.snapshots.length,
+            漂移轨迹: history.snapshots.map((s) => ({
+              日期: s.date,
+              得分: s.score,
+              严重程度: s.severity,
+              收益漂移: s.components.returnDrift,
+              回撤漂移: s.components.drawdownDrift,
+              执行漂移: s.components.executionDrift,
+              风险漂移: s.components.riskDrift,
+            })),
+          };
+        }
 
-          if (!backtestRecord) {
-            return {
-              error: backtestId
-                ? `未找到回测记录: ${backtestId}`
-                : `策略 ${strategyId ?? "未指定"} 无回测记录，请先运行回测`,
-            };
-          }
+        case "report": {
+          const result = compareLiveVsBacktest(req);
+          const granularity = (args.granularity as SegmentGranularity) ?? "monthly";
+          const segmented = comparePeriodSegmented(req, granularity);
+          const matched = matchTrades(req);
+          const history = computeDriftHistory(req);
 
-          const bt = backtestRecord.result;
-          const sid = strategyId ?? bt.strategyId;
-
-          // Load live equity
-          const eh = mode === "live" ? equityHistoryLive : equityHistoryPaper;
-          const start = startDate ?? bt.startDate;
-          const end = endDate ?? bt.endDate;
-          const liveEquity = eh.getRange(start, end);
-
-          if (liveEquity.length === 0) {
-            return {
-              error: `${mode === "live" ? "实盘" : "模拟盘"}在 ${start} ~ ${end} 期间无权益快照数据`,
-              hint: "请确认交易引擎在该期间运行过",
-            };
-          }
-
-          // Load trades and signals for the strategy
-          const allTrades = await loadTrades(config);
-          const liveTrades = allTrades.filter(
-            (t) =>
-              t.strategyId === sid &&
-              t.entryTime >= start &&
-              t.entryTime <= end + "T23:59:59",
-          );
-
-          const allSignals = await loadSignals(config);
-          const liveSignals = allSignals.filter(
-            (s) =>
-              s.strategyId === sid &&
-              new Date(s.timestamp).toISOString().slice(0, 10) >= start &&
-              new Date(s.timestamp).toISOString().slice(0, 10) <= end,
-          );
-
-          const result = compareLiveVsBacktest({
-            strategyId: sid,
-            startDate: start,
-            endDate: end,
-            backtestResult: bt,
-            liveEquity,
-            liveTrades,
-            liveSignals,
-          });
-
-          if (action === "drift_check") {
-            return {
-              策略: result.strategyId,
-              漂移得分: `${result.drift.score}/100`,
-              严重程度: result.drift.severity,
-              收益偏差: `${fmt(result.returnComparison.returnDiff, 2)}%`,
-              执行率: `${fmt(result.executionQuality.fillRate * 100, 0)}%`,
-              观察: result.drift.observations,
-            };
-          }
-
-          return formatResult(result);
+          return {
+            标题: `策略 ${req.strategyId} 实盘回测对比报告`,
+            期间: `${req.startDate} ~ ${req.endDate}`,
+            综合对比: formatResult(result),
+            分段分析: {
+              漂移起始: segmented.driftOnset ?? "未检测到",
+              最差分段: segmented.worstSegment ?? "N/A",
+              分段数: segmented.segments.length,
+              分段摘要: segmented.segments.map((s) => ({
+                区间: s.label,
+                收益偏差: `${fmt(s.returnDiff, 2)}%`,
+                漂移得分: s.driftScore,
+              })),
+            },
+            交易匹配: {
+              匹配率: `${fmt(matched.summary.matchRate * 100, 1)}%`,
+              未执行信号: matched.summary.missedCount,
+              额外交易: matched.summary.extraLiveCount,
+              问题标的: matched.summary.problematicSymbols,
+            },
+            漂移趋势: {
+              趋势: history.trend === "improving" ? "改善中" : history.trend === "worsening" ? "恶化中" : "稳定",
+              平均漂移: history.avgDrift,
+              高风险次数: history.alertCount,
+            },
+            建议: generateRecommendations(result, segmented, matched, history),
+          };
         }
 
         default:
@@ -254,4 +316,124 @@ export function createLiveBacktestCompareTool(
       }
     },
   };
+
+  // ── Internal helpers ──────────────────────────────────────────
+
+  async function resolveCompareData(args: Record<string, unknown>) {
+    const backtestId = args.backtest_id as string | undefined;
+    const strategyId = args.strategy_id as string | undefined;
+    const mode = (args.mode as string) ?? "paper";
+    const startDate = args.start_date as string | undefined;
+    const endDate = args.end_date as string | undefined;
+
+    let backtestRecord;
+    if (backtestId) {
+      backtestRecord = backtestStore.getFullResult(backtestId);
+    } else if (strategyId) {
+      const entries = backtestStore.query({
+        strategyId,
+        sortBy: "createdAt",
+        sortDir: "desc",
+        limit: 1,
+      });
+      if (entries.length > 0) {
+        backtestRecord = backtestStore.getFullResult(entries[0]!.id);
+      }
+    }
+
+    if (!backtestRecord) {
+      return {
+        error: backtestId
+          ? `未找到回测记录: ${backtestId}`
+          : `策略 ${strategyId ?? "未指定"} 无回测记录，请先运行回测`,
+      };
+    }
+
+    const bt = backtestRecord.result;
+    const sid = strategyId ?? bt.strategyId;
+
+    const eh = mode === "live" ? equityHistoryLive : equityHistoryPaper;
+    const start = startDate ?? bt.startDate;
+    const end = endDate ?? bt.endDate;
+    const liveEquity = eh.getRange(start, end);
+
+    if (liveEquity.length === 0) {
+      return {
+        error: `${mode === "live" ? "实盘" : "模拟盘"}在 ${start} ~ ${end} 期间无权益快照数据`,
+        hint: "请确认交易引擎在该期间运行过",
+      };
+    }
+
+    const allTrades = await loadTrades(config);
+    const liveTrades = allTrades.filter(
+      (t) =>
+        t.strategyId === sid &&
+        t.entryTime >= start &&
+        t.entryTime <= end + "T23:59:59",
+    );
+
+    const allSignals = await loadSignals(config);
+    const liveSignals = allSignals.filter(
+      (s) =>
+        s.strategyId === sid &&
+        new Date(s.timestamp).toISOString().slice(0, 10) >= start &&
+        new Date(s.timestamp).toISOString().slice(0, 10) <= end,
+    );
+
+    return {
+      req: {
+        strategyId: sid,
+        startDate: start,
+        endDate: end,
+        backtestResult: bt,
+        liveEquity,
+        liveTrades,
+        liveSignals,
+      },
+    };
+  }
+}
+
+function generateRecommendations(
+  result: LiveBacktestCompareResult,
+  segmented: PeriodSegmentedResult,
+  matched: TradeMatchResult,
+  history: DriftHistory,
+): string[] {
+  const recs: string[] = [];
+
+  if (result.drift.severity === "critical" || result.drift.severity === "high") {
+    recs.push("漂移严重，建议暂停实盘运行并审查策略参数");
+  }
+
+  if (matched.summary.matchRate < 0.7) {
+    recs.push(`信号执行率仅${(matched.summary.matchRate * 100).toFixed(0)}%，建议检查下单通道和流动性`);
+  }
+
+  if (matched.summary.avgSlippagePct > 0.3) {
+    recs.push(`平均滑点${matched.summary.avgSlippagePct.toFixed(2)}%过高，建议使用限价单或优化执行时机`);
+  }
+
+  if (result.drawdownComparison.drawdownDiff > 5) {
+    recs.push("实盘回撤显著超过回测预期，建议收紧止损或降低仓位");
+  }
+
+  if (history.trend === "worsening") {
+    recs.push("漂移趋势恶化中，策略可能正在失效，建议重新评估市场适用性");
+  }
+
+  if (segmented.driftOnset) {
+    recs.push(`漂移从${segmented.driftOnset}开始加剧，建议回查该时段市场环境变化`);
+  }
+
+  if (matched.summary.problematicSymbols.length > 0) {
+    const syms = matched.summary.problematicSymbols.map((p) => p.symbol).join(", ");
+    recs.push(`标的 ${syms} 信号执行率低，建议检查其流动性或交易限制`);
+  }
+
+  if (recs.length === 0) {
+    recs.push("策略运行状态良好，建议继续监控并定期对比");
+  }
+
+  return recs;
 }

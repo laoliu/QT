@@ -46,20 +46,39 @@ function modeSuffix(cfg: QuantTradingConfig): string {
   return broker === "paper" ? "-paper" : "-live";
 }
 
-function ordersPath(cfg: QuantTradingConfig): string {
-  return path.join(dir(cfg), `orders${modeSuffix(cfg)}.json`);
+/**
+ * Account-aware file suffix. When an accountName is provided (multi-account mode),
+ * files are namespaced as `-{accountName}-paper` or `-{accountName}-live`.
+ * Without accountName, falls back to the legacy `-paper` / `-live` suffix.
+ */
+function accountModeSuffix(cfg: QuantTradingConfig, accountName?: string): string {
+  const mode = modeSuffix(cfg);
+  if (accountName && accountName !== "default") {
+    return `-${accountName}${mode}`;
+  }
+  return mode;
 }
 
-function tradesPath(cfg: QuantTradingConfig): string {
-  return path.join(dir(cfg), `trades${modeSuffix(cfg)}.json`);
+function ordersPath(cfg: QuantTradingConfig, accountName?: string): string {
+  return path.join(dir(cfg), `orders${accountModeSuffix(cfg, accountName)}.json`);
+}
+
+function tradesPath(cfg: QuantTradingConfig, accountName?: string): string {
+  return path.join(dir(cfg), `trades${accountModeSuffix(cfg, accountName)}.json`);
 }
 
 /** Get orders/trades path for a specific mode (for API queries) */
-export function ordersPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live"): string {
+export function ordersPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live", accountName?: string): string {
+  if (accountName && accountName !== "default") {
+    return path.join(dir(cfg), `orders-${accountName}-${mode}.json`);
+  }
   return path.join(dir(cfg), `orders-${mode}.json`);
 }
 
-export function tradesPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live"): string {
+export function tradesPathForMode(cfg: QuantTradingConfig, mode: "paper" | "live", accountName?: string): string {
+  if (accountName && accountName !== "default") {
+    return path.join(dir(cfg), `trades-${accountName}-${mode}.json`);
+  }
   return path.join(dir(cfg), `trades-${mode}.json`);
 }
 
@@ -67,23 +86,23 @@ async function ensureDir(cfg: QuantTradingConfig): Promise<void> {
   await fs.mkdir(dir(cfg), { recursive: true });
 }
 
-async function loadOrders(cfg: QuantTradingConfig): Promise<Order[]> {
+async function loadOrders(cfg: QuantTradingConfig, accountName?: string): Promise<Order[]> {
   try {
-    return JSON.parse(await fs.readFile(ordersPath(cfg), "utf-8")) as Order[];
+    return JSON.parse(await fs.readFile(ordersPath(cfg, accountName), "utf-8")) as Order[];
   } catch {
     return [];
   }
 }
 
-async function appendOrder(order: Order, cfg: QuantTradingConfig): Promise<void> {
+async function appendOrder(order: Order, cfg: QuantTradingConfig, accountName?: string): Promise<void> {
   const release = await ordersMutex.acquire();
   try {
     await ensureDir(cfg);
-    const orders = await loadOrders(cfg);
+    const orders = await loadOrders(cfg, accountName);
     // Skip if broker already persisted this order (e.g. PaperBroker writes in placeOrder)
     if (orders.some((o) => o.orderId === order.orderId)) return;
     orders.push(order);
-    await fs.writeFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
+    await fs.writeFile(ordersPath(cfg, accountName), JSON.stringify(orders, null, 2));
   } finally {
     release();
   }
@@ -93,35 +112,36 @@ async function updateOrder(
   orderId: string,
   patch: Partial<Order>,
   cfg: QuantTradingConfig,
+  accountName?: string,
 ): Promise<Order | null> {
   const release = await ordersMutex.acquire();
   try {
-    const orders = await loadOrders(cfg);
+    const orders = await loadOrders(cfg, accountName);
     const idx = orders.findIndex((o) => o.orderId === orderId);
     if (idx < 0) return null;
     Object.assign(orders[idx], patch, { updatedAt: new Date().toISOString() });
-    await fs.writeFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
+    await fs.writeFile(ordersPath(cfg, accountName), JSON.stringify(orders, null, 2));
     return orders[idx];
   } finally {
     release();
   }
 }
 
-async function loadTrades(cfg: QuantTradingConfig): Promise<TradeRecord[]> {
+async function loadTrades(cfg: QuantTradingConfig, accountName?: string): Promise<TradeRecord[]> {
   try {
-    return JSON.parse(await fs.readFile(tradesPath(cfg), "utf-8")) as TradeRecord[];
+    return JSON.parse(await fs.readFile(tradesPath(cfg, accountName), "utf-8")) as TradeRecord[];
   } catch {
     return [];
   }
 }
 
-async function appendTrade(trade: TradeRecord, cfg: QuantTradingConfig): Promise<void> {
+async function appendTrade(trade: TradeRecord, cfg: QuantTradingConfig, accountName?: string): Promise<void> {
   const release = await tradesMutex.acquire();
   try {
     await ensureDir(cfg);
-    const trades = await loadTrades(cfg);
+    const trades = await loadTrades(cfg, accountName);
     trades.push(trade);
-    await fs.writeFile(tradesPath(cfg), JSON.stringify(trades, null, 2));
+    await fs.writeFile(tradesPath(cfg, accountName), JSON.stringify(trades, null, 2));
   } finally {
     release();
   }
@@ -169,6 +189,8 @@ export class OrderManager {
   private confirmMgr: ConfirmationManager;
   private api: OpenClawPluginApi | null;
   private tradeCb?: (trade: TradeRecord) => void;
+  /** Account name for multi-account file namespacing. */
+  readonly accountName: string | undefined;
 
   // Tracks open buy orders for a symbol so we can match exits to entries
   // symbol → list of open entry order IDs (queue: FIFO)
@@ -180,10 +202,12 @@ export class OrderManager {
     cfg: QuantTradingConfig,
     broker: IBrokerAdapter,
     api: OpenClawPluginApi | null = null,
+    accountName?: string,
   ) {
     this.cfg = cfg;
     this.broker = broker;
     this.api = api;
+    this.accountName = accountName;
     this.riskGate = new RiskGate(cfg.tradingAccount?.riskLimits as RiskLimitsConfig | undefined);
     this.confirmMgr = new ConfirmationManager(cfg, api);
 
@@ -204,10 +228,10 @@ export class OrderManager {
    */
   private async rebuildOpenBuys(): Promise<void> {
     try {
-      const orders = await loadOrders(this.cfg);
+      const orders = await loadOrders(this.cfg, this.accountName);
       // Find buy/cover orders that are filled or partially filled but haven't
       // been paired with a corresponding sell yet.
-      const trades = await loadTrades(this.cfg);
+      const trades = await loadTrades(this.cfg, this.accountName);
       const pairedEntryIds = new Set(trades.map((t) => t.entryOrderId));
 
       for (const order of orders) {
@@ -364,7 +388,7 @@ export class OrderManager {
     }
 
     // Persist
-    await appendOrder(order, this.cfg);
+    await appendOrder(order, this.cfg, this.accountName);
 
     // Track open buys/sell_open for PnL matching
     if (
@@ -387,7 +411,7 @@ export class OrderManager {
   /** Cancel an open order. */
   async cancel(orderId: string): Promise<void> {
     // Load from disk to validate status before calling broker
-    const orders = await loadOrders(this.cfg);
+    const orders = await loadOrders(this.cfg, this.accountName);
     const diskOrder = orders.find((o) => o.orderId === orderId);
     if (!diskOrder) throw new Error(`Order ${orderId} not found`);
 
@@ -397,7 +421,7 @@ export class OrderManager {
 
     // Pending order never submitted to broker — cancel locally only
     if (diskOrder.status === "pending" && !diskOrder.brokerOrderId) {
-      await updateOrder(orderId, { status: "cancelled" }, this.cfg);
+      await updateOrder(orderId, { status: "cancelled" }, this.cfg, this.accountName);
       return;
     }
 
@@ -412,12 +436,12 @@ export class OrderManager {
         throw err;
       }
     }
-    await updateOrder(orderId, { status: "cancelled" }, this.cfg);
+    await updateOrder(orderId, { status: "cancelled" }, this.cfg, this.accountName);
   }
 
   /** Cancel all open orders, optionally filtered by symbol. */
   async cancelAll(symbol?: string): Promise<void> {
-    const orders = await loadOrders(this.cfg);
+    const orders = await loadOrders(this.cfg, this.accountName);
     const open = orders.filter(
       (o) =>
         (o.status === "submitted" || o.status === "partial" || o.status === "pending") &&
@@ -431,7 +455,7 @@ export class OrderManager {
    * Call this periodically (e.g. every 30s from the live engine tick).
    */
   async cancelExpiredOrders(): Promise<string[]> {
-    const orders = await loadOrders(this.cfg);
+    const orders = await loadOrders(this.cfg, this.accountName);
     const now = Date.now();
     const expired = orders.filter(
       (o) =>
@@ -456,7 +480,7 @@ export class OrderManager {
 
   /** Return today's net PnL (realised fills today). */
   async getDailyPnl(): Promise<number> {
-    const trades = await loadTrades(this.cfg);
+    const trades = await loadTrades(this.cfg, this.accountName);
     const today = new Date().toISOString().slice(0, 10);
     return trades
       .filter((t) => t.exitTime?.startsWith(today))
@@ -469,7 +493,7 @@ export class OrderManager {
     status?: OrderStatus[];
     brokerType?: string;
   }): Promise<Order[]> {
-    let orders = await loadOrders(this.cfg);
+    let orders = await loadOrders(this.cfg, this.accountName);
     if (filter?.symbol) orders = orders.filter((o) => o.symbol === filter.symbol);
     if (filter?.status?.length) orders = orders.filter((o) => filter.status!.includes(o.status));
     if (filter?.brokerType) orders = orders.filter((o) => o.brokerType === filter.brokerType);
@@ -478,7 +502,7 @@ export class OrderManager {
 
   /** Return all trade records. */
   async getTrades(symbol?: string): Promise<TradeRecord[]> {
-    const trades = await loadTrades(this.cfg);
+    const trades = await loadTrades(this.cfg, this.accountName);
     return symbol ? trades.filter((t) => t.symbol === symbol) : trades;
   }
 
@@ -495,7 +519,7 @@ export class OrderManager {
     let allOrders: Order[] = [];
     const release = await ordersMutex.acquire();
     try {
-      allOrders = await loadOrders(this.cfg);
+      allOrders = await loadOrders(this.cfg, this.accountName);
       const idx = allOrders.findIndex((o) => o.orderId === fill.orderId);
       order = idx >= 0 ? allOrders[idx] : undefined;
       if (order && idx >= 0) {
@@ -515,7 +539,7 @@ export class OrderManager {
           filledAt: newStatus === "filled" ? now : undefined,
           updatedAt: now,
         });
-        await fs.writeFile(ordersPath(this.cfg), JSON.stringify(allOrders, null, 2));
+        await fs.writeFile(ordersPath(this.cfg, this.accountName), JSON.stringify(allOrders, null, 2));
       }
     } finally {
       release();
@@ -569,7 +593,7 @@ export class OrderManager {
         entryOrderId,
         exitOrderId: fill.orderId,
       };
-      await appendTrade(trade, this.cfg);
+      await appendTrade(trade, this.cfg, this.accountName);
       this.tradeCb?.(trade);
       this.log(`成交记录: ${fill.symbol} 净盈亏 ¥${netPnl.toFixed(2)}`);
     }
@@ -580,7 +604,7 @@ export class OrderManager {
     status: OrderStatus,
     _order: Order,
   ): Promise<void> {
-    await updateOrder(orderId, { status }, this.cfg);
+    await updateOrder(orderId, { status }, this.cfg, this.accountName);
     if (status === "rejected") {
       this.log(`订单被拒绝: ${orderId.slice(0, 8)}`);
     }

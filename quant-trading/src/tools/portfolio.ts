@@ -7,10 +7,14 @@ import path from "node:path";
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
+import type { AccountManager } from "../services/account-manager.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 
-function getPortfolioPath(config: QuantTradingConfig): string {
+function getPortfolioPath(config: QuantTradingConfig, accountName?: string): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  if (accountName && accountName !== "default") {
+    return path.join(dir, `portfolio-${accountName}-paper.json`);
+  }
   return path.join(dir, "portfolio-paper.json");
 }
 
@@ -20,9 +24,9 @@ function getLegacyPortfolioPath(config: QuantTradingConfig): string {
   return path.join(dir, "portfolio.json");
 }
 
-async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
+async function loadPortfolio(config: QuantTradingConfig, accountName?: string): Promise<Portfolio> {
   // Try mode-specific file first, then legacy
-  for (const filePath of [getPortfolioPath(config), getLegacyPortfolioPath(config)]) {
+  for (const filePath of [getPortfolioPath(config, accountName), getLegacyPortfolioPath(config)]) {
     try {
       const raw = await fs.readFile(filePath, "utf-8");
       return JSON.parse(raw) as Portfolio;
@@ -41,8 +45,8 @@ async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
   };
 }
 
-async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): Promise<void> {
-  const filePath = getPortfolioPath(config);
+async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig, accountName?: string): Promise<void> {
+  const filePath = getPortfolioPath(config, accountName);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   portfolio.updatedAt = new Date().toISOString();
   await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
@@ -52,6 +56,7 @@ export function createPortfolioTool(
   api: OpenClawPluginApi,
   config: QuantTradingConfig,
   getEngine?: () => LiveEngine | null,
+  accountManager?: AccountManager,
 ) {
   return {
     name: "portfolio",
@@ -95,6 +100,7 @@ export function createPortfolioTool(
     },
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
+      const acctName = accountManager?.getActiveAccountName();
 
       switch (action) {
         case "show":
@@ -131,7 +137,7 @@ export function createPortfolioTool(
             }
           }
           // Fallback to paper portfolio file
-          const portfolio = await loadPortfolio(config);
+          const portfolio = await loadPortfolio(config, acctName);
           return {
             name: portfolio.name,
             source: "paper",
@@ -150,7 +156,7 @@ export function createPortfolioTool(
         }
 
         case "buy": {
-          const portfolio = await loadPortfolio(config);
+          const portfolio = await loadPortfolio(config, acctName);
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
@@ -182,7 +188,7 @@ export function createPortfolioTool(
           portfolio.totalValue =
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
+          await savePortfolio(portfolio, config, acctName);
           return {
             success: true,
             message: `买入 ${symbol} ${quantity}股 @ ¥${price}`,
@@ -191,7 +197,7 @@ export function createPortfolioTool(
         }
 
         case "sell": {
-          const portfolio = await loadPortfolio(config);
+          const portfolio = await loadPortfolio(config, acctName);
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
@@ -212,7 +218,7 @@ export function createPortfolioTool(
           portfolio.totalValue =
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
+          await savePortfolio(portfolio, config, acctName);
           return {
             success: true,
             message: `卖出 ${symbol} ${quantity}股 @ ¥${price}`,
@@ -221,12 +227,12 @@ export function createPortfolioTool(
         }
 
         case "add_cash": {
-          const portfolio = await loadPortfolio(config);
+          const portfolio = await loadPortfolio(config, acctName);
           const amount = args.amount as number;
           if (!amount || amount <= 0) return { error: "请提供正数金额" };
           portfolio.cash += amount;
           portfolio.totalValue += amount;
-          await savePortfolio(portfolio, config);
+          await savePortfolio(portfolio, config, acctName);
           return { success: true, cash: `¥${portfolio.cash.toFixed(2)}` };
         }
 
@@ -249,7 +255,7 @@ export function createPortfolioTool(
               };
             }
           }
-          const portfolio = await loadPortfolio(config);
+          const portfolio = await loadPortfolio(config, acctName);
           const totalCost = portfolio.positions.reduce((s, p) => s + p.quantity * p.avgCost, 0);
           return {
             name: portfolio.name,

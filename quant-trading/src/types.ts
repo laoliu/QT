@@ -569,6 +569,8 @@ export type BrokerAccount = {
   profit: number; // total unrealized + today realized
   profitPct: number;
   todayProfit?: number; // today's realized PnL
+  buyingPower?: number; // available buying power (cash - frozenCash, or margin-adjusted)
+  marginUsed?: number; // margin currently used (for margin accounts)
   lastSyncAt: string;
 };
 
@@ -798,6 +800,17 @@ export type TradingAccountConfig = {
   ib?: IBBrokerConfig;
 };
 
+/**
+ * Named trading account — extends TradingAccountConfig with a unique name
+ * and optional label for multi-account management.
+ */
+export type NamedTradingAccount = TradingAccountConfig & {
+  /** Unique account name, e.g. "qmt-live", "paper-test", "ib-us" */
+  name: string;
+  /** Human-readable label, e.g. "A股实盘-QMT", "模拟盘" */
+  label?: string;
+};
+
 export type NotificationConfig = {
   signalAlerts?: boolean;
   dailyReport?: boolean;
@@ -823,6 +836,17 @@ export type QuantTradingConfig = {
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
+  /**
+   * Multi-account configuration. When set, takes precedence over `tradingAccount`.
+   * Each entry is a named account with its own broker, risk limits, and sizing config.
+   */
+  tradingAccounts?: NamedTradingAccount[];
+  /**
+   * Currently active account name (for multi-account mode).
+   * Must match one of the `tradingAccounts[].name` values.
+   * Defaults to the first account if not specified.
+   */
+  activeAccount?: string;
   notifications?: NotificationConfig;
   /**
    * PnL monitor configuration.

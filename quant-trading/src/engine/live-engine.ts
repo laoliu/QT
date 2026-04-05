@@ -66,6 +66,8 @@ export class LiveEngine implements OpenClawPluginService {
   private registry: LiveStrategyRegistry;
   /** Active broker adapter instance — created once in start(), destroyed in stop() */
   private brokerAdapter: IBrokerAdapter | null = null;
+  /** Account name for multi-account support. */
+  private accountName: string | undefined;
 
   // Cached account / position state (refreshed every minute)
   private lastAccount: BrokerAccount | null = null;
@@ -117,10 +119,26 @@ export class LiveEngine implements OpenClawPluginService {
   /** Counter for regime checks (check every 10 syncs = ~10 min). */
   private regimeCheckCounter = 0;
 
-  constructor(cfg: QuantTradingConfig, api: OpenClawPluginApi) {
+  constructor(cfg: QuantTradingConfig, api: OpenClawPluginApi, accountName?: string) {
     this.cfg = cfg;
     this.api = api;
+    this.accountName = accountName;
     this.registry = new LiveStrategyRegistry(cfg);
+  }
+
+  /** Update the config (e.g. after account switch). Only valid when stopped. */
+  updateConfig(cfg: QuantTradingConfig, accountName?: string): void {
+    if (this.status !== "stopped") {
+      throw new Error("Cannot update config while engine is running. Stop the engine first.");
+    }
+    this.cfg = cfg;
+    this.accountName = accountName;
+    this.registry = new LiveStrategyRegistry(cfg);
+  }
+
+  /** Get the current account name (for multi-account mode). */
+  getAccountName(): string | undefined {
+    return this.accountName;
   }
 
   /** Set a callback that fires on every staleness alert (wire to AlertStore). */
@@ -193,7 +211,7 @@ export class LiveEngine implements OpenClawPluginService {
       this.log(`Broker connected: ${brokerAdapter.brokerType}`);
 
       // Create order manager
-      const mgr = new OrderManager(this.cfg, brokerAdapter, this.api);
+      const mgr = new OrderManager(this.cfg, brokerAdapter, this.api, this.accountName);
       if (this.tradeCb) mgr.setTradeCallback(this.tradeCb);
       this.orderMgr = mgr;
 

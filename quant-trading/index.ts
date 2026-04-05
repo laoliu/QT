@@ -84,6 +84,7 @@ import {
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
+import { AccountManager } from "./src/services/account-manager.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
@@ -123,6 +124,7 @@ import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
 import { createConditionalOrderTool } from "./src/tools/conditional-order.js";
 import { createCorrelationTool } from "./src/tools/correlation.js";
+import { createCorporateActionsTool } from "./src/tools/corporate-actions.js";
 import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
@@ -130,6 +132,7 @@ import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
+import { createFeeTaxReportTool } from "./src/tools/fee-tax-report.js";
 import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.js";
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
@@ -137,6 +140,7 @@ import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
+import { createMarketCalendarTool } from "./src/tools/market-calendar.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
@@ -261,8 +265,16 @@ const quantTradingPlugin = {
       }
     }
 
+    // ── Account Manager (multi-account registry) ──────────────────
+    const accountManager = new AccountManager(config);
+    // Load persisted active account state (async, but we proceed with config default)
+    void accountManager.load();
+    // Resolve config for the active account (backward-compat: tradingAccount is set)
+    const resolvedConfig = accountManager.resolveConfig(config);
+    const activeAccountName = accountManager.getActiveAccountName();
+
     // ── Live Engine singleton (started/stopped as a service) ─────────
-    const liveEngine = new LiveEngine(config, api);
+    const liveEngine = new LiveEngine(resolvedConfig, api, activeAccountName);
     const getEngine = () => liveEngine;
 
     // ── Event Bus (real-time SSE) ──────────────────────────────────
@@ -586,14 +598,14 @@ const quantTradingPlugin = {
       market_data: createMarketDataTool(api, config),
       stock_screen: createStockScreenTool(api, config, scanHistoryStore),
       backtest: createBacktestTool(api, config, backtestStore),
-      portfolio: createPortfolioTool(api, config, getEngine),
+      portfolio: createPortfolioTool(api, config, getEngine, accountManager),
       portfolio_backtest: createPortfolioBacktestTool(api, config),
       portfolio_rebalance: createPortfolioRebalanceTool(api, config, getEngine),
       trading_signal: createTradingSignalTool(api, config, signalHitRateTracker),
       risk_analysis: createRiskAnalysisTool(api, config),
       futures_straddle: createFuturesStraddleTool(api, config),
       data_cache: createDataCacheTool(api, config),
-      live_trading: createLiveTradingTool(api, config, getEngine, equityHistory),
+      live_trading: createLiveTradingTool(api, config, getEngine, equityHistory, accountManager),
       strategy_optimizer: createStrategyOptimizerTool(api, config, composedStrategyStore),
       strategy_composer: createStrategyComposerTool(api, config, composedStrategyStore),
       custom_strategy: createCustomStrategyTool(api, customStrategyStore),
@@ -642,6 +654,9 @@ const quantTradingPlugin = {
       institutional_flow: createInstitutionalFlowTool(api, config),
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
+      market_calendar: createMarketCalendarTool(api, config),
+      corporate_actions: createCorporateActionsTool(api, config),
+      fee_tax_report: createFeeTaxReportTool(api, getEngine),
       stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
@@ -700,6 +715,9 @@ const quantTradingPlugin = {
       institutional_flow: "机构持仓",
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",
+      market_calendar: "交易日历",
+      corporate_actions: "公司行动",
+      fee_tax_report: "费用税务",
       stock_recommend: "智能选股推荐",
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
@@ -1082,7 +1100,7 @@ const quantTradingPlugin = {
     // for an explicit start_engine tool call. Lifecycle hooks handle cleanup.
     api.registerService(liveEngine);
 
-    if (config.tradingAccount?.autoStart) {
+    if (resolvedConfig.tradingAccount?.autoStart) {
       // Deferred so the rest of plugin registration completes first
       setTimeout(() => void liveEngine.start(), 0);
     }

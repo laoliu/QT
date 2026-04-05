@@ -23,6 +23,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OrderRequest } from "../broker/adapter.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
+import type { AccountManager } from "../services/account-manager.js";
 import type { EquityHistory } from "../services/equity-history.js";
 import type { QuantTradingConfig } from "../types.js";
 
@@ -31,6 +32,7 @@ export function createLiveTradingTool(
   config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
   equityHistory?: EquityHistory,
+  accountManager?: AccountManager,
 ) {
   return {
     name: "live_trading",
@@ -40,8 +42,12 @@ export function createLiveTradingTool(
       "action=stop_engine 停止引擎, action=pause_engine 暂停, action=resume_engine 恢复, " +
       "action=add_strategy 添加策略, action=remove_strategy 移除策略, " +
       "action=list_strategies 列出策略, action=force_order 强制下单, " +
+      "action=modify_order 改单, action=query_orders 查询订单, " +
+      "action=batch_order 批量下单, " +
       "action=cancel_order 撤单, action=cancel_all_orders 全撤, " +
-      "action=get_risk_snapshot 风控快照, action=list_confirmations 待确认列表。",
+      "action=get_risk_snapshot 风控快照, action=list_confirmations 待确认列表, " +
+      "action=list_accounts 查看账户列表, action=switch_account 切换账户, " +
+      "action=account_summary 多账户汇总。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -57,10 +63,16 @@ export function createLiveTradingTool(
             "remove_strategy",
             "list_strategies",
             "force_order",
+            "modify_order",
+            "query_orders",
+            "batch_order",
             "cancel_order",
             "cancel_all_orders",
             "get_risk_snapshot",
             "list_confirmations",
+            "list_accounts",
+            "switch_account",
+            "account_summary",
           ],
           description: "操作类型",
         },
@@ -126,8 +138,37 @@ export function createLiveTradingTool(
           type: "number",
           description: "订单有效期（分钟），超时自动撤单。如 30 = 30分钟后未成交则撤销",
         },
+        // For modify_order
+        new_price: { type: "number", description: "修改后的价格" },
+        new_quantity: { type: "number", description: "修改后的数量" },
+        // For query_orders
+        status_filter: {
+          type: "string",
+          enum: ["pending", "submitted", "partial", "filled", "cancelled", "rejected", "expired", "open", "all"],
+          description: "订单状态过滤。open=所有未完成订单，all=全部",
+        },
+        limit: { type: "number", description: "返回条数限制（默认20）" },
+        // For batch_order
+        orders: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              symbol: { type: "string" },
+              side: { type: "string" },
+              order_type: { type: "string" },
+              quantity: { type: "number" },
+              price: { type: "number" },
+            },
+            required: ["symbol", "side", "quantity"],
+          },
+          description: "批量下单列表，每项包含 symbol/side/quantity/price/order_type",
+        },
         // For cancel_order
         order_id: { type: "string", description: "订单ID" },
+        // For switch_account / account queries
+        account_name: { type: "string", description: "账户名称 (用于 switch_account 或指定账户查询)" },
+        auto_start: { type: "boolean", description: "切换账户后是否自动启动引擎 (默认 false)" },
       },
       required: ["action"],
     },
@@ -146,10 +187,14 @@ export function createLiveTradingTool(
             status: engine.getStatus(),
             mode: config.tradingAccount?.mode ?? "paper",
             broker: config.tradingAccount?.broker ?? "paper",
+            accountName: accountManager?.getActiveAccountName() ?? "default",
             account: account
               ? {
                   cash: `¥${account.cash.toFixed(2)}`,
+                  frozenCash: `¥${account.frozenCash.toFixed(2)}`,
+                  buyingPower: `¥${(account.buyingPower ?? account.cash - account.frozenCash).toFixed(2)}`,
                   totalAssets: `¥${account.totalAssets.toFixed(2)}`,
+                  marketValue: `¥${account.marketValue.toFixed(2)}`,
                   profit: `¥${account.profit.toFixed(2)}`,
                   profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
                   lastSync: account.lastSyncAt,
@@ -293,6 +338,120 @@ export function createLiveTradingTool(
             : { error: result.reason, ruleId: result.ruleId };
         }
 
+        case "modify_order": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化" };
+          const orderId = args.order_id as string;
+          if (!orderId) return { error: "请提供 order_id" };
+          const newPrice = args.new_price as number | undefined;
+          const newQuantity = args.new_quantity as number | undefined;
+          if (!newPrice && !newQuantity) return { error: "请提供 new_price 或 new_quantity" };
+          const updated = await mgr.broker.modifyOrder(orderId, {
+            price: newPrice,
+            quantity: newQuantity,
+          });
+          return {
+            message: `订单 ${orderId.slice(0, 8)} 已修改`,
+            orderId: updated.orderId,
+            price: updated.price,
+            quantity: updated.quantity,
+            status: updated.status,
+          };
+        }
+
+        case "query_orders": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化" };
+          const statusFilter = args.status_filter as string | undefined;
+          const symbol = args.symbol as string | undefined;
+          const limit = (args.limit as number) || 20;
+          let statusArr: import("../types.js").OrderStatus[] | undefined;
+          if (statusFilter === "open") {
+            statusArr = ["pending", "submitted", "partial"];
+          } else if (statusFilter && statusFilter !== "all") {
+            statusArr = [statusFilter as import("../types.js").OrderStatus];
+          }
+          const orders = await mgr.getOrders({ symbol, status: statusArr });
+          const sorted = orders.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          const limited = sorted.slice(0, limit);
+          return {
+            total: orders.length,
+            showing: limited.length,
+            orders: limited.map((o) => ({
+              orderId: o.orderId.slice(0, 8),
+              symbol: o.symbol,
+              side: o.side,
+              orderType: o.orderType,
+              price: o.price,
+              quantity: o.quantity,
+              filledQty: o.filledQty,
+              avgFillPrice: o.avgFillPrice,
+              status: o.status,
+              strategyId: o.strategyId,
+              createdAt: o.createdAt,
+            })),
+          };
+        }
+
+        case "batch_order": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化" };
+          const orderList = args.orders as Array<{
+            symbol: string;
+            side: string;
+            order_type?: string;
+            quantity: number;
+            price?: number;
+          }>;
+          if (!orderList || orderList.length === 0) return { error: "请提供 orders 数组" };
+          if (orderList.length > 20) return { error: "单次批量下单最多20笔" };
+          const results: Array<{
+            symbol: string;
+            ok: boolean;
+            orderId?: string;
+            error?: string;
+          }> = [];
+          for (const item of orderList) {
+            if (!item.symbol || !item.side || !item.quantity) {
+              results.push({ symbol: item.symbol ?? "?", ok: false, error: "缺少必填参数" });
+              continue;
+            }
+            const orderType = (item.order_type as "market" | "limit") ?? "limit";
+            if (orderType === "limit" && !item.price) {
+              results.push({ symbol: item.symbol, ok: false, error: "限价单需提供price" });
+              continue;
+            }
+            const req: OrderRequest = {
+              symbol: item.symbol,
+              market: detectMarketFromSymbol(item.symbol),
+              side: item.side as "buy" | "sell",
+              orderType,
+              quantity: item.quantity,
+              price: item.price,
+              strategyId: "manual_batch",
+            };
+            const result = await mgr.submit(req);
+            results.push(
+              result.ok
+                ? { symbol: item.symbol, ok: true, orderId: result.order.orderId }
+                : { symbol: item.symbol, ok: false, error: result.reason },
+            );
+          }
+          const succeeded = results.filter((r) => r.ok).length;
+          return {
+            message: `批量下单完成: ${succeeded}/${results.length} 成功`,
+            results,
+          };
+        }
+
         case "cancel_order": {
           const engine = getEngine();
           if (!engine) return { error: "引擎未初始化" };
@@ -383,6 +542,147 @@ export function createLiveTradingTool(
           if (!mgr) return { confirmations: [] };
           const items = await mgr.confirmationManager.listPending();
           return { total: items.length, confirmations: items };
+        }
+
+        case "list_accounts": {
+          if (!accountManager) {
+            return {
+              accounts: [{
+                name: "default",
+                label: "默认账户",
+                mode: config.tradingAccount?.mode ?? "paper",
+                broker: config.tradingAccount?.broker ?? "paper",
+                active: true,
+              }],
+              message: "单账户模式。配置 tradingAccounts 数组以启用多账户管理。",
+            };
+          }
+          const accounts = accountManager.listAccounts();
+          const activeName = accountManager.getActiveAccountName();
+          const engine = getEngine();
+          return {
+            total: accounts.length,
+            activeAccount: activeName,
+            engineStatus: engine?.getStatus() ?? "stopped",
+            accounts: accounts.map((a) => ({
+              name: a.name,
+              label: a.label ?? a.name,
+              mode: a.mode,
+              broker: a.broker ?? "paper",
+              accountId: a.accountId,
+              active: a.name === activeName,
+              autoStart: a.autoStart ?? false,
+            })),
+          };
+        }
+
+        case "switch_account": {
+          if (!accountManager) {
+            return { error: "未配置多账户。请在配置中添加 tradingAccounts 数组。" };
+          }
+          const targetName = args.account_name as string;
+          if (!targetName) return { error: "请提供 account_name" };
+
+          const currentActive = accountManager.getActiveAccountName();
+          if (targetName === currentActive) {
+            return { message: `当前已是账户 "${targetName}"，无需切换` };
+          }
+
+          // Stop the current engine if running
+          const engine = getEngine();
+          if (engine && engine.getStatus() !== "stopped") {
+            await engine.stop();
+          }
+
+          // Switch active account
+          const switched = await accountManager.setActiveAccount(targetName);
+          if (!switched) {
+            return { error: `未找到账户 "${targetName}"。使用 list_accounts 查看可用账户。` };
+          }
+
+          // Update engine config to the new account
+          const newConfig = accountManager.resolveConfig(config);
+          if (engine) {
+            engine.updateConfig(newConfig, targetName);
+          }
+
+          const autoStart = args.auto_start as boolean | undefined;
+          if (autoStart && engine) {
+            engine.start().catch((err) => {
+              api.logger.error(`Engine startup after account switch failed: ${(err as Error).message}`);
+            });
+            return {
+              message: `已切换到账户 "${targetName}"，引擎启动中…`,
+              account: targetName,
+              previousAccount: currentActive,
+            };
+          }
+
+          return {
+            message: `已切换到账户 "${targetName}"。引擎已停止，使用 start_engine 启动。`,
+            account: targetName,
+            previousAccount: currentActive,
+          };
+        }
+
+        case "account_summary": {
+          if (!accountManager || !accountManager.isMultiAccount) {
+            // Single account mode — just show current status
+            const engine = getEngine();
+            const account = engine?.getAccount();
+            return {
+              mode: "single_account",
+              account: account
+                ? {
+                    cash: `¥${account.cash.toFixed(2)}`,
+                    totalAssets: `¥${account.totalAssets.toFixed(2)}`,
+                    profit: `¥${account.profit.toFixed(2)}`,
+                    profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
+                  }
+                : null,
+            };
+          }
+
+          const accounts = accountManager.listAccounts();
+          const activeName = accountManager.getActiveAccountName();
+          const engine = getEngine();
+          const activeAccount = engine?.getAccount();
+
+          // For active account, we have live data
+          const summaries = accounts.map((a) => {
+            if (a.name === activeName && activeAccount) {
+              return {
+                name: a.name,
+                label: a.label ?? a.name,
+                mode: a.mode,
+                broker: a.broker ?? "paper",
+                active: true,
+                engineStatus: engine?.getStatus() ?? "stopped",
+                cash: `¥${activeAccount.cash.toFixed(2)}`,
+                totalAssets: `¥${activeAccount.totalAssets.toFixed(2)}`,
+                profit: `¥${activeAccount.profit.toFixed(2)}`,
+                profitPct: `${(activeAccount.profitPct * 100).toFixed(2)}%`,
+              };
+            }
+            return {
+              name: a.name,
+              label: a.label ?? a.name,
+              mode: a.mode,
+              broker: a.broker ?? "paper",
+              active: false,
+              engineStatus: "stopped" as const,
+              cash: "N/A (需切换到该账户查看)",
+              totalAssets: "N/A",
+              profit: "N/A",
+              profitPct: "N/A",
+            };
+          });
+
+          return {
+            totalAccounts: accounts.length,
+            activeAccount: activeName,
+            accounts: summaries,
+          };
         }
 
         default:

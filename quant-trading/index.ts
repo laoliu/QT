@@ -165,6 +165,7 @@ import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
+import { createLiveBacktestCompareTool } from "./src/tools/live-backtest-compare.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
@@ -654,6 +655,13 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      live_backtest_compare: createLiveBacktestCompareTool(
+        api,
+        config,
+        backtestStore,
+        equityHistoryPaper,
+        equityHistoryLive,
+      ),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +712,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      live_backtest_compare: "实盘回测对比",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

@@ -538,6 +538,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Live vs Backtest Comparison API ───────────────────────────
+  registerLiveBacktestCompareRoutes(deps);
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────
@@ -1529,6 +1532,136 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
       }
 
       methodNotAllowed(res);
+    }),
+  });
+}
+
+// ── Live vs Backtest Comparison routes ──────────────────────────
+
+function registerLiveBacktestCompareRoutes({
+  api,
+  config,
+  backtestStore,
+  equityHistory,
+  equityHistoryPaper,
+  equityHistoryLive,
+  secure,
+}: RouteDeps): void {
+  // GET /quant/api/live-backtest-compare?backtest_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const p = urlParams(req);
+      const backtestId = p.get("backtest_id") ?? undefined;
+      const strategyId = p.get("strategy_id") ?? undefined;
+      const mode = p.get("mode") ?? "paper";
+      const startDate = p.get("start") ?? undefined;
+      const endDate = p.get("end") ?? undefined;
+
+      if (!backtestId && !strategyId) {
+        json(res, { status: "error", message: "需要 backtest_id 或 strategy_id 参数" }, 400);
+        return;
+      }
+
+      try {
+        const { compareLiveVsBacktest } = await import(
+          "../services/live-backtest-compare.js"
+        );
+
+        // Resolve backtest
+        let btRecord;
+        if (backtestId) {
+          btRecord = backtestStore.getFullResult(backtestId);
+        } else if (strategyId) {
+          const entries = backtestStore.query({
+            strategyId,
+            sortBy: "createdAt",
+            sortDir: "desc",
+            limit: 1,
+          });
+          if (entries.length > 0) {
+            btRecord = backtestStore.getFullResult(entries[0]!.id);
+          }
+        }
+
+        if (!btRecord) {
+          json(res, { status: "error", message: "未找到回测记录" }, 404);
+          return;
+        }
+
+        const bt = btRecord.result;
+        const sid = strategyId ?? bt.strategyId;
+        const eh =
+          mode === "live"
+            ? (equityHistoryLive ?? equityHistory)
+            : (equityHistoryPaper ?? equityHistory);
+        const start = startDate ?? bt.startDate;
+        const end = endDate ?? bt.endDate;
+        const liveEquity = eh.getRange(start, end);
+
+        if (liveEquity.length === 0) {
+          json(
+            res,
+            { status: "error", message: `${mode === "live" ? "实盘" : "模拟盘"}无权益数据` },
+            404,
+          );
+          return;
+        }
+
+        // Load trades and signals
+        const fsP = await import("node:fs/promises");
+        const osM = await import("node:os");
+        const pathM = await import("node:path");
+        const dir =
+          config.dataDir ??
+          pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+
+        let allTrades: import("../types.js").TradeRecord[] = [];
+        let allSignals: import("../types.js").TradingSignal[] = [];
+        try {
+          allTrades = JSON.parse(
+            await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8"),
+          );
+        } catch {
+          /* empty */
+        }
+        try {
+          allSignals = JSON.parse(
+            await fsP.default.readFile(pathM.default.join(dir, "signals.json"), "utf-8"),
+          );
+        } catch {
+          /* empty */
+        }
+
+        const liveTrades = allTrades.filter(
+          (t) =>
+            t.strategyId === sid &&
+            t.entryTime >= start &&
+            t.entryTime <= end + "T23:59:59",
+        );
+        const liveSignals = allSignals.filter(
+          (s) =>
+            s.strategyId === sid &&
+            new Date(s.timestamp).toISOString().slice(0, 10) >= start &&
+            new Date(s.timestamp).toISOString().slice(0, 10) <= end,
+        );
+
+        const result = compareLiveVsBacktest({
+          strategyId: sid,
+          startDate: start,
+          endDate: end,
+          backtestResult: bt,
+          liveEquity,
+          liveTrades,
+          liveSignals,
+        });
+
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
     }),
   });
 }

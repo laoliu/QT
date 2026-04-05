@@ -20,7 +20,8 @@ export type ExportTarget =
   | { type: "klines"; symbol: string; interval?: string; dateFrom?: string; dateTo?: string; limit?: number }
   | { type: "backtest"; backtestId: string }
   | { type: "screen"; screenId: string }
-  | { type: "equity"; accountId?: string; dateFrom?: string; dateTo?: string };
+  | { type: "equity"; accountId?: string; dateFrom?: string; dateTo?: string }
+  | { type: "watchlist"; category?: string };
 
 export type ExportFormat = "csv" | "json";
 
@@ -55,6 +56,7 @@ export interface DataSource {
   getBacktestResult(backtestId: string): Promise<ExportableRow[]>;
   getScreenResult(screenId: string): Promise<ExportableRow[]>;
   getEquityHistory(accountId?: string, dateFrom?: string, dateTo?: string): Promise<ExportableRow[]>;
+  getWatchlist(category?: string): Promise<ExportableRow[]>;
 }
 
 // ── CSV helpers ─────────────────────────────────────────────
@@ -89,6 +91,7 @@ export const SIGNAL_COLUMNS = ["date", "timestamp", "symbol", "direction", "pric
 export const JOURNAL_COLUMNS = ["id", "date", "symbol", "direction", "entryPrice", "exitPrice", "pnl", "rating", "tags", "content", "lesson", "strategyId", "createdAt"];
 export const KLINE_COLUMNS = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
 export const EQUITY_COLUMNS = ["date", "equity", "cash", "marketValue", "dailyPnl", "positionCount", "benchmark"];
+export const WATCHLIST_COLUMNS = ["code", "name", "category", "priority", "priceTarget", "convictionScore", "tags", "notes", "addedAt", "updatedAt"];
 
 // ── Service ─────────────────────────────────────────────────
 
@@ -150,6 +153,11 @@ export class DataExportService {
         columns = EQUITY_COLUMNS;
         prefix = "equity";
         break;
+      case "watchlist":
+        rows = await this.dataSource.getWatchlist(target.category);
+        columns = WATCHLIST_COLUMNS;
+        prefix = "watchlist";
+        break;
     }
 
     const date = new Date().toISOString().slice(0, 10);
@@ -179,6 +187,14 @@ export class DataExportService {
     };
   }
 
+  async exportBatch(targets: ExportTarget[], format: ExportFormat = "csv"): Promise<ExportResult[]> {
+    const results: ExportResult[] = [];
+    for (const target of targets) {
+      results.push(await this.export(target, format));
+    }
+    return results;
+  }
+
   async listExports(): Promise<ExportFileInfo[]> {
     try {
       const files = await fs.readdir(this.exportDir);
@@ -198,6 +214,28 @@ export class DataExportService {
       return details;
     } catch {
       return [];
+    }
+  }
+
+  async deleteExport(filename: string): Promise<boolean> {
+    const safe = path.basename(filename);
+    const filePath = path.join(this.exportDir, safe);
+    try {
+      await fs.unlink(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async deleteAllExports(): Promise<number> {
+    try {
+      const files = await fs.readdir(this.exportDir);
+      const exportFiles = files.filter((f) => f.endsWith(".csv") || f.endsWith(".json"));
+      await Promise.all(exportFiles.map((f) => fs.unlink(path.join(this.exportDir, f))));
+      return exportFiles.length;
+    } catch {
+      return 0;
     }
   }
 }

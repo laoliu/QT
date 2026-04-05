@@ -16,6 +16,7 @@ import type { DataQualityValidator } from "../services/data-quality.js";
 import type { HistoricalDataWarehouse } from "../services/data-warehouse.js";
 import type { EquityHistory } from "../services/equity-history.js";
 import type { EventBus } from "../services/event-bus.js";
+import type { FavoritesStore } from "../services/favorites-store.js";
 import type { PriceAlertService } from "../services/price-alert.js";
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
@@ -77,6 +78,7 @@ export interface RouteDeps {
   taskScheduler: TaskScheduler;
   tradeJournal: TradeJournal;
   scanHistoryStore: ScanHistoryStore;
+  favoritesStore?: FavoritesStore;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -1552,7 +1554,7 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Data Export sub-routes (FR-7) ───────────────────────────────
 
-function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, getEngine }: RouteDeps): void {
+function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, favoritesStore, getEngine }: RouteDeps): void {
   // GET /quant/api/data-export/list — list exported files
   api.registerHttpRoute({
     auth: "plugin",
@@ -1618,6 +1620,70 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
     }),
   });
 
+  // DELETE /quant/api/data-export/delete?file=xxx — delete an exported file
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/data-export/delete",
+    handler: secure(async (req, res) => {
+      if (req.method !== "DELETE" && req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+      const { existsSync, unlinkSync } = await import("node:fs");
+      const pathMod = await import("node:path");
+      const { homedir } = await import("node:os");
+
+      let filename: string | undefined;
+      if (req.method === "DELETE") {
+        filename = urlParams(req).get("file") ?? undefined;
+      } else {
+        const body = await parseJsonBody<Record<string, unknown>>(req);
+        filename = body.filename as string | undefined;
+      }
+
+      if (!filename) {
+        json(res, { status: "error", message: "缺少文件名参数" }, 400);
+        return;
+      }
+
+      const safe = pathMod.basename(filename);
+      const base = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+      const filePath = pathMod.join(base, "exports", safe);
+      if (!existsSync(filePath)) {
+        json(res, { status: "error", message: `文件不存在: ${safe}` }, 404);
+        return;
+      }
+      unlinkSync(filePath);
+      json(res, { status: "ok", message: `已删除: ${safe}` });
+    }),
+  });
+
+  // POST /quant/api/data-export/clean — delete all exported files
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/data-export/clean",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+      const fsMod = await import("node:fs");
+      const pathMod = await import("node:path");
+      const { homedir } = await import("node:os");
+      const base = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+      const dir = pathMod.join(base, "exports");
+      try {
+        const files = fsMod.readdirSync(dir).filter((f) => f.endsWith(".csv") || f.endsWith(".json"));
+        for (const f of files) {
+          fsMod.unlinkSync(pathMod.join(dir, f));
+        }
+        json(res, { status: "ok", deleted: files.length, message: `已清理 ${files.length} 个导出文件` });
+      } catch {
+        json(res, { status: "ok", deleted: 0, message: "导出目录为空或不存在" });
+      }
+    }),
+  });
+
   // POST /quant/api/data-export/export — trigger a data export
   api.registerHttpRoute({
     auth: "plugin",
@@ -1640,7 +1706,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
         return;
@@ -1842,6 +1908,27 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
               }
             }
             dataset = "screen";
+            break;
+          }
+          case "watchlist": {
+            headers = ["code", "name", "category", "priority", "priceTarget", "convictionScore", "tags", "notes", "addedAt", "updatedAt"];
+            if (favoritesStore) {
+              const category = body.category as string | undefined;
+              const stocks = favoritesStore.listFavorites(category ? { category } : undefined);
+              rows = stocks.map((s) => ({
+                code: s.code,
+                name: s.name ?? "",
+                category: s.category ?? "",
+                priority: s.priority ?? "",
+                priceTarget: s.priceTarget ?? "",
+                convictionScore: s.convictionScore ?? "",
+                tags: s.tags?.join(";") ?? "",
+                notes: s.notes ?? "",
+                addedAt: s.addedAt,
+                updatedAt: s.updatedAt,
+              }));
+            }
+            dataset = "watchlist";
             break;
           }
         }

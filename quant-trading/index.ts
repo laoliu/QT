@@ -662,6 +662,7 @@ const quantTradingPlugin = {
         journal: tradeJournal,
         backtestStore,
         scanHistoryStore,
+        favoritesStore,
         getEngine: () => liveEngine,
       }),
     };
@@ -1264,6 +1265,7 @@ const quantTradingPlugin = {
       taskScheduler,
       tradeJournal,
       scanHistoryStore,
+      favoritesStore,
       secure,
       securePublic,
     });

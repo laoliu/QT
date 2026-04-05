@@ -11,6 +11,10 @@
  *  - FR-7.7: K-line data export
  *  - FR-7.8: JSON format export
  *  - FR-7.9: List exported files
+ *  - FR-7.10: Watchlist/favorites export
+ *  - FR-7.11: Delete exported files
+ *  - FR-7.12: Clean all exported files
+ *  - FR-7.13: Batch export (multi-type)
  *  - NFR-10: UTF-8 BOM for Chinese Excel compatibility
  *  - NFR-3: Export under 5s (for 10k rows)
  *  - AC-5: CSV columns match specification
@@ -29,6 +33,7 @@ import {
   JOURNAL_COLUMNS,
   KLINE_COLUMNS,
   EQUITY_COLUMNS,
+  WATCHLIST_COLUMNS,
   type DataSource,
   type ExportableRow,
 } from "./data-export.js";
@@ -76,6 +81,10 @@ function mockDataSource(overrides?: Partial<DataSource>): DataSource {
     ],
     getEquityHistory: async () => [
       { date: "2026-03-01", equity: 100000, cash: 50000, marketValue: 50000, dailyPnl: 500, positionCount: 2, benchmark: 0.012 },
+    ],
+    getWatchlist: async () => [
+      { code: "600519", name: "贵州茅台", category: "watchlist", priority: 5, priceTarget: 2000, convictionScore: 9, tags: "白酒;消费", notes: "龙头", addedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" },
+      { code: "000858", name: "五粮液", category: "watchlist", priority: 3, priceTarget: 160, convictionScore: 7, tags: "白酒", notes: "", addedAt: "2026-02-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" },
     ],
     ...overrides,
   };
@@ -307,5 +316,111 @@ describe("DataExportService", () => {
 
     expect(result.rowCount).toBe(10000);
     expect(elapsed).toBeLessThan(5000); // NFR-3
+  });
+
+  it("exports watchlist/favorites to CSV (FR-7.10)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "watchlist" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^watchlist-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of WATCHLIST_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("贵州茅台");
+    expect(content).toContain("600519");
+    expect(content).toContain("白酒");
+  });
+
+  it("exports watchlist filtered by category", async () => {
+    const svc = new DataExportService({
+      dataSource: mockDataSource({
+        getWatchlist: async (category) => {
+          const all = [
+            { code: "600519", name: "贵州茅台", category: "watchlist", addedAt: "2026-01-01", updatedAt: "2026-03-01" },
+            { code: "300750", name: "宁德时代", category: "ideas", addedAt: "2026-02-01", updatedAt: "2026-03-01" },
+          ];
+          return category ? all.filter((s) => s.category === category) : all;
+        },
+      }),
+      exportDir: tmpDir,
+    });
+
+    const result = await svc.export({ type: "watchlist", category: "ideas" });
+    expect(result.rowCount).toBe(1);
+    const content = await fs.readFile(result.path, "utf-8");
+    expect(content).toContain("宁德时代");
+    expect(content).not.toContain("贵州茅台");
+  });
+
+  it("deletes a single exported file (FR-7.11)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "positions" });
+
+    const filesBefore = await svc.listExports();
+    expect(filesBefore).toHaveLength(1);
+
+    const deleted = await svc.deleteExport(result.filename);
+    expect(deleted).toBe(true);
+
+    const filesAfter = await svc.listExports();
+    expect(filesAfter).toHaveLength(0);
+  });
+
+  it("deleteExport returns false for non-existent file", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const deleted = await svc.deleteExport("non-existent.csv");
+    expect(deleted).toBe(false);
+  });
+
+  it("cleans all exported files (FR-7.12)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    await svc.export({ type: "positions" });
+    await svc.export({ type: "trades" });
+    await svc.export({ type: "signals" }, "json");
+
+    const filesBefore = await svc.listExports();
+    expect(filesBefore).toHaveLength(3);
+
+    const count = await svc.deleteAllExports();
+    expect(count).toBe(3);
+
+    const filesAfter = await svc.listExports();
+    expect(filesAfter).toHaveLength(0);
+  });
+
+  it("batch exports multiple datasets (FR-7.13)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const results = await svc.exportBatch([
+      { type: "positions" },
+      { type: "trades" },
+      { type: "signals" },
+    ]);
+
+    expect(results).toHaveLength(3);
+    expect(results[0].filename).toMatch(/^positions-/);
+    expect(results[1].filename).toMatch(/^trades-/);
+    expect(results[2].filename).toMatch(/^signals-/);
+
+    const files = await svc.listExports();
+    expect(files).toHaveLength(3);
+  });
+
+  it("batch exports with JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const results = await svc.exportBatch([
+      { type: "positions" },
+      { type: "watchlist" },
+    ], "json");
+
+    expect(results).toHaveLength(2);
+    for (const r of results) {
+      expect(r.format).toBe("json");
+      expect(r.filename).toMatch(/\.json$/);
+    }
   });
 });

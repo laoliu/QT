@@ -21,6 +21,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { EquityHistory } from "../services/equity-history.js";
+import type { FavoritesStore } from "../services/favorites-store.js";
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { TradeJournal } from "../services/trade-journal.js";
@@ -81,11 +82,12 @@ export interface DataExportDeps {
   journal: TradeJournal;
   backtestStore?: BacktestStore;
   scanHistoryStore?: ScanHistoryStore;
+  favoritesStore?: FavoritesStore;
   getEngine?: () => LiveEngine | null;
 }
 
 export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDeps) {
-  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, getEngine } = deps;
+  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, getEngine } = deps;
 
   return {
     name: "data_export",
@@ -100,7 +102,11 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
       "• action=backtest — 导出回测结果详情\n" +
       "• action=screen — 导出选股/筛选结果\n" +
       "• action=klines — 导出指定标的的K线缓存数据\n" +
-      "• action=list — 列出已导出的文件",
+      "• action=watchlist — 导出自选股/收藏列表\n" +
+      "• action=batch — 批量导出多种数据（盘后复盘一键导出）\n" +
+      "• action=list — 列出已导出的文件\n" +
+      "• action=delete — 删除指定的导出文件\n" +
+      "• action=clean — 清理所有导出文件",
     parameters: {
       type: "object" as const,
       properties: {
@@ -116,7 +122,11 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
             "backtest",
             "screen",
             "klines",
+            "watchlist",
+            "batch",
             "list",
+            "delete",
+            "clean",
           ],
           description: "导出的数据类型",
         },
@@ -158,6 +168,19 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           enum: ["paper", "live", "all"],
           description: "持仓模式（action=portfolio 时使用），默认 all",
         },
+        category: {
+          type: "string",
+          description: "自选股分类过滤（action=watchlist 时使用，如 watchlist/ideas/shortlist）",
+        },
+        batchTypes: {
+          type: "array",
+          items: { type: "string" },
+          description: "批量导出的数据类型列表（action=batch 时使用，如 [\"portfolio\",\"trades\",\"signals\"]）",
+        },
+        filename: {
+          type: "string",
+          description: "要删除的导出文件名（action=delete 时使用）",
+        },
       },
       required: ["action"],
     },
@@ -172,6 +195,18 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
 
       if (action === "list") {
         return listExports(config);
+      }
+
+      if (action === "delete") {
+        return deleteExport(config, args.filename as string | undefined);
+      }
+
+      if (action === "clean") {
+        return cleanExports(config);
+      }
+
+      if (action === "batch") {
+        return batchExport(config, args, deps);
       }
 
       const exportDir = getExportDir(config);
@@ -274,6 +309,13 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           dataset = "screen";
           break;
         }
+        case "watchlist": {
+          const result = exportWatchlist(favoritesStore, args.category as string | undefined);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "watchlist";
+          break;
+        }
         default:
           return { status: "error", message: `未知的 action: ${action}` };
       }
@@ -316,6 +358,7 @@ function datasetLabel(action: string): string {
     backtest: "回测",
     screen: "选股",
     klines: "K线",
+    watchlist: "自选股",
   };
   return labels[action] ?? action;
 }
@@ -579,4 +622,181 @@ function exportScreen(
     signals: entry.signals?.join(";") ?? "",
   }));
   return Promise.resolve({ headers, rows });
+}
+
+function exportWatchlist(
+  favoritesStore?: FavoritesStore,
+  category?: string,
+): { headers: string[]; rows: Record<string, unknown>[] } {
+  if (!favoritesStore) {
+    return { headers: ["message"], rows: [{ message: "自选股存储不可用" }] };
+  }
+
+  const headers = [
+    "code", "name", "category", "priority", "priceTarget",
+    "convictionScore", "tags", "notes", "addedAt", "updatedAt",
+  ];
+
+  const stocks = favoritesStore.listFavorites(category ? { category } : undefined);
+  const rows = stocks.map((s) => ({
+    code: s.code,
+    name: s.name ?? "",
+    category: s.category ?? "",
+    priority: s.priority ?? "",
+    priceTarget: s.priceTarget ?? "",
+    convictionScore: s.convictionScore ?? "",
+    tags: s.tags?.join(";") ?? "",
+    notes: s.notes ?? "",
+    addedAt: s.addedAt,
+    updatedAt: s.updatedAt,
+  }));
+
+  return { headers, rows };
+}
+
+async function deleteExport(config: QuantTradingConfig, filename?: string) {
+  if (!filename) {
+    return { status: "error", message: "action=delete 需要指定 filename 参数" };
+  }
+  const dir = getExportDir(config);
+  const safe = path.basename(filename);
+  const filePath = path.join(dir, safe);
+  try {
+    await fs.unlink(filePath);
+    return { status: "ok", message: `已删除导出文件: ${safe}` };
+  } catch {
+    return { status: "error", message: `文件不存在或删除失败: ${safe}` };
+  }
+}
+
+async function cleanExports(config: QuantTradingConfig) {
+  const dir = getExportDir(config);
+  try {
+    const files = await fs.readdir(dir);
+    const exportFiles = files.filter((f) => f.endsWith(".csv") || f.endsWith(".json"));
+    await Promise.all(exportFiles.map((f) => fs.unlink(path.join(dir, f))));
+    return { status: "ok", deleted: exportFiles.length, message: `已清理 ${exportFiles.length} 个导出文件` };
+  } catch {
+    return { status: "ok", deleted: 0, message: "导出目录为空或不存在" };
+  }
+}
+
+async function batchExport(
+  config: QuantTradingConfig,
+  args: Record<string, unknown>,
+  deps: DataExportDeps,
+) {
+  const { quantStorage, journal, backtestStore, scanHistoryStore, favoritesStore, getEngine } = deps;
+  const format = (args.format as string) ?? "csv";
+  const symbol = args.symbol as string | undefined;
+  const startDate = args.startDate as string | undefined;
+  const endDate = args.endDate as string | undefined;
+  const limit = (args.limit as number) ?? 10000;
+
+  const batchTypes = (args.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
+  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
+
+  const invalidTypes = batchTypes.filter((t) => !validBatchTypes.includes(t));
+  if (invalidTypes.length > 0) {
+    return { status: "error", message: `不支持的批量导出类型: ${invalidTypes.join(", ")}` };
+  }
+
+  const exportDir = getExportDir(config);
+  await fs.mkdir(exportDir, { recursive: true });
+
+  const results: Array<{ dataset: string; rows: number; file: string; filename: string }> = [];
+
+  for (const type of batchTypes) {
+    let data: Record<string, unknown>[];
+    let headers: string[];
+    let dataset = type;
+
+    switch (type) {
+      case "portfolio": {
+        const result = await exportPortfolio(config, getEngine, args.mode as string | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "trades":
+        data = (await quantStorage.getTrades({ symbol, limit })).map((r) => ({ ...r }));
+        headers = ["symbol", "side", "entryPrice", "exitPrice", "quantity", "entryTime", "exitTime", "netPnl", "pnlPct", "commission", "strategyId"];
+        break;
+      case "signals":
+        data = (await quantStorage.getSignals({ symbol, strategyId: undefined, limit })).map((r) => ({
+          ...r,
+          date: r.date ?? new Date(r.timestamp).toISOString().slice(0, 10),
+        }));
+        headers = ["date", "timestamp", "symbol", "direction", "price", "quantity", "reason", "confidence", "strategyId"];
+        break;
+      case "orders":
+        data = (await quantStorage.getOrders({ symbol, limit })).map((r) => ({ ...r }));
+        headers = ["orderId", "symbol", "market", "side", "orderType", "quantity", "price", "status", "filledQty", "filledPrice", "strategyId", "createdAt", "updatedAt"];
+        break;
+      case "equity":
+        data = (await quantStorage.getEquitySnapshots({ start: startDate, end: endDate, limit })).map((r) => ({ ...r }));
+        headers = ["date", "equity", "cash", "marketValue", "dailyPnl", "positionCount", "benchmark"];
+        break;
+      case "journal":
+        data = exportJournal(journal, symbol, startDate, endDate, limit);
+        headers = ["id", "date", "symbol", "direction", "entryPrice", "exitPrice", "pnl", "rating", "tags", "content", "lesson", "strategyId", "createdAt"];
+        break;
+      case "klines": {
+        if (!symbol) {
+          results.push({ dataset: "klines", rows: 0, file: "", filename: "(跳过: 未指定 symbol)" });
+          continue;
+        }
+        const interval = (args.interval as string) ?? "1d";
+        const start = startDate ?? "2000-01-01";
+        const end = endDate ?? new Date().toISOString().slice(0, 10);
+        data = (await quantStorage.getKlines(symbol, interval, start, end)).slice(0, limit).map((r) => ({ ...r }));
+        headers = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
+        dataset = `klines_${symbol}`;
+        break;
+      }
+      case "backtest": {
+        const result = await exportBacktest(backtestStore, args.backtestId as string | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "screen": {
+        const result = await exportScreen(scanHistoryStore, args.screenId as string | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "watchlist": {
+        const result = exportWatchlist(favoritesStore, args.category as string | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      default:
+        continue;
+    }
+
+    const filename = makeFilename(dataset, format);
+    const filePath = path.join(exportDir, filename);
+
+    if (format === "json") {
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+    } else {
+      const csv = toCsv(headers, data);
+      await fs.writeFile(filePath, "\uFEFF" + csv, "utf-8");
+    }
+
+    results.push({ dataset: type, rows: data.length, file: filePath, filename });
+  }
+
+  const totalRows = results.reduce((sum, r) => sum + r.rows, 0);
+  return {
+    status: "ok",
+    batchTypes,
+    format,
+    results,
+    totalFiles: results.length,
+    totalRows,
+    message: `批量导出完成: ${results.length} 个文件, 共 ${totalRows} 条记录`,
+  };
 }

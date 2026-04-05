@@ -7,12 +7,13 @@ import type { BrokerType, QuantTradingConfig } from "../types.js";
  *   await broker.connect();
  */
 import type { IBrokerAdapter } from "./adapter.js";
+import { FutuBroker } from "./futu-broker.js";
 import { PaperBroker } from "./paper-broker.js";
 import { QMTBroker } from "./qmt-broker.js";
 import { RemoteQMTBroker } from "./remote-qmt-broker.js";
 
 export type { IBrokerAdapter };
-export { PaperBroker, QMTBroker, RemoteQMTBroker };
+export { FutuBroker, PaperBroker, QMTBroker, RemoteQMTBroker };
 
 /**
  * Instantiate the correct broker adapter.
@@ -35,10 +36,7 @@ export function createBrokerAdapter(config: QuantTradingConfig): IBrokerAdapter 
       return new RemoteQMTBroker(config);
 
     case "futu":
-      // Futu implementation planned for next phase; fall back to paper for now
-      throw new Error(
-        "Futu broker is not yet implemented. Set tradingAccount.broker = 'qmt' or 'paper'.",
-      );
+      return new FutuBroker(config);
 
     case "ib":
       throw new Error(
@@ -52,7 +50,7 @@ export function createBrokerAdapter(config: QuantTradingConfig): IBrokerAdapter 
 
     default:
       throw new Error(
-        `Unknown broker type: ${broker as string}. Supported: paper, qmt, remote-qmt`,
+        `Unknown broker type: ${broker as string}. Supported: paper, qmt, remote-qmt, futu`,
       );
   }
 }

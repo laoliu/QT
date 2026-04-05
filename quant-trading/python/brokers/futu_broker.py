@@ -98,6 +98,8 @@ if HAS_FUTU:
     SIDE_TO_FUTU = {
         "buy": TrdSide.BUY,
         "sell": TrdSide.SELL,
+        "short": TrdSide.SELL_SHORT,
+        "cover": TrdSide.BUY_BACK,
         "buy_open": TrdSide.BUY,
         "sell_close": TrdSide.SELL,
     }
@@ -504,6 +506,159 @@ class FutuBrokerBridge:
         except Exception:
             return {"alive": False}
 
+    def query_deals(self, params: dict) -> list:
+        """Query today's deal/trade history."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params.get("stock_code")
+        code_filter = stock_code if stock_code else ""
+
+        ret, data = self.trade_ctx.deal_list_query(
+            code=code_filter,
+            trd_env=self.trade_env,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"query_deals failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            value = float(row.get("price", 0)) * int(row.get("qty", 0))
+            result.append({
+                "deal_id": str(row.get("deal_id", "")),
+                "order_id": str(row.get("order_id", "")),
+                "stock_code": row.get("code", ""),
+                "stock_name": row.get("stock_name", ""),
+                "side": map_futu_side(row.get("trd_side", "")) if HAS_FUTU else "buy",
+                "price": float(row.get("price", 0)),
+                "qty": int(row.get("qty", 0)),
+                "amount": value,
+                "time": row.get("create_time", ""),
+            })
+        return result
+
+    def get_klines(self, params: dict) -> list:
+        """Fetch K-line (candlestick) data for a symbol."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params["stock_code"]
+        kl_type_str = params.get("kl_type", "K_DAY")
+        count = int(params.get("count", 100))
+
+        # Map string to Futu KLType
+        kl_type = KLType.K_DAY if HAS_FUTU else None
+        if HAS_FUTU:
+            kl_map = {
+                "K_1M": KLType.K_1M,
+                "K_5M": KLType.K_5M,
+                "K_15M": KLType.K_15M,
+                "K_30M": KLType.K_30M,
+                "K_60M": KLType.K_60M,
+                "K_DAY": KLType.K_DAY,
+                "K_WEEK": KLType.K_WEEK,
+                "K_MON": KLType.K_MON,
+            }
+            kl_type = kl_map.get(kl_type_str, KLType.K_DAY)
+
+        ret, data, _ = self.quote_ctx.request_history_kline(
+            stock_code,
+            ktype=kl_type,
+            max_count=count,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"get_klines failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            result.append({
+                "time_key": row.get("time_key", ""),
+                "open": float(row.get("open", 0)),
+                "high": float(row.get("high", 0)),
+                "low": float(row.get("low", 0)),
+                "close": float(row.get("close", 0)),
+                "volume": int(row.get("volume", 0)),
+                "turnover": float(row.get("turnover", 0)),
+                "turnover_rate": float(row.get("turnover_rate", 0)) if "turnover_rate" in row else None,
+            })
+        return result
+
+    def subscribe_orderbook(self, params: dict) -> dict:
+        """Subscribe to order book (bid/ask depth) for a symbol."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+
+        codes = params.get("stock_codes", [])
+        for code in codes:
+            ret, data = self.quote_ctx.subscribe(code, [SubType.ORDER_BOOK], subscribe_push=True)
+            if ret != RET_OK:
+                log.warning("subscribe_orderbook failed for %s: %s", code, data)
+        return {"subscribed_orderbook": codes}
+
+    def get_orderbook(self, params: dict) -> dict:
+        """Get current order book snapshot for a symbol."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params["stock_code"]
+
+        # Need to subscribe first
+        ret, data = self.quote_ctx.subscribe(stock_code, [SubType.ORDER_BOOK])
+        if ret != RET_OK:
+            raise RuntimeError(f"subscribe for orderbook failed: {data}")
+
+        ret, data = self.quote_ctx.get_order_book(stock_code)
+        if ret != RET_OK:
+            raise RuntimeError(f"get_orderbook failed: {data}")
+
+        bids = []
+        asks = []
+        for _, row in data.get("Bid", []):
+            bids.append({"price": float(row[0]), "volume": int(row[1]), "order_num": int(row[2]) if len(row) > 2 else 0})
+        for _, row in data.get("Ask", []):
+            asks.append({"price": float(row[0]), "volume": int(row[1]), "order_num": int(row[2]) if len(row) > 2 else 0})
+
+        return {
+            "stock_code": stock_code,
+            "bids": bids,
+            "asks": asks,
+        }
+
+    def get_market_snapshot(self, params: dict) -> list:
+        """Get real-time snapshot for one or more symbols."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+
+        codes = params.get("stock_codes", [])
+        if not codes:
+            return []
+
+        ret, data = self.quote_ctx.get_market_snapshot(codes)
+        if ret != RET_OK:
+            raise RuntimeError(f"get_market_snapshot failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            result.append({
+                "stock_code": row.get("code", ""),
+                "stock_name": row.get("name", ""),
+                "last_price": float(row.get("last_price", 0)),
+                "open": float(row.get("open_price", 0)),
+                "high": float(row.get("high_price", 0)),
+                "low": float(row.get("low_price", 0)),
+                "prev_close": float(row.get("prev_close_price", 0)),
+                "volume": int(row.get("volume", 0)),
+                "turnover": float(row.get("turnover", 0)),
+                "turnover_rate": float(row.get("turnover_rate", 0)) if "turnover_rate" in data.columns else None,
+                "amplitude": float(row.get("amplitude", 0)) if "amplitude" in data.columns else None,
+                "pe_ratio": float(row.get("pe_ratio", 0)) if "pe_ratio" in data.columns else None,
+                "pb_ratio": float(row.get("pb_ratio", 0)) if "pb_ratio" in data.columns else None,
+                "time": int(time.time() * 1000),
+            })
+        return result
+
     # ── Serialisers ────────────────────────────────────────────
 
     @staticmethod
@@ -566,6 +721,11 @@ METHODS = {
     "subscribe_quote": "subscribe_quote",
     "unsubscribe_quote": "unsubscribe_quote",
     "ping": "ping",
+    "query_deals": "query_deals",
+    "get_klines": "get_klines",
+    "subscribe_orderbook": "subscribe_orderbook",
+    "get_orderbook": "get_orderbook",
+    "get_market_snapshot": "get_market_snapshot",
 }
 
 

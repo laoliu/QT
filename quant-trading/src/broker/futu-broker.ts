@@ -103,6 +103,58 @@ type RawFill = {
   time: string;
 };
 
+type RawDeal = {
+  deal_id: string;
+  order_id: string;
+  stock_code: string;
+  stock_name: string;
+  side: string;
+  price: number;
+  qty: number;
+  amount: number;
+  time: string;
+};
+
+type RawKline = {
+  time_key: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  turnover: number;
+  turnover_rate: number | null;
+};
+
+type RawOrderBookEntry = {
+  price: number;
+  volume: number;
+  order_num: number;
+};
+
+type RawOrderBook = {
+  stock_code: string;
+  bids: RawOrderBookEntry[];
+  asks: RawOrderBookEntry[];
+};
+
+type RawMarketSnapshot = {
+  stock_code: string;
+  stock_name: string;
+  last_price: number;
+  open: number;
+  high: number;
+  low: number;
+  prev_close: number;
+  volume: number;
+  turnover: number;
+  turnover_rate: number | null;
+  amplitude: number | null;
+  pe_ratio: number | null;
+  pb_ratio: number | null;
+  time: number;
+};
+
 // ── Symbol normalisation ──────────────────────────────────────────
 
 /**
@@ -390,6 +442,86 @@ export class FutuBroker implements IBrokerAdapter {
     } catch {
       return false;
     }
+  }
+
+  // ── Extended data methods (Futu-specific, beyond IBrokerAdapter) ──
+
+  /**
+   * Query today's trade/deal history.
+   * Returns filled trades with price, quantity, and timing.
+   */
+  async queryDeals(symbol?: string): Promise<
+    Array<{
+      dealId: string;
+      orderId: string;
+      symbol: string;
+      name: string;
+      side: string;
+      price: number;
+      quantity: number;
+      amount: number;
+      time: string;
+    }>
+  > {
+    const params: Record<string, unknown> = {};
+    if (symbol) params.stock_code = toFutuSymbol(symbol);
+    const raw = await this.proc.call<RawDeal[]>("query_deals", params);
+    return raw.map((r) => ({
+      dealId: r.deal_id,
+      orderId: r.order_id,
+      symbol: fromFutuSymbol(r.stock_code),
+      name: r.stock_name,
+      side: r.side,
+      price: r.price,
+      quantity: r.qty,
+      amount: r.amount,
+      time: r.time,
+    }));
+  }
+
+  /**
+   * Fetch K-line (candlestick) data from Futu.
+   * @param symbol Stock code (auto-converted to Futu format)
+   * @param klType Futu K-line type: "K_1M" | "K_5M" | "K_15M" | "K_30M" | "K_60M" | "K_DAY" | "K_WEEK" | "K_MON"
+   * @param count Number of bars to fetch (max 1000)
+   */
+  async getKlines(
+    symbol: string,
+    klType: string = "K_DAY",
+    count: number = 100,
+  ): Promise<RawKline[]> {
+    return this.proc.call<RawKline[]>("get_klines", {
+      stock_code: toFutuSymbol(symbol),
+      kl_type: klType,
+      count,
+    });
+  }
+
+  /**
+   * Get order book (bid/ask depth) snapshot for a symbol.
+   */
+  async getOrderbook(symbol: string): Promise<RawOrderBook> {
+    return this.proc.call<RawOrderBook>("get_orderbook", {
+      stock_code: toFutuSymbol(symbol),
+    });
+  }
+
+  /**
+   * Subscribe to order book push updates.
+   */
+  async subscribeOrderbook(symbols: string[]): Promise<{ subscribed_orderbook: string[] }> {
+    const futuSymbols = symbols.map(toFutuSymbol);
+    return this.proc.call("subscribe_orderbook", { stock_codes: futuSymbols });
+  }
+
+  /**
+   * Get real-time market snapshot for one or more symbols.
+   */
+  async getMarketSnapshot(symbols: string[]): Promise<RawMarketSnapshot[]> {
+    const futuSymbols = symbols.map(toFutuSymbol);
+    return this.proc.call<RawMarketSnapshot[]>("get_market_snapshot", {
+      stock_codes: futuSymbols,
+    });
   }
 
   // ── Private ──────────────────────────────────────────────────

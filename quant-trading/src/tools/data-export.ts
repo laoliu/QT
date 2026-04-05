@@ -21,6 +21,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { EquityHistory } from "../services/equity-history.js";
+import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { TradeJournal } from "../services/trade-journal.js";
 import type { Portfolio, QuantTradingConfig } from "../types.js";
@@ -79,11 +80,12 @@ export interface DataExportDeps {
   equityHistory: EquityHistory;
   journal: TradeJournal;
   backtestStore?: BacktestStore;
+  scanHistoryStore?: ScanHistoryStore;
   getEngine?: () => LiveEngine | null;
 }
 
 export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDeps) {
-  const { config, quantStorage, equityHistory, journal, backtestStore, getEngine } = deps;
+  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, getEngine } = deps;
 
   return {
     name: "data_export",
@@ -96,6 +98,7 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
       "• action=equity — 导出权益曲线（资金变化历史）\n" +
       "• action=journal — 导出交易笔记/复盘日志\n" +
       "• action=backtest — 导出回测结果详情\n" +
+      "• action=screen — 导出选股/筛选结果\n" +
       "• action=klines — 导出指定标的的K线缓存数据\n" +
       "• action=list — 列出已导出的文件",
     parameters: {
@@ -111,6 +114,7 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
             "equity",
             "journal",
             "backtest",
+            "screen",
             "klines",
             "list",
           ],
@@ -136,6 +140,10 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
         backtestId: {
           type: "string",
           description: "回测记录ID（action=backtest 时使用）",
+        },
+        screenId: {
+          type: "string",
+          description: "选股记录ID（action=screen 时使用，不传则导出最近一次筛选结果）",
         },
         interval: {
           type: "string",
@@ -259,6 +267,13 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           dataset = `klines_${symbol}`;
           break;
         }
+        case "screen": {
+          const result = await exportScreen(scanHistoryStore, args.screenId as string | undefined);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "screen";
+          break;
+        }
         default:
           return { status: "error", message: `未知的 action: ${action}` };
       }
@@ -299,6 +314,7 @@ function datasetLabel(action: string): string {
     equity: "权益",
     journal: "笔记",
     backtest: "回测",
+    screen: "选股",
     klines: "K线",
   };
   return labels[action] ?? action;
@@ -508,4 +524,59 @@ async function exportBacktest(
   }));
 
   return { headers, rows };
+}
+
+function exportScreen(
+  scanHistoryStore?: ScanHistoryStore,
+  screenId?: string,
+): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  if (!scanHistoryStore) {
+    return Promise.resolve({ headers: ["message"], rows: [{ message: "选股历史存储不可用" }] });
+  }
+
+  const headers = [
+    "rank", "code", "name", "score", "screenerId",
+    "universe", "market", "date", "signals",
+  ];
+
+  if (screenId) {
+    const record = scanHistoryStore.getFullResult(screenId);
+    if (!record) {
+      return Promise.resolve({ headers: ["message"], rows: [{ message: `未找到选股记录: ${screenId}` }] });
+    }
+    const rows = record.results.map((entry, i) => ({
+      rank: entry.rank ?? i + 1,
+      code: entry.code,
+      name: entry.name ?? "",
+      score: entry.score ?? "",
+      screenerId: record.screenerId,
+      universe: record.universe,
+      market: record.market,
+      date: record.date,
+      signals: entry.signals?.join(";") ?? "",
+    }));
+    return Promise.resolve({ headers, rows });
+  }
+
+  // No screenId — export the latest scan result
+  const index = scanHistoryStore.query({ limit: 1, sortBy: "createdAt", sortDir: "desc" });
+  if (index.length === 0) {
+    return Promise.resolve({ headers: ["message"], rows: [{ message: "暂无选股历史记录" }] });
+  }
+  const latest = scanHistoryStore.getFullResult(index[0].id);
+  if (!latest) {
+    return Promise.resolve({ headers: ["message"], rows: [{ message: "无法读取选股记录详情" }] });
+  }
+  const rows = latest.results.map((entry, i) => ({
+    rank: entry.rank ?? i + 1,
+    code: entry.code,
+    name: entry.name ?? "",
+    score: entry.score ?? "",
+    screenerId: latest.screenerId,
+    universe: latest.universe,
+    market: latest.market,
+    date: latest.date,
+    signals: entry.signals?.join(";") ?? "",
+  }));
+  return Promise.resolve({ headers, rows });
 }

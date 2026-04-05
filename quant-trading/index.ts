@@ -661,6 +661,7 @@ const quantTradingPlugin = {
         equityHistory,
         journal: tradeJournal,
         backtestStore,
+        scanHistoryStore,
         getEngine: () => liveEngine,
       }),
     };

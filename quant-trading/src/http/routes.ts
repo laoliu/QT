@@ -44,6 +44,16 @@ function urlParams(req: { url?: string }): URLSearchParams {
   return new URL(req.url ?? "/", "http://localhost").searchParams;
 }
 
+/** Escape a CSV field value (handles commas, quotes, newlines). */
+function escapeCsvField(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
 // ── Dependencies ─────────────────────────────────────────────────
 
 export interface RouteDeps {
@@ -1538,7 +1548,7 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Data Export sub-routes (FR-7) ───────────────────────────────
 
-function registerDataExportRoutes({ api, config, secure }: RouteDeps): void {
+function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore }: RouteDeps): void {
   // GET /quant/api/data-export/list — list exported files
   api.registerHttpRoute({
     auth: "plugin",
@@ -1601,6 +1611,140 @@ function registerDataExportRoutes({ api, config, secure }: RouteDeps): void {
         "Content-Length": content.length,
       });
       res.end(content);
+    }),
+  });
+
+  // POST /quant/api/data-export/export — trigger a data export
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/data-export/export",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      const action = body.action as string | undefined;
+      const format = ((body.format as string) ?? "csv") === "json" ? "json" : "csv";
+      const symbol = body.symbol as string | undefined;
+      const startDate = body.startDate as string | undefined;
+      const endDate = body.endDate as string | undefined;
+      const limit = (body.limit as number) ?? 10000;
+
+      if (!action) {
+        json(res, { status: "error", message: "缺少 action 参数" }, 400);
+        return;
+      }
+
+      const validActions = ["trades", "signals", "orders", "equity", "klines", "backtest"];
+      if (!validActions.includes(action)) {
+        json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
+        return;
+      }
+
+      try {
+        const fsMod = await import("node:fs");
+        const pathMod = await import("node:path");
+        const { homedir } = await import("node:os");
+        const base = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+        const dir = pathMod.join(base, "exports");
+        fsMod.mkdirSync(dir, { recursive: true });
+
+        let rows: Record<string, unknown>[] = [];
+        let headers: string[] = [];
+        let dataset = action;
+
+        switch (action) {
+          case "trades":
+            rows = (await quantStorage.getTrades({ symbol, limit })).map((r) => ({ ...r }));
+            headers = ["symbol", "side", "entryPrice", "exitPrice", "quantity", "entryTime", "exitTime", "netPnl", "pnlPct", "commission", "strategyId"];
+            break;
+          case "signals":
+            rows = (await quantStorage.getSignals({ symbol, limit })).map((r) => ({ ...r }));
+            headers = ["date", "timestamp", "symbol", "direction", "price", "quantity", "reason", "confidence", "strategyId"];
+            break;
+          case "orders":
+            rows = (await quantStorage.getOrders({ symbol, limit })).map((r) => ({ ...r }));
+            headers = ["orderId", "symbol", "market", "side", "orderType", "quantity", "price", "status", "filledQty", "filledPrice", "strategyId", "createdAt", "updatedAt"];
+            break;
+          case "equity":
+            rows = (await quantStorage.getEquitySnapshots({ start: startDate, end: endDate, limit })).map((r) => ({ ...r }));
+            headers = ["date", "equity", "cash", "marketValue", "dailyPnl", "positionCount", "benchmark"];
+            break;
+          case "klines": {
+            if (!symbol) {
+              json(res, { status: "error", message: "action=klines 需要指定 symbol 参数" }, 400);
+              return;
+            }
+            const interval = (body.interval as string) ?? "1d";
+            const start = startDate ?? "2000-01-01";
+            const end = endDate ?? new Date().toISOString().slice(0, 10);
+            rows = (await quantStorage.getKlines(symbol, interval, start, end)).slice(0, limit).map((r) => ({ ...r }));
+            headers = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
+            dataset = `klines_${symbol}`;
+            break;
+          }
+          case "backtest": {
+            if (!backtestStore) {
+              json(res, { status: "error", message: "回测存储不可用" }, 500);
+              return;
+            }
+            const backtestId = body.backtestId as string | undefined;
+            headers = ["id", "createdAt", "strategyId", "symbols", "startDate", "endDate", "engine", "initialCash", "finalValue", "totalReturn", "annualizedReturn", "maxDrawdown", "sharpeRatio", "winRate", "totalTrades", "tags", "notes"];
+            if (backtestId) {
+              const record = backtestStore.getFullResult(backtestId);
+              if (!record) {
+                json(res, { status: "error", message: `未找到回测记录: ${backtestId}` }, 404);
+                return;
+              }
+              const r = record.result;
+              rows = [{
+                id: record.id, createdAt: record.createdAt, strategyId: r.strategyId,
+                symbols: r.symbols.join(","), startDate: r.startDate, endDate: r.endDate,
+                engine: record.engine, initialCash: r.initialCash, finalValue: r.finalValue,
+                totalReturn: r.totalReturn, annualizedReturn: r.annualizedReturn,
+                maxDrawdown: r.maxDrawdown, sharpeRatio: r.sharpeRatio,
+                winRate: r.winRate, totalTrades: r.totalTrades,
+                tags: record.tags.join(";"), notes: record.notes ?? "",
+              }];
+            } else {
+              rows = backtestStore.query().map((e: Record<string, unknown>) => ({
+                ...e,
+                symbols: Array.isArray(e.symbols) ? (e.symbols as string[]).join(",") : e.symbols,
+                tags: Array.isArray(e.tags) ? (e.tags as string[]).join(";") : e.tags,
+              }));
+            }
+            break;
+          }
+        }
+
+        // Write file
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const filename = `${dataset}_${ts}.${format}`;
+        const filePath = pathMod.join(dir, filename);
+
+        if (format === "json") {
+          fsMod.writeFileSync(filePath, JSON.stringify(rows, null, 2), "utf-8");
+        } else {
+          const csvHeader = headers.map(escapeCsvField).join(",");
+          const csvRows = rows.map((row) => headers.map((h) => escapeCsvField(row[h])).join(","));
+          fsMod.writeFileSync(filePath, "\uFEFF" + csvHeader + "\n" + csvRows.join("\n") + "\n", "utf-8");
+        }
+
+        const stat = fsMod.statSync(filePath);
+        json(res, {
+          status: "ok",
+          dataset: action,
+          format,
+          rows: rows.length,
+          file: filePath,
+          filename,
+          size: stat.size,
+          message: `已导出 ${rows.length} 条记录到 ${filename}`,
+        });
+      } catch (e) {
+        json(res, { status: "error", message: (e as Error).message }, 500);
+      }
     }),
   });
 }

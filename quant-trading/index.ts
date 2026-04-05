@@ -1262,6 +1262,8 @@ const quantTradingPlugin = {
       getEngine,
       priceAlertService,
       taskScheduler,
+      tradeJournal,
+      scanHistoryStore,
       secure,
       securePublic,
     });

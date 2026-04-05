@@ -17,9 +17,11 @@ import type { HistoricalDataWarehouse } from "../services/data-warehouse.js";
 import type { EquityHistory } from "../services/equity-history.js";
 import type { EventBus } from "../services/event-bus.js";
 import type { PriceAlertService } from "../services/price-alert.js";
+import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
+import type { TradeJournal } from "../services/trade-journal.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
@@ -73,6 +75,8 @@ export interface RouteDeps {
   getEngine: () => LiveEngine;
   priceAlertService: PriceAlertService;
   taskScheduler: TaskScheduler;
+  tradeJournal: TradeJournal;
+  scanHistoryStore: ScanHistoryStore;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -1548,7 +1552,7 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Data Export sub-routes (FR-7) ───────────────────────────────
 
-function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore }: RouteDeps): void {
+function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, getEngine }: RouteDeps): void {
   // GET /quant/api/data-export/list — list exported files
   api.registerHttpRoute({
     auth: "plugin",
@@ -1636,7 +1640,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["trades", "signals", "orders", "equity", "klines", "backtest"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
         return;
@@ -1655,6 +1659,65 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         let dataset = action;
 
         switch (action) {
+          case "portfolio": {
+            headers = ["source", "symbol", "name", "quantity", "avgCost", "currentPrice", "marketValue", "unrealizedPnl", "unrealizedPnlPct", "weight"];
+            const mode = body.mode as string | undefined;
+            // Paper portfolio
+            if (!mode || mode === "all" || mode === "paper") {
+              const portfolioDir = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+              for (const name of ["portfolio-paper.json", "portfolio.json"]) {
+                try {
+                  const raw = fsMod.readFileSync(pathMod.join(portfolioDir, name), "utf-8");
+                  const paper = JSON.parse(raw) as { totalValue?: number; positions: Array<Record<string, unknown>> };
+                  for (const pos of paper.positions) {
+                    const qty = (pos.quantity as number) ?? 0;
+                    const cost = (pos.avgCost as number) ?? 0;
+                    const cur = (pos.currentPrice as number) ?? cost;
+                    const mv = cur * qty;
+                    const pnl = (cur - cost) * qty;
+                    const pnlPct = cost > 0 ? (pnl / (cost * qty)) * 100 : 0;
+                    rows.push({
+                      source: "paper", symbol: pos.symbol ?? "", name: pos.name ?? "",
+                      quantity: qty, avgCost: cost, currentPrice: cur, marketValue: mv,
+                      unrealizedPnl: pnl, unrealizedPnlPct: Number(pnlPct.toFixed(2)),
+                      weight: (paper.totalValue ?? 0) > 0 ? Number(((mv / (paper.totalValue ?? 1)) * 100).toFixed(2)) : 0,
+                    });
+                  }
+                  break; // found file, stop trying
+                } catch {
+                  continue;
+                }
+              }
+            }
+            // Live positions
+            if ((!mode || mode === "all" || mode === "live") && getEngine) {
+              try {
+                const engine = getEngine();
+                if (engine) {
+                  const engineApi = (engine as unknown as { api?: { getPositions?: () => Promise<unknown[]> } }).api;
+                  if (engineApi?.getPositions) {
+                    const positions = (await engineApi.getPositions()) as Array<Record<string, unknown>>;
+                    for (const pos of positions) {
+                      rows.push({
+                        source: "live", symbol: pos.symbol ?? "", name: pos.name ?? "",
+                        quantity: pos.quantity ?? pos.totalQty ?? 0,
+                        avgCost: pos.avgCost ?? pos.costPrice ?? 0,
+                        currentPrice: pos.currentPrice ?? pos.lastPrice ?? 0,
+                        marketValue: pos.marketValue ?? 0,
+                        unrealizedPnl: pos.unrealizedPnl ?? pos.floatPnl ?? 0,
+                        unrealizedPnlPct: pos.unrealizedPnlPct ?? pos.floatPnlPct ?? 0,
+                        weight: 0,
+                      });
+                    }
+                  }
+                }
+              } catch {
+                // Live engine not available — skip
+              }
+            }
+            dataset = "portfolio";
+            break;
+          }
           case "trades":
             rows = (await quantStorage.getTrades({ symbol, limit })).map((r) => ({ ...r }));
             headers = ["symbol", "side", "entryPrice", "exitPrice", "quantity", "entryTime", "exitTime", "netPnl", "pnlPct", "commission", "strategyId"];
@@ -1714,6 +1777,71 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
                 tags: Array.isArray(e.tags) ? (e.tags as string[]).join(";") : e.tags,
               }));
             }
+            break;
+          }
+          case "journal": {
+            headers = ["id", "date", "symbol", "direction", "entryPrice", "exitPrice", "pnl", "rating", "tags", "content", "lesson", "strategyId", "createdAt"];
+            const allNotes = (tradeJournal as unknown as { notes: Array<Record<string, unknown>> }).notes ?? [];
+            let filtered = allNotes;
+            if (symbol) {
+              filtered = filtered.filter((n) => n.symbol === symbol);
+            }
+            if (startDate) {
+              filtered = filtered.filter((n) => (n.date as string) >= startDate);
+            }
+            if (endDate) {
+              filtered = filtered.filter((n) => (n.date as string) <= endDate);
+            }
+            rows = filtered.slice(0, limit).map((n) => ({
+              id: n.id, date: n.date, symbol: n.symbol,
+              direction: n.direction ?? "", entryPrice: n.entryPrice ?? "",
+              exitPrice: n.exitPrice ?? "", pnl: n.pnl ?? "",
+              rating: n.rating ?? "",
+              tags: Array.isArray(n.tags) ? (n.tags as string[]).join(";") : "",
+              content: n.content ?? "", lesson: n.lesson ?? "",
+              strategyId: n.strategyId ?? "", createdAt: n.createdAt ?? "",
+            }));
+            dataset = "journal";
+            break;
+          }
+          case "screen": {
+            if (!scanHistoryStore) {
+              json(res, { status: "error", message: "选股历史存储不可用" }, 500);
+              return;
+            }
+            headers = ["rank", "code", "name", "score", "screenerId", "universe", "market", "date", "signals"];
+            const screenId = body.screenId as string | undefined;
+            if (screenId) {
+              const record = scanHistoryStore.getFullResult(screenId);
+              if (!record) {
+                json(res, { status: "error", message: `未找到选股记录: ${screenId}` }, 404);
+                return;
+              }
+              rows = record.results.map((entry: Record<string, unknown>, i: number) => ({
+                rank: entry.rank ?? i + 1, code: entry.code, name: entry.name ?? "",
+                score: entry.score ?? "", screenerId: record.screenerId,
+                universe: record.universe, market: record.market,
+                date: record.date,
+                signals: Array.isArray(entry.signals) ? (entry.signals as string[]).join(";") : "",
+              }));
+            } else {
+              const index = scanHistoryStore.query({ limit: 1, sortBy: "createdAt", sortDir: "desc" });
+              if (index.length === 0) {
+                rows = [];
+              } else {
+                const latest = scanHistoryStore.getFullResult(index[0].id);
+                if (latest) {
+                  rows = latest.results.map((entry: Record<string, unknown>, i: number) => ({
+                    rank: entry.rank ?? i + 1, code: entry.code, name: entry.name ?? "",
+                    score: entry.score ?? "", screenerId: latest.screenerId,
+                    universe: latest.universe, market: latest.market,
+                    date: latest.date,
+                    signals: Array.isArray(entry.signals) ? (entry.signals as string[]).join(";") : "",
+                  }));
+                }
+              }
+            }
+            dataset = "screen";
             break;
           }
         }

@@ -135,6 +135,7 @@ import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
+import { createLiveBacktestComparisonTool } from "./src/tools/live-backtest-comparison.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
@@ -654,6 +655,13 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      live_backtest_comparison: createLiveBacktestComparisonTool(
+        api,
+        config,
+        getEngine,
+        equityHistory,
+        backtestStore,
+      ),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +712,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      live_backtest_comparison: "实盘回测对比",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

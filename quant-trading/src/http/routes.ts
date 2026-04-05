@@ -1878,4 +1878,139 @@ function registerLiveBacktestCompareRoutes({
       }
     }),
   });
+
+  // GET /quant/api/live-backtest-compare/out-of-sample?strategy_id=xxx[&backtest_id=xxx&mode=paper|live]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/out-of-sample",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const p = urlParams(req);
+      const backtestId = p.get("backtest_id") ?? undefined;
+      const strategyId = p.get("strategy_id") ?? undefined;
+      const mode = p.get("mode") ?? "paper";
+
+      if (!backtestId && !strategyId) {
+        json(res, { status: "error", message: "需要 backtest_id 或 strategy_id 参数" }, 400);
+        return;
+      }
+
+      try {
+        const { compareOutOfSample } = await import("../services/live-backtest-compare.js");
+        const fsP = await import("node:fs/promises");
+        const osM = await import("node:os");
+        const pathM = await import("node:path");
+
+        let btRecord;
+        if (backtestId) {
+          btRecord = backtestStore.getFullResult(backtestId);
+        } else if (strategyId) {
+          const entries = backtestStore.query({ strategyId, sortBy: "createdAt", sortDir: "desc", limit: 1 });
+          if (entries.length > 0) btRecord = backtestStore.getFullResult(entries[0]!.id);
+        }
+        if (!btRecord) {
+          json(res, { status: "error", message: "未找到回测记录" }, 404);
+          return;
+        }
+
+        const bt = btRecord.result;
+        const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+        const allLiveEquity = eh.getRange(bt.endDate, "9999-12-31");
+        if (allLiveEquity.length === 0) {
+          json(res, { status: "error", message: `回测结束日期 ${bt.endDate} 之后无权益数据` }, 404);
+          return;
+        }
+
+        const dir = config.dataDir ?? pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+        let allTrades: TradeRecord[] = [];
+        try { allTrades = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8")); } catch { /* empty */ }
+
+        const sid = strategyId ?? bt.strategyId;
+        const oosLiveTrades = allTrades.filter((t) => t.strategyId === sid && t.entryTime > bt.endDate);
+        const result = compareOutOfSample(bt, allLiveEquity, oosLiveTrades);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/closest-backtest?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/closest-backtest",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const p = urlParams(req);
+      const strategyId = p.get("strategy_id") ?? undefined;
+      const mode = p.get("mode") ?? "paper";
+      const startDate = p.get("start") ?? undefined;
+      const endDate = p.get("end") ?? undefined;
+
+      try {
+        const { findClosestBacktest } = await import("../services/live-backtest-compare.js");
+
+        const entries = backtestStore.query({
+          strategyId,
+          sortBy: "createdAt",
+          sortDir: "desc",
+          limit: 20,
+        });
+        if (entries.length < 2) {
+          json(res, { status: "error", message: "需要至少2条回测记录才能进行多回测匹配" }, 400);
+          return;
+        }
+
+        const backtests = entries
+          .map((e) => ({ id: e.id, result: backtestStore.getFullResult(e.id)?.result }))
+          .filter((b): b is { id: string; result: import("../types.js").BacktestResult } => b.result != null);
+
+        const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+        const start = startDate ?? backtests[0]!.result.startDate;
+        const end = endDate ?? new Date().toISOString().slice(0, 10);
+        const liveEquity = eh.getRange(start, end);
+
+        if (liveEquity.length === 0) {
+          json(res, { status: "error", message: `${mode === "live" ? "实盘" : "模拟盘"}在指定期间无权益数据` }, 404);
+          return;
+        }
+
+        const result = findClosestBacktest(backtests, liveEquity);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/export?strategy_id=xxx[&format=csv&...]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/export",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const {
+          compareLiveVsBacktest,
+          matchTrades,
+          exportComparisonCsv,
+        } = await import("../services/live-backtest-compare.js");
+        const comparison = compareLiveVsBacktest(resolved.req);
+        const matched = matchTrades(resolved.req);
+        const csv = exportComparisonCsv(comparison, matched);
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="live-backtest-compare-${resolved.req.strategyId}.csv"`,
+        });
+        res.end(csv);
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
 }

@@ -393,6 +393,7 @@ export type TradeRecord = {
   quantity: number;
   grossPnl: number;
   commission: number;
+  tax?: number; // stamp duty (A-share sell: 0.1%)
   netPnl: number;
   holdingDays?: number;
   strategyId?: string;

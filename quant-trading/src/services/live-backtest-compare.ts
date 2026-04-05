@@ -1126,9 +1126,13 @@ function computeCostDecomposition(
   let totalTax = 0;
   for (const t of liveTrades) {
     totalCommission += t.commission;
-    // tax = grossPnl - netPnl - commission (when grossPnl > netPnl + commission)
-    const impliedTax = t.grossPnl - t.netPnl - t.commission;
-    if (impliedTax > 0) totalTax += impliedTax;
+    // Use explicit tax field if available, otherwise infer from PnL breakdown
+    if (t.tax != null && t.tax > 0) {
+      totalTax += t.tax;
+    } else {
+      const impliedTax = t.grossPnl - t.netPnl - t.commission;
+      if (impliedTax > 0) totalTax += impliedTax;
+    }
   }
 
   const sorted = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
@@ -1168,6 +1172,20 @@ export function compareBySymbol(
   const symbolSet = new Set<string>();
   for (const s of backtestResult.signals) symbolSet.add(s.symbol);
   for (const t of liveTrades) symbolSet.add(t.symbol);
+
+  // Estimate per-symbol backtest return proportionally based on signal count share.
+  // Since BacktestResult only stores aggregate equity, we distribute the total P&L
+  // proportionally to each symbol's share of backtest signals (buy+sell pairs).
+  const btSignalsBySymbol = new Map<string, number>();
+  let totalBtSignals = 0;
+  for (const s of backtestResult.signals) {
+    const d = new Date(s.timestamp).toISOString().slice(0, 10);
+    if (d >= startDate && d <= endDate) {
+      btSignalsBySymbol.set(s.symbol, (btSignalsBySymbol.get(s.symbol) ?? 0) + 1);
+      totalBtSignals++;
+    }
+  }
+  const btTotalPnl = backtestResult.finalValue - backtestResult.initialCash;
 
   const symbols: PerSymbolBreakdown[] = [];
 
@@ -1222,9 +1240,10 @@ export function compareBySymbol(
       if (!found) missedSignals++;
     }
 
-    // Estimate backtest return proportionally from equity curve is not possible per-symbol,
-    // so use signal-based heuristic
-    const backtestReturn = 0; // Not available per-symbol from aggregate backtest
+    // Estimate backtest return proportionally from total P&L based on signal share
+    const symBtSignalCount = btSignalsBySymbol.get(symbol) ?? 0;
+    const signalShare = totalBtSignals > 0 ? symBtSignalCount / totalBtSignals : 0;
+    const backtestReturn = signalShare * btTotalPnl;
     const liveReturn = liveGross;
 
     symbols.push({
@@ -1364,6 +1383,93 @@ export function compareOutOfSample(
     verdict,
     observations,
   };
+}
+
+// ── CSV export ──────────────────────────────────────────────────
+
+/**
+ * Export comparison results and trade matching as a CSV string.
+ * Produces two sections: summary metrics and trade-level detail.
+ */
+export function exportComparisonCsv(
+  result: LiveBacktestCompareResult,
+  matched: TradeMatchResult,
+): string {
+  const lines: string[] = [];
+
+  // BOM for Excel compatibility
+  lines.push("\uFEFF");
+
+  // Section 1: Summary
+  lines.push("=== 对比摘要 ===");
+  lines.push("指标,回测,实盘,偏差");
+
+  const rc = result.returnComparison;
+  lines.push(`总收益(%),${rc.backtestReturn.toFixed(2)},${rc.liveReturn.toFixed(2)},${rc.returnDiff.toFixed(2)}`);
+  lines.push(`年化收益(%),${rc.backtestAnnualizedReturn.toFixed(2)},${rc.liveAnnualizedReturn.toFixed(2)},${(rc.liveAnnualizedReturn - rc.backtestAnnualizedReturn).toFixed(2)}`);
+
+  const dc = result.drawdownComparison;
+  lines.push(`最大回撤(%),${dc.backtestMaxDrawdown.toFixed(2)},${dc.liveMaxDrawdown.toFixed(2)},${dc.drawdownDiff.toFixed(2)}`);
+
+  const rkc = result.riskComparison;
+  lines.push(`Sharpe,${rkc.backtestSharpe.toFixed(2)},${rkc.liveSharpe.toFixed(2)},${(rkc.liveSharpe - rkc.backtestSharpe).toFixed(2)}`);
+  lines.push(`胜率(%),${rkc.backtestWinRate.toFixed(1)},${rkc.liveWinRate.toFixed(1)},${(rkc.liveWinRate - rkc.backtestWinRate).toFixed(1)}`);
+
+  const eq = result.executionQuality;
+  lines.push(`交易数,${eq.backtestTrades},${eq.liveTrades},${eq.liveTrades - eq.backtestTrades}`);
+  lines.push(`信号执行率(%),100,${(eq.fillRate * 100).toFixed(0)},${((eq.fillRate - 1) * 100).toFixed(0)}`);
+  lines.push(`平均滑点(%),0,${eq.avgSlippagePct.toFixed(3)},${eq.avgSlippagePct.toFixed(3)}`);
+
+  lines.push("");
+  lines.push(`漂移得分,${result.drift.score}/100`);
+  lines.push(`漂移严重程度,${result.drift.severity}`);
+
+  if (result.extendedRisk) {
+    const er = result.extendedRisk;
+    lines.push("");
+    lines.push("=== 扩展风险指标 ===");
+    lines.push("指标,回测,实盘");
+    lines.push(`Sortino,${er.backtestSortino.toFixed(2)},${er.liveSortino.toFixed(2)}`);
+    lines.push(`Calmar,${er.backtestCalmar.toFixed(2)},${er.liveCalmar.toFixed(2)}`);
+    lines.push(`盈亏比,${er.backtestProfitFactor.toFixed(2)},${er.liveProfitFactor.toFixed(2)}`);
+  }
+
+  if (result.costDecomposition) {
+    const cd = result.costDecomposition;
+    lines.push("");
+    lines.push("=== 成本分析 ===");
+    lines.push(`实盘佣金,${cd.totalCommission.toFixed(2)}`);
+    lines.push(`实盘税费,${cd.totalTax.toFixed(2)}`);
+    lines.push(`成本占比(%),${cd.costPct.toFixed(3)}`);
+    lines.push(`回测费用,${cd.backtestFees.toFixed(2)}`);
+    lines.push(`成本解释收益差距(%),${cd.costExplainedGapPct.toFixed(1)}`);
+  }
+
+  // Section 2: Equity curve overlay
+  lines.push("");
+  lines.push("=== 权益曲线 ===");
+  lines.push("日期,回测权益(%),实盘权益(%)");
+  for (const pt of result.equityCurveOverlay.points) {
+    lines.push(`${pt.date},${pt.backtestValue?.toFixed(2) ?? ""},${pt.liveValue?.toFixed(2) ?? ""}`);
+  }
+
+  // Section 3: Trade-level matching
+  lines.push("");
+  lines.push("=== 逐笔交易匹配 ===");
+  lines.push("类型,标的,方向,信号价格,成交价格,滑点(%),实盘盈亏,延迟(秒)");
+  for (const m of matched.matches) {
+    const type = m.matchType === "matched" ? "已匹配" : m.matchType === "missed" ? "未执行" : "额外交易";
+    const symbol = m.backtestSignal.symbol;
+    const dir = m.backtestSignal.direction;
+    const sigPrice = m.backtestSignal.price.toFixed(2);
+    const fillPrice = m.liveTrade ? m.liveTrade.entryPrice.toFixed(2) : "";
+    const slippage = m.slippagePct != null ? m.slippagePct.toFixed(3) : "";
+    const pnl = m.liveTrade ? m.liveTrade.netPnl.toFixed(2) : "";
+    const latency = m.latencyMs != null ? (m.latencyMs / 1000).toFixed(1) : "";
+    lines.push(`${type},${symbol},${dir},${sigPrice},${fillPrice},${slippage},${pnl},${latency}`);
+  }
+
+  return lines.join("\n");
 }
 
 // ── Multi-backtest closest match ──────────────────────────────

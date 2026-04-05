@@ -3,8 +3,17 @@
  * trading performance against backtest predictions.
  *
  * Actions:
- *   compare       — run a full live-vs-backtest comparison
- *   drift_check   — quick drift score for a strategy
+ *   compare          — run a full live-vs-backtest comparison
+ *   drift_check      — quick drift score for a strategy
+ *   list_backtests   — list stored backtest records available for comparison
+ *   period_compare   — monthly or weekly segmented comparison
+ *   trade_match      — signal-by-signal matching analysis
+ *   drift_history    — rolling drift trend tracking
+ *   symbol_breakdown — per-symbol breakdown of drift contributions
+ *   report           — comprehensive combined report with recommendations
+ *   out_of_sample    — forward walk validation (post-backtest live performance)
+ *   closest_backtest — find best-matching backtest among multiple candidates
+ *   export           — export comparison results as CSV file
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -20,6 +29,7 @@ import {
   compareBySymbol,
   compareOutOfSample,
   findClosestBacktest,
+  exportComparisonCsv,
   type LiveBacktestCompareResult,
   type SegmentGranularity,
   type PeriodSegmentedResult,
@@ -163,13 +173,14 @@ export function createLiveBacktestCompareTool(
       "action=symbol_breakdown 按标的分拆对比, " +
       "action=report 生成完整对比报告, " +
       "action=out_of_sample 样本外验证（回测后实盘表现）, " +
-      "action=closest_backtest 在多个回测中找到最匹配实盘走势的回测。",
+      "action=closest_backtest 在多个回测中找到最匹配实盘走势的回测, " +
+      "action=export 导出CSV格式对比报告（含权益曲线和逐笔匹配）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export"],
           description: "操作类型",
         },
         backtest_id: {
@@ -395,6 +406,56 @@ export function createLiveBacktestCompareTool(
             建议: generateRecommendations(result, segmented, matched, history),
           };
 
+          // Include out-of-sample analysis if live data exists after backtest period
+          try {
+            const bt = req.backtestResult;
+            const mode2 = (args.mode as string) ?? "paper";
+            const eh2 = mode2 === "live" ? equityHistoryLive : equityHistoryPaper;
+            const oosEquity = eh2.getRange(bt.endDate, "9999-12-31");
+            if (oosEquity.length >= 2) {
+              const allTrades2 = await loadTrades(config);
+              const oosTrades = allTrades2.filter((t) => t.strategyId === req.strategyId && t.entryTime > bt.endDate);
+              const oos = compareOutOfSample(bt, oosEquity, oosTrades);
+              report.样本外验证 = {
+                样本外期间: `${oos.outOfSamplePeriod.start} ~ ${oos.outOfSamplePeriod.end}`,
+                样本外年化收益: `${fmt(oos.outOfSampleReturn, 2)}%`,
+                收益衰减: `${fmt(oos.returnDecay, 2)}%`,
+                Sharpe衰减: fmt(oos.sharpeDecay, 2),
+                判定: oos.verdict === "on_track" ? "运行正常" : oos.verdict === "degrading" ? "表现衰减" : "策略失效",
+              };
+            }
+          } catch { /* out-of-sample data may not be available */ }
+
+          // Include closest backtest match if multiple backtests exist
+          try {
+            const strategyId2 = args.strategy_id as string | undefined;
+            const entries2 = backtestStore.query({
+              strategyId: strategyId2 ?? req.strategyId,
+              sortBy: "createdAt",
+              sortDir: "desc",
+              limit: 20,
+            });
+            if (entries2.length >= 2) {
+              const bts = entries2
+                .map((e) => ({ id: e.id, result: backtestStore.getFullResult(e.id)?.result }))
+                .filter((b): b is { id: string; result: import("../types.js").BacktestResult } => b.result != null);
+              const mode3 = (args.mode as string) ?? "paper";
+              const eh3 = mode3 === "live" ? equityHistoryLive : equityHistoryPaper;
+              const liveEq = eh3.getRange(req.startDate, req.endDate);
+              if (liveEq.length >= 2 && bts.length >= 2) {
+                const closestMatch = findClosestBacktest(bts, liveEq);
+                if (closestMatch.bestMatch) {
+                  report.最佳匹配回测 = {
+                    回测ID: closestMatch.bestMatch.backtestId,
+                    策略: closestMatch.bestMatch.strategyId,
+                    相关性得分: `${closestMatch.bestMatch.correlationScore}/100`,
+                    收益偏差: `${fmt(closestMatch.bestMatch.returnDiff, 2)}%`,
+                  };
+                }
+              }
+            }
+          } catch { /* closest backtest may not be available */ }
+
           return report;
         }
 
@@ -499,6 +560,32 @@ export function createLiveBacktestCompareTool(
               相关性: `${c.correlationScore}/100`,
               收益偏差: `${fmt(c.returnDiff, 2)}%`,
             })),
+          };
+        }
+
+        case "export": {
+          const resolved2 = await resolveCompareData(args);
+          if ("error" in resolved2) return resolved2;
+          const { req: req2 } = resolved2;
+          const result2 = compareLiveVsBacktest(req2);
+          const matched2 = matchTrades(req2);
+          const csv = exportComparisonCsv(result2, matched2);
+
+          // Write CSV to data directory
+          const dir2 = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const filename = `live-backtest-compare-${req2.strategyId}-${new Date().toISOString().slice(0, 10)}.csv`;
+          const filePath = path.join(dir2, filename);
+          await fs.writeFile(filePath, csv, "utf-8");
+
+          return {
+            message: `对比报告已导出`,
+            文件路径: filePath,
+            策略: req2.strategyId,
+            期间: `${req2.startDate} ~ ${req2.endDate}`,
+            漂移得分: `${result2.drift.score}/100`,
+            交易匹配率: `${fmt(matched2.summary.matchRate * 100, 1)}%`,
+            权益曲线数据点: result2.equityCurveOverlay.points.length,
+            逐笔匹配数: matched2.matches.length,
           };
         }
 

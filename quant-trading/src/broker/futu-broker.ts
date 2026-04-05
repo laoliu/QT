@@ -75,6 +75,10 @@ type RawAccount = {
   market_value: number;
   profit: number;
   profit_ratio: number;
+  today_profit?: number;
+  power?: number;
+  max_power_short?: number | null;
+  maintenance_margin?: number | null;
 };
 
 type RawQuote = {
@@ -398,6 +402,7 @@ export class FutuBroker implements IBrokerAdapter {
       marketValue: raw.market_value,
       profit: raw.profit,
       profitPct: raw.profit_ratio,
+      todayProfit: raw.today_profit ?? undefined,
       lastSyncAt: new Date().toISOString(),
     };
   }
@@ -559,6 +564,204 @@ export class FutuBroker implements IBrokerAdapter {
     return this.proc.call<RawMarketSnapshot[]>("get_market_snapshot", {
       stock_codes: futuSymbols,
     });
+  }
+
+  // ── Extended: historical queries ────────────────────────────
+
+  /**
+   * Query historical orders across multiple days.
+   * @param start Start date in "YYYY-MM-DD" format
+   * @param end End date in "YYYY-MM-DD" format
+   * @param symbol Optional stock code filter
+   */
+  async queryHistoryOrders(
+    start: string,
+    end: string,
+    symbol?: string,
+  ): Promise<Order[]> {
+    const params: Record<string, unknown> = { start, end };
+    if (symbol) params.stock_code = toFutuSymbol(symbol);
+    const raw = await this.proc.call<RawOrder[]>("query_history_orders", params);
+    return raw.map((r) => this.mapRawOrder(r));
+  }
+
+  /**
+   * Query historical deals/fills across multiple days.
+   * @param start Start date in "YYYY-MM-DD" format
+   * @param end End date in "YYYY-MM-DD" format
+   * @param symbol Optional stock code filter
+   */
+  async queryHistoryDeals(
+    start: string,
+    end: string,
+    symbol?: string,
+  ): Promise<
+    Array<{
+      dealId: string;
+      orderId: string;
+      symbol: string;
+      name: string;
+      side: string;
+      price: number;
+      quantity: number;
+      amount: number;
+      time: string;
+    }>
+  > {
+    const params: Record<string, unknown> = { start, end };
+    if (symbol) params.stock_code = toFutuSymbol(symbol);
+    const raw = await this.proc.call<RawDeal[]>("query_history_deals", params);
+    return raw.map((r) => ({
+      dealId: r.deal_id,
+      orderId: r.order_id,
+      symbol: fromFutuSymbol(r.stock_code),
+      name: r.stock_name,
+      side: r.side,
+      price: r.price,
+      quantity: r.qty,
+      amount: r.amount,
+      time: r.time,
+    }));
+  }
+
+  // ── Extended: fund flow ──────────────────────────────────────
+
+  /**
+   * Query account fund flow history (deposits, withdrawals, dividends, etc.).
+   */
+  async queryFundFlow(
+    start?: string,
+    end?: string,
+  ): Promise<
+    Array<{
+      time: string;
+      type: string;
+      symbol: string;
+      amount: number;
+      balance: number;
+    }>
+  > {
+    const params: Record<string, unknown> = {};
+    if (start) params.start = start;
+    if (end) params.end = end;
+    const raw = await this.proc.call<
+      Array<{ time: string; type: string; stock_code: string; amount: number; balance: number }>
+    >("query_fund_flow", params);
+    return raw.map((r) => ({
+      time: r.time,
+      type: r.type,
+      symbol: r.stock_code ? fromFutuSymbol(r.stock_code) : "",
+      amount: r.amount,
+      balance: r.balance,
+    }));
+  }
+
+  // ── Extended: IPO ───────────────────────────────────────────
+
+  /**
+   * Query available IPO list for a given market.
+   * @param market "HK" or "US"
+   */
+  async queryIpoList(market: string = "HK"): Promise<
+    Array<{
+      symbol: string;
+      name: string;
+      listTime: string;
+      ipoPriceMin: number | null;
+      ipoPriceMax: number | null;
+      lotSize: number | null;
+      applyTime: string | null;
+      applyEndTime: string | null;
+    }>
+  > {
+    const raw = await this.proc.call<
+      Array<{
+        stock_code: string;
+        stock_name: string;
+        list_time: string;
+        ipo_price_min: number | null;
+        ipo_price_max: number | null;
+        lot_size: number | null;
+        apply_time: string | null;
+        apply_end_time: string | null;
+      }>
+    >("query_ipo_list", { market });
+    return raw.map((r) => ({
+      symbol: fromFutuSymbol(r.stock_code),
+      name: r.stock_name,
+      listTime: r.list_time,
+      ipoPriceMin: r.ipo_price_min,
+      ipoPriceMax: r.ipo_price_max,
+      lotSize: r.lot_size,
+      applyTime: r.apply_time,
+      applyEndTime: r.apply_end_time,
+    }));
+  }
+
+  /**
+   * Subscribe to an IPO (apply for shares).
+   */
+  async subscribeIpo(
+    symbol: string,
+    quantity: number,
+    price?: number,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.proc.call<{ success: boolean; message: string }>("subscribe_ipo", {
+      stock_code: toFutuSymbol(symbol),
+      quantity,
+      price: price ?? 0,
+    });
+  }
+
+  // ── Extended: currency exchange ─────────────────────────────
+
+  /**
+   * Exchange currency between HKD/USD/CNH for cross-market trading.
+   */
+  async currencyExchange(
+    fromCurrency: string,
+    toCurrency: string,
+    amount: number,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.proc.call<{ success: boolean; message: string }>("currency_exchange", {
+      from_currency: fromCurrency,
+      to_currency: toCurrency,
+      amount,
+    });
+  }
+
+  // ── Extended: position cost adjustment ──────────────────────
+
+  /**
+   * Adjust the average cost of a position (after corporate actions, etc.).
+   */
+  async changePositionCost(
+    symbol: string,
+    costPrice: number,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.proc.call<{ success: boolean; message: string }>("change_position_cost", {
+      stock_code: toFutuSymbol(symbol),
+      cost_price: costPrice,
+    });
+  }
+
+  // ── Extended: margin account info ───────────────────────────
+
+  /**
+   * Get margin/leverage account details.
+   * Returns purchasing power, max short power, and maintenance margin.
+   */
+  async queryMarginInfo(): Promise<{
+    power: number;
+    maxPowerShort: number | null;
+    maintenanceMargin: number | null;
+  }> {
+    const raw = await this.proc.call<RawAccount>("query_account");
+    return {
+      power: raw.power ?? 0,
+      maxPowerShort: raw.max_power_short ?? null,
+      maintenanceMargin: raw.maintenance_margin ?? null,
+    };
   }
 
   // ── Private ──────────────────────────────────────────────────

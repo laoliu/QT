@@ -102,6 +102,8 @@ if HAS_FUTU:
         "cover": TrdSide.BUY_BACK,
         "buy_open": TrdSide.BUY,
         "sell_close": TrdSide.SELL,
+        "buy_close": TrdSide.BUY_BACK,
+        "sell_open": TrdSide.SELL_SHORT,
     }
     FUTU_TO_SIDE = {
         TrdSide.BUY: "buy",
@@ -468,6 +470,10 @@ class FutuBrokerBridge:
             "market_value": float(row.get("market_val", 0)),
             "profit": float(row.get("unrealized_pl", 0)),
             "profit_ratio": float(row.get("unrealized_pl", 0)) / max(float(row.get("total_assets", 1)), 1),
+            "today_profit": float(row.get("realized_pl", 0)),
+            "power": float(row.get("power", 0)),
+            "max_power_short": float(row.get("max_power_short", 0)) if "max_power_short" in data.columns else None,
+            "maintenance_margin": float(row.get("maintenance_margin", 0)) if "maintenance_margin" in data.columns else None,
         }
 
     def subscribe_quote(self, params: dict) -> dict:
@@ -505,6 +511,66 @@ class FutuBrokerBridge:
             return {"alive": ret == RET_OK}
         except Exception:
             return {"alive": False}
+
+    def query_history_orders(self, params: dict) -> list:
+        """Query historical orders across multiple days."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        start = params.get("start", "")
+        end = params.get("end", "")
+        stock_code = params.get("stock_code", "")
+
+        ret, data = self.trade_ctx.history_order_list_query(
+            status_filter_list=[],
+            code=stock_code,
+            start=start,
+            end=end,
+            trd_env=self.trade_env,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"query_history_orders failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            result.append(self._serialize_order(row))
+        return result
+
+    def query_history_deals(self, params: dict) -> list:
+        """Query historical deals/fills across multiple days."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        start = params.get("start", "")
+        end = params.get("end", "")
+        stock_code = params.get("stock_code", "")
+
+        ret, data = self.trade_ctx.history_deal_list_query(
+            code=stock_code,
+            start=start,
+            end=end,
+            trd_env=self.trade_env,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"query_history_deals failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            value = float(row.get("price", 0)) * int(row.get("qty", 0))
+            result.append({
+                "deal_id": str(row.get("deal_id", "")),
+                "order_id": str(row.get("order_id", "")),
+                "stock_code": row.get("code", ""),
+                "stock_name": row.get("stock_name", ""),
+                "side": map_futu_side(row.get("trd_side", "")) if HAS_FUTU else "buy",
+                "price": float(row.get("price", 0)),
+                "qty": int(row.get("qty", 0)),
+                "amount": value,
+                "time": row.get("create_time", ""),
+            })
+        return result
 
     def query_deals(self, params: dict) -> list:
         """Query today's deal/trade history."""
@@ -707,6 +773,152 @@ class FutuBrokerBridge:
             result.append(self._serialize_position(row))
         return result
 
+    def query_fund_flow(self, params: dict) -> list:
+        """Query account fund flow (deposit/withdrawal/dividend/commission) history."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        start = params.get("start", "")
+        end = params.get("end", "")
+
+        ret, data = self.trade_ctx.acctradinginfo_query(
+            order_type=0,  # 0 = all
+            code="",
+            start=start,
+            end=end,
+            trd_env=self.trade_env,
+        )
+
+        if ret != RET_OK:
+            raise RuntimeError(f"query_fund_flow failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            result.append({
+                "time": row.get("create_time", ""),
+                "type": row.get("trd_side", ""),
+                "stock_code": row.get("code", ""),
+                "amount": float(row.get("amount", 0)),
+                "balance": float(row.get("balance", 0)),
+            })
+        return result
+
+    def query_ipo_list(self, params: dict) -> list:
+        """Query available IPO list."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+
+        market_str = params.get("market", "HK")
+
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        market_map = {
+            "HK": TrdMarket.HK,
+            "US": TrdMarket.US,
+        }
+        trd_market = market_map.get(market_str.upper(), TrdMarket.HK)
+
+        try:
+            ret, data = self.quote_ctx.get_ipo_list(trd_market)
+            if ret != RET_OK:
+                raise RuntimeError(f"query_ipo_list failed: {data}")
+
+            result = []
+            for _, row in data.iterrows():
+                result.append({
+                    "stock_code": row.get("code", ""),
+                    "stock_name": row.get("name", ""),
+                    "list_time": row.get("list_time", ""),
+                    "ipo_price_min": float(row.get("ipo_price_min", 0)) if "ipo_price_min" in data.columns else None,
+                    "ipo_price_max": float(row.get("ipo_price_max", 0)) if "ipo_price_max" in data.columns else None,
+                    "lot_size": int(row.get("lot_size", 0)) if "lot_size" in data.columns else None,
+                    "apply_time": row.get("apply_time", "") if "apply_time" in data.columns else None,
+                    "apply_end_time": row.get("apply_end_time", "") if "apply_end_time" in data.columns else None,
+                })
+            return result
+        except AttributeError:
+            raise RuntimeError("当前 futu-api 版本不支持 IPO 查询，请升级到最新版本")
+
+    def subscribe_ipo(self, params: dict) -> dict:
+        """Subscribe to an IPO."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params["stock_code"]
+        quantity = int(params["quantity"])
+        price = float(params.get("price", 0))
+
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        try:
+            ret, data = self.trade_ctx.subscribe_ipo(
+                code=stock_code,
+                qty=quantity,
+                price=price if price > 0 else None,
+                trd_env=self.trade_env,
+            )
+            if ret != RET_OK:
+                return {"success": False, "message": f"IPO 认购失败: {data}"}
+            return {"success": True, "message": f"IPO 认购请求已提交: {stock_code} x {quantity}"}
+        except AttributeError:
+            return {"success": False, "message": "当前 futu-api 版本不支持 IPO 认购，请升级到最新版本"}
+        except Exception as e:
+            return {"success": False, "message": f"IPO 认购异常: {str(e)}"}
+
+    def currency_exchange(self, params: dict) -> dict:
+        """Exchange currency between HKD/USD/CNH for cross-market trading."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        from_currency = params.get("from_currency", "HKD")
+        to_currency = params.get("to_currency", "USD")
+        amount = float(params["amount"])
+
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        try:
+            ret, data = self.trade_ctx.currency_swap(
+                from_currency=from_currency,
+                to_currency=to_currency,
+                amount=amount,
+                trd_env=self.trade_env,
+            )
+            if ret != RET_OK:
+                return {"success": False, "message": f"换汇失败: {data}"}
+            return {"success": True, "message": f"换汇请求已提交: {amount} {from_currency} → {to_currency}"}
+        except AttributeError:
+            return {"success": False, "message": "当前 futu-api 版本不支持换汇操作，请升级到最新版本"}
+        except Exception as e:
+            return {"success": False, "message": f"换汇异常: {str(e)}"}
+
+    def change_position_cost(self, params: dict) -> dict:
+        """Adjust position cost price (after corporate actions, etc.)."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params["stock_code"]
+        new_cost = float(params["cost_price"])
+
+        if not HAS_FUTU:
+            raise RuntimeError("futu-api is not installed")
+
+        try:
+            ret, data = self.trade_ctx.modify_position(
+                code=stock_code,
+                cost_price=new_cost,
+                trd_env=self.trade_env,
+            )
+            if ret != RET_OK:
+                return {"success": False, "message": f"调整持仓成本失败: {data}"}
+            return {"success": True, "message": f"持仓成本已调整: {stock_code} → {new_cost}"}
+        except AttributeError:
+            return {"success": False, "message": "当前 futu-api 版本不支持调整持仓成本，请升级到最新版本"}
+        except Exception as e:
+            return {"success": False, "message": f"调整持仓成本异常: {str(e)}"}
+
     # ── Serialisers ────────────────────────────────────────────
 
     @staticmethod
@@ -783,6 +995,13 @@ METHODS = {
     "unsubscribe_quote": "unsubscribe_quote",
     "ping": "ping",
     "query_deals": "query_deals",
+    "query_history_orders": "query_history_orders",
+    "query_history_deals": "query_history_deals",
+    "query_fund_flow": "query_fund_flow",
+    "query_ipo_list": "query_ipo_list",
+    "subscribe_ipo": "subscribe_ipo",
+    "currency_exchange": "currency_exchange",
+    "change_position_cost": "change_position_cost",
     "get_klines": "get_klines",
     "subscribe_orderbook": "subscribe_orderbook",
     "get_orderbook": "get_orderbook",

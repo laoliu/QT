@@ -18,6 +18,8 @@ import {
   matchTrades,
   computeDriftHistory,
   compareBySymbol,
+  compareOutOfSample,
+  findClosestBacktest,
   type LiveBacktestCompareResult,
   type SegmentGranularity,
   type PeriodSegmentedResult,
@@ -25,6 +27,7 @@ import {
   type DriftHistory,
   type PerSymbolBreakdownResult,
 } from "../services/live-backtest-compare.js";
+import type { AlertStore } from "../services/alert-store.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
 
 function fmt(v: unknown, digits: number): string {
@@ -145,6 +148,7 @@ export function createLiveBacktestCompareTool(
   backtestStore: BacktestStore,
   equityHistoryPaper: EquityHistory,
   equityHistoryLive: EquityHistory,
+  alertStore?: AlertStore,
 ) {
   return {
     name: "live_backtest_compare",
@@ -157,13 +161,15 @@ export function createLiveBacktestCompareTool(
       "action=trade_match 逐笔交易匹配分析, " +
       "action=drift_history 漂移趋势跟踪, " +
       "action=symbol_breakdown 按标的分拆对比, " +
-      "action=report 生成完整对比报告。",
+      "action=report 生成完整对比报告, " +
+      "action=out_of_sample 样本外验证（回测后实盘表现）, " +
+      "action=closest_backtest 在多个回测中找到最匹配实盘走势的回测。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest"],
           description: "操作类型",
         },
         backtest_id: {
@@ -230,11 +236,13 @@ export function createLiveBacktestCompareTool(
       switch (action) {
         case "compare": {
           const result = compareLiveVsBacktest(req);
+          fireDriftAlert(result);
           return formatResult(result);
         }
 
         case "drift_check": {
           const result = compareLiveVsBacktest(req);
+          fireDriftAlert(result);
           return {
             策略: result.strategyId,
             漂移得分: `${result.drift.score}/100`,
@@ -342,6 +350,7 @@ export function createLiveBacktestCompareTool(
 
         case "report": {
           const result = compareLiveVsBacktest(req);
+          fireDriftAlert(result);
           const granularity = (args.granularity as SegmentGranularity) ?? "monthly";
           const segmented = comparePeriodSegmented(req, granularity);
           const matched = matchTrades(req);
@@ -389,11 +398,135 @@ export function createLiveBacktestCompareTool(
           return report;
         }
 
+        case "out_of_sample": {
+          // Out-of-sample: compare live performance AFTER the backtest period
+          const backtestId = args.backtest_id as string | undefined;
+          const strategyId = args.strategy_id as string | undefined;
+          const mode = (args.mode as string) ?? "paper";
+
+          let btRecord;
+          if (backtestId) {
+            btRecord = backtestStore.getFullResult(backtestId);
+          } else if (strategyId) {
+            const entries = backtestStore.query({ strategyId, sortBy: "createdAt", sortDir: "desc", limit: 1 });
+            if (entries.length > 0) btRecord = backtestStore.getFullResult(entries[0]!.id);
+          }
+          if (!btRecord) return { error: "未找到回测记录" };
+
+          const bt = btRecord.result;
+          const eh = mode === "live" ? equityHistoryLive : equityHistoryPaper;
+          // Get all equity data after the backtest end date
+          const allLiveEquity = eh.getRange(bt.endDate, "9999-12-31");
+          if (allLiveEquity.length === 0) {
+            return { error: `回测结束日期 ${bt.endDate} 之后无${mode === "live" ? "实盘" : "模拟盘"}权益数据` };
+          }
+
+          const allTrades = await loadTrades(config);
+          const sid = strategyId ?? bt.strategyId;
+          const oosLiveTrades = allTrades.filter((t) => t.strategyId === sid && t.entryTime > bt.endDate);
+
+          const oos = compareOutOfSample(bt, allLiveEquity, oosLiveTrades);
+          return {
+            策略: oos.strategyId,
+            样本内期间: `${oos.inSamplePeriod.start} ~ ${oos.inSamplePeriod.end}`,
+            样本外期间: `${oos.outOfSamplePeriod.start} ~ ${oos.outOfSamplePeriod.end}`,
+            样本内表现: {
+              年化收益: `${fmt(oos.inSampleReturn, 2)}%`,
+              Sharpe: fmt(oos.inSampleSharpe, 2),
+              最大回撤: `${fmt(oos.inSampleMaxDrawdown, 2)}%`,
+            },
+            样本外表现: {
+              年化收益: `${fmt(oos.outOfSampleReturn, 2)}%`,
+              Sharpe: fmt(oos.outOfSampleSharpe, 2),
+              最大回撤: `${fmt(oos.outOfSampleMaxDrawdown, 2)}%`,
+            },
+            衰减分析: {
+              收益衰减: `${fmt(oos.returnDecay, 2)}%`,
+              Sharpe衰减: fmt(oos.sharpeDecay, 2),
+            },
+            判定: oos.verdict === "on_track" ? "运行正常" : oos.verdict === "degrading" ? "表现衰减" : "策略失效",
+            观察: oos.observations,
+          };
+        }
+
+        case "closest_backtest": {
+          const strategyId = args.strategy_id as string | undefined;
+          const mode = (args.mode as string) ?? "paper";
+          const startDate = args.start_date as string | undefined;
+          const endDate = args.end_date as string | undefined;
+
+          // Get all backtests (optionally filtered by strategy)
+          const entries = backtestStore.query({
+            strategyId,
+            sortBy: "createdAt",
+            sortDir: "desc",
+            limit: 20,
+          });
+          if (entries.length < 2) {
+            return { error: "需要至少2条回测记录才能进行多回测匹配" };
+          }
+
+          const backtests = entries
+            .map((e) => ({ id: e.id, result: backtestStore.getFullResult(e.id)?.result }))
+            .filter((b): b is { id: string; result: import("../types.js").BacktestResult } => b.result != null);
+
+          const eh = mode === "live" ? equityHistoryLive : equityHistoryPaper;
+          const start = startDate ?? backtests[0]!.result.startDate;
+          const end = endDate ?? new Date().toISOString().slice(0, 10);
+          const liveEquity = eh.getRange(start, end);
+
+          if (liveEquity.length === 0) {
+            return { error: `${mode === "live" ? "实盘" : "模拟盘"}在 ${start} ~ ${end} 期间无权益数据` };
+          }
+
+          const match = findClosestBacktest(backtests, liveEquity);
+          return {
+            实盘期间: `${match.livePeriod.start} ~ ${match.livePeriod.end}`,
+            实盘收益: `${fmt(match.liveReturn, 2)}%`,
+            候选回测数: match.candidates.length,
+            最佳匹配: match.bestMatch ? {
+              回测ID: match.bestMatch.backtestId,
+              策略: match.bestMatch.strategyId,
+              相关性得分: `${match.bestMatch.correlationScore}/100`,
+              RMSE: fmt(match.bestMatch.rmse, 2),
+              回测收益: `${fmt(match.bestMatch.backtestReturn, 2)}%`,
+              收益偏差: `${fmt(match.bestMatch.returnDiff, 2)}%`,
+              回测期间: `${match.bestMatch.backtestPeriod.start} ~ ${match.bestMatch.backtestPeriod.end}`,
+            } : "无匹配",
+            全部候选: match.candidates.slice(0, 5).map((c) => ({
+              回测ID: c.backtestId,
+              策略: c.strategyId,
+              相关性: `${c.correlationScore}/100`,
+              收益偏差: `${fmt(c.returnDiff, 2)}%`,
+            })),
+          };
+        }
+
         default:
           return { error: `未知操作: ${action}` };
       }
     },
   };
+
+  /** Fire an alert via AlertStore when drift severity is high or critical. */
+  function fireDriftAlert(result: LiveBacktestCompareResult): void {
+    if (!alertStore) return;
+    const { drift, strategyId } = result;
+    if (drift.severity === "high" || drift.severity === "critical") {
+      const severity = drift.severity === "critical" ? "critical" : "warning";
+      alertStore.add(
+        severity,
+        "strategy",
+        `策略 ${strategyId} 漂移${drift.severity === "critical" ? "严重" : "偏高"} (${drift.score}/100): ${drift.observations[0] ?? ""}`,
+        {
+          strategyId,
+          driftScore: drift.score,
+          driftSeverity: drift.severity,
+          components: drift.components,
+        },
+      );
+    }
+  }
 
   // ── Internal helpers ──────────────────────────────────────────
 

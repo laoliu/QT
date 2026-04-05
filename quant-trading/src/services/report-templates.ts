@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "drift_monitor";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1172,6 +1173,83 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+/**
+ * Build a drift monitoring report — checks all active strategies for live-vs-backtest drift.
+ */
+async function generateDriftMonitor(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = ["📈 **策略漂移监控**", ""];
+
+  // List available backtests
+  let backtestEntries: Array<Record<string, unknown>> = [];
+  try {
+    const listRaw = await executeTool("live_backtest_compare", {
+      action: "list_backtests",
+    });
+    const listData = JSON.parse(listRaw);
+    backtestEntries = Array.isArray(listData.records) ? listData.records : [];
+  } catch {
+    return "📈 **策略漂移监控**\n\n暂无回测记录，无法进行漂移检查。";
+  }
+
+  if (backtestEntries.length === 0) {
+    return "📈 **策略漂移监控**\n\n暂无回测记录。请先运行策略回测后再启用漂移监控。";
+  }
+
+  // Deduplicate by strategy — keep the most recent backtest per strategy
+  const strategyMap = new Map<string, Record<string, unknown>>();
+  for (const entry of backtestEntries) {
+    const sid = String(entry.策略 ?? entry.strategy ?? "");
+    if (sid && !strategyMap.has(sid)) {
+      strategyMap.set(sid, entry);
+    }
+  }
+
+  let alertCount = 0;
+  for (const [sid, entry] of strategyMap) {
+    const btId = String(entry.id ?? "");
+    if (!btId) continue;
+
+    // Run drift check for this strategy
+    try {
+      const driftRaw = await executeTool("live_backtest_compare", {
+        action: "drift_check",
+        backtest_id: btId,
+        mode: "paper",
+      });
+      const driftData = JSON.parse(driftRaw);
+      const score = String(driftData.漂移得分 ?? driftData.driftScore ?? "N/A");
+      const severity = String(driftData.严重程度 ?? driftData.severity ?? "unknown");
+      const returnDiff = String(driftData.收益偏差 ?? "N/A");
+      const fillRate = String(driftData.执行率 ?? "N/A");
+      const observations = Array.isArray(driftData.观察) ? driftData.观察 : [];
+
+      const icon = severity === "critical" ? "🔴" : severity === "high" ? "🟠" : severity === "moderate" ? "🟡" : "🟢";
+      sections.push(`${icon} **${sid}** — 漂移: ${score} (${severity})`);
+      sections.push(`  收益偏差: ${returnDiff}  执行率: ${fillRate}`);
+      if (observations.length > 0) {
+        sections.push(`  ${String(observations[0])}`);
+      }
+      sections.push("");
+
+      if (severity === "high" || severity === "critical") alertCount++;
+    } catch {
+      sections.push(`⚠️ **${sid}** — 漂移检查失败`);
+      sections.push("");
+    }
+  }
+
+  if (alertCount > 0) {
+    sections.push(`⚠️ **${String(alertCount)}个策略漂移偏高，建议及时审查！**`);
+  } else {
+    sections.push("✅ 所有策略运行正常，漂移在可接受范围内。");
+  }
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1307,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "drift_monitor",
+    name: "策略漂移监控",
+    description: "定期检查所有活跃策略的实盘回测漂移，高漂移自动告警",
+    defaultIntervalMinutes: 0,
+    generate: generateDriftMonitor,
   },
 ];
 

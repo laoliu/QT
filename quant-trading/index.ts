@@ -661,6 +661,7 @@ const quantTradingPlugin = {
         backtestStore,
         equityHistoryPaper,
         equityHistoryLive,
+        alertStore,
       ),
     };
 

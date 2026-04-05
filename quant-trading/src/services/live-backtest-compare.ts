@@ -166,6 +166,57 @@ export interface CostDecomposition {
   costDiff: number;
 }
 
+// ── Out-of-sample (forward walk) comparison ──────────────────
+
+export interface OutOfSampleResult {
+  strategyId: string;
+  /** The backtest's training period */
+  inSamplePeriod: { start: string; end: string };
+  /** The live trading period (post-backtest) */
+  outOfSamplePeriod: { start: string; end: string };
+  /** In-sample (backtest) performance */
+  inSampleReturn: number;
+  inSampleSharpe: number;
+  inSampleMaxDrawdown: number;
+  /** Out-of-sample (live) performance */
+  outOfSampleReturn: number;
+  outOfSampleSharpe: number;
+  outOfSampleMaxDrawdown: number;
+  /** Degradation metrics */
+  returnDecay: number; // annualized return decay %
+  sharpeDecay: number; // Sharpe ratio decay
+  /** "on_track" | "degrading" | "failed" */
+  verdict: "on_track" | "degrading" | "failed";
+  /** Observations */
+  observations: string[];
+}
+
+// ── Multi-backtest closest match ──────────────────────────────
+
+export interface BacktestMatchCandidate {
+  backtestId: string;
+  strategyId: string;
+  /** How closely the live equity tracks this backtest (0-100, 100=perfect match) */
+  correlationScore: number;
+  /** RMSE between normalized equity curves */
+  rmse: number;
+  /** Return difference (live - backtest) */
+  returnDiff: number;
+  backtestReturn: number;
+  backtestSharpe: number;
+  backtestPeriod: { start: string; end: string };
+}
+
+export interface MultiBacktestMatchResult {
+  /** The live equity period used for matching */
+  livePeriod: { start: string; end: string };
+  liveReturn: number;
+  /** All candidates ranked by correlation */
+  candidates: BacktestMatchCandidate[];
+  /** Best matching backtest */
+  bestMatch: BacktestMatchCandidate | null;
+}
+
 // ── Per-symbol breakdown ───────────────────────────────────
 
 export interface PerSymbolBreakdown {
@@ -1199,5 +1250,225 @@ export function compareBySymbol(
     symbols,
     worstSymbol: symbols.length > 0 ? symbols[0]!.symbol : null,
     bestSymbol: symbols.length > 0 ? symbols[symbols.length - 1]!.symbol : null,
+  };
+}
+
+// ── Out-of-sample comparison ──────────────────────────────────
+
+/**
+ * Compare live performance in a period AFTER the backtest ended
+ * against the backtest's in-sample metrics. This answers "how is
+ * the strategy doing in genuinely unseen market conditions?"
+ */
+export function compareOutOfSample(
+  backtestResult: BacktestResult,
+  liveEquity: EquitySnapshot[],
+  liveTrades: TradeRecord[],
+): OutOfSampleResult {
+  const strategyId = backtestResult.strategyId;
+  const inSamplePeriod = { start: backtestResult.startDate, end: backtestResult.endDate };
+
+  // Live equity should be after backtest end date
+  const sortedLive = [...liveEquity]
+    .filter((s) => s.date > backtestResult.endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const outOfSamplePeriod = {
+    start: sortedLive.length > 0 ? sortedLive[0]!.date : backtestResult.endDate,
+    end: sortedLive.length > 0 ? sortedLive[sortedLive.length - 1]!.date : backtestResult.endDate,
+  };
+
+  // In-sample metrics (from backtest)
+  const inSampleReturn = backtestResult.annualizedReturn;
+  const inSampleSharpe = backtestResult.sharpeRatio;
+  const inSampleMaxDrawdown = backtestResult.maxDrawdown;
+
+  // Out-of-sample metrics (from live equity)
+  let outOfSampleReturn = 0;
+  let outOfSampleSharpe = 0;
+  let outOfSampleMaxDrawdown = 0;
+
+  if (sortedLive.length >= 2) {
+    const first = sortedLive[0]!;
+    const last = sortedLive[sortedLive.length - 1]!;
+
+    // Total return
+    const totalReturn = first.equity > 0 ? (last.equity - first.equity) / first.equity : 0;
+    const days = Math.max(1, (new Date(last.date).getTime() - new Date(first.date).getTime()) / 86_400_000);
+    outOfSampleReturn = (Math.pow(1 + totalReturn, 365 / days) - 1) * 100;
+
+    // Sharpe from daily returns
+    const dailyReturns: number[] = [];
+    for (let i = 1; i < sortedLive.length; i++) {
+      const prev = sortedLive[i - 1]!;
+      if (prev.equity > 0) {
+        dailyReturns.push((sortedLive[i]!.equity - prev.equity) / prev.equity);
+      }
+    }
+    if (dailyReturns.length > 1) {
+      const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+      const variance = dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / (dailyReturns.length - 1);
+      const std = Math.sqrt(variance);
+      if (std > 0) outOfSampleSharpe = (mean / std) * Math.sqrt(252);
+    }
+
+    // Max drawdown
+    let peak = -Infinity;
+    for (const snap of sortedLive) {
+      if (snap.equity > peak) peak = snap.equity;
+      const dd = peak > 0 ? ((peak - snap.equity) / peak) * 100 : 0;
+      if (dd > outOfSampleMaxDrawdown) outOfSampleMaxDrawdown = dd;
+    }
+  }
+
+  const returnDecay = inSampleReturn - outOfSampleReturn;
+  const sharpeDecay = inSampleSharpe - outOfSampleSharpe;
+
+  // Verdict
+  let verdict: OutOfSampleResult["verdict"];
+  if (returnDecay < 5 && sharpeDecay < 0.3) {
+    verdict = "on_track";
+  } else if (returnDecay < 15 && sharpeDecay < 1.0) {
+    verdict = "degrading";
+  } else {
+    verdict = "failed";
+  }
+
+  const observations: string[] = [];
+  if (sortedLive.length < 5) {
+    observations.push("样本外数据不足，结论可能不可靠");
+  }
+  if (verdict === "on_track") {
+    observations.push(`策略在样本外表现良好，年化收益衰减仅 ${returnDecay.toFixed(1)}%`);
+  } else if (verdict === "degrading") {
+    observations.push(`策略在样本外表现衰减，年化收益下降 ${returnDecay.toFixed(1)}%，Sharpe下降 ${sharpeDecay.toFixed(2)}`);
+  } else {
+    observations.push(`策略在样本外严重失效，年化收益衰减 ${returnDecay.toFixed(1)}%，建议停用并重新优化`);
+  }
+  if (outOfSampleMaxDrawdown > inSampleMaxDrawdown * 1.5) {
+    observations.push(`样本外最大回撤 (${outOfSampleMaxDrawdown.toFixed(1)}%) 远超回测期 (${inSampleMaxDrawdown.toFixed(1)}%)`);
+  }
+
+  return {
+    strategyId,
+    inSamplePeriod,
+    outOfSamplePeriod,
+    inSampleReturn,
+    inSampleSharpe,
+    inSampleMaxDrawdown,
+    outOfSampleReturn,
+    outOfSampleSharpe,
+    outOfSampleMaxDrawdown,
+    returnDecay,
+    sharpeDecay,
+    verdict,
+    observations,
+  };
+}
+
+// ── Multi-backtest closest match ──────────────────────────────
+
+/**
+ * Given multiple backtest results and live equity, find which backtest
+ * the live performance most closely matches.
+ */
+export function findClosestBacktest(
+  backtests: Array<{ id: string; result: BacktestResult }>,
+  liveEquity: EquitySnapshot[],
+): MultiBacktestMatchResult {
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const livePeriod = {
+    start: sortedLive.length > 0 ? sortedLive[0]!.date : "",
+    end: sortedLive.length > 0 ? sortedLive[sortedLive.length - 1]!.date : "",
+  };
+
+  let liveReturn = 0;
+  if (sortedLive.length >= 2) {
+    const first = sortedLive[0]!;
+    const last = sortedLive[sortedLive.length - 1]!;
+    if (first.equity > 0) liveReturn = ((last.equity - first.equity) / first.equity) * 100;
+  }
+
+  // Normalize live equity to percentages
+  const liveInitial = sortedLive.length > 0 ? sortedLive[0]!.equity : 1;
+  const livePctByDate = new Map<string, number>();
+  for (const snap of sortedLive) {
+    livePctByDate.set(snap.date, liveInitial > 0 ? (snap.equity / liveInitial) * 100 : 100);
+  }
+
+  const candidates: BacktestMatchCandidate[] = [];
+
+  for (const { id, result: bt } of backtests) {
+    // Normalize backtest equity to percentages
+    const btPctByDate = new Map<string, number>();
+    for (const p of bt.equityCurve) {
+      btPctByDate.set(p.date, bt.initialCash > 0 ? (p.value / bt.initialCash) * 100 : 100);
+    }
+
+    // Find overlapping dates
+    const overlap: Array<{ live: number; bt: number }> = [];
+    for (const [date, livePct] of livePctByDate) {
+      const btPct = btPctByDate.get(date);
+      if (btPct != null) {
+        overlap.push({ live: livePct, bt: btPct });
+      }
+    }
+
+    if (overlap.length < 2) {
+      candidates.push({
+        backtestId: id,
+        strategyId: bt.strategyId,
+        correlationScore: 0,
+        rmse: Infinity,
+        returnDiff: liveReturn - bt.totalReturn,
+        backtestReturn: bt.totalReturn,
+        backtestSharpe: bt.sharpeRatio,
+        backtestPeriod: { start: bt.startDate, end: bt.endDate },
+      });
+      continue;
+    }
+
+    // Pearson correlation
+    const n = overlap.length;
+    const meanLive = overlap.reduce((a, p) => a + p.live, 0) / n;
+    const meanBt = overlap.reduce((a, p) => a + p.bt, 0) / n;
+    let covSum = 0;
+    let varLive = 0;
+    let varBt = 0;
+    for (const p of overlap) {
+      const dL = p.live - meanLive;
+      const dB = p.bt - meanBt;
+      covSum += dL * dB;
+      varLive += dL * dL;
+      varBt += dB * dB;
+    }
+    const denom = Math.sqrt(varLive * varBt);
+    const correlation = denom > 0 ? covSum / denom : 0;
+    const correlationScore = Math.round(Math.max(0, correlation * 100));
+
+    // RMSE
+    const rmseSum = overlap.reduce((a, p) => a + (p.live - p.bt) ** 2, 0);
+    const rmse = Math.sqrt(rmseSum / n);
+
+    candidates.push({
+      backtestId: id,
+      strategyId: bt.strategyId,
+      correlationScore,
+      rmse: Math.round(rmse * 100) / 100,
+      returnDiff: liveReturn - bt.totalReturn,
+      backtestReturn: bt.totalReturn,
+      backtestSharpe: bt.sharpeRatio,
+      backtestPeriod: { start: bt.startDate, end: bt.endDate },
+    });
+  }
+
+  // Sort by correlation descending
+  candidates.sort((a, b) => b.correlationScore - a.correlationScore);
+
+  return {
+    livePeriod,
+    liveReturn,
+    candidates,
+    bestMatch: candidates.length > 0 ? candidates[0]! : null,
   };
 }

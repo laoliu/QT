@@ -661,6 +661,7 @@ const quantTradingPlugin = {
         getEngine,
         equityHistory,
         backtestStore,
+        alertStore,
       ),
     };
 

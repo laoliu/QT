@@ -7,6 +7,10 @@
  *   - Validate backtest assumptions (slippage, fill rates)
  *   - Quantify the "backtest-to-live gap"
  *   - Generate actionable diagnostics (e.g. "slippage 3x higher than modeled")
+ *   - Rolling window comparisons (30/60/90 day)
+ *   - Trade-by-trade matching between live and backtest signals
+ *   - Multi-strategy batch comparison
+ *   - Markdown report export
  *
  * Data sources:
  *   - EquityHistory: actual live equity curve
@@ -14,7 +18,7 @@
  *   - TradeRecord[]: actual filled trades from live engine
  *   - Backtest engine: re-run backtest on the same period for fresh comparison
  */
-import type { BacktestResult, TradeRecord } from "../types.js";
+import type { BacktestResult, TradingSignal, TradeRecord } from "../types.js";
 import type { EquityHistory, EquitySnapshot } from "./equity-history.js";
 import type { BacktestStore } from "./backtest-store.js";
 
@@ -101,6 +105,91 @@ export interface LiveVsBacktestResult {
     totalReturn: number;
     maxDrawdown: number;
   };
+}
+
+// ── Trade-by-trade matching types ─────────────────────────────
+
+export interface TradeMatch {
+  /** Live trade that was matched. */
+  liveTrade: TradeRecord;
+  /** Backtest signal that was matched (null if unmatched). */
+  backtestSignal: TradingSignal | null;
+  /** Match quality. */
+  matchType: "exact" | "approximate" | "unmatched";
+  /** Days between live entry and backtest signal (0 = same day). */
+  timingDeltaDays: number;
+  /** Price difference between live entry and backtest signal price. */
+  priceDeltaPct: number;
+  /** Slippage impact of the timing/price difference. */
+  slippageImpact: number;
+}
+
+export interface TradeMatchResult {
+  strategyId: string;
+  period: string;
+  /** Trades matched between live and backtest. */
+  matches: TradeMatch[];
+  /** Backtest signals with no corresponding live trade. */
+  missedSignals: TradingSignal[];
+  /** Summary statistics. */
+  summary: {
+    totalLiveTrades: number;
+    totalBacktestSignals: number;
+    exactMatches: number;
+    approximateMatches: number;
+    unmatchedLiveTrades: number;
+    missedSignals: number;
+    avgTimingDeltaDays: number;
+    avgPriceDeltaPct: number;
+  };
+}
+
+// ── Rolling comparison types ─────────────────────────────────
+
+export interface RollingComparisonPoint {
+  /** Window end date. */
+  date: string;
+  /** Window start date. */
+  windowStart: string;
+  /** Verdict for this window. */
+  verdict: LiveVsBacktestResult["verdict"];
+  /** Key metric deltas for this window. */
+  returnDelta: number;
+  drawdownDelta: number;
+  winRateDelta: number;
+  /** Number of live trades in this window. */
+  liveTrades: number;
+}
+
+export interface RollingComparisonResult {
+  strategyId: string;
+  symbols: string[];
+  rollingDays: number;
+  /** Time series of rolling comparison points. */
+  points: RollingComparisonPoint[];
+  /** Trend direction: improving, stable, deteriorating. */
+  trend: "improving" | "stable" | "deteriorating";
+  trendDescription: string;
+}
+
+// ── Multi-strategy batch comparison types ─────────────────────
+
+export interface BatchComparisonEntry {
+  strategyId: string;
+  result: LiveVsBacktestResult;
+}
+
+export interface BatchComparisonResult {
+  /** Individual strategy comparison results. */
+  entries: BatchComparisonEntry[];
+  /** Ranked by consistency (best verdict first). */
+  ranking: Array<{
+    strategyId: string;
+    verdict: LiveVsBacktestResult["verdict"];
+    returnDelta: number;
+    drawdownDelta: number;
+    score: number;
+  }>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -321,6 +410,50 @@ function determineVerdict(
 
 // ── Service ─────────────────────────────────────────────────
 
+function signalDate(s: TradingSignal): string {
+  return new Date(s.timestamp).toISOString().slice(0, 10);
+}
+
+function daysBetween(a: string, b: string): number {
+  const msPerDay = 86_400_000;
+  return Math.round((new Date(a).getTime() - new Date(b).getTime()) / msPerDay);
+}
+
+function determineTrend(
+  points: RollingComparisonPoint[],
+): { trend: RollingComparisonResult["trend"]; trendDescription: string } {
+  if (points.length < 3) {
+    return { trend: "stable", trendDescription: "数据点不足，无法判断趋势" };
+  }
+
+  const verdictScores: Record<string, number> = {
+    consistent: 0,
+    minor_drift: 1,
+    significant_drift: 2,
+    critical_divergence: 3,
+  };
+
+  // Compare first half vs second half
+  const mid = Math.floor(points.length / 2);
+  const firstHalf = points.slice(0, mid);
+  const secondHalf = points.slice(mid);
+
+  const avgFirst =
+    firstHalf.reduce((a, p) => a + (verdictScores[p.verdict] ?? 0), 0) / firstHalf.length;
+  const avgSecond =
+    secondHalf.reduce((a, p) => a + (verdictScores[p.verdict] ?? 0), 0) / secondHalf.length;
+
+  const diff = avgSecond - avgFirst;
+
+  if (diff < -0.3) {
+    return { trend: "improving", trendDescription: "实盘与回测的一致性呈改善趋势" };
+  }
+  if (diff > 0.3) {
+    return { trend: "deteriorating", trendDescription: "实盘与回测的偏离呈加剧趋势，需关注" };
+  }
+  return { trend: "stable", trendDescription: "实盘与回测的一致性保持稳定" };
+}
+
 export class LiveBacktestComparison {
   constructor(
     private equityHistory: EquityHistory,
@@ -389,10 +522,14 @@ export class LiveBacktestComparison {
     const liveStats = computeLiveStats(stratTrades, liveSnapshots);
 
     // 5. Compute backtest stats
+    // Estimate modeled slippage from backtest fee impact, fallback to 0.1%
+    const modeledSlippage = btResult?.feeImpact != null && btResult.feeImpact > 0
+      ? btResult.feeImpact / (btResult.totalTrades || 1)
+      : 0.1;
     const backtestStats = {
       totalTrades: btResult?.totalTrades ?? 0,
       winRate: btResult?.winRate ?? 0,
-      modeledSlippage: 0.1, // default modeled slippage (0.1%)
+      modeledSlippage,
       totalReturn: btResult?.totalReturn ?? 0,
       maxDrawdown: Math.abs(btResult?.maxDrawdown ?? 0),
     };
@@ -473,5 +610,296 @@ export class LiveBacktestComparison {
       liveStats,
       backtestStats,
     };
+  }
+
+  /**
+   * Match individual live trades against backtest signals for the same strategy/period.
+   */
+  matchTrades(
+    req: LiveVsBacktestRequest,
+    liveTrades: TradeRecord[],
+    backtestResult?: BacktestResult,
+  ): TradeMatchResult {
+    const signals = backtestResult?.signals ?? [];
+
+    // Filter trades to period and strategy
+    const periodTrades = liveTrades.filter((t) => {
+      const tDate = t.entryTime.slice(0, 10);
+      return (
+        tDate >= req.startDate &&
+        tDate <= req.endDate &&
+        (!req.strategyId || t.strategyId === req.strategyId)
+      );
+    });
+
+    // Filter signals to period and symbols
+    const periodSignals = signals.filter((s) => {
+      const sDate = signalDate(s);
+      return sDate >= req.startDate && sDate <= req.endDate && req.symbols.includes(s.symbol);
+    });
+
+    const matchedSignalIndices = new Set<number>();
+    const matches: TradeMatch[] = [];
+
+    for (const trade of periodTrades) {
+      const tradeDate = trade.entryTime.slice(0, 10);
+      let bestMatch: { signal: TradingSignal; idx: number; daysDelta: number; priceDelta: number } | null = null;
+
+      for (let i = 0; i < periodSignals.length; i++) {
+        if (matchedSignalIndices.has(i)) continue;
+        const sig = periodSignals[i]!;
+        if (sig.symbol !== trade.symbol) continue;
+
+        const daysDelta = Math.abs(daysBetween(tradeDate, signalDate(sig)));
+        if (daysDelta > 5) continue; // max 5-day window for approximate match
+
+        const priceDelta =
+          sig.price > 0 ? Math.abs(trade.entryPrice - sig.price) / sig.price * 100 : 0;
+
+        if (!bestMatch || daysDelta < bestMatch.daysDelta ||
+          (daysDelta === bestMatch.daysDelta && priceDelta < bestMatch.priceDelta)) {
+          bestMatch = { signal: sig, idx: i, daysDelta: daysDelta, priceDelta };
+        }
+      }
+
+      if (bestMatch) {
+        matchedSignalIndices.add(bestMatch.idx);
+        const slippageImpact =
+          trade.entryPrice > 0
+            ? ((trade.entryPrice - bestMatch.signal.price) / trade.entryPrice) * 100
+            : 0;
+        matches.push({
+          liveTrade: trade,
+          backtestSignal: bestMatch.signal,
+          matchType: bestMatch.daysDelta === 0 ? "exact" : "approximate",
+          timingDeltaDays: bestMatch.daysDelta,
+          priceDeltaPct: bestMatch.priceDelta,
+          slippageImpact,
+        });
+      } else {
+        matches.push({
+          liveTrade: trade,
+          backtestSignal: null,
+          matchType: "unmatched",
+          timingDeltaDays: 0,
+          priceDeltaPct: 0,
+          slippageImpact: 0,
+        });
+      }
+    }
+
+    const missedSignals = periodSignals.filter((_, i) => !matchedSignalIndices.has(i));
+
+    const matched = matches.filter((m) => m.matchType !== "unmatched");
+    const exactMatches = matches.filter((m) => m.matchType === "exact").length;
+    const approximateMatches = matches.filter((m) => m.matchType === "approximate").length;
+    const avgTimingDelta =
+      matched.length > 0
+        ? matched.reduce((a, m) => a + m.timingDeltaDays, 0) / matched.length
+        : 0;
+    const avgPriceDelta =
+      matched.length > 0
+        ? matched.reduce((a, m) => a + m.priceDeltaPct, 0) / matched.length
+        : 0;
+
+    return {
+      strategyId: req.strategyId,
+      period: `${req.startDate} ~ ${req.endDate}`,
+      matches,
+      missedSignals,
+      summary: {
+        totalLiveTrades: periodTrades.length,
+        totalBacktestSignals: periodSignals.length,
+        exactMatches,
+        approximateMatches,
+        unmatchedLiveTrades: matches.filter((m) => m.matchType === "unmatched").length,
+        missedSignals: missedSignals.length,
+        avgTimingDeltaDays: avgTimingDelta,
+        avgPriceDeltaPct: avgPriceDelta,
+      },
+    };
+  }
+
+  /**
+   * Compute rolling window comparisons over a date range.
+   * Slides a window of `rollingDays` through the period, producing a time series of comparison verdicts.
+   */
+  rollingComparison(
+    strategyId: string,
+    symbols: string[],
+    endDate: string,
+    liveTrades: TradeRecord[],
+    backtestResult?: BacktestResult,
+    rollingDays: number = 30,
+    stepDays: number = 7,
+  ): RollingComparisonResult {
+    const points: RollingComparisonPoint[] = [];
+    const end = new Date(endDate);
+
+    // Go back far enough to have multiple windows
+    const maxLookback = rollingDays * 6;
+    const earliest = new Date(end);
+    earliest.setDate(earliest.getDate() - maxLookback);
+
+    let cursor = new Date(earliest);
+    cursor.setDate(cursor.getDate() + rollingDays);
+
+    while (cursor <= end) {
+      const windowEnd = cursor.toISOString().slice(0, 10);
+      const windowStartDate = new Date(cursor);
+      windowStartDate.setDate(windowStartDate.getDate() - rollingDays);
+      const windowStart = windowStartDate.toISOString().slice(0, 10);
+
+      const result = this.compare(
+        { strategyId, symbols, startDate: windowStart, endDate: windowEnd },
+        liveTrades,
+        backtestResult,
+      );
+
+      const returnMetric = result.metrics.find((m) => m.label === "总收益率");
+      const ddMetric = result.metrics.find((m) => m.label === "最大回撤");
+      const wrMetric = result.metrics.find((m) => m.label === "胜率");
+
+      points.push({
+        date: windowEnd,
+        windowStart,
+        verdict: result.verdict,
+        returnDelta: returnMetric?.delta ?? 0,
+        drawdownDelta: ddMetric?.delta ?? 0,
+        winRateDelta: wrMetric?.delta ?? 0,
+        liveTrades: result.liveStats.totalTrades,
+      });
+
+      cursor.setDate(cursor.getDate() + stepDays);
+    }
+
+    // Determine trend from verdict progression
+    const trend = determineTrend(points);
+
+    return {
+      strategyId,
+      symbols,
+      rollingDays,
+      points,
+      ...trend,
+    };
+  }
+
+  /**
+   * Compare multiple strategies simultaneously, ranking by consistency.
+   */
+  batchCompare(
+    strategies: Array<{
+      strategyId: string;
+      symbols: string[];
+      trades: TradeRecord[];
+      backtestResult?: BacktestResult;
+    }>,
+    startDate: string,
+    endDate: string,
+  ): BatchComparisonResult {
+    const entries: BatchComparisonEntry[] = [];
+
+    for (const s of strategies) {
+      const result = this.compare(
+        { strategyId: s.strategyId, symbols: s.symbols, startDate, endDate },
+        s.trades,
+        s.backtestResult,
+      );
+      entries.push({ strategyId: s.strategyId, result });
+    }
+
+    // Score each strategy: lower is better (less drift)
+    const verdictScores: Record<LiveVsBacktestResult["verdict"], number> = {
+      consistent: 0,
+      minor_drift: 1,
+      significant_drift: 2,
+      critical_divergence: 3,
+    };
+
+    const ranking = entries
+      .map((e) => {
+        const returnMetric = e.result.metrics.find((m) => m.label === "总收益率");
+        const ddMetric = e.result.metrics.find((m) => m.label === "最大回撤");
+        const verdictScore = verdictScores[e.result.verdict];
+        const returnPenalty = Math.max(0, -(returnMetric?.delta ?? 0)) / 10;
+        const ddPenalty = Math.max(0, ddMetric?.delta ?? 0) / 10;
+        return {
+          strategyId: e.strategyId,
+          verdict: e.result.verdict,
+          returnDelta: returnMetric?.delta ?? 0,
+          drawdownDelta: ddMetric?.delta ?? 0,
+          score: verdictScore + returnPenalty + ddPenalty,
+        };
+      })
+      .sort((a, b) => a.score - b.score);
+
+    return { entries, ranking };
+  }
+
+  /**
+   * Generate a Markdown report of the comparison result.
+   */
+  generateReport(result: LiveVsBacktestResult): string {
+    const lines: string[] = [];
+    lines.push(`# 实盘 vs 回测对比报告`);
+    lines.push("");
+    lines.push(`**策略:** ${result.strategyId}`);
+    lines.push(`**标的:** ${result.symbols.join(", ")}`);
+    lines.push(`**期间:** ${result.period}`);
+    lines.push(`**回测ID:** ${result.backtestId ?? "无匹配"}`);
+    lines.push("");
+
+    // Verdict
+    const verdictEmoji: Record<string, string> = {
+      consistent: "🟢",
+      minor_drift: "🟡",
+      significant_drift: "🟠",
+      critical_divergence: "🔴",
+    };
+    lines.push(`## 综合评估: ${verdictEmoji[result.verdict] ?? ""} ${result.verdictDescription}`);
+    lines.push("");
+
+    // Metrics table
+    lines.push("## 关键指标对比");
+    lines.push("");
+    lines.push("| 指标 | 回测 | 实盘 | 差异 | 偏离度 | 状态 |");
+    lines.push("|------|------|------|------|--------|------|");
+    for (const m of result.metrics) {
+      const status = m.degraded ? "⚠️ 退化" : "✅ 正常";
+      lines.push(
+        `| ${m.label} | ${m.backtest.toFixed(2)}${m.unit} | ${m.live.toFixed(2)}${m.unit} | ${m.delta > 0 ? "+" : ""}${m.delta.toFixed(2)}${m.unit} | ${m.deltaPct > 0 ? "+" : ""}${m.deltaPct.toFixed(1)}% | ${status} |`,
+      );
+    }
+    lines.push("");
+
+    // Gaps
+    lines.push("## 差异诊断");
+    lines.push("");
+    for (const g of result.gaps) {
+      const icon = g.severity === "critical" ? "🔴" : g.severity === "warning" ? "🟡" : "🟢";
+      lines.push(`- ${icon} **${g.category}**: ${g.description}`);
+    }
+    lines.push("");
+
+    // Stats summary
+    lines.push("## 实盘统计");
+    lines.push("");
+    lines.push(`- 交易次数: ${result.liveStats.totalTrades}`);
+    lines.push(`- 胜率: ${result.liveStats.winRate.toFixed(1)}%`);
+    lines.push(`- 总收益: ${result.liveStats.totalReturn.toFixed(2)}%`);
+    lines.push(`- 最大回撤: ${result.liveStats.maxDrawdown.toFixed(2)}%`);
+    lines.push(`- 平均滑点: ${result.liveStats.avgSlippage.toFixed(3)}%`);
+    lines.push("");
+
+    lines.push("## 回测统计");
+    lines.push("");
+    lines.push(`- 交易次数: ${result.backtestStats.totalTrades}`);
+    lines.push(`- 胜率: ${result.backtestStats.winRate.toFixed(1)}%`);
+    lines.push(`- 总收益: ${result.backtestStats.totalReturn.toFixed(2)}%`);
+    lines.push(`- 最大回撤: ${result.backtestStats.maxDrawdown.toFixed(2)}%`);
+    lines.push(`- 建模滑点: ${result.backtestStats.modeledSlippage.toFixed(3)}%`);
+
+    return lines.join("\n");
   }
 }

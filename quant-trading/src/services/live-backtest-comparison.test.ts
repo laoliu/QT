@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { BacktestResult, TradeRecord } from "../types.js";
+import type { BacktestResult, TradingSignal, TradeRecord } from "../types.js";
 import type { EquitySnapshot } from "./equity-history.js";
 import { LiveBacktestComparison } from "./live-backtest-comparison.js";
 
@@ -70,6 +70,17 @@ function fakeTrade(overrides: Partial<TradeRecord> = {}): TradeRecord {
     strategyId: "dual-ma-crossover",
     entryOrderId: "o-1",
     exitOrderId: "o-2",
+    ...overrides,
+  };
+}
+
+function fakeSignal(overrides: Partial<TradingSignal> = {}): TradingSignal {
+  return {
+    timestamp: new Date("2025-01-15T09:30:00Z").getTime(),
+    symbol: "600519",
+    direction: "buy",
+    price: 1795,
+    strategyId: "dual-ma-crossover",
     ...overrides,
   };
 }
@@ -298,5 +309,246 @@ describe("LiveBacktestComparison", () => {
     // Should have critical or significant drift verdict
     expect(["significant_drift", "critical_divergence"]).toContain(result.verdict);
     expect(result.gaps.some((g) => g.severity === "critical")).toBe(true);
+  });
+
+  it("uses feeImpact for modeled slippage when available", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.compare(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      [fakeTrade()],
+      fakeBacktestResult({ feeImpact: 2.0, totalTrades: 20 }),
+    );
+
+    // modeledSlippage should be feeImpact / totalTrades = 2.0 / 20 = 0.1
+    expect(result.backtestStats.modeledSlippage).toBe(0.1);
+  });
+});
+
+// ── Trade matching tests ─────────────────────────────────────
+
+describe("LiveBacktestComparison.matchTrades", () => {
+  it("matches trades with exact same-day signals", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2025-01-15T10:00:00Z", entryPrice: 1800 }),
+    ];
+
+    const btResult = fakeBacktestResult({
+      signals: [
+        fakeSignal({ timestamp: new Date("2025-01-15T09:30:00Z").getTime(), price: 1795 }),
+      ],
+    });
+
+    const result = service.matchTrades(
+      { strategyId: "dual-ma-crossover", symbols: ["600519"], startDate: "2025-01-01", endDate: "2025-03-31" },
+      trades,
+      btResult,
+    );
+
+    expect(result.summary.exactMatches).toBe(1);
+    expect(result.summary.unmatchedLiveTrades).toBe(0);
+    expect(result.matches[0]!.matchType).toBe("exact");
+    expect(result.matches[0]!.timingDeltaDays).toBe(0);
+  });
+
+  it("matches trades with approximate same-week signals", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2025-01-17T10:00:00Z", entryPrice: 1810 }),
+    ];
+
+    const btResult = fakeBacktestResult({
+      signals: [
+        fakeSignal({ timestamp: new Date("2025-01-15T09:30:00Z").getTime(), price: 1795 }),
+      ],
+    });
+
+    const result = service.matchTrades(
+      { strategyId: "dual-ma-crossover", symbols: ["600519"], startDate: "2025-01-01", endDate: "2025-03-31" },
+      trades,
+      btResult,
+    );
+
+    expect(result.summary.approximateMatches).toBe(1);
+    expect(result.matches[0]!.matchType).toBe("approximate");
+    expect(result.matches[0]!.timingDeltaDays).toBe(2);
+  });
+
+  it("identifies missed signals and unmatched trades", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    // Trade on a date with no nearby signal
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2025-03-25T10:00:00Z" }),
+    ];
+
+    // Signal far from any trade
+    const btResult = fakeBacktestResult({
+      signals: [
+        fakeSignal({ timestamp: new Date("2025-01-10T09:30:00Z").getTime() }),
+      ],
+    });
+
+    const result = service.matchTrades(
+      { strategyId: "dual-ma-crossover", symbols: ["600519"], startDate: "2025-01-01", endDate: "2025-03-31" },
+      trades,
+      btResult,
+    );
+
+    expect(result.summary.unmatchedLiveTrades).toBe(1);
+    expect(result.summary.missedSignals).toBe(1);
+    expect(result.missedSignals.length).toBe(1);
+  });
+
+  it("handles empty inputs gracefully", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.matchTrades(
+      { strategyId: "dual-ma-crossover", symbols: ["600519"], startDate: "2025-01-01", endDate: "2025-03-31" },
+      [],
+      fakeBacktestResult({ signals: [] }),
+    );
+
+    expect(result.summary.totalLiveTrades).toBe(0);
+    expect(result.summary.totalBacktestSignals).toBe(0);
+    expect(result.matches.length).toBe(0);
+  });
+});
+
+// ── Rolling comparison tests ─────────────────────────────────
+
+describe("LiveBacktestComparison.rollingComparison", () => {
+  it("produces multiple rolling comparison points", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const trades = Array.from({ length: 10 }, (_, i) =>
+      fakeTrade({
+        tradeId: `t-${i}`,
+        entryTime: `2025-0${1 + (i % 3)}-${String(10 + i).padStart(2, "0")}T10:00:00Z`,
+      }),
+    );
+
+    const result = service.rollingComparison(
+      "dual-ma-crossover",
+      ["600519"],
+      "2025-03-31",
+      trades,
+      fakeBacktestResult(),
+      30,
+      14,
+    );
+
+    expect(result.rollingDays).toBe(30);
+    expect(result.points.length).toBeGreaterThan(0);
+    expect(["improving", "stable", "deteriorating"]).toContain(result.trend);
+    expect(result.trendDescription).toBeTruthy();
+
+    // Each point should have the expected fields
+    for (const p of result.points) {
+      expect(p.date).toBeTruthy();
+      expect(p.windowStart).toBeTruthy();
+      expect(typeof p.returnDelta).toBe("number");
+      expect(["consistent", "minor_drift", "significant_drift", "critical_divergence"]).toContain(p.verdict);
+    }
+  });
+});
+
+// ── Batch comparison tests ───────────────────────────────────
+
+describe("LiveBacktestComparison.batchCompare", () => {
+  it("ranks multiple strategies by consistency", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const goodTrades = Array.from({ length: 15 }, (_, i) =>
+      fakeTrade({
+        tradeId: `g-${i}`,
+        strategyId: "good-strat",
+        netPnl: i % 3 === 0 ? -500 : 1000,
+        exitPrice: i % 3 === 0 ? 1750 : 1900,
+        entryTime: `2025-0${1 + (i % 3)}-${String(10 + (i % 20)).padStart(2, "0")}T10:00:00Z`,
+      }),
+    );
+
+    const badTrades = Array.from({ length: 10 }, (_, i) =>
+      fakeTrade({
+        tradeId: `b-${i}`,
+        strategyId: "bad-strat",
+        netPnl: -2000,
+        exitPrice: 1600,
+        entryTime: `2025-0${1 + (i % 3)}-${String(10 + i).padStart(2, "0")}T10:00:00Z`,
+      }),
+    );
+
+    const result = service.batchCompare(
+      [
+        {
+          strategyId: "good-strat",
+          symbols: ["600519"],
+          trades: goodTrades,
+          backtestResult: fakeBacktestResult({ strategyId: "good-strat", winRate: 65, totalTrades: 15, totalReturn: 10, maxDrawdown: 5 }),
+        },
+        {
+          strategyId: "bad-strat",
+          symbols: ["600519"],
+          trades: badTrades,
+          backtestResult: fakeBacktestResult({ strategyId: "bad-strat", winRate: 70, totalTrades: 25, totalReturn: 30, maxDrawdown: 5 }),
+        },
+      ],
+      "2025-01-01",
+      "2025-03-31",
+    );
+
+    expect(result.entries.length).toBe(2);
+    expect(result.ranking.length).toBe(2);
+    // Good strategy should rank better (lower score)
+    expect(result.ranking[0]!.strategyId).toBe("good-strat");
+    expect(result.ranking[0]!.score).toBeLessThan(result.ranking[1]!.score);
+  });
+});
+
+// ── Report generation tests ──────────────────────────────────
+
+describe("LiveBacktestComparison.generateReport", () => {
+  it("generates a Markdown report", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.compare(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      [fakeTrade()],
+      fakeBacktestResult(),
+    );
+
+    const report = service.generateReport(result);
+
+    expect(report).toContain("# 实盘 vs 回测对比报告");
+    expect(report).toContain("dual-ma-crossover");
+    expect(report).toContain("600519");
+    expect(report).toContain("综合评估");
+    expect(report).toContain("关键指标对比");
+    expect(report).toContain("| 指标 |");
+    expect(report).toContain("差异诊断");
+    expect(report).toContain("实盘统计");
+    expect(report).toContain("回测统计");
   });
 });

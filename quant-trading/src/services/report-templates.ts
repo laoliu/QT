@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "live_backtest_drift";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1172,6 +1173,68 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+// ── Live Backtest Drift Report ─────────────────────────────
+
+async function generateLiveBacktestDrift(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = [];
+  sections.push("## 📊 实盘 vs 回测偏离报告\n");
+
+  try {
+    // First list comparable strategies
+    const listRaw = await executeTool("live_backtest_comparison", { action: "list_comparable" });
+    const listData = JSON.parse(listRaw);
+
+    if (!listData.strategies || listData.strategies.length === 0) {
+      sections.push("暂无可对比的策略。需要同时有实盘交易记录和回测结果才能生成偏离报告。");
+      return sections.join("\n");
+    }
+
+    sections.push(`共 ${listData.strategies.length} 个策略可对比:\n`);
+
+    // Compare each strategy
+    for (const strat of listData.strategies.slice(0, 5)) {
+      try {
+        const compareRaw = await executeTool("live_backtest_comparison", {
+          action: "compare",
+          strategy_id: strat.strategyId,
+        });
+        const compareData = JSON.parse(compareRaw);
+
+        const verdictLabels: Record<string, string> = {
+          consistent: "🟢 一致",
+          minor_drift: "🟡 轻微偏离",
+          significant_drift: "🟠 显著偏离",
+          critical_divergence: "🔴 严重偏离",
+        };
+
+        sections.push(`### ${strat.strategyId}`);
+        sections.push(`- 评估: ${verdictLabels[compareData.verdict] ?? compareData.verdict}`);
+        sections.push(`- ${compareData.verdictDescription ?? ""}`);
+        if (compareData.metricsComparison) {
+          for (const m of compareData.metricsComparison) {
+            sections.push(`  - ${m.指标}: 回测 ${m.回测} → 实盘 ${m.实盘} (${m.差异}) ${m.状态}`);
+          }
+        }
+        if (compareData.gaps) {
+          for (const g of compareData.gaps) {
+            sections.push(`  - ${g.严重度} ${g.描述}`);
+          }
+        }
+        sections.push("");
+      } catch {
+        sections.push(`### ${strat.strategyId}\n- ⚠️ 对比失败\n`);
+      }
+    }
+  } catch {
+    sections.push("获取对比数据失败。");
+  }
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1292,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "live_backtest_drift",
+    name: "实盘回测偏离",
+    description: "定期对比实盘与回测表现：策略漂移检测、滑点验证、差异诊断",
+    defaultIntervalMinutes: 0,
+    generate: generateLiveBacktestDrift,
   },
 ];
 

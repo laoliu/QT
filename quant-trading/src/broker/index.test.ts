@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { QuantTradingConfig } from "../types.js";
-import { createBrokerAdapter, PaperBroker, QMTBroker } from "./index.js";
+import { createBrokerAdapter, FutuBroker, PaperBroker, QMTBroker } from "./index.js";
 
 function makeConfig(overrides?: Partial<QuantTradingConfig>): QuantTradingConfig {
   return {
@@ -34,10 +34,11 @@ describe("createBrokerAdapter", () => {
     expect(broker).toBeInstanceOf(QMTBroker);
   });
 
-  it("should throw for futu broker", () => {
-    expect(() =>
-      createBrokerAdapter(makeConfig({ tradingAccount: { mode: "live", broker: "futu" } })),
-    ).toThrow(/Futu broker is not yet implemented/);
+  it("should return FutuBroker when broker is futu and mode is live", () => {
+    const broker = createBrokerAdapter(
+      makeConfig({ tradingAccount: { mode: "live", broker: "futu" } }),
+    );
+    expect(broker).toBeInstanceOf(FutuBroker);
   });
 
   it("should throw for ib broker", () => {

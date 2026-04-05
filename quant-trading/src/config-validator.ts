@@ -98,7 +98,7 @@ export function validateConfig(config: unknown): ConfigIssue[] {
       }
 
       // Warn about unimplemented brokers that are valid but not yet available
-      const UNIMPLEMENTED_BROKERS = ["futu", "ib", "eastmoney"] as const;
+      const UNIMPLEMENTED_BROKERS = ["ib", "eastmoney"] as const;
       if (
         ta.broker !== undefined &&
         UNIMPLEMENTED_BROKERS.includes(ta.broker as (typeof UNIMPLEMENTED_BROKERS)[number])

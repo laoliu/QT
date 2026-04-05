@@ -538,6 +538,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Data Export API (FR-7) ────────────────────────────────────
+  registerDataExportRoutes(deps);
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────
@@ -1529,6 +1532,75 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
       }
 
       methodNotAllowed(res);
+    }),
+  });
+}
+
+// ── Data Export sub-routes (FR-7) ───────────────────────────────
+
+function registerDataExportRoutes({ api, config, secure }: RouteDeps): void {
+  // GET /quant/api/data-export/list — list exported files
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/data-export/list",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") {
+        methodNotAllowed(res);
+        return;
+      }
+      const { existsSync, readdirSync, statSync } = await import("node:fs");
+      const pathMod = await import("node:path");
+      const { homedir } = await import("node:os");
+      const base = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+      const dir = pathMod.join(base, "exports");
+      if (!existsSync(dir)) {
+        json(res, { status: "ok", files: [], total: 0 });
+        return;
+      }
+      const files = readdirSync(dir)
+        .filter((f) => f.endsWith(".csv") || f.endsWith(".json"))
+        .map((f) => {
+          const st = statSync(pathMod.join(dir, f));
+          return { filename: f, size: st.size, createdAt: st.mtime.toISOString() };
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      json(res, { status: "ok", files, total: files.length, dir });
+    }),
+  });
+
+  // GET /quant/api/data-export/download?file=xxx — download an exported file
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/data-export/download",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") {
+        methodNotAllowed(res);
+        return;
+      }
+      const { existsSync, readFileSync } = await import("node:fs");
+      const pathMod = await import("node:path");
+      const { homedir } = await import("node:os");
+      const filename = urlParams(req).get("file");
+      if (!filename) {
+        json(res, { status: "error", message: "缺少 ?file= 参数" }, 400);
+        return;
+      }
+      // Sanitize filename to prevent path traversal
+      const safe = pathMod.basename(filename);
+      const base = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+      const filePath = pathMod.join(base, "exports", safe);
+      if (!existsSync(filePath)) {
+        json(res, { status: "error", message: `文件不存在: ${safe}` }, 404);
+        return;
+      }
+      const content = readFileSync(filePath);
+      const isJson = safe.endsWith(".json");
+      res.writeHead(200, {
+        "Content-Type": isJson ? "application/json; charset=utf-8" : "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${encodeURIComponent(safe)}"`,
+        "Content-Length": content.length,
+      });
+      res.end(content);
     }),
   });
 }

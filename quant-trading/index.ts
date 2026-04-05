@@ -126,6 +126,7 @@ import { createCorrelationTool } from "./src/tools/correlation.js";
 import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
+import { createDataExportTool } from "./src/tools/data-export.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
@@ -654,6 +655,14 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      data_export: createDataExportTool(api, {
+        config,
+        quantStorage: storage,
+        equityHistory,
+        journal: tradeJournal,
+        backtestStore,
+        getEngine: () => liveEngine,
+      }),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +713,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      data_export: "数据导出",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

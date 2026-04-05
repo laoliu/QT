@@ -307,6 +307,20 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Performance Report Page ────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/performance",
+    handler: securePublic(async (_req, res) => {
+      const { getPerformanceReportPageHtml } = await import(
+        "./pages/performance-report/index.js"
+      );
+      const html = getPerformanceReportPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
   // ── Favorites Page ────────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

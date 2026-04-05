@@ -173,6 +173,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">推荐</span><span class="tag">里程碑</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/performance" class="nav-card card-dashboard" style="color:inherit;text-decoration:none">
+    <div class="icon">📈</div>
+    <h3>交易绩效报告</h3>
+    <p>全面的交易绩效分析 — 策略归因、标的分析、收益曲线、盈亏分布、基准对比</p>
+    <div class="tags">
+      <span class="tag">策略归因</span><span class="tag">盈亏分析</span><span class="tag">收益曲线</span>
+      <span class="tag">基准对比</span><span class="tag">胜率</span>
+    </div>
+  </a>
   <a href="${b}/quant/admin/favorites" class="nav-card card-admin" style="color:inherit;text-decoration:none">
     <div class="icon">⭐</div>
     <h3>股票收藏</h3>
@@ -260,6 +269,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/ui</span><span class="api-desc">管理面板</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/stock?symbol=…</span><span class="api-desc">个股详情页</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/planner</span><span class="api-desc">投资规划</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/performance</span><span class="api-desc">交易绩效报告</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/lianban</span><span class="api-desc">连板分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/event-catalyst</span><span class="api-desc">事件催化分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/datahub</span><span class="api-desc">金融数据中心</span></div>

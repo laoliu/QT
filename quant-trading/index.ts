@@ -135,6 +135,7 @@ import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
+import { createLiveBacktestCompareTool } from "./src/tools/live-backtest-compare.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
@@ -594,6 +595,7 @@ const quantTradingPlugin = {
       futures_straddle: createFuturesStraddleTool(api, config),
       data_cache: createDataCacheTool(api, config),
       live_trading: createLiveTradingTool(api, config, getEngine, equityHistory),
+      live_backtest_compare: createLiveBacktestCompareTool(api, config, equityHistory, backtestStore),
       strategy_optimizer: createStrategyOptimizerTool(api, config, composedStrategyStore),
       strategy_composer: createStrategyComposerTool(api, config, composedStrategyStore),
       custom_strategy: createCustomStrategyTool(api, customStrategyStore),
@@ -667,6 +669,7 @@ const quantTradingPlugin = {
       futures_straddle: "期货套利",
       data_cache: "数据缓存",
       live_trading: "实盘交易",
+      live_backtest_compare: "实盘回测对比",
       strategy_optimizer: "策略优化",
       strategy_composer: "策略组合",
       strategy_explorer: "策略探索",

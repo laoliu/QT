@@ -367,7 +367,19 @@ export class FutuBroker implements IBrokerAdapter {
       params.stock_code = toFutuSymbol(filter.symbol);
     }
     const raw = await this.proc.call<RawOrder[]>("query_orders", params);
-    return raw.map((r) => this.mapRawOrder(r));
+    let orders = raw.map((r) => this.mapRawOrder(r));
+
+    // Apply client-side filters that the Python bridge does not support
+    if (filter) {
+      orders = orders.filter(
+        (o) =>
+          (!filter.status?.length || filter.status.includes(o.status)) &&
+          (!filter.strategyId || o.strategyId === filter.strategyId) &&
+          (!filter.dateFrom || o.createdAt >= filter.dateFrom) &&
+          (!filter.dateTo || o.createdAt <= filter.dateTo + "T99"),
+      );
+    }
+    return orders;
   }
 
   async queryPositions(): Promise<LivePosition[]> {
@@ -442,6 +454,31 @@ export class FutuBroker implements IBrokerAdapter {
     } catch {
       return false;
     }
+  }
+
+  // ── Option support ──────────────────────────────────────────
+
+  supportsOptions(): boolean {
+    // Futu OpenD supports HK and US options trading
+    return true;
+  }
+
+  async exerciseOption(
+    symbol: string,
+    quantity: number,
+  ): Promise<{ success: boolean; message: string }> {
+    if (!this.connected) throw new Error("Not connected");
+    const futuSymbol = toFutuSymbol(symbol);
+    const result = await this.proc.call<{ success: boolean; message: string }>("exercise_option", {
+      stock_code: futuSymbol,
+      volume: quantity,
+    });
+    return result;
+  }
+
+  async queryOptionPositions(): Promise<LivePosition[]> {
+    const raw = await this.proc.call<RawPosition[]>("query_option_positions");
+    return raw.map((r) => this.mapRawPosition(r));
   }
 
   // ── Extended data methods (Futu-specific, beyond IBrokerAdapter) ──

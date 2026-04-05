@@ -659,6 +659,54 @@ class FutuBrokerBridge:
             })
         return result
 
+    def exercise_option(self, params: dict) -> dict:
+        """Exercise an option position (American-style)."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        stock_code = params["stock_code"]
+        volume = int(params["volume"])
+        trd_market = detect_trd_market(stock_code)
+
+        # Futu uses place_order with SPECIAL_LIMIT or exercise-specific API
+        # For HK/US options, exercise is done via the trade context
+        try:
+            ret, data = self.trade_ctx.exercise_assign(
+                exercise_code=stock_code,
+                exercise_qty=volume,
+                trd_env=self.trade_env,
+                trd_market=trd_market,
+            )
+            if ret != RET_OK:
+                return {"success": False, "message": f"行权失败: {data}"}
+            return {"success": True, "message": f"行权请求已提交: {stock_code} x {volume}"}
+        except AttributeError:
+            # Fallback: older futu-api versions may not have exercise_assign
+            return {"success": False, "message": "当前 futu-api 版本不支持行权操作，请升级到最新版本"}
+        except Exception as e:
+            return {"success": False, "message": f"行权异常: {str(e)}"}
+
+    def query_option_positions(self, _params: dict = {}) -> list:
+        """Query option-specific positions."""
+        if not self.trade_ctx:
+            raise RuntimeError("Not connected")
+
+        ret, data = self.trade_ctx.position_list_query(trd_env=self.trade_env)
+        if ret != RET_OK:
+            raise RuntimeError(f"query_option_positions failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            code = row.get("code", "")
+            # Filter to option contracts only (typically contain option-related identifiers)
+            sec_type = row.get("sec_type", "")
+            if sec_type and HAS_FUTU:
+                from futu import SecurityType
+                if sec_type not in (SecurityType.WARRANT, SecurityType.DRVT):
+                    continue
+            result.append(self._serialize_position(row))
+        return result
+
     # ── Serialisers ────────────────────────────────────────────
 
     @staticmethod
@@ -685,6 +733,19 @@ class FutuBrokerBridge:
         market_val = float(row.get("market_val", 0))
         current_price = float(row.get("nominal_price", 0))
         unrealized_pnl = float(row.get("unrealized_pl", 0))
+        today_buy_qty = int(row.get("today_buy_qty", 0))
+
+        # T+1 tracking: for CN A-shares, today_buy_qty cannot be sold today
+        # can_use_volume = total qty - today's buy qty (T+1 rule)
+        code = row.get("code", "")
+        is_cn_stock = code.startswith("SH.") or code.startswith("SZ.")
+        if is_cn_stock:
+            can_use_volume = max(0, qty - today_buy_qty)
+            frozen_volume = today_buy_qty
+        else:
+            # HK/US stocks can be sold on the same day (T+0)
+            can_use_volume = qty
+            frozen_volume = 0
 
         unrealized_pnl_pct = None
         if cost_price > 0 and qty > 0:
@@ -695,9 +756,9 @@ class FutuBrokerBridge:
             "stock_code": row.get("code", ""),
             "stock_name": row.get("stock_name", ""),
             "volume": qty,
-            "can_use_volume": qty,  # Futu doesn't have T+1 freeze concept for HK/US
-            "frozen_volume": 0,
-            "today_buy_volume": int(row.get("today_buy_qty", 0)),
+            "can_use_volume": can_use_volume,
+            "frozen_volume": frozen_volume,
+            "today_buy_volume": today_buy_qty,
             "avg_price": cost_price,
             "market_value": market_val,
             "last_price": current_price if current_price > 0 else None,
@@ -726,6 +787,8 @@ METHODS = {
     "subscribe_orderbook": "subscribe_orderbook",
     "get_orderbook": "get_orderbook",
     "get_market_snapshot": "get_market_snapshot",
+    "exercise_option": "exercise_option",
+    "query_option_positions": "query_option_positions",
 }
 
 
@@ -765,7 +828,7 @@ def main():
 
         try:
             fn = getattr(bridge, METHODS[method])
-            if method in ("query_positions", "query_account", "disconnect", "connect", "ping"):
+            if method in ("query_positions", "query_account", "disconnect", "connect", "ping", "query_option_positions"):
                 result = fn()
             else:
                 result = fn(params)

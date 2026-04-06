@@ -18,6 +18,11 @@ import {
   analyzeIntradayExecution,
   replayWhatIf,
   compareDrawdownEpisodes,
+  compareRollingPerformance,
+  compareWinLossStreaks,
+  compareHoldingPeriods,
+  compareTurnover,
+  compareSectorDrift,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareRequest,
@@ -1118,5 +1123,198 @@ describe("compareDrawdownEpisodes", () => {
     const result = compareDrawdownEpisodes(req, 2);
     // -0.5% is under 2% threshold, so no episodes
     expect(result.liveEpisodes).toHaveLength(0);
+  });
+});
+
+describe("compareRollingPerformance", () => {
+  it("returns correct structure with rolling windows", () => {
+    const req = makeReq();
+    const result = compareRollingPerformance(req, 2);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.windowDays).toBe(2);
+    expect(result.period.start).toBe("2024-01-01");
+    expect(result.period.end).toBe("2024-06-30");
+    expect(Array.isArray(result.windows)).toBe(true);
+    expect(typeof result.avgSharpeDiff).toBe("number");
+    expect(typeof result.avgReturnDiff).toBe("number");
+    expect(typeof result.sharpeDecayTrend).toBe("boolean");
+    expect(Array.isArray(result.observations)).toBe(true);
+  });
+
+  it("produces windows with required fields", () => {
+    const req = makeReq();
+    const result = compareRollingPerformance(req, 2);
+    if (result.windows.length > 0) {
+      const w = result.windows[0]!;
+      expect(typeof w.startDate).toBe("string");
+      expect(typeof w.endDate).toBe("string");
+      expect(typeof w.backtestReturn).toBe("number");
+      expect(typeof w.liveReturn).toBe("number");
+      expect(typeof w.backtestSharpe).toBe("number");
+      expect(typeof w.liveSharpe).toBe("number");
+      expect(typeof w.backtestVolatility).toBe("number");
+      expect(typeof w.liveVolatility).toBe("number");
+    }
+  });
+
+  it("handles insufficient overlapping data", () => {
+    const req = makeReq({ liveEquity: [makeEquitySnap("2024-01-01", 100000)] });
+    const result = compareRollingPerformance(req, 30);
+    expect(result.windows).toHaveLength(0);
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+});
+
+describe("compareWinLossStreaks", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = compareWinLossStreaks(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.backtestStreaks).toBeDefined();
+    expect(result.liveStreaks).toBeDefined();
+    expect(typeof result.lossStreakWorse).toBe("boolean");
+    expect(Array.isArray(result.observations)).toBe(true);
+  });
+
+  it("computes streak stats from live trades", () => {
+    const liveTrades = [
+      makeTrade({ netPnl: 100, exitPrice: 1810, entryTime: "2024-03-01T09:30:00" }),
+      makeTrade({ netPnl: 50, exitPrice: 1820, entryTime: "2024-03-15T09:30:00" }),
+      makeTrade({ netPnl: -30, exitPrice: 1790, entryTime: "2024-04-01T09:30:00" }),
+      makeTrade({ netPnl: -20, exitPrice: 1780, entryTime: "2024-04-15T09:30:00" }),
+      makeTrade({ netPnl: -10, exitPrice: 1770, entryTime: "2024-05-01T09:30:00" }),
+      makeTrade({ netPnl: 80, exitPrice: 1850, entryTime: "2024-05-15T09:30:00" }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareWinLossStreaks(req);
+    expect(result.liveStreaks.maxConsecutiveWins).toBe(2);
+    expect(result.liveStreaks.maxConsecutiveLosses).toBe(3);
+  });
+
+  it("handles empty trades", () => {
+    const req = makeReq({ liveTrades: [] });
+    const result = compareWinLossStreaks(req);
+    expect(result.liveStreaks.maxConsecutiveWins).toBe(0);
+    expect(result.liveStreaks.maxConsecutiveLosses).toBe(0);
+  });
+});
+
+describe("compareHoldingPeriods", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = compareHoldingPeriods(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.backtestHolding).toBeDefined();
+    expect(result.liveHolding).toBeDefined();
+    expect(typeof result.holdingDaysDiff).toBe("number");
+    expect(typeof result.prematureExits).toBe("boolean");
+    expect(Array.isArray(result.observations)).toBe(true);
+  });
+
+  it("computes holding stats from closed trades with exitTime", () => {
+    const liveTrades = [
+      makeTrade({ entryTime: "2024-03-01T09:30:00", exitTime: "2024-03-05T14:30:00", exitPrice: 1810 }),
+      makeTrade({ entryTime: "2024-04-01T09:30:00", exitTime: "2024-04-10T14:30:00", exitPrice: 1820 }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareHoldingPeriods(req);
+    expect(result.liveHolding.avgHoldingDays).toBeGreaterThan(0);
+    expect(result.liveHolding.minHoldingDays).toBeLessThanOrEqual(result.liveHolding.maxHoldingDays);
+  });
+
+  it("handles trades with holdingDays field", () => {
+    const liveTrades = [
+      makeTrade({ holdingDays: 3, exitPrice: 1810, exitTime: "2024-03-04T14:30:00" }),
+      makeTrade({ holdingDays: 7, exitPrice: 1820, exitTime: "2024-04-08T14:30:00" }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareHoldingPeriods(req);
+    expect(result.liveHolding.avgHoldingDays).toBe(5);
+  });
+
+  it("handles no closed trades", () => {
+    const liveTrades = [makeTrade({ exitPrice: undefined, exitTime: undefined })];
+    const req = makeReq({ liveTrades });
+    const result = compareHoldingPeriods(req);
+    expect(result.liveHolding.avgHoldingDays).toBe(0);
+  });
+});
+
+describe("compareTurnover", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = compareTurnover(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(typeof result.backtestTurnoverRate).toBe("number");
+    expect(typeof result.liveTurnoverRate).toBe("number");
+    expect(typeof result.turnoverDiff).toBe("number");
+    expect(typeof result.backtestTradesPerMonth).toBe("number");
+    expect(typeof result.liveTradesPerMonth).toBe("number");
+    expect(typeof result.liveVolume).toBe("number");
+    expect(typeof result.excessTurnoverCostPct).toBe("number");
+    expect(Array.isArray(result.observations)).toBe(true);
+  });
+
+  it("computes live volume from trades", () => {
+    const liveTrades = [
+      makeTrade({ entryPrice: 1800, quantity: 100 }),
+      makeTrade({ entryPrice: 1850, quantity: 200 }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareTurnover(req);
+    expect(result.liveVolume).toBe(1800 * 100 + 1850 * 200);
+  });
+
+  it("handles empty trades", () => {
+    const req = makeReq({ liveTrades: [] });
+    const result = compareTurnover(req);
+    expect(result.liveTurnoverRate).toBe(0);
+    expect(result.liveTradesPerMonth).toBe(0);
+  });
+});
+
+describe("compareSectorDrift", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = compareSectorDrift(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(Array.isArray(result.backtestSectors)).toBe(true);
+    expect(Array.isArray(result.liveSectors)).toBe(true);
+    expect(Array.isArray(result.driftySectors)).toBe(true);
+    expect(typeof result.concentrationDrift).toBe("number");
+    expect(Array.isArray(result.observations)).toBe(true);
+  });
+
+  it("classifies symbols into sectors", () => {
+    const liveTrades = [
+      makeTrade({ symbol: "600519", entryPrice: 1800, quantity: 100 }),
+      makeTrade({ symbol: "300750", entryPrice: 500, quantity: 200 }),
+      makeTrade({ symbol: "000001", entryPrice: 10, quantity: 1000 }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareSectorDrift(req);
+    const sectors = result.liveSectors.map((s) => s.sector);
+    expect(sectors).toContain("主板大盘");
+    expect(sectors).toContain("科技/创业板");
+    expect(sectors).toContain("深市主板");
+  });
+
+  it("detects sector allocation drift", () => {
+    // Backtest signals all in 600xxx (主板大盘)
+    // Live trades split between 600xxx and 300xxx (科技/创业板)
+    const liveTrades = [
+      makeTrade({ symbol: "300750", entryPrice: 500, quantity: 500 }),
+      makeTrade({ symbol: "300059", entryPrice: 200, quantity: 1000 }),
+    ];
+    const req = makeReq({ liveTrades });
+    const result = compareSectorDrift(req);
+    // Backtest is all 600519 (主板大盘), live is all 300xxx (科技/创业板)
+    expect(result.driftySectors.length).toBeGreaterThan(0);
+  });
+
+  it("handles empty data", () => {
+    const req = makeReq({ liveTrades: [] });
+    const result = compareSectorDrift(req);
+    expect(result.liveSectors).toHaveLength(0);
   });
 });

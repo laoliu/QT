@@ -20,6 +20,11 @@
  *   intraday_analysis — execution quality by time-of-day (30-min buckets)
  *   whatif_replay     — what-if replay: hypothetical return if all missed signals executed
  *   drawdown_episodes — compare individual drawdown episodes between backtest and live
+ *   rolling_performance — rolling window Sharpe/return/volatility comparison
+ *   win_loss_streak  — consecutive win/loss streak comparison
+ *   holding_analysis — holding period distribution comparison
+ *   turnover_analysis — portfolio turnover rate comparison
+ *   sector_drift      — sector exposure drift analysis
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -45,6 +50,11 @@ import {
   analyzeIntradayExecution,
   replayWhatIf,
   compareDrawdownEpisodes,
+  compareRollingPerformance,
+  compareWinLossStreaks,
+  compareHoldingPeriods,
+  compareTurnover,
+  compareSectorDrift,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareResult,
@@ -209,13 +219,18 @@ export function createLiveBacktestCompareTool(
       "action=custom_benchmark 自定义基准对比（指定基准标的进行Alpha/Beta/跟踪误差分析）。" +
       "action=intraday_analysis 日内执行分析（按30分钟时段分析信号执行质量和滑点分布）。" +
       "action=whatif_replay 假设情景回放（如果执行了所有遗漏信号，收益会怎样）。" +
-      "action=drawdown_episodes 回撤事件对比（逐一对比回测和实盘的回撤事件深度和恢复速度）。",
+      "action=drawdown_episodes 回撤事件对比（逐一对比回测和实盘的回撤事件深度和恢复速度）。" +
+      "action=rolling_performance 滚动窗口指标对比（滚动Sharpe/收益/波动率趋势分析）。" +
+      "action=win_loss_streak 连胜连亏对比（比较回测和实盘的连赢/连亏次数和模式）。" +
+      "action=holding_analysis 持仓时间分析（比较回测和实盘的平均持仓天数和分布）。" +
+      "action=turnover_analysis 换手率分析（比较回测和实盘的交易频率和换手率）。" +
+      "action=sector_drift 板块漂移分析（比较回测和实盘的板块配置偏差）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check", "portfolio_compare", "reoptimize_check", "custom_benchmark", "intraday_analysis", "whatif_replay", "drawdown_episodes"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check", "portfolio_compare", "reoptimize_check", "custom_benchmark", "intraday_analysis", "whatif_replay", "drawdown_episodes", "rolling_performance", "win_loss_streak", "holding_analysis", "turnover_analysis", "sector_drift"],
           description: "操作类型",
         },
         backtest_id: {
@@ -1082,6 +1097,125 @@ export function createLiveBacktestCompareTool(
               恢复天数: e.recoveryDays ?? "N/A",
             })),
             观察: ddResult.observations,
+          };
+        }
+
+        case "rolling_performance": {
+          const windowDays2 = (args.window_days as number) ?? 30;
+          const rollingResult = compareRollingPerformance(req, windowDays2);
+          return {
+            策略: rollingResult.strategyId,
+            期间: `${rollingResult.period.start} ~ ${rollingResult.period.end}`,
+            窗口天数: rollingResult.windowDays,
+            窗口数量: rollingResult.windows.length,
+            平均Sharpe偏差: rollingResult.avgSharpeDiff,
+            平均收益偏差: `${rollingResult.avgReturnDiff}%`,
+            Sharpe衰减趋势: rollingResult.sharpeDecayTrend ? "是" : "否",
+            滚动窗口: rollingResult.windows.slice(-10).map((w) => ({
+              期间: `${w.startDate} ~ ${w.endDate}`,
+              回测收益: `${w.backtestReturn}%`,
+              实盘收益: `${w.liveReturn}%`,
+              回测Sharpe: w.backtestSharpe,
+              实盘Sharpe: w.liveSharpe,
+              回测波动率: `${w.backtestVolatility}%`,
+              实盘波动率: `${w.liveVolatility}%`,
+            })),
+            提示: rollingResult.windows.length > 10 ? `仅显示最近10个窗口，共${rollingResult.windows.length}个` : undefined,
+            观察: rollingResult.observations,
+          };
+        }
+
+        case "win_loss_streak": {
+          const streakResult = compareWinLossStreaks(req);
+          return {
+            策略: streakResult.strategyId,
+            期间: `${streakResult.period.start} ~ ${streakResult.period.end}`,
+            回测连胜连亏: {
+              最长连赢: `${streakResult.backtestStreaks.maxConsecutiveWins} 次`,
+              最长连亏: `${streakResult.backtestStreaks.maxConsecutiveLosses} 次`,
+              平均连赢: streakResult.backtestStreaks.avgWinStreak,
+              平均连亏: streakResult.backtestStreaks.avgLossStreak,
+            },
+            实盘连胜连亏: {
+              最长连赢: `${streakResult.liveStreaks.maxConsecutiveWins} 次`,
+              最长连亏: `${streakResult.liveStreaks.maxConsecutiveLosses} 次`,
+              平均连赢: streakResult.liveStreaks.avgWinStreak,
+              平均连亏: streakResult.liveStreaks.avgLossStreak,
+              当前状态: streakResult.liveStreaks.currentStreak.type === "none" ? "无交易"
+                : `连${streakResult.liveStreaks.currentStreak.type === "win" ? "赢" : "亏"} ${streakResult.liveStreaks.currentStreak.length} 次`,
+            },
+            实盘连亏恶化: streakResult.lossStreakWorse ? "是" : "否",
+            观察: streakResult.observations,
+          };
+        }
+
+        case "holding_analysis": {
+          const holdingResult = compareHoldingPeriods(req);
+          return {
+            策略: holdingResult.strategyId,
+            期间: `${holdingResult.period.start} ~ ${holdingResult.period.end}`,
+            回测持仓统计: {
+              平均持仓天数: holdingResult.backtestHolding.avgHoldingDays,
+              中位数持仓天数: holdingResult.backtestHolding.medianHoldingDays,
+              最短持仓: `${holdingResult.backtestHolding.minHoldingDays} 天`,
+              最长持仓: `${holdingResult.backtestHolding.maxHoldingDays} 天`,
+              分布: holdingResult.backtestHolding.holdingDistribution,
+            },
+            实盘持仓统计: {
+              平均持仓天数: holdingResult.liveHolding.avgHoldingDays,
+              中位数持仓天数: holdingResult.liveHolding.medianHoldingDays,
+              最短持仓: `${holdingResult.liveHolding.minHoldingDays} 天`,
+              最长持仓: `${holdingResult.liveHolding.maxHoldingDays} 天`,
+              分布: holdingResult.liveHolding.holdingDistribution,
+            },
+            持仓天数偏差: `${holdingResult.holdingDaysDiff} 天`,
+            提前退出: holdingResult.prematureExits ? "是" : "否",
+            观察: holdingResult.observations,
+          };
+        }
+
+        case "turnover_analysis": {
+          const turnoverResult = compareTurnover(req);
+          return {
+            策略: turnoverResult.strategyId,
+            期间: `${turnoverResult.period.start} ~ ${turnoverResult.period.end}`,
+            回测换手率: `${turnoverResult.backtestTurnoverRate}%`,
+            实盘换手率: `${turnoverResult.liveTurnoverRate}%`,
+            换手率偏差: `${turnoverResult.turnoverDiff}%`,
+            回测月均交易次数: turnoverResult.backtestTradesPerMonth,
+            实盘月均交易次数: turnoverResult.liveTradesPerMonth,
+            实盘总交易金额: `¥${turnoverResult.liveVolume.toLocaleString()}`,
+            超额换手成本: `${turnoverResult.excessTurnoverCostPct}%`,
+            观察: turnoverResult.observations,
+          };
+        }
+
+        case "sector_drift": {
+          const sectorResult = compareSectorDrift(req);
+          return {
+            策略: sectorResult.strategyId,
+            期间: `${sectorResult.period.start} ~ ${sectorResult.period.end}`,
+            回测板块配置: sectorResult.backtestSectors.map((s) => ({
+              板块: s.sector,
+              占比: `${s.allocationPct}%`,
+              交易次数: s.tradeCount,
+            })),
+            实盘板块配置: sectorResult.liveSectors.map((s) => ({
+              板块: s.sector,
+              占比: `${s.allocationPct}%`,
+              交易次数: s.tradeCount,
+              盈亏贡献: `¥${s.pnlContribution}`,
+            })),
+            漂移板块: sectorResult.driftySectors.length > 0
+              ? sectorResult.driftySectors.map((d) => ({
+                  板块: d.sector,
+                  回测占比: `${d.backtestPct}%`,
+                  实盘占比: `${d.livePct}%`,
+                  偏差: `${d.driftPct}%`,
+                }))
+              : "无显著偏差",
+            集中度漂移: `${sectorResult.concentrationDrift}%`,
+            观察: sectorResult.observations,
           };
         }
 

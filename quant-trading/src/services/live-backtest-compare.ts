@@ -3168,6 +3168,688 @@ export function compareDrawdownEpisodes(
   };
 }
 
+// ── Rolling performance comparison types ─────────────────────
+
+export interface RollingPerformanceWindow {
+  /** Window end date */
+  endDate: string;
+  /** Window start date */
+  startDate: string;
+  /** Rolling return (%) for backtest */
+  backtestReturn: number;
+  /** Rolling return (%) for live */
+  liveReturn: number;
+  /** Rolling Sharpe for backtest */
+  backtestSharpe: number;
+  /** Rolling Sharpe for live */
+  liveSharpe: number;
+  /** Rolling volatility (annualized %) for backtest */
+  backtestVolatility: number;
+  /** Rolling volatility (annualized %) for live */
+  liveVolatility: number;
+}
+
+export interface RollingPerformanceResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  windowDays: number;
+  windows: RollingPerformanceWindow[];
+  /** Average rolling Sharpe difference (live - backtest) */
+  avgSharpeDiff: number;
+  /** Average rolling return difference (live - backtest) */
+  avgReturnDiff: number;
+  /** Whether live Sharpe is trending downward relative to backtest */
+  sharpeDecayTrend: boolean;
+  observations: string[];
+}
+
+/**
+ * Compute rolling performance metrics (Sharpe, return, volatility) for
+ * overlapping windows, comparing live vs backtest.
+ */
+export function compareRollingPerformance(
+  req: LiveBacktestCompareRequest,
+  windowDays: number = 30,
+): RollingPerformanceResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity } = req;
+
+  // Build daily value maps
+  const btMap = new Map<string, number>();
+  for (const p of backtestResult.equityCurve) {
+    btMap.set(p.date, p.value);
+  }
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const liveMap = new Map<string, number>();
+  for (const s of sortedLive) {
+    liveMap.set(s.date, s.equity);
+  }
+
+  // Collect all dates where both have data
+  const allDates = [...new Set([...btMap.keys(), ...liveMap.keys()])]
+    .filter((d) => btMap.has(d) && liveMap.has(d))
+    .sort();
+
+  const windows: RollingPerformanceWindow[] = [];
+
+  for (let i = windowDays; i < allDates.length; i++) {
+    const winEnd = allDates[i]!;
+    const winStart = allDates[i - windowDays]!;
+
+    const btStart = btMap.get(winStart)!;
+    const btEnd = btMap.get(winEnd)!;
+    const liveStart = liveMap.get(winStart)!;
+    const liveEnd = liveMap.get(winEnd)!;
+
+    const btReturn = btStart > 0 ? ((btEnd - btStart) / btStart) * 100 : 0;
+    const liveReturn = liveStart > 0 ? ((liveEnd - liveStart) / liveStart) * 100 : 0;
+
+    // Compute daily returns within the window
+    const btDailyReturns: number[] = [];
+    const liveDailyReturns: number[] = [];
+    for (let j = i - windowDays + 1; j <= i; j++) {
+      const prevDate = allDates[j - 1]!;
+      const curDate = allDates[j]!;
+      const btPrev = btMap.get(prevDate)!;
+      const btCur = btMap.get(curDate)!;
+      const livePrev = liveMap.get(prevDate)!;
+      const liveCur = liveMap.get(curDate)!;
+      if (btPrev > 0) btDailyReturns.push((btCur - btPrev) / btPrev);
+      if (livePrev > 0) liveDailyReturns.push((liveCur - livePrev) / livePrev);
+    }
+
+    const btSharpe = computeSharpeFromReturns(btDailyReturns);
+    const liveSharpe = computeSharpeFromReturns(liveDailyReturns);
+    const btVol = computeAnnualizedVol(btDailyReturns);
+    const liveVol = computeAnnualizedVol(liveDailyReturns);
+
+    windows.push({
+      endDate: winEnd,
+      startDate: winStart,
+      backtestReturn: Math.round(btReturn * 100) / 100,
+      liveReturn: Math.round(liveReturn * 100) / 100,
+      backtestSharpe: Math.round(btSharpe * 100) / 100,
+      liveSharpe: Math.round(liveSharpe * 100) / 100,
+      backtestVolatility: Math.round(btVol * 100) / 100,
+      liveVolatility: Math.round(liveVol * 100) / 100,
+    });
+  }
+
+  const sharpeDiffs = windows.map((w) => w.liveSharpe - w.backtestSharpe);
+  const returnDiffs = windows.map((w) => w.liveReturn - w.backtestReturn);
+  const avgSharpeDiff = sharpeDiffs.length > 0
+    ? Math.round((sharpeDiffs.reduce((a, b) => a + b, 0) / sharpeDiffs.length) * 100) / 100
+    : 0;
+  const avgReturnDiff = returnDiffs.length > 0
+    ? Math.round((returnDiffs.reduce((a, b) => a + b, 0) / returnDiffs.length) * 100) / 100
+    : 0;
+
+  // Check if Sharpe difference is trending negative (linear regression slope)
+  let sharpeDecayTrend = false;
+  if (sharpeDiffs.length >= 3) {
+    const n = sharpeDiffs.length;
+    const meanX = (n - 1) / 2;
+    const meanY = sharpeDiffs.reduce((a, b) => a + b, 0) / n;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < n; i++) {
+      num += (i - meanX) * (sharpeDiffs[i]! - meanY);
+      den += (i - meanX) ** 2;
+    }
+    const slope = den > 0 ? num / den : 0;
+    sharpeDecayTrend = slope < -0.01;
+  }
+
+  const observations: string[] = [];
+  if (windows.length === 0) {
+    observations.push("重叠数据不足，无法计算滚动窗口指标");
+  } else {
+    observations.push(`共 ${windows.length} 个滚动窗口（${windowDays}日窗口）`);
+    if (avgSharpeDiff < -0.3) {
+      observations.push(`实盘滚动Sharpe平均低于回测 ${Math.abs(avgSharpeDiff).toFixed(2)}，策略实盘表现持续弱于回测`);
+    } else if (avgSharpeDiff > 0.3) {
+      observations.push(`实盘滚动Sharpe平均高于回测 ${avgSharpeDiff.toFixed(2)}，策略实盘表现好于回测预期`);
+    }
+    if (sharpeDecayTrend) {
+      observations.push("实盘Sharpe相对回测呈下降趋势，策略可能正在衰减");
+    }
+    if (avgReturnDiff < -2) {
+      observations.push(`滚动收益平均偏差 ${avgReturnDiff.toFixed(2)}%，实盘持续跑输回测`);
+    }
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    windowDays,
+    windows,
+    avgSharpeDiff,
+    avgReturnDiff,
+    sharpeDecayTrend,
+    observations,
+  };
+}
+
+function computeSharpeFromReturns(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / (returns.length - 1);
+  const std = Math.sqrt(variance);
+  return std > 0 ? (mean / std) * Math.sqrt(252) : 0;
+}
+
+function computeAnnualizedVol(returns: number[]): number {
+  if (returns.length < 2) return 0;
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const variance = returns.reduce((a, r) => a + (r - mean) ** 2, 0) / (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(252) * 100;
+}
+
+// ── Win/loss streak comparison types ─────────────────────────
+
+export interface StreakStats {
+  maxConsecutiveWins: number;
+  maxConsecutiveLosses: number;
+  avgWinStreak: number;
+  avgLossStreak: number;
+  currentStreak: { type: "win" | "loss" | "none"; length: number };
+}
+
+export interface WinLossStreakResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  backtestStreaks: StreakStats;
+  liveStreaks: StreakStats;
+  /** Whether live has significantly worse loss streaks than backtest */
+  lossStreakWorse: boolean;
+  observations: string[];
+}
+
+/**
+ * Compare consecutive win/loss streaks between backtest and live trading.
+ */
+export function compareWinLossStreaks(
+  req: LiveBacktestCompareRequest,
+): WinLossStreakResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades } = req;
+
+  // Backtest streaks from signals (pair buy/sell signals to estimate P&L direction)
+  const btStreaks = computeStreaksFromSignals(backtestResult.signals, backtestResult.equityCurve);
+
+  // Live streaks from closed trades
+  const closedTrades = liveTrades
+    .filter((t) => t.exitPrice != null)
+    .sort((a, b) => a.entryTime.localeCompare(b.entryTime));
+  const liveOutcomes = closedTrades.map((t) => t.netPnl > 0 ? "win" as const : "loss" as const);
+  const liveStreaks = computeStreaksFromOutcomes(liveOutcomes);
+
+  const lossStreakWorse = liveStreaks.maxConsecutiveLosses > btStreaks.maxConsecutiveLosses * 1.5 + 1;
+
+  const observations: string[] = [];
+  observations.push(
+    `回测最长连赢 ${btStreaks.maxConsecutiveWins} 次，实盘最长连赢 ${liveStreaks.maxConsecutiveWins} 次`,
+  );
+  observations.push(
+    `回测最长连亏 ${btStreaks.maxConsecutiveLosses} 次，实盘最长连亏 ${liveStreaks.maxConsecutiveLosses} 次`,
+  );
+
+  if (lossStreakWorse) {
+    observations.push("实盘连亏次数显著超过回测，建议检查执行质量或市场环境变化");
+  }
+
+  if (liveStreaks.currentStreak.type === "loss" && liveStreaks.currentStreak.length >= 3) {
+    observations.push(`当前处于连亏 ${liveStreaks.currentStreak.length} 次状态，需关注风险`);
+  }
+
+  if (liveStreaks.avgLossStreak > btStreaks.avgLossStreak * 1.5 + 0.5) {
+    observations.push("实盘平均连亏长度明显超过回测，策略在实盘中亏损持续性更强");
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    backtestStreaks: btStreaks,
+    liveStreaks: liveStreaks,
+    lossStreakWorse,
+    observations,
+  };
+}
+
+function computeStreaksFromSignals(
+  signals: TradingSignal[],
+  equityCurve: Array<{ date: string; value: number }>,
+): StreakStats {
+  // Estimate win/loss from equity curve changes around signal dates
+  const curveMap = new Map<string, number>();
+  for (const p of equityCurve) curveMap.set(p.date, p.value);
+
+  const sorted = [...signals].sort((a, b) => a.timestamp - b.timestamp);
+  const outcomes: Array<"win" | "loss"> = [];
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const curDate = new Date(sorted[i]!.timestamp).toISOString().slice(0, 10);
+    const nextDate = new Date(sorted[i + 1]!.timestamp).toISOString().slice(0, 10);
+    const curVal = curveMap.get(curDate);
+    const nextVal = curveMap.get(nextDate);
+    if (curVal != null && nextVal != null) {
+      outcomes.push(nextVal >= curVal ? "win" : "loss");
+    }
+  }
+
+  return computeStreaksFromOutcomes(outcomes);
+}
+
+function computeStreaksFromOutcomes(outcomes: Array<"win" | "loss">): StreakStats {
+  if (outcomes.length === 0) {
+    return {
+      maxConsecutiveWins: 0,
+      maxConsecutiveLosses: 0,
+      avgWinStreak: 0,
+      avgLossStreak: 0,
+      currentStreak: { type: "none", length: 0 },
+    };
+  }
+
+  let maxWins = 0;
+  let maxLosses = 0;
+  let currentType = outcomes[0]!;
+  let currentLen = 1;
+  const winStreaks: number[] = [];
+  const lossStreaks: number[] = [];
+
+  for (let i = 1; i < outcomes.length; i++) {
+    if (outcomes[i] === currentType) {
+      currentLen++;
+    } else {
+      if (currentType === "win") {
+        winStreaks.push(currentLen);
+        if (currentLen > maxWins) maxWins = currentLen;
+      } else {
+        lossStreaks.push(currentLen);
+        if (currentLen > maxLosses) maxLosses = currentLen;
+      }
+      currentType = outcomes[i]!;
+      currentLen = 1;
+    }
+  }
+  // Final streak
+  if (currentType === "win") {
+    winStreaks.push(currentLen);
+    if (currentLen > maxWins) maxWins = currentLen;
+  } else {
+    lossStreaks.push(currentLen);
+    if (currentLen > maxLosses) maxLosses = currentLen;
+  }
+
+  const avgWin = winStreaks.length > 0 ? Math.round((winStreaks.reduce((a, b) => a + b, 0) / winStreaks.length) * 10) / 10 : 0;
+  const avgLoss = lossStreaks.length > 0 ? Math.round((lossStreaks.reduce((a, b) => a + b, 0) / lossStreaks.length) * 10) / 10 : 0;
+
+  return {
+    maxConsecutiveWins: maxWins,
+    maxConsecutiveLosses: maxLosses,
+    avgWinStreak: avgWin,
+    avgLossStreak: avgLoss,
+    currentStreak: { type: currentType, length: currentLen },
+  };
+}
+
+// ── Holding period analysis types ────────────────────────────
+
+export interface HoldingPeriodStats {
+  avgHoldingDays: number;
+  medianHoldingDays: number;
+  minHoldingDays: number;
+  maxHoldingDays: number;
+  holdingDistribution: Array<{ bucket: string; count: number }>;
+}
+
+export interface HoldingAnalysisResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  backtestHolding: HoldingPeriodStats;
+  liveHolding: HoldingPeriodStats;
+  /** Absolute difference in average holding period (days) */
+  holdingDaysDiff: number;
+  /** Whether live exits significantly earlier than backtest expects */
+  prematureExits: boolean;
+  observations: string[];
+}
+
+/**
+ * Compare holding period distributions between backtest and live trades.
+ */
+export function compareHoldingPeriods(
+  req: LiveBacktestCompareRequest,
+): HoldingAnalysisResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades } = req;
+
+  // Estimate backtest holding periods from paired signals
+  const btHoldingDays = estimateBacktestHoldingDays(backtestResult.signals);
+  const btStats = computeHoldingStats(btHoldingDays);
+
+  // Live holding periods from closed trades
+  const liveHoldingDays = liveTrades
+    .filter((t) => t.exitTime != null)
+    .map((t) => {
+      if (t.holdingDays != null) return t.holdingDays;
+      const entry = new Date(t.entryTime).getTime();
+      const exit = new Date(t.exitTime!).getTime();
+      return Math.max(1, Math.round((exit - entry) / 86_400_000));
+    });
+  const liveStats = computeHoldingStats(liveHoldingDays);
+
+  const holdingDaysDiff = Math.round((liveStats.avgHoldingDays - btStats.avgHoldingDays) * 10) / 10;
+  const prematureExits = btStats.avgHoldingDays > 0 && liveStats.avgHoldingDays < btStats.avgHoldingDays * 0.6;
+
+  const observations: string[] = [];
+  observations.push(
+    `回测平均持仓 ${btStats.avgHoldingDays} 天，实盘平均持仓 ${liveStats.avgHoldingDays} 天`,
+  );
+
+  if (prematureExits) {
+    observations.push("实盘持仓时间显著短于回测预期，可能存在提前止损或恐慌性平仓");
+  }
+
+  if (holdingDaysDiff > 5) {
+    observations.push("实盘持仓时间长于回测，可能存在犹豫不决或止盈不及时的问题");
+  }
+
+  if (liveStats.maxHoldingDays > btStats.maxHoldingDays * 2 + 5) {
+    observations.push(`实盘最长持仓 ${liveStats.maxHoldingDays} 天远超回测 ${btStats.maxHoldingDays} 天，可能有被套牢的仓位`);
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    backtestHolding: btStats,
+    liveHolding: liveStats,
+    holdingDaysDiff,
+    prematureExits,
+    observations,
+  };
+}
+
+function estimateBacktestHoldingDays(signals: TradingSignal[]): number[] {
+  const sorted = [...signals].sort((a, b) => a.timestamp - b.timestamp);
+  const holdingDays: number[] = [];
+  // Pair buy/sell signals by symbol
+  const openMap = new Map<string, number>(); // symbol → entry timestamp
+
+  for (const sig of sorted) {
+    if (sig.direction === "buy" || sig.direction === "cover") {
+      openMap.set(sig.symbol, sig.timestamp);
+    } else if (sig.direction === "sell" || sig.direction === "short") {
+      const entryTs = openMap.get(sig.symbol);
+      if (entryTs != null) {
+        const days = Math.max(1, Math.round((sig.timestamp - entryTs) / 86_400_000));
+        holdingDays.push(days);
+        openMap.delete(sig.symbol);
+      }
+    }
+  }
+  return holdingDays;
+}
+
+function computeHoldingStats(holdingDays: number[]): HoldingPeriodStats {
+  if (holdingDays.length === 0) {
+    return {
+      avgHoldingDays: 0,
+      medianHoldingDays: 0,
+      minHoldingDays: 0,
+      maxHoldingDays: 0,
+      holdingDistribution: [],
+    };
+  }
+
+  const sorted = [...holdingDays].sort((a, b) => a - b);
+  const avg = Math.round((sorted.reduce((a, b) => a + b, 0) / sorted.length) * 10) / 10;
+  const median = sorted.length % 2 === 0
+    ? (sorted[sorted.length / 2 - 1]! + sorted[sorted.length / 2]!) / 2
+    : sorted[Math.floor(sorted.length / 2)]!;
+
+  // Build distribution buckets
+  const buckets = [
+    { label: "1天", min: 0, max: 1 },
+    { label: "2-3天", min: 2, max: 3 },
+    { label: "4-7天", min: 4, max: 7 },
+    { label: "8-14天", min: 8, max: 14 },
+    { label: "15-30天", min: 15, max: 30 },
+    { label: "30天以上", min: 31, max: Infinity },
+  ];
+
+  const distribution = buckets.map((b) => ({
+    bucket: b.label,
+    count: sorted.filter((d) => d >= b.min && d <= b.max).length,
+  })).filter((d) => d.count > 0);
+
+  return {
+    avgHoldingDays: avg,
+    medianHoldingDays: median,
+    minHoldingDays: sorted[0]!,
+    maxHoldingDays: sorted[sorted.length - 1]!,
+    holdingDistribution: distribution,
+  };
+}
+
+// ── Turnover analysis types ──────────────────────────────────
+
+export interface TurnoverAnalysisResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Backtest estimated turnover rate (%) */
+  backtestTurnoverRate: number;
+  /** Live turnover rate (%) */
+  liveTurnoverRate: number;
+  /** Difference: live - backtest */
+  turnoverDiff: number;
+  /** Backtest trades per month */
+  backtestTradesPerMonth: number;
+  /** Live trades per month */
+  liveTradesPerMonth: number;
+  /** Total trading volume (buy + sell value) */
+  liveVolume: number;
+  /** Estimated impact of excess turnover on returns (%) */
+  excessTurnoverCostPct: number;
+  observations: string[];
+}
+
+/**
+ * Compare portfolio turnover between backtest and live trading.
+ * Turnover = total traded value / average portfolio value.
+ */
+export function compareTurnover(
+  req: LiveBacktestCompareRequest,
+): TurnoverAnalysisResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity, liveTrades } = req;
+
+  const periodDays = Math.max(1, (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86_400_000);
+  const periodMonths = periodDays / 30;
+
+  // Backtest turnover estimate
+  const btTradesPerMonth = periodMonths > 0 ? backtestResult.totalTrades / periodMonths : 0;
+  // Estimate average trade size as initialCash / 5 (heuristic for diversified portfolio)
+  const avgBtTradeSize = backtestResult.initialCash / Math.max(1, backtestResult.symbols.length);
+  const btVolume = backtestResult.totalTrades * avgBtTradeSize;
+  const btAvgPortfolio = (backtestResult.initialCash + backtestResult.finalValue) / 2;
+  const backtestTurnoverRate = btAvgPortfolio > 0 ? Math.round((btVolume / btAvgPortfolio) * 100 * 10) / 10 : 0;
+
+  // Live turnover
+  const liveVolume = liveTrades.reduce((sum, t) => sum + t.entryPrice * t.quantity, 0);
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const liveAvgEquity = sortedLive.length > 0
+    ? sortedLive.reduce((sum, s) => sum + s.equity, 0) / sortedLive.length
+    : 1;
+  const liveTurnoverRate = liveAvgEquity > 0 ? Math.round((liveVolume / liveAvgEquity) * 100 * 10) / 10 : 0;
+
+  const liveTradesPerMonth = periodMonths > 0 ? Math.round((liveTrades.length / periodMonths) * 10) / 10 : 0;
+
+  const turnoverDiff = Math.round((liveTurnoverRate - backtestTurnoverRate) * 10) / 10;
+
+  // Excess turnover cost: assume 0.15% per roundtrip (commission + slippage)
+  const excessVolume = Math.max(0, liveVolume - btVolume);
+  const excessTurnoverCostPct = liveAvgEquity > 0
+    ? Math.round((excessVolume * 0.0015 / liveAvgEquity) * 100 * 100) / 100
+    : 0;
+
+  const observations: string[] = [];
+  observations.push(
+    `回测换手率 ${backtestTurnoverRate}%，实盘换手率 ${liveTurnoverRate}%`,
+  );
+  observations.push(
+    `回测月均交易 ${btTradesPerMonth.toFixed(1)} 次，实盘月均交易 ${liveTradesPerMonth} 次`,
+  );
+
+  if (turnoverDiff > 50) {
+    observations.push("实盘换手率显著高于回测，可能存在过度交易，增加了交易成本");
+  } else if (turnoverDiff < -50) {
+    observations.push("实盘换手率低于回测，可能遗漏了部分交易信号");
+  }
+
+  if (excessTurnoverCostPct > 0.5) {
+    observations.push(`超额换手导致约 ${excessTurnoverCostPct}% 的额外交易成本`);
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    backtestTurnoverRate,
+    liveTurnoverRate,
+    turnoverDiff,
+    backtestTradesPerMonth: Math.round(btTradesPerMonth * 10) / 10,
+    liveTradesPerMonth,
+    liveVolume: Math.round(liveVolume),
+    excessTurnoverCostPct,
+    observations,
+  };
+}
+
+// ── Sector drift analysis types ──────────────────────────────
+
+export interface SectorExposure {
+  sector: string;
+  /** Capital allocation percentage */
+  allocationPct: number;
+  /** Number of trades in this sector */
+  tradeCount: number;
+  /** Total P&L contribution */
+  pnlContribution: number;
+}
+
+export interface SectorDriftResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  backtestSectors: SectorExposure[];
+  liveSectors: SectorExposure[];
+  /** Sectors with the largest allocation drift */
+  driftySectors: Array<{ sector: string; backtestPct: number; livePct: number; driftPct: number }>;
+  /** Overall sector concentration change */
+  concentrationDrift: number;
+  observations: string[];
+}
+
+// Simple A-share sector classification by stock code prefix
+function classifyStockSector(symbol: string): string {
+  const code = symbol.replace(/\.(SH|SZ|sh|sz)$/, "");
+  if (code.startsWith("688") || code.startsWith("300")) return "科技/创业板";
+  if (code.startsWith("601") || code.startsWith("600")) return "主板大盘";
+  if (code.startsWith("000")) return "深市主板";
+  if (code.startsWith("002")) return "中小板";
+  if (code.startsWith("8")) return "北交所";
+  if (code.startsWith("5")) return "基金/ETF";
+  return "其他";
+}
+
+/**
+ * Compare sector-level exposure between backtest and live trading.
+ * Uses stock code prefix for sector classification (A-share heuristic).
+ */
+export function compareSectorDrift(
+  req: LiveBacktestCompareRequest,
+): SectorDriftResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades } = req;
+
+  // Backtest sector allocation from signals
+  const btSectorMap = new Map<string, { volume: number; count: number; pnl: number }>();
+  for (const sig of backtestResult.signals) {
+    const sector = classifyStockSector(sig.symbol);
+    const existing = btSectorMap.get(sector) ?? { volume: 0, count: 0, pnl: 0 };
+    existing.volume += sig.price * (sig.quantity ?? 100);
+    existing.count++;
+    btSectorMap.set(sector, existing);
+  }
+
+  // Live sector allocation from trades
+  const liveSectorMap = new Map<string, { volume: number; count: number; pnl: number }>();
+  for (const trade of liveTrades) {
+    const sector = classifyStockSector(trade.symbol);
+    const existing = liveSectorMap.get(sector) ?? { volume: 0, count: 0, pnl: 0 };
+    existing.volume += trade.entryPrice * trade.quantity;
+    existing.count++;
+    existing.pnl += trade.netPnl;
+    liveSectorMap.set(sector, existing);
+  }
+
+  // Convert to exposure arrays
+  const btTotal = [...btSectorMap.values()].reduce((s, v) => s + v.volume, 0) || 1;
+  const backtestSectors: SectorExposure[] = [...btSectorMap.entries()].map(([sector, v]) => ({
+    sector,
+    allocationPct: Math.round((v.volume / btTotal) * 100 * 10) / 10,
+    tradeCount: v.count,
+    pnlContribution: Math.round(v.pnl * 100) / 100,
+  })).sort((a, b) => b.allocationPct - a.allocationPct);
+
+  const liveTotal = [...liveSectorMap.values()].reduce((s, v) => s + v.volume, 0) || 1;
+  const liveSectors: SectorExposure[] = [...liveSectorMap.entries()].map(([sector, v]) => ({
+    sector,
+    allocationPct: Math.round((v.volume / liveTotal) * 100 * 10) / 10,
+    tradeCount: v.count,
+    pnlContribution: Math.round(v.pnl * 100) / 100,
+  })).sort((a, b) => b.allocationPct - a.allocationPct);
+
+  // Compute drift per sector
+  const allSectors = new Set([...btSectorMap.keys(), ...liveSectorMap.keys()]);
+  const driftySectors: SectorDriftResult["driftySectors"] = [];
+  for (const sector of allSectors) {
+    const btPct = backtestSectors.find((s) => s.sector === sector)?.allocationPct ?? 0;
+    const livePct = liveSectors.find((s) => s.sector === sector)?.allocationPct ?? 0;
+    const driftPct = Math.round((livePct - btPct) * 10) / 10;
+    if (Math.abs(driftPct) > 3) {
+      driftySectors.push({ sector, backtestPct: btPct, livePct, driftPct });
+    }
+  }
+  driftySectors.sort((a, b) => Math.abs(b.driftPct) - Math.abs(a.driftPct));
+
+  // Concentration drift: Herfindahl index difference
+  const btHHI = backtestSectors.reduce((s, sec) => s + (sec.allocationPct / 100) ** 2, 0);
+  const liveHHI = liveSectors.reduce((s, sec) => s + (sec.allocationPct / 100) ** 2, 0);
+  const concentrationDrift = Math.round((liveHHI - btHHI) * 10000) / 100;
+
+  const observations: string[] = [];
+  if (driftySectors.length === 0) {
+    observations.push("板块配置与回测基本一致");
+  } else {
+    for (const d of driftySectors.slice(0, 3)) {
+      const dir = d.driftPct > 0 ? "偏多" : "偏少";
+      observations.push(`${d.sector}板块: 实盘 ${d.livePct}% vs 回测 ${d.backtestPct}% (${dir}${Math.abs(d.driftPct)}%)`);
+    }
+  }
+
+  if (concentrationDrift > 5) {
+    observations.push("实盘板块集中度高于回测，分散化不足可能增加风险");
+  } else if (concentrationDrift < -5) {
+    observations.push("实盘板块更加分散，可能导致与回测的行业因子暴露不同");
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    backtestSectors,
+    liveSectors,
+    driftySectors,
+    concentrationDrift,
+    observations,
+  };
+}
+
 function extractDrawdownEpisodes(
   curve: Array<{ date: string; value: number }>,
   minDrawdownPct: number,

@@ -93,6 +93,7 @@ import { CustomStrategyStore } from "./src/services/custom-strategy-store.js";
 import { DataQualityValidator } from "./src/services/data-quality.js";
 import { createDataSyncService } from "./src/services/data-sync.js";
 import { HistoricalDataWarehouse } from "./src/services/data-warehouse.js";
+import { BasketOrderService } from "./src/services/basket-order.js";
 import { DcaScheduleService } from "./src/services/dca-schedule.js";
 import { EquityHistory } from "./src/services/equity-history.js";
 import { EventBus } from "./src/services/event-bus.js";
@@ -118,6 +119,7 @@ import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
+import { createBasketOrderTool } from "./src/tools/basket-order.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
@@ -368,6 +370,14 @@ const quantTradingPlugin = {
     );
     dcaScheduleService.setNotify((m: string) => tryNotify(api, m));
     void dcaScheduleService.load();
+
+    // ── Basket Order Service (篮子订单) ───────────────────────
+    const basketOrderService = new BasketOrderService(
+      config,
+      () => liveEngine.orderManager,
+    );
+    basketOrderService.setNotify((m: string) => tryNotify(api, m));
+    void basketOrderService.load();
 
     // ── Breakout Monitor (突破监控) ────────────────────────────
     const breakoutMonitor = new BreakoutMonitor({
@@ -627,6 +637,7 @@ const quantTradingPlugin = {
       favorites: createFavoritesTool(api, config),
       conditional_order: createConditionalOrderTool(api, conditionalOrderService),
       dca_schedule: createDcaScheduleTool(api, dcaScheduleService),
+      basket_order: createBasketOrderTool(api, config, basketOrderService),
       breakout_monitor: createBreakoutMonitorTool(api, config, breakoutMonitor),
       trade_journal: createTradeJournalTool(api, tradeJournal),
       performance_attribution: createPerformanceAttributionTool(api, config),
@@ -684,6 +695,7 @@ const quantTradingPlugin = {
       favorites: "股票收藏",
       conditional_order: "条件单",
       dca_schedule: "定投计划",
+      basket_order: "篮子订单",
       trade_journal: "交易笔记",
       performance_attribution: "绩效归因",
       strategy_health: "策略健康",

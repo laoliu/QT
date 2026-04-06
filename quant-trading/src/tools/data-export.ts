@@ -19,6 +19,8 @@ import os from "node:os";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
+import type { ConditionalOrderService } from "../services/conditional-order.js";
+import type { DcaScheduleService } from "../services/dca-schedule.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
@@ -89,10 +91,12 @@ export interface DataExportDeps {
   alertStore?: AlertStore;
   signalHitRateTracker?: SignalHitRateTracker;
   getEngine?: () => LiveEngine | null;
+  conditionalOrderService?: ConditionalOrderService;
+  dcaScheduleService?: DcaScheduleService;
 }
 
 export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDeps) {
-  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine } = deps;
+  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine, conditionalOrderService, dcaScheduleService } = deps;
 
   return {
     name: "data_export",
@@ -114,6 +118,8 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
       "• action=fund_flow — 导出资金流向数据（个股/板块/北向资金）\n" +
       "• action=sector — 导出板块分析数据（排名/成分股）\n" +
       "• action=institutional — 导出机构持仓数据（基金/QFII/社保等）\n" +
+      "• action=conditional_orders — 导出条件单（止损/止盈/追踪止损等）\n" +
+      "• action=dca_plans — 导出定投计划\n" +
       "• action=batch — 批量导出多种数据（盘后复盘一键导出）\n" +
       "• action=list — 列出已导出的文件\n" +
       "• action=delete — 删除指定的导出文件\n" +
@@ -140,6 +146,8 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
             "fund_flow",
             "sector",
             "institutional",
+            "conditional_orders",
+            "dca_plans",
             "batch",
             "list",
             "delete",
@@ -225,6 +233,15 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           type: "string",
           enum: ["fund", "qfii", "insurance", "social_security", "trust", "broker"],
           description: "机构类型（action=institutional 时使用）: fund=基金, qfii=QFII, insurance=保险, social_security=社保, trust=信托, broker=券商",
+        },
+        activeOnly: {
+          type: "boolean",
+          description: "是否仅导出活跃条件单（action=conditional_orders 时使用，默认 false 导出全部）",
+        },
+        dcaStatus: {
+          type: "string",
+          enum: ["active", "paused", "cancelled"],
+          description: "定投计划状态过滤（action=dca_plans 时使用，不传则导出全部）",
         },
       },
       required: ["action"],
@@ -403,6 +420,20 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           dataset = "institutional";
           break;
         }
+        case "conditional_orders": {
+          const result = exportConditionalOrders(conditionalOrderService, args.activeOnly as boolean | undefined);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "conditional_orders";
+          break;
+        }
+        case "dca_plans": {
+          const result = exportDcaPlans(dcaScheduleService, args.dcaStatus as string | undefined);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "dca_plans";
+          break;
+        }
         default:
           return { status: "error", message: `未知的 action: ${action}` };
       }
@@ -452,6 +483,8 @@ function datasetLabel(action: string): string {
     fund_flow: "资金流向",
     sector: "板块分析",
     institutional: "机构持仓",
+    conditional_orders: "条件单",
+    dca_plans: "定投计划",
   };
   return labels[action] ?? action;
 }
@@ -933,7 +966,7 @@ async function batchExport(
   const limit = (args.limit as number) ?? 10000;
 
   const batchTypes = (args.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional"];
+  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional", "conditional_orders", "dca_plans"];
 
   const invalidTypes = batchTypes.filter((t) => !validBatchTypes.includes(t));
   if (invalidTypes.length > 0) {
@@ -1043,6 +1076,18 @@ async function batchExport(
       }
       case "institutional": {
         const result = await exportInstitutional(config, args.instType as string | undefined, symbol, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "conditional_orders": {
+        const result = exportConditionalOrders(conditionalOrderService, args.activeOnly as boolean | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "dca_plans": {
+        const result = exportDcaPlans(dcaScheduleService, args.dcaStatus as string | undefined);
         data = result.rows;
         headers = result.headers;
         break;
@@ -1241,5 +1286,76 @@ async function exportInstitutional(
     changeRatio: h.changeRatio ?? h.change_ratio ?? "",
     reportDate: h.reportDate ?? h.report_date ?? "",
   }));
+  return { headers, rows };
+}
+
+// ── Conditional orders export helper ──────────────────────────
+
+function exportConditionalOrders(
+  conditionalOrderService?: ConditionalOrderService,
+  activeOnly?: boolean,
+): { headers: string[]; rows: Record<string, unknown>[] } {
+  if (!conditionalOrderService) {
+    return { headers: ["message"], rows: [{ message: "条件单服务不可用" }] };
+  }
+
+  const headers = [
+    "id", "symbol", "type", "entryPrice", "triggerValue", "quantity",
+    "strategyId", "description", "createdAt", "triggered", "triggeredAt", "triggerResult",
+  ];
+
+  const orders = conditionalOrderService.listOrders(activeOnly ?? false);
+  const rows = orders.map((o) => ({
+    id: o.id,
+    symbol: o.symbol,
+    type: o.type,
+    entryPrice: o.entryPrice,
+    triggerValue: o.triggerValue,
+    quantity: o.quantity,
+    strategyId: o.strategyId ?? "",
+    description: o.description,
+    createdAt: o.createdAt,
+    triggered: o.triggered ? "是" : "否",
+    triggeredAt: o.triggeredAt ?? "",
+    triggerResult: o.triggerResult ?? "",
+  }));
+
+  return { headers, rows };
+}
+
+// ── DCA plans export helper ───────────────────────────────────
+
+function exportDcaPlans(
+  dcaScheduleService?: DcaScheduleService,
+  status?: string,
+): { headers: string[]; rows: Record<string, unknown>[] } {
+  if (!dcaScheduleService) {
+    return { headers: ["message"], rows: [{ message: "定投服务不可用" }] };
+  }
+
+  const headers = [
+    "id", "symbol", "amount", "frequency", "dayOfPeriod", "hour",
+    "status", "executionCount", "totalInvested", "lastExecutedAt",
+    "nextExecutionAt", "maxExecutions", "createdAt", "description",
+  ];
+
+  const plans = dcaScheduleService.listPlans(status as "active" | "paused" | "cancelled" | undefined);
+  const rows = plans.map((p) => ({
+    id: p.id,
+    symbol: p.symbol,
+    amount: p.amount,
+    frequency: p.frequency,
+    dayOfPeriod: p.dayOfPeriod ?? "",
+    hour: p.hour ?? "",
+    status: p.status,
+    executionCount: p.executionCount,
+    totalInvested: p.totalInvested,
+    lastExecutedAt: p.lastExecutedAt ?? "",
+    nextExecutionAt: p.nextExecutionAt ?? "",
+    maxExecutions: p.maxExecutions ?? "",
+    createdAt: p.createdAt,
+    description: p.description,
+  }));
+
   return { headers, rows };
 }

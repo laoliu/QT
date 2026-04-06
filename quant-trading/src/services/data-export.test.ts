@@ -40,6 +40,8 @@ import {
   FUND_FLOW_COLUMNS,
   SECTOR_COLUMNS,
   INSTITUTIONAL_COLUMNS,
+  CONDITIONAL_ORDER_COLUMNS,
+  DCA_PLAN_COLUMNS,
   type DataSource,
   type ExportableRow,
 } from "./data-export.js";
@@ -125,6 +127,20 @@ function mockDataSource(overrides?: Partial<DataSource>): DataSource {
       { symbol: "600519", name: "贵州茅台", instType: "fund", holdShares: 85000000, holdRatio: 6.77, changeShares: 2000000, changeRatio: 2.41, reportDate: "2025-12-31" },
       { symbol: "000858", name: "五粮液", instType: "fund", holdShares: 120000000, holdRatio: 3.09, changeShares: -5000000, changeRatio: -4.00, reportDate: "2025-12-31" },
     ],
+    getConditionalOrders: async (activeOnly) => {
+      const all = [
+        { id: "co-001", symbol: "600519", type: "stop_loss", entryPrice: 1800, triggerValue: 1700, quantity: 100, strategyId: "macd", description: "茅台止损单", createdAt: "2026-03-01T09:30:00Z", triggered: false, triggeredAt: "", triggerResult: "" },
+        { id: "co-002", symbol: "000858", type: "take_profit", entryPrice: 130, triggerValue: 160, quantity: 200, strategyId: "", description: "五粮液止盈单", createdAt: "2026-03-01T10:00:00Z", triggered: true, triggeredAt: "2026-03-10T14:50:00Z", triggerResult: "已成交" },
+      ];
+      return activeOnly ? all.filter((o) => !o.triggered) : all;
+    },
+    getDcaPlans: async (status) => {
+      const all = [
+        { id: "dca-001", symbol: "600519", amount: 5000, frequency: "weekly", dayOfPeriod: 1, hour: 9, status: "active", executionCount: 8, totalInvested: 40000, lastExecutedAt: "2026-03-31T09:00:00Z", nextExecutionAt: "2026-04-07T09:00:00Z", maxExecutions: "", createdAt: "2026-02-01T00:00:00Z", description: "每周定投茅台 ¥5000" },
+        { id: "dca-002", symbol: "300750", amount: 3000, frequency: "monthly", dayOfPeriod: 15, hour: 9, status: "paused", executionCount: 3, totalInvested: 9000, lastExecutedAt: "2026-03-15T09:00:00Z", nextExecutionAt: "", maxExecutions: 12, createdAt: "2026-01-01T00:00:00Z", description: "每月定投宁德时代 ¥3000" },
+      ];
+      return status ? all.filter((p) => p.status === status) : all;
+    },
     ...overrides,
   };
 }
@@ -660,5 +676,100 @@ describe("DataExportService", () => {
     expect(results[0].rowCount).toBe(2);
     expect(results[1].rowCount).toBe(2);
     expect(results[2].rowCount).toBe(2);
+  });
+
+  it("exports conditional orders to CSV (FR-7.17)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "conditional_orders" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^conditional_orders-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of CONDITIONAL_ORDER_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("600519");
+    expect(content).toContain("stop_loss");
+    expect(content).toContain("take_profit");
+    expect(content).toContain("茅台止损单");
+  });
+
+  it("exports conditional orders with activeOnly filter", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "conditional_orders", activeOnly: true });
+
+    expect(result.rowCount).toBe(1);
+    const content = await fs.readFile(result.path, "utf-8");
+    expect(content).toContain("stop_loss");
+    expect(content).not.toContain("take_profit");
+  });
+
+  it("exports conditional orders to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "conditional_orders" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].type).toBe("stop_loss");
+  });
+
+  it("exports DCA plans to CSV (FR-7.18)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "dca_plans" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^dca_plans-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of DCA_PLAN_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("600519");
+    expect(content).toContain("weekly");
+    expect(content).toContain("每周定投茅台");
+  });
+
+  it("exports DCA plans with status filter", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "dca_plans", status: "active" });
+
+    expect(result.rowCount).toBe(1);
+    const content = await fs.readFile(result.path, "utf-8");
+    expect(content).toContain("600519");
+    expect(content).not.toContain("300750");
+  });
+
+  it("exports DCA plans to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "dca_plans" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].frequency).toBe("weekly");
+  });
+
+  it("batch exports include conditional_orders and dca_plans", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const results = await svc.exportBatch([
+      { type: "conditional_orders" },
+      { type: "dca_plans" },
+    ]);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].filename).toMatch(/^conditional_orders-/);
+    expect(results[1].filename).toMatch(/^dca_plans-/);
+    expect(results[0].rowCount).toBe(2);
+    expect(results[1].rowCount).toBe(2);
   });
 });

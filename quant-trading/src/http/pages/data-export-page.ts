@@ -117,6 +117,8 @@ tr:hover td{background:var(--bg3)}
       <option value="fund_flow">资金流向 (fund_flow)</option>
       <option value="sector">板块分析 (sector)</option>
       <option value="institutional">机构持仓 (institutional)</option>
+      <option value="conditional_orders">条件单 (conditional_orders)</option>
+      <option value="dca_plans">定投计划 (dca_plans)</option>
     </select>
   </div>
   <div class="form-row">
@@ -184,6 +186,8 @@ tr:hover td{background:var(--bg3)}
     <label><input type="checkbox" value="fund_flow"> 资金流向</label>
     <label><input type="checkbox" value="sector"> 板块分析</label>
     <label><input type="checkbox" value="institutional"> 机构持仓</label>
+    <label><input type="checkbox" value="conditional_orders"> 条件单</label>
+    <label><input type="checkbox" value="dca_plans"> 定投计划</label>
   </div>
   <div class="form-row">
     <label>导出格式</label>

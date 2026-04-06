@@ -11,6 +11,8 @@ import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
+import type { ConditionalOrderService } from "../services/conditional-order.js";
+import type { DcaScheduleService } from "../services/dca-schedule.js";
 import type { BenchmarkService } from "../services/benchmark.js";
 import type { DataQualityValidator } from "../services/data-quality.js";
 import type { HistoricalDataWarehouse } from "../services/data-warehouse.js";
@@ -79,6 +81,8 @@ export interface RouteDeps {
   tradeJournal: TradeJournal;
   scanHistoryStore: ScanHistoryStore;
   favoritesStore?: FavoritesStore;
+  conditionalOrderService?: ConditionalOrderService;
+  dcaScheduleService?: DcaScheduleService;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -1554,7 +1558,7 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Data Export sub-routes (FR-7) ───────────────────────────────
 
-function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, favoritesStore, alertStore, getEngine }: RouteDeps): void {
+function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, favoritesStore, alertStore, getEngine, conditionalOrderService, dcaScheduleService }: RouteDeps): void {
   // GET /quant/api/data-export/list — list exported files
   api.registerHttpRoute({
     auth: "plugin",
@@ -1706,7 +1710,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional", "batch"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional", "conditional_orders", "dca_plans", "batch"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
         return;
@@ -1715,7 +1719,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
       // Batch export: export multiple dataset types in one request
       if (action === "batch") {
         const batchTypes = (body.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional"];
+        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional", "conditional_orders", "dca_plans"];
         const invalidTypes = batchTypes.filter((t: string) => !validBatchTypes.includes(t));
         if (invalidTypes.length > 0) {
           json(res, { status: "error", message: `不支持的批量导出类型: ${invalidTypes.join(", ")}` }, 400);
@@ -1862,6 +1866,38 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
                     case "institutional": {
                       bHeaders = ["message"];
                       bRows = [{ message: `${batchAction} 批量导出请通过AI工具 data_export 使用` }];
+                      break;
+                    }
+                    case "conditional_orders": {
+                      bHeaders = ["id", "symbol", "type", "entryPrice", "triggerValue", "quantity", "strategyId", "description", "createdAt", "triggered", "triggeredAt", "triggerResult"];
+                      if (conditionalOrderService) {
+                        const orders = conditionalOrderService.listOrders(false);
+                        bRows = orders.map((o) => ({
+                          id: o.id, symbol: o.symbol, type: o.type,
+                          entryPrice: o.entryPrice, triggerValue: o.triggerValue,
+                          quantity: o.quantity, strategyId: o.strategyId ?? "",
+                          description: o.description, createdAt: o.createdAt,
+                          triggered: o.triggered ? "是" : "否",
+                          triggeredAt: o.triggeredAt ?? "", triggerResult: o.triggerResult ?? "",
+                        }));
+                      }
+                      break;
+                    }
+                    case "dca_plans": {
+                      bHeaders = ["id", "symbol", "amount", "frequency", "dayOfPeriod", "hour", "status", "executionCount", "totalInvested", "lastExecutedAt", "nextExecutionAt", "maxExecutions", "createdAt", "description"];
+                      if (dcaScheduleService) {
+                        const plans = dcaScheduleService.listPlans();
+                        bRows = plans.map((p) => ({
+                          id: p.id, symbol: p.symbol, amount: p.amount,
+                          frequency: p.frequency, dayOfPeriod: p.dayOfPeriod ?? "",
+                          hour: p.hour ?? "", status: p.status,
+                          executionCount: p.executionCount, totalInvested: p.totalInvested,
+                          lastExecutedAt: p.lastExecutedAt ?? "",
+                          nextExecutionAt: p.nextExecutionAt ?? "",
+                          maxExecutions: p.maxExecutions ?? "",
+                          createdAt: p.createdAt, description: p.description,
+                        }));
+                      }
                       break;
                     }
                   }
@@ -2200,6 +2236,42 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
             headers = ["message"];
             rows = [{ message: `${action} 导出需要实时数据获取，请通过AI助手使用 data_export action=${action} 命令导出` }];
             dataset = action;
+            break;
+          }
+          case "conditional_orders": {
+            headers = ["id", "symbol", "type", "entryPrice", "triggerValue", "quantity", "strategyId", "description", "createdAt", "triggered", "triggeredAt", "triggerResult"];
+            if (conditionalOrderService) {
+              const activeOnly = body.activeOnly as boolean | undefined;
+              const orders = conditionalOrderService.listOrders(activeOnly ?? false);
+              rows = orders.map((o) => ({
+                id: o.id, symbol: o.symbol, type: o.type,
+                entryPrice: o.entryPrice, triggerValue: o.triggerValue,
+                quantity: o.quantity, strategyId: o.strategyId ?? "",
+                description: o.description, createdAt: o.createdAt,
+                triggered: o.triggered ? "是" : "否",
+                triggeredAt: o.triggeredAt ?? "", triggerResult: o.triggerResult ?? "",
+              }));
+            }
+            dataset = "conditional_orders";
+            break;
+          }
+          case "dca_plans": {
+            headers = ["id", "symbol", "amount", "frequency", "dayOfPeriod", "hour", "status", "executionCount", "totalInvested", "lastExecutedAt", "nextExecutionAt", "maxExecutions", "createdAt", "description"];
+            if (dcaScheduleService) {
+              const dcaStatus = body.dcaStatus as string | undefined;
+              const plans = dcaScheduleService.listPlans(dcaStatus as "active" | "paused" | "cancelled" | undefined);
+              rows = plans.map((p) => ({
+                id: p.id, symbol: p.symbol, amount: p.amount,
+                frequency: p.frequency, dayOfPeriod: p.dayOfPeriod ?? "",
+                hour: p.hour ?? "", status: p.status,
+                executionCount: p.executionCount, totalInvested: p.totalInvested,
+                lastExecutedAt: p.lastExecutedAt ?? "",
+                nextExecutionAt: p.nextExecutionAt ?? "",
+                maxExecutions: p.maxExecutions ?? "",
+                createdAt: p.createdAt, description: p.description,
+              }));
+            }
+            dataset = "dca_plans";
             break;
           }
         }

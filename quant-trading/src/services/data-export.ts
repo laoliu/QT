@@ -27,7 +27,9 @@ export type ExportTarget =
   | { type: "performance"; accountId?: string; dateFrom?: string; dateTo?: string }
   | { type: "fund_flow"; flowType?: string; symbol?: string; limit?: number }
   | { type: "sector"; sectorAction?: string; sector?: string; limit?: number }
-  | { type: "institutional"; instType?: string; symbol?: string; dateFrom?: string; dateTo?: string; limit?: number };
+  | { type: "institutional"; instType?: string; symbol?: string; dateFrom?: string; dateTo?: string; limit?: number }
+  | { type: "conditional_orders"; activeOnly?: boolean }
+  | { type: "dca_plans"; status?: string };
 
 export type ExportFormat = "csv" | "json";
 
@@ -69,6 +71,8 @@ export interface DataSource {
   getFundFlow(flowType?: string, symbol?: string, limit?: number): Promise<ExportableRow[]>;
   getSectorAnalysis(sectorAction?: string, sector?: string, limit?: number): Promise<ExportableRow[]>;
   getInstitutionalFlow(instType?: string, symbol?: string, dateFrom?: string, dateTo?: string, limit?: number): Promise<ExportableRow[]>;
+  getConditionalOrders(activeOnly?: boolean): Promise<ExportableRow[]>;
+  getDcaPlans(status?: string): Promise<ExportableRow[]>;
 }
 
 // ── CSV helpers ─────────────────────────────────────────────
@@ -110,6 +114,8 @@ export const PERFORMANCE_COLUMNS = ["metric", "value"];
 export const FUND_FLOW_COLUMNS = ["symbol", "name", "changePct", "mainNetInflow", "superLargeInflow", "largeInflow", "mediumInflow", "smallInflow", "date"];
 export const SECTOR_COLUMNS = ["rank", "sector", "changePct", "turnover", "amount", "leadingStock", "leadingChangePct", "stockCount", "upCount", "downCount"];
 export const INSTITUTIONAL_COLUMNS = ["symbol", "name", "instType", "holdShares", "holdRatio", "changeShares", "changeRatio", "reportDate"];
+export const CONDITIONAL_ORDER_COLUMNS = ["id", "symbol", "type", "entryPrice", "triggerValue", "quantity", "strategyId", "description", "createdAt", "triggered", "triggeredAt", "triggerResult"];
+export const DCA_PLAN_COLUMNS = ["id", "symbol", "amount", "frequency", "dayOfPeriod", "hour", "status", "executionCount", "totalInvested", "lastExecutedAt", "nextExecutionAt", "maxExecutions", "createdAt", "description"];
 
 // ── Service ─────────────────────────────────────────────────
 
@@ -205,6 +211,16 @@ export class DataExportService {
         rows = await this.dataSource.getInstitutionalFlow(target.instType, target.symbol, target.dateFrom, target.dateTo, target.limit);
         columns = INSTITUTIONAL_COLUMNS;
         prefix = "institutional";
+        break;
+      case "conditional_orders":
+        rows = await this.dataSource.getConditionalOrders(target.activeOnly);
+        columns = CONDITIONAL_ORDER_COLUMNS;
+        prefix = "conditional_orders";
+        break;
+      case "dca_plans":
+        rows = await this.dataSource.getDcaPlans(target.status);
+        columns = DCA_PLAN_COLUMNS;
+        prefix = "dca_plans";
         break;
     }
 

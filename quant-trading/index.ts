@@ -666,6 +666,8 @@ const quantTradingPlugin = {
         alertStore,
         signalHitRateTracker,
         getEngine: () => liveEngine,
+        conditionalOrderService,
+        dcaScheduleService,
       }),
     };
 
@@ -1268,6 +1270,8 @@ const quantTradingPlugin = {
       tradeJournal,
       scanHistoryStore,
       favoritesStore,
+      conditionalOrderService,
+      dcaScheduleService,
       secure,
       securePublic,
     });

@@ -30,6 +30,8 @@ export interface EquitySnapshot {
   positionCount: number;
   /** Optional benchmark value (e.g. CSI 300 index) for comparison */
   benchmark?: number;
+  /** Account identifier for multi-account equity tracking. */
+  accountId?: string;
 }
 
 export interface EquityHistoryOptions {

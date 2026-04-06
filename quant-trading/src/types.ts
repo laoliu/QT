@@ -396,6 +396,8 @@ export type TradeRecord = {
   netPnl: number;
   holdingDays?: number;
   strategyId?: string;
+  /** Account identifier for multi-account filtering (e.g. "8888000001"). */
+  accountId?: string;
   entryOrderId: string;
   exitOrderId?: string;
 };
@@ -1157,6 +1159,8 @@ export type TradingPerformanceReport = {
   bySymbol: TradeAggregation[];
   /** Trade breakdown by month (YYYY-MM). */
   byMonth: TradeAggregation[];
+  /** Trade breakdown by account ID. */
+  byAccount: TradeAggregation[];
   /** Daily equity curve with drawdown overlay. */
   equityCurve: EquityCurvePoint[];
   /** Monthly return heatmap data (YYYY-MM → return%). */

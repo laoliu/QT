@@ -134,6 +134,10 @@ function filterTrades(
 ): TradeRecord[] {
   let result = trades.filter((t) => t.exitTime != null);
 
+  if (query.accountId) {
+    result = result.filter((t) => t.accountId === query.accountId);
+  }
+
   if (query.strategyIds && query.strategyIds.length > 0) {
     const set = new Set(query.strategyIds);
     result = result.filter((t) => t.strategyId != null && set.has(t.strategyId));
@@ -159,6 +163,10 @@ function filterEquitySnapshots(
   query: PerformanceReportQuery,
 ): EquitySnapshot[] {
   let result = [...snapshots].sort((a, b) => a.date.localeCompare(b.date));
+
+  if (query.accountId) {
+    result = result.filter((s) => s.accountId === query.accountId);
+  }
 
   if (query.startDate) {
     result = result.filter((s) => s.date >= query.startDate!);
@@ -436,6 +444,11 @@ export class TradingPerformanceReportService {
       .map(([key, group]) => buildAggregation(key, group, totalNetPnl))
       .sort((a, b) => a.key.localeCompare(b.key));
 
+    const byAccountMap = groupBy(trades, (t) => t.accountId ?? "default");
+    const byAccount = [...byAccountMap.entries()]
+      .map(([key, group]) => buildAggregation(key, group, totalNetPnl))
+      .sort((a, b) => Math.abs(b.netPnl) - Math.abs(a.netPnl));
+
     // Equity curve with drawdown overlay
     const equityCurve: EquityCurvePoint[] = equity.map((s, i) => ({
       date: s.date,
@@ -472,6 +485,7 @@ export class TradingPerformanceReportService {
       byStrategy,
       bySymbol,
       byMonth,
+      byAccount,
       equityCurve,
       monthlyReturns,
       totalTradesAnalyzed: trades.length,
@@ -529,6 +543,20 @@ export class TradingPerformanceReportService {
     const set = new Set<string>();
     for (const t of trades) {
       set.add(t.symbol);
+    }
+    return [...set].sort();
+  }
+
+  /**
+   * List available account IDs from trade records.
+   * Useful for populating filter dropdowns.
+   */
+  async listAccounts(mode?: "paper" | "live"): Promise<string[]> {
+    const m = mode ?? (this.config.tradingAccount?.mode === "live" ? "live" : "paper");
+    const trades = (await loadJson<TradeRecord[]>(tradesPath(this.config, m))) ?? [];
+    const set = new Set<string>();
+    for (const t of trades) {
+      if (t.accountId) set.add(t.accountId);
     }
     return [...set].sort();
   }

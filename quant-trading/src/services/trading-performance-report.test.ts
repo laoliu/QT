@@ -371,4 +371,69 @@ describe("TradingPerformanceReportService", () => {
     expect(report.metrics).toHaveLength(2);
     expect(report.metrics.map((m) => m.id)).toEqual(["net_pnl", "win_rate"]);
   });
+
+  it("filters by accountId", async () => {
+    const trades = [
+      makeTrade({ accountId: "acct-1", netPnl: 1000, grossPnl: 1050, commission: 50 }),
+      makeTrade({ accountId: "acct-2", netPnl: 500, grossPnl: 550, commission: 50 }),
+      makeTrade({ accountId: "acct-1", netPnl: -200, grossPnl: -150, commission: 50 }),
+    ];
+    setupMockData(trades, []);
+
+    const svc = new TradingPerformanceReportService(config);
+    const report = await svc.generateReport({ accountId: "acct-1" });
+
+    expect(report.totalTradesAnalyzed).toBe(2);
+    expect(report.metrics.find((m) => m.id === "net_pnl")!.value).toBe(800);
+  });
+
+  it("aggregates by account", async () => {
+    const trades = [
+      makeTrade({ accountId: "acct-1", netPnl: 1000, grossPnl: 1050, commission: 50 }),
+      makeTrade({ accountId: "acct-2", netPnl: 500, grossPnl: 550, commission: 50 }),
+      makeTrade({ accountId: "acct-1", netPnl: -200, grossPnl: -150, commission: 50 }),
+    ];
+    setupMockData(trades, []);
+
+    const svc = new TradingPerformanceReportService(config);
+    const report = await svc.generateReport();
+
+    expect(report.byAccount).toHaveLength(2);
+    const acct1 = report.byAccount.find((a) => a.key === "acct-1")!;
+    expect(acct1.trades).toBe(2);
+    expect(acct1.netPnl).toBe(800);
+    const acct2 = report.byAccount.find((a) => a.key === "acct-2")!;
+    expect(acct2.trades).toBe(1);
+    expect(acct2.netPnl).toBe(500);
+  });
+
+  it("groups trades without accountId under 'default'", async () => {
+    const trades = [
+      makeTrade({ accountId: undefined, netPnl: 300, grossPnl: 350, commission: 50 }),
+      makeTrade({ accountId: "acct-1", netPnl: 700, grossPnl: 750, commission: 50 }),
+    ];
+    setupMockData(trades, []);
+
+    const svc = new TradingPerformanceReportService(config);
+    const report = await svc.generateReport();
+
+    expect(report.byAccount).toHaveLength(2);
+    expect(report.byAccount.find((a) => a.key === "default")).toBeDefined();
+    expect(report.byAccount.find((a) => a.key === "acct-1")).toBeDefined();
+  });
+
+  it("listAccounts returns unique sorted account IDs", async () => {
+    const trades = [
+      makeTrade({ accountId: "acct-b" }),
+      makeTrade({ accountId: "acct-a" }),
+      makeTrade({ accountId: "acct-b" }),
+      makeTrade({ accountId: undefined }),
+    ];
+    setupMockData(trades, []);
+
+    const svc = new TradingPerformanceReportService(config);
+    const accounts = await svc.listAccounts();
+
+    expect(accounts).toEqual(["acct-a", "acct-b"]);
+  });
 });

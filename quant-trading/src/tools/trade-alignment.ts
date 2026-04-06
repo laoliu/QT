@@ -6,6 +6,8 @@
  *   align_trades      — align live trades against backtest trade records (TradeRecord[])
  *   list_backtests    — list available backtest runs for alignment
  *   report            — generate a human-readable alignment report
+ *   pnl_drift         — compute cumulative PnL drift between live and backtest
+ *   export_csv        — export alignment result as CSV string
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -16,14 +18,20 @@ import type { BacktestStore } from "../services/backtest-store.js";
 import {
   alignTrades,
   alignTradeRecords,
+  computePnlDrift,
+  exportAlignmentCsv,
   filterPairs,
   formatAlignmentReport,
+  formatPnlDriftReport,
   formatTradeRecordAlignmentReport,
+  A_SHARE_MORNING_SESSION,
+  A_SHARE_AFTERNOON_SESSION,
 } from "../services/trade-alignment.js";
 import type {
   AlignmentConfig,
   AlignmentMatchType,
   QuantTradingConfig,
+  TradingSession,
   TradeRecord,
 } from "../types.js";
 
@@ -52,15 +60,17 @@ export function createTradeAlignmentTool(
       "action=align_signals 对齐实盘交易与回测信号, " +
       "action=align_trades 对齐实盘与回测交易记录, " +
       "action=list_backtests 列出可对齐的回测记录, " +
-      "action=report 生成对齐报告。",
+      "action=report 生成对齐报告, " +
+      "action=pnl_drift 计算累计盈亏偏移曲线, " +
+      "action=export_csv 导出对齐结果为CSV。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["align_signals", "align_trades", "list_backtests", "report"],
+          enum: ["align_signals", "align_trades", "list_backtests", "report", "pnl_drift", "export_csv"],
           description:
-            "操作: align_signals=对齐信号, align_trades=对齐交易, list_backtests=列出回测, report=报告",
+            "操作: align_signals=对齐信号, align_trades=对齐交易, list_backtests=列出回测, report=报告, pnl_drift=盈亏偏移, export_csv=导出CSV",
         },
         backtest_id: {
           type: "string",
@@ -96,6 +106,11 @@ export function createTradeAlignmentTool(
           type: "number",
           description: "限制返回配对数量 (默认50)",
         },
+        trading_session: {
+          type: "string",
+          enum: ["morning", "afternoon"],
+          description: "A股交易时段筛选: morning=上午盘(9:30-11:30), afternoon=下午盘(13:00-15:00)",
+        },
       },
       required: ["action"],
     },
@@ -112,6 +127,12 @@ export function createTradeAlignmentTool(
       }
       if (args.price_tolerance_pct != null) {
         alignConfig.priceToleranceRatio = (args.price_tolerance_pct as number) / 100;
+      }
+      // Trading session filter
+      if (args.trading_session === "morning") {
+        alignConfig.tradingSession = A_SHARE_MORNING_SESSION;
+      } else if (args.trading_session === "afternoon") {
+        alignConfig.tradingSession = A_SHARE_AFTERNOON_SESSION;
       }
 
       switch (action) {
@@ -294,6 +315,9 @@ export function createTradeAlignmentTool(
                 ? Number((p.exitPriceSlippage * 100).toFixed(3))
                 : undefined,
               pnlDelta: p.pnlDelta != null ? Number(p.pnlDelta.toFixed(2)) : undefined,
+              quantitySlippagePct: p.quantitySlippage != null
+                ? Number((p.quantitySlippage * 100).toFixed(2))
+                : undefined,
               holdingDaysDelta: p.holdingDaysDelta,
             })),
             totalPairsReturned: Math.min(pairs.length, limit),
@@ -340,6 +364,80 @@ export function createTradeAlignmentTool(
             liveTrades: liveTrades.length,
             backtestSignals: record.result.signals.length,
             backtestSyntheticTrades: backtestTrades.length,
+          };
+        }
+
+        // ── Cumulative PnL drift analysis ───────────────────────
+        case "pnl_drift": {
+          const backtestId = args.backtest_id as string;
+          if (!backtestId) {
+            return { error: "需要 backtest_id 参数。使用 action=list_backtests 查看可用回测。" };
+          }
+
+          const record = backtestStore.getFullResult(backtestId);
+          if (!record) {
+            return { error: `回测记录 ${backtestId} 不存在` };
+          }
+
+          let liveTrades = await loadLiveTrades(config, mode, getEngine);
+          if (symbol) {
+            liveTrades = liveTrades.filter((t) => t.symbol === symbol);
+          }
+
+          if (liveTrades.length === 0) {
+            return { error: `暂无${mode === "live" ? "实盘" : "模拟盘"}交易记录` };
+          }
+
+          const backtestTrades = signalsToTradeRecords(record.result.signals, record.result.strategyId);
+          const tradeResult = alignTradeRecords(liveTrades, backtestTrades, {
+            strategyId: record.result.strategyId,
+            symbols: symbol ? [symbol] : undefined,
+            config: alignConfig,
+          });
+
+          const drift = computePnlDrift(tradeResult);
+          const driftReport = formatPnlDriftReport(drift);
+
+          return {
+            ...drift,
+            report: driftReport,
+          };
+        }
+
+        // ── Export alignment result as CSV ──────────────────────
+        case "export_csv": {
+          const backtestId = args.backtest_id as string;
+          if (!backtestId) {
+            return { error: "需要 backtest_id 参数。使用 action=list_backtests 查看可用回测。" };
+          }
+
+          const record = backtestStore.getFullResult(backtestId);
+          if (!record) {
+            return { error: `回测记录 ${backtestId} 不存在` };
+          }
+
+          let liveTrades = await loadLiveTrades(config, mode, getEngine);
+          if (symbol) {
+            liveTrades = liveTrades.filter((t) => t.symbol === symbol);
+          }
+
+          if (liveTrades.length === 0) {
+            return { error: `暂无${mode === "live" ? "实盘" : "模拟盘"}交易记录` };
+          }
+
+          const backtestTrades = signalsToTradeRecords(record.result.signals, record.result.strategyId);
+          const tradeResult = alignTradeRecords(liveTrades, backtestTrades, {
+            strategyId: record.result.strategyId,
+            symbols: symbol ? [symbol] : undefined,
+            config: alignConfig,
+          });
+
+          const csv = exportAlignmentCsv(tradeResult);
+
+          return {
+            csv,
+            pairCount: tradeResult.pairs.length,
+            hint: "CSV内容已生成，可直接复制到文件或Excel中使用",
           };
         }
 
@@ -441,7 +539,7 @@ function signalsToTradeRecords(signals: { timestamp: number | string; symbol: st
   return records;
 }
 
-function formatSummary(s: { totalPairs: number; exactMatches: number; timeShiftedMatches: number; liveOnlyTrades: number; backtestOnlySignals: number; avgTimeDeltaMs: number; avgPriceSlippage: number; avgPnlDelta: number; executionRate: number; pnlCorrelation: number }) {
+function formatSummary(s: { totalPairs: number; exactMatches: number; timeShiftedMatches: number; liveOnlyTrades: number; backtestOnlySignals: number; avgTimeDeltaMs: number; avgPriceSlippage: number; avgPnlDelta: number; avgQuantitySlippage: number; executionRate: number; pnlCorrelation: number }) {
   return {
     totalPairs: s.totalPairs,
     exactMatches: s.exactMatches,
@@ -450,13 +548,14 @@ function formatSummary(s: { totalPairs: number; exactMatches: number; timeShifte
     backtestOnlySignals: s.backtestOnlySignals,
     avgTimeDeltaHours: Number((s.avgTimeDeltaMs / 3_600_000).toFixed(2)),
     avgPriceSlippagePct: Number((s.avgPriceSlippage * 100).toFixed(3)),
+    avgQuantitySlippagePct: Number((s.avgQuantitySlippage * 100).toFixed(2)),
     avgPnlDelta: Number(s.avgPnlDelta.toFixed(2)),
     executionRate: `${(s.executionRate * 100).toFixed(1)}%`,
     pnlCorrelation: Number(s.pnlCorrelation.toFixed(4)),
   };
 }
 
-function formatSymbolBreakdown(breakdown: Record<string, { totalPairs: number; exactMatches: number; timeShiftedMatches: number; liveOnlyTrades: number; backtestOnlySignals: number; avgTimeDeltaMs: number; avgPriceSlippage: number; avgPnlDelta: number; executionRate: number; pnlCorrelation: number }>) {
+function formatSymbolBreakdown(breakdown: Record<string, { totalPairs: number; exactMatches: number; timeShiftedMatches: number; liveOnlyTrades: number; backtestOnlySignals: number; avgTimeDeltaMs: number; avgPriceSlippage: number; avgPnlDelta: number; avgQuantitySlippage: number; executionRate: number; pnlCorrelation: number }>) {
   const result: Record<string, ReturnType<typeof formatSummary>> = {};
   for (const [sym, s] of Object.entries(breakdown)) {
     result[sym] = formatSummary(s);

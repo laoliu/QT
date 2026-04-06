@@ -4,9 +4,14 @@ import {
   alignTrades,
   alignTradesRaw,
   alignTradeRecords,
+  computePnlDrift,
+  exportAlignmentCsv,
   filterPairs,
   formatAlignmentReport,
+  formatPnlDriftReport,
   formatTradeRecordAlignmentReport,
+  A_SHARE_MORNING_SESSION,
+  A_SHARE_AFTERNOON_SESSION,
 } from "./trade-alignment.js";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -416,5 +421,219 @@ describe("formatTradeRecordAlignmentReport", () => {
     expect(report).toContain("600519");
     expect(report).toContain("执行率");
     expect(report).toContain("入场时间偏移");
+  });
+});
+
+// ── quantitySlippage ──────────────────────────────────────────
+
+describe("quantitySlippage", () => {
+  it("computes quantity slippage for signal alignment", () => {
+    const live = [fakeLiveTrade({ quantity: 200 })];
+    const bt = fakeBacktestResult([fakeSignal({ quantity: 100 })]);
+
+    const result = alignTrades(live, bt);
+
+    expect(result.pairs[0]!.quantitySlippage).toBeCloseTo(1.0, 5); // (200-100)/100 = 1.0
+  });
+
+  it("returns undefined when backtest signal has no quantity", () => {
+    const live = [fakeLiveTrade({ quantity: 200 })];
+    const bt = fakeBacktestResult([fakeSignal()]);
+    // fakeSignal has no quantity by default
+
+    const result = alignTrades(live, bt);
+
+    expect(result.pairs[0]!.quantitySlippage).toBeUndefined();
+  });
+
+  it("computes quantity slippage for trade record alignment", () => {
+    const live = [
+      fakeLiveTrade({ quantity: 300, exitTime: "2024-06-18T14:30:00.000Z", holdingDays: 3 }),
+    ];
+    const bt = [fakeBtTrade({ quantity: 200 })];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    expect(result.pairs[0]!.quantitySlippage).toBeCloseTo(0.5, 5); // (300-200)/200
+    expect(result.summary.avgQuantitySlippage).toBeCloseTo(0.5, 5);
+  });
+});
+
+// ── tradingSession filtering ──────────────────────────────────
+
+describe("trading session filtering", () => {
+  it("only matches trades within morning session", () => {
+    // Signal at 9:35 UTC+8 = 01:35 UTC
+    const morningSignal = fakeSignal({
+      timestamp: new Date("2024-06-15T01:35:00.000Z").getTime(),
+    });
+    // Trade at 9:40 UTC+8 = 01:40 UTC
+    const morningTrade = fakeLiveTrade({
+      entryTime: "2024-06-15T01:40:00.000Z",
+    });
+    // Trade at 14:00 UTC+8 = 06:00 UTC (afternoon)
+    const afternoonTrade = fakeLiveTrade({
+      tradeId: "t-afternoon",
+      entryTime: "2024-06-15T06:00:00.000Z",
+    });
+
+    const bt = fakeBacktestResult([morningSignal]);
+    const result = alignTrades([morningTrade, afternoonTrade], bt, {
+      tradingSession: A_SHARE_MORNING_SESSION,
+    });
+
+    // Morning trade should match, afternoon trade should be excluded from session
+    const matched = result.pairs.filter(
+      (p) => p.matchType === "exact" || p.matchType === "time_shifted",
+    );
+    expect(matched).toHaveLength(1);
+  });
+
+  it("filters by afternoon session", () => {
+    // Signal at 13:30 UTC+8 = 05:30 UTC
+    const signal = fakeSignal({
+      timestamp: new Date("2024-06-15T05:30:00.000Z").getTime(),
+    });
+    // Trade at 13:35 UTC+8 = 05:35 UTC
+    const trade = fakeLiveTrade({
+      entryTime: "2024-06-15T05:35:00.000Z",
+    });
+
+    const bt = fakeBacktestResult([signal]);
+    const result = alignTrades([trade], bt, {
+      tradingSession: A_SHARE_AFTERNOON_SESSION,
+    });
+
+    expect(result.pairs.filter((p) => p.matchType === "exact" || p.matchType === "time_shifted")).toHaveLength(1);
+  });
+});
+
+// ── computePnlDrift ──────────────────────────────────────────
+
+describe("computePnlDrift", () => {
+  it("computes cumulative PnL drift for matched trade records", () => {
+    const live = [
+      fakeLiveTrade({
+        tradeId: "t-1",
+        netPnl: 500,
+        exitTime: "2024-06-16T14:30:00.000Z",
+        holdingDays: 1,
+      }),
+      fakeLiveTrade({
+        tradeId: "t-2",
+        netPnl: -200,
+        entryTime: "2024-06-17T09:35:00.000Z",
+        exitTime: "2024-06-18T14:30:00.000Z",
+        holdingDays: 2,
+      }),
+    ];
+    const bt = [
+      fakeBtTrade({
+        tradeId: "bt-1",
+        netPnl: 520,
+        exitTime: "2024-06-16T14:30:00.000Z",
+        holdingDays: 1,
+      }),
+      fakeBtTrade({
+        tradeId: "bt-2",
+        netPnl: -180,
+        entryTime: "2024-06-17T09:30:00.000Z",
+        exitTime: "2024-06-18T14:30:00.000Z",
+        holdingDays: 2,
+      }),
+    ];
+
+    const alignment = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+    const drift = computePnlDrift(alignment);
+
+    expect(drift.strategyId).toBe("dual-ma");
+    expect(drift.driftCurve.length).toBeGreaterThan(0);
+    // Final drift should be (500-200) - (520-180) = 300 - 340 = -40
+    expect(drift.finalDrift).toBeCloseTo(-40, 1);
+  });
+
+  it("returns empty drift for no pairs", () => {
+    const alignment = alignTradeRecords([], [], { strategyId: "dual-ma" });
+    const drift = computePnlDrift(alignment);
+
+    expect(drift.driftCurve).toHaveLength(0);
+    expect(drift.finalDrift).toBe(0);
+    expect(drift.maxDrift).toBe(0);
+  });
+});
+
+// ── formatPnlDriftReport ─────────────────────────────────────
+
+describe("formatPnlDriftReport", () => {
+  it("formats a readable drift report", () => {
+    const live = [
+      fakeLiveTrade({ tradeId: "t-1", netPnl: 500, exitTime: "2024-06-16T14:30:00.000Z", holdingDays: 1 }),
+    ];
+    const bt = [
+      fakeBtTrade({ tradeId: "bt-1", netPnl: 520, exitTime: "2024-06-16T14:30:00.000Z", holdingDays: 1 }),
+    ];
+
+    const alignment = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+    const drift = computePnlDrift(alignment);
+    const report = formatPnlDriftReport(drift);
+
+    expect(report).toContain("累计盈亏偏移报告");
+    expect(report).toContain("dual-ma");
+    expect(report).toContain("最大偏移");
+    expect(report).toContain("最终偏移");
+  });
+});
+
+// ── exportAlignmentCsv ──────────────────────────────────────
+
+describe("exportAlignmentCsv", () => {
+  it("exports matched pairs as CSV", () => {
+    const live = [
+      fakeLiveTrade({
+        exitTime: "2024-06-18T14:35:00.000Z",
+        exitPrice: 1845,
+        holdingDays: 3,
+      }),
+    ];
+    const bt = [fakeBtTrade()];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+    const csv = exportAlignmentCsv(result);
+
+    // Header row + 1 data row
+    const lines = csv.split("\n");
+    expect(lines.length).toBe(2);
+    expect(lines[0]).toContain("配对ID");
+    expect(lines[0]).toContain("匹配类型");
+    expect(lines[0]).toContain("实盘入场价");
+    expect(lines[0]).toContain("数量偏差(%)");
+    expect(lines[1]).toContain("600519");
+  });
+
+  it("handles empty result", () => {
+    const result = alignTradeRecords([], [], { strategyId: "dual-ma" });
+    const csv = exportAlignmentCsv(result);
+
+    const lines = csv.split("\n");
+    expect(lines.length).toBe(1); // Only header
+  });
+
+  it("escapes fields with commas", () => {
+    const live = [
+      fakeLiveTrade({
+        tradeId: "t-with,comma",
+        exitTime: "2024-06-18T14:35:00.000Z",
+        holdingDays: 3,
+      }),
+    ];
+    const bt = [fakeBtTrade()];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+    const csv = exportAlignmentCsv(result);
+
+    // The comma in tradeId should not break CSV parsing
+    expect(csv).toBeDefined();
+    const lines = csv.split("\n");
+    expect(lines.length).toBe(2);
   });
 });

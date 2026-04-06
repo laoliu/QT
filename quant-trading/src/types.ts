@@ -1062,6 +1062,8 @@ export type AlignedTradePair = {
   timeDeltaMs?: number;
   /** Price slippage: (liveEntryPrice - backtestPrice) / backtestPrice. */
   priceSlippage?: number;
+  /** Quantity slippage: (liveQuantity - backtestQuantity) / backtestQuantity. */
+  quantitySlippage?: number;
   /** PnL difference: liveTrade.netPnl - backtestEstimatedPnl. */
   pnlDelta?: number;
 };
@@ -1074,6 +1076,18 @@ export type AlignmentConfig = {
   priceToleranceRatio?: number;
   /** Whether to include backtest_only signals that had no live execution (default: true). */
   includeUnexecuted?: boolean;
+  /** Restrict matching to specific trading sessions (e.g., A-share morning/afternoon). */
+  tradingSession?: TradingSession;
+};
+
+/** Trading session time window for session-aware alignment. */
+export type TradingSession = {
+  /** Session name (e.g., "morning", "afternoon", "all"). */
+  name: string;
+  /** Start time of session in HH:MM format (local market time). */
+  startTime: string;
+  /** End time of session in HH:MM format (local market time). */
+  endTime: string;
 };
 
 /** Summary statistics for a set of aligned trade pairs. */
@@ -1089,6 +1103,8 @@ export type AlignmentSummary = {
   avgPriceSlippage: number;
   /** Average PnL delta across matched pairs. */
   avgPnlDelta: number;
+  /** Average quantity slippage across matched pairs. */
+  avgQuantitySlippage: number;
   /** Execution rate: matched / (matched + backtestOnly). */
   executionRate: number;
   /** Correlation of PnL between live and backtest (Pearson r, -1 to 1). */
@@ -1132,6 +1148,8 @@ export type AlignedTradeRecordPair = {
   exitPriceSlippage?: number;
   /** PnL difference: liveTrade.netPnl - backtestTrade.netPnl. */
   pnlDelta?: number;
+  /** Quantity slippage: (liveQty - btQty) / btQty. */
+  quantitySlippage?: number;
   /** Holding period difference in days. */
   holdingDaysDelta?: number;
 };
@@ -1145,4 +1163,35 @@ export type TradeRecordAlignmentResult = {
   summary: AlignmentSummary;
   symbolBreakdown?: Record<string, AlignmentSummary>;
   config: Required<AlignmentConfig>;
+};
+
+/** Cumulative PnL drift point — tracks divergence over time. */
+export type PnlDriftPoint = {
+  /** ISO date string. */
+  date: string;
+  /** Cumulative live PnL up to this date. */
+  cumulativeLivePnl: number;
+  /** Cumulative backtest PnL up to this date. */
+  cumulativeBacktestPnl: number;
+  /** Drift = cumulative live - cumulative backtest. */
+  drift: number;
+  /** Drift as percentage of backtest PnL (if non-zero). */
+  driftPct: number;
+};
+
+/** Cumulative PnL drift analysis result. */
+export type PnlDriftResult = {
+  strategyId: string;
+  symbols: string[];
+  dateRange: { from: string; to: string };
+  /** Time-ordered drift curve. */
+  driftCurve: PnlDriftPoint[];
+  /** Maximum absolute drift observed. */
+  maxDrift: number;
+  /** Maximum absolute drift as percentage. */
+  maxDriftPct: number;
+  /** Final drift at end of period. */
+  finalDrift: number;
+  /** Final drift as percentage. */
+  finalDriftPct: number;
 };

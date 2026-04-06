@@ -23,8 +23,11 @@ import type {
   AlignmentResult,
   AlignmentSummary,
   BacktestResult,
+  PnlDriftPoint,
+  PnlDriftResult,
   TradeRecord,
   TradeRecordAlignmentResult,
+  TradingSession,
   TradingSignal,
 } from "../types.js";
 
@@ -38,6 +41,7 @@ function resolveConfig(config?: AlignmentConfig): Required<AlignmentConfig> {
     timeToleranceMs: config?.timeToleranceMs ?? DEFAULT_TIME_TOLERANCE_MS,
     priceToleranceRatio: config?.priceToleranceRatio ?? DEFAULT_PRICE_TOLERANCE_RATIO,
     includeUnexecuted: config?.includeUnexecuted ?? true,
+    tradingSession: config?.tradingSession ?? undefined as unknown as TradingSession,
   };
 }
 
@@ -69,6 +73,32 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
     arr.push(item);
   }
   return map;
+}
+
+/**
+ * Check if a timestamp falls within a trading session time window.
+ * Compares only the HH:MM portion of the timestamp (assumes local market time in UTC+8 for A-share).
+ */
+function isInTradingSession(timestamp: number, session: TradingSession | undefined): boolean {
+  if (!session) return true;
+
+  const date = new Date(timestamp);
+  // A-share market operates in UTC+8
+  const utc8Offset = 8 * 60;
+  const localMinutes = date.getUTCHours() * 60 + date.getUTCMinutes() + utc8Offset;
+  const normalizedMinutes = ((localMinutes % 1440) + 1440) % 1440;
+
+  const [startH, startM] = session.startTime.split(":").map(Number);
+  const [endH, endM] = session.endTime.split(":").map(Number);
+  const startMinutes = startH! * 60 + startM!;
+  const endMinutes = endH! * 60 + endM!;
+
+  return normalizedMinutes >= startMinutes && normalizedMinutes <= endMinutes;
+}
+
+/** Extract date string (YYYY-MM-DD) from a timestamp. */
+function toDateStr(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
 /** Pearson correlation coefficient for two equal-length number arrays. */
@@ -119,7 +149,11 @@ function alignSymbol(
 ): AlignedTradePair[] {
   const pairs: AlignedTradePair[] = [];
 
+  // Filter by trading session if configured
+  const sessionFilter = cfg.tradingSession;
+
   const liveEntries: LiveTradeEntry[] = liveTrades
+    .filter((t) => isInTradingSession(toTimestamp(t.entryTime), sessionFilter))
     .map((trade) => ({
       trade,
       timestamp: toTimestamp(trade.entryTime),
@@ -128,6 +162,7 @@ function alignSymbol(
     .sort((a, b) => a.timestamp - b.timestamp);
 
   const btEntries: BacktestSignalEntry[] = backtestSignals
+    .filter((s) => isInTradingSession(toTimestamp(s.timestamp), sessionFilter))
     .map((signal) => ({
       signal,
       timestamp: toTimestamp(signal.timestamp),
@@ -175,6 +210,13 @@ function alignSymbol(
           ? (le.trade.entryPrice - be.signal.price) / be.signal.price
           : 0;
 
+      // Quantity slippage
+      const btQuantity = be.signal.quantity;
+      const quantitySlippage =
+        btQuantity != null && btQuantity > 0
+          ? (le.trade.quantity - btQuantity) / btQuantity
+          : undefined;
+
       // Determine match type
       const matchType: AlignmentMatchType =
         Math.abs(timeDeltaMs) <= cfg.timeToleranceMs / 10 ? "exact" : "time_shifted";
@@ -189,6 +231,7 @@ function alignSymbol(
         backtestTimestamp: be.timestamp,
         timeDeltaMs,
         priceSlippage,
+        quantitySlippage,
         pnlDelta: le.trade.netPnl,
       });
     }
@@ -234,6 +277,7 @@ function computeSummary(pairs: AlignedTradePair[]): AlignmentSummary {
   const matchedTimeDeltasAbs: number[] = [];
   const matchedSlippages: number[] = [];
   const matchedPnlDeltas: number[] = [];
+  const matchedQtySlippages: number[] = [];
   const livePnls: number[] = [];
   const btEstPnls: number[] = [];
 
@@ -257,6 +301,7 @@ function computeSummary(pairs: AlignedTradePair[]): AlignmentSummary {
       if (p.timeDeltaMs != null) matchedTimeDeltasAbs.push(Math.abs(p.timeDeltaMs));
       if (p.priceSlippage != null) matchedSlippages.push(p.priceSlippage);
       if (p.pnlDelta != null) matchedPnlDeltas.push(p.pnlDelta);
+      if (p.quantitySlippage != null) matchedQtySlippages.push(p.quantitySlippage);
       if (p.liveTrade) livePnls.push(p.liveTrade.netPnl);
       // For correlation, use 0 as backtest PnL estimate when unavailable
       btEstPnls.push(0);
@@ -275,6 +320,7 @@ function computeSummary(pairs: AlignedTradePair[]): AlignmentSummary {
     avgTimeDeltaMs: avg(matchedTimeDeltasAbs),
     avgPriceSlippage: avg(matchedSlippages),
     avgPnlDelta: avg(matchedPnlDeltas),
+    avgQuantitySlippage: avg(matchedQtySlippages),
     executionRate: matched + backtestOnlySignals > 0
       ? matched / (matched + backtestOnlySignals)
       : 0,
@@ -447,7 +493,10 @@ function alignTradeRecordsForSymbol(
 ): AlignedTradeRecordPair[] {
   const pairs: AlignedTradeRecordPair[] = [];
 
+  const sessionFilter = cfg.tradingSession;
+
   const liveEntries: TradeRecordEntry[] = liveTrades
+    .filter((t) => isInTradingSession(toTimestamp(t.entryTime), sessionFilter))
     .map((t) => ({
       trade: t,
       entryTs: toTimestamp(t.entryTime),
@@ -457,6 +506,7 @@ function alignTradeRecordsForSymbol(
     .sort((a, b) => a.entryTs - b.entryTs);
 
   const btEntries: TradeRecordEntry[] = backtestTrades
+    .filter((t) => isInTradingSession(toTimestamp(t.entryTime), sessionFilter))
     .map((t) => ({
       trade: t,
       entryTs: toTimestamp(t.entryTime),
@@ -520,6 +570,11 @@ function alignTradeRecordsForSymbol(
 
       const pnlDelta = le.trade.netPnl - be.trade.netPnl;
 
+      const quantitySlippage =
+        be.trade.quantity > 0
+          ? (le.trade.quantity - be.trade.quantity) / be.trade.quantity
+          : undefined;
+
       let holdingDaysDelta: number | undefined;
       if (le.trade.holdingDays != null && be.trade.holdingDays != null) {
         holdingDaysDelta = le.trade.holdingDays - be.trade.holdingDays;
@@ -539,6 +594,7 @@ function alignTradeRecordsForSymbol(
         entryPriceSlippage,
         exitPriceSlippage,
         pnlDelta,
+        quantitySlippage,
         holdingDaysDelta,
       });
     }
@@ -581,6 +637,7 @@ function computeTradeRecordSummary(pairs: AlignedTradeRecordPair[]): AlignmentSu
   const matchedTimeDeltasAbs: number[] = [];
   const matchedSlippages: number[] = [];
   const matchedPnlDeltas: number[] = [];
+  const matchedQtySlippages: number[] = [];
   const livePnls: number[] = [];
   const btPnls: number[] = [];
 
@@ -604,6 +661,7 @@ function computeTradeRecordSummary(pairs: AlignedTradeRecordPair[]): AlignmentSu
       if (p.entryTimeDeltaMs != null) matchedTimeDeltasAbs.push(Math.abs(p.entryTimeDeltaMs));
       if (p.entryPriceSlippage != null) matchedSlippages.push(p.entryPriceSlippage);
       if (p.pnlDelta != null) matchedPnlDeltas.push(p.pnlDelta);
+      if (p.quantitySlippage != null) matchedQtySlippages.push(p.quantitySlippage);
       if (p.liveTrade) livePnls.push(p.liveTrade.netPnl);
       if (p.backtestTrade) btPnls.push(p.backtestTrade.netPnl);
     }
@@ -621,6 +679,7 @@ function computeTradeRecordSummary(pairs: AlignedTradeRecordPair[]): AlignmentSu
     avgTimeDeltaMs: avg(matchedTimeDeltasAbs),
     avgPriceSlippage: avg(matchedSlippages),
     avgPnlDelta: avg(matchedPnlDeltas),
+    avgQuantitySlippage: avg(matchedQtySlippages),
     executionRate:
       matched + backtestOnlySignals > 0 ? matched / (matched + backtestOnlySignals) : 0,
     pnlCorrelation: pearsonCorrelation(livePnls, btPnls),
@@ -754,3 +813,217 @@ export function formatTradeRecordAlignmentReport(result: TradeRecordAlignmentRes
 
   return lines.join("\n");
 }
+
+// ── Cumulative PnL Drift ─────────────────────────────────────
+
+/**
+ * Compute cumulative PnL drift curve between matched live and backtest trades.
+ *
+ * Groups matched pairs by date, accumulates PnL for both sides, and outputs
+ * a time-ordered drift curve showing where live execution diverged from backtest.
+ */
+export function computePnlDrift(result: TradeRecordAlignmentResult): PnlDriftResult {
+  // Collect matched pairs with both sides
+  const matchedPairs = result.pairs.filter(
+    (p) =>
+      (p.matchType === "exact" || p.matchType === "time_shifted") &&
+      p.liveTrade &&
+      p.backtestTrade,
+  );
+
+  // Build daily PnL map
+  const dailyLive = new Map<string, number>();
+  const dailyBt = new Map<string, number>();
+
+  for (const p of matchedPairs) {
+    const exitTime = p.liveTrade!.exitTime ?? p.liveTrade!.entryTime;
+    const date = toDateStr(toTimestamp(exitTime));
+    dailyLive.set(date, (dailyLive.get(date) ?? 0) + p.liveTrade!.netPnl);
+    dailyBt.set(date, (dailyBt.get(date) ?? 0) + p.backtestTrade!.netPnl);
+  }
+
+  // Also add unmatched live trades to the live PnL
+  for (const p of result.pairs) {
+    if (p.matchType === "live_only" && p.liveTrade) {
+      const exitTime = p.liveTrade.exitTime ?? p.liveTrade.entryTime;
+      const date = toDateStr(toTimestamp(exitTime));
+      dailyLive.set(date, (dailyLive.get(date) ?? 0) + p.liveTrade.netPnl);
+    }
+  }
+
+  // Also add unmatched backtest trades
+  for (const p of result.pairs) {
+    if (p.matchType === "backtest_only" && p.backtestTrade) {
+      const exitTime = p.backtestTrade.exitTime ?? p.backtestTrade.entryTime;
+      const date = toDateStr(toTimestamp(exitTime));
+      dailyBt.set(date, (dailyBt.get(date) ?? 0) + p.backtestTrade.netPnl);
+    }
+  }
+
+  // Merge all dates and sort
+  const allDates = [...new Set([...dailyLive.keys(), ...dailyBt.keys()])].sort();
+
+  let cumulativeLive = 0;
+  let cumulativeBt = 0;
+  let maxDrift = 0;
+  let maxDriftPct = 0;
+  const driftCurve: PnlDriftPoint[] = [];
+
+  for (const date of allDates) {
+    cumulativeLive += dailyLive.get(date) ?? 0;
+    cumulativeBt += dailyBt.get(date) ?? 0;
+    const drift = cumulativeLive - cumulativeBt;
+    const driftPct = cumulativeBt !== 0 ? drift / Math.abs(cumulativeBt) : 0;
+
+    driftCurve.push({
+      date,
+      cumulativeLivePnl: Number(cumulativeLive.toFixed(2)),
+      cumulativeBacktestPnl: Number(cumulativeBt.toFixed(2)),
+      drift: Number(drift.toFixed(2)),
+      driftPct: Number(driftPct.toFixed(4)),
+    });
+
+    if (Math.abs(drift) > Math.abs(maxDrift)) {
+      maxDrift = drift;
+    }
+    if (Math.abs(driftPct) > Math.abs(maxDriftPct)) {
+      maxDriftPct = driftPct;
+    }
+  }
+
+  const finalPoint = driftCurve.at(-1);
+
+  return {
+    strategyId: result.strategyId,
+    symbols: result.symbols,
+    dateRange: result.dateRange,
+    driftCurve,
+    maxDrift: Number(maxDrift.toFixed(2)),
+    maxDriftPct: Number(maxDriftPct.toFixed(4)),
+    finalDrift: finalPoint?.drift ?? 0,
+    finalDriftPct: finalPoint?.driftPct ?? 0,
+  };
+}
+
+/**
+ * Format PnL drift result as a human-readable report.
+ */
+export function formatPnlDriftReport(drift: PnlDriftResult): string {
+  const lines: string[] = [
+    `=== 累计盈亏偏移报告 ===`,
+    `策略: ${drift.strategyId}`,
+    `标的: ${drift.symbols.join(", ")}`,
+    `时间范围: ${drift.dateRange.from} ~ ${drift.dateRange.to}`,
+    ``,
+    `--- 偏移统计 ---`,
+    `最大偏移: ¥${drift.maxDrift.toFixed(2)} (${(drift.maxDriftPct * 100).toFixed(2)}%)`,
+    `最终偏移: ¥${drift.finalDrift.toFixed(2)} (${(drift.finalDriftPct * 100).toFixed(2)}%)`,
+    ``,
+    `--- 偏移曲线 ---`,
+    `日期          实盘累计PnL   回测累计PnL    偏移`,
+  ];
+
+  for (const p of drift.driftCurve) {
+    lines.push(
+      `${p.date}  ¥${p.cumulativeLivePnl.toFixed(2).padStart(12)}  ` +
+        `¥${p.cumulativeBacktestPnl.toFixed(2).padStart(12)}  ` +
+        `¥${p.drift.toFixed(2).padStart(10)} (${(p.driftPct * 100).toFixed(2)}%)`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+// ── CSV Export ───────────────────────────────────────────────
+
+/**
+ * Export trade-record alignment pairs as CSV string.
+ * Useful for external analysis in Excel or other tools.
+ */
+export function exportAlignmentCsv(result: TradeRecordAlignmentResult): string {
+  const headers = [
+    "配对ID",
+    "匹配类型",
+    "标的",
+    "实盘入场时间",
+    "实盘出场时间",
+    "实盘入场价",
+    "实盘出场价",
+    "实盘数量",
+    "实盘净盈亏",
+    "实盘持仓天数",
+    "回测入场时间",
+    "回测出场时间",
+    "回测入场价",
+    "回测出场价",
+    "回测数量",
+    "回测净盈亏",
+    "回测持仓天数",
+    "入场时间偏移(小时)",
+    "出场时间偏移(小时)",
+    "入场价格滑点(%)",
+    "出场价格滑点(%)",
+    "数量偏差(%)",
+    "盈亏差异",
+    "持仓天数差异",
+  ];
+
+  const rows: string[][] = [headers];
+
+  for (const p of result.pairs) {
+    const lt = p.liveTrade;
+    const bt = p.backtestTrade;
+    rows.push([
+      p.id,
+      p.matchType,
+      p.symbol,
+      lt?.entryTime ?? "",
+      lt?.exitTime ?? "",
+      lt != null ? String(lt.entryPrice) : "",
+      lt?.exitPrice != null ? String(lt.exitPrice) : "",
+      lt != null ? String(lt.quantity) : "",
+      lt != null ? String(lt.netPnl) : "",
+      lt?.holdingDays != null ? String(lt.holdingDays) : "",
+      bt?.entryTime ?? "",
+      bt?.exitTime ?? "",
+      bt != null ? String(bt.entryPrice) : "",
+      bt?.exitPrice != null ? String(bt.exitPrice) : "",
+      bt != null ? String(bt.quantity) : "",
+      bt != null ? String(bt.netPnl) : "",
+      bt?.holdingDays != null ? String(bt.holdingDays) : "",
+      p.entryTimeDeltaMs != null ? (p.entryTimeDeltaMs / 3_600_000).toFixed(2) : "",
+      p.exitTimeDeltaMs != null ? (p.exitTimeDeltaMs / 3_600_000).toFixed(2) : "",
+      p.entryPriceSlippage != null ? (p.entryPriceSlippage * 100).toFixed(3) : "",
+      p.exitPriceSlippage != null ? (p.exitPriceSlippage * 100).toFixed(3) : "",
+      p.quantitySlippage != null ? (p.quantitySlippage * 100).toFixed(2) : "",
+      p.pnlDelta != null ? p.pnlDelta.toFixed(2) : "",
+      p.holdingDaysDelta != null ? String(p.holdingDaysDelta) : "",
+    ]);
+  }
+
+  return rows.map((r) => r.map(escapeCsvField).join(",")).join("\n");
+}
+
+/** Escape a CSV field: wrap in quotes if it contains commas, quotes, or newlines. */
+function escapeCsvField(field: string): string {
+  if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+  return field;
+}
+
+// ── Predefined A-share Trading Sessions ─────────────────────
+
+/** A-share morning session (9:30 – 11:30 CST). */
+export const A_SHARE_MORNING_SESSION: TradingSession = {
+  name: "morning",
+  startTime: "09:30",
+  endTime: "11:30",
+};
+
+/** A-share afternoon session (13:00 – 15:00 CST). */
+export const A_SHARE_AFTERNOON_SESSION: TradingSession = {
+  name: "afternoon",
+  startTime: "13:00",
+  endTime: "15:00",
+};

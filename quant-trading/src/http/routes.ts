@@ -1635,6 +1635,7 @@ function registerLiveBacktestCompareRoutes({
   equityHistory,
   equityHistoryPaper,
   equityHistoryLive,
+  alertStore,
   secure,
 }: RouteDeps): void {
   // GET /quant/api/live-backtest-compare?backtest_id=xxx[&mode=paper|live&start=&end=]
@@ -2011,6 +2012,23 @@ function registerLiveBacktestCompareRoutes({
       } catch (err) {
         json(res, { status: "error", message: (err as Error).message }, 500);
       }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/decay-alerts — list strategy decay alerts
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/decay-alerts",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const decayAlerts = alertStore.query({ source: "strategy" }).filter(
+        (a) => a.metadata?.driftScore != null,
+      );
+      json(res, {
+        status: "ok",
+        count: decayAlerts.length,
+        data: decayAlerts,
+      });
     }),
   });
 }

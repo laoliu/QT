@@ -897,6 +897,19 @@ export type QuantTradingConfig = {
     criticalThresholdMs?: number;
   };
 
+  // ── Live vs Backtest Comparison ────────────────────────────────
+
+  /**
+   * Strategy decay alert configuration for live-vs-backtest comparison.
+   * Controls when decay alerts are triggered based on return deviation.
+   */
+  decayAlert?: {
+    /** Default return deviation threshold (0-1). Default 0.20 (20%). */
+    returnDeviationThreshold?: number;
+    /** Per-strategy threshold overrides: { strategyId: threshold }. */
+    perStrategyOverrides?: Record<string, number>;
+  };
+
   // ── Options Configuration ──────────────────────────────────────
 
   /**

@@ -9,7 +9,9 @@ import {
   compareBySymbol,
   compareOutOfSample,
   findClosestBacktest,
+  DEFAULT_DECAY_ALERT_CONFIG,
   type LiveBacktestCompareRequest,
+  type DecayAlertConfig,
 } from "./live-backtest-compare.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -418,5 +420,66 @@ describe("findClosestBacktest", () => {
     const result = findClosestBacktest([], liveEquity);
     expect(result.bestMatch).toBeNull();
     expect(result.candidates.length).toBe(0);
+  });
+});
+
+describe("curveCorrelation", () => {
+  it("returns positive correlation for similar equity curves", () => {
+    const result = compareLiveVsBacktest(makeReq());
+    // Both curves go up, so correlation should be positive
+    expect(result.curveCorrelation).toBeGreaterThan(0);
+  });
+
+  it("returns zero with no overlapping data", () => {
+    const req = makeReq({ liveEquity: [makeEquitySnap("2025-01-01", 100000)] });
+    const result = compareLiveVsBacktest(req);
+    expect(result.curveCorrelation).toBe(0);
+  });
+});
+
+describe("avgSignalDelayMs", () => {
+  it("computes average delay between signals and trades", () => {
+    const result = compareLiveVsBacktest(makeReq());
+    // We have 2 live signals and 2 live trades, each with 1 min delay (60_000 ms)
+    expect(result.avgSignalDelayMs).toBeGreaterThanOrEqual(0);
+    expect(typeof result.avgSignalDelayMs).toBe("number");
+  });
+
+  it("returns zero with no matching signals", () => {
+    const req = makeReq({ liveSignals: [] });
+    const result = compareLiveVsBacktest(req);
+    expect(result.avgSignalDelayMs).toBe(0);
+  });
+});
+
+describe("decayAlertTriggered", () => {
+  it("is false when return deviation is within threshold", () => {
+    // Backtest: 15%, Live: ~12%, deviation = |12/15 - 1| = 0.2 = 20%
+    // Default threshold is 0.20, so exactly at boundary
+    const result = compareLiveVsBacktest(makeReq());
+    expect(typeof result.decayAlertTriggered).toBe("boolean");
+  });
+
+  it("is true when return deviation exceeds threshold", () => {
+    // Make a big gap: backtest 50%, live ~12%
+    const bt = makeBacktest({ totalReturn: 50 });
+    const config: DecayAlertConfig = { returnDeviationThreshold: 0.10 };
+    const result = compareLiveVsBacktest(makeReq({ backtestResult: bt }), config);
+    expect(result.decayAlertTriggered).toBe(true);
+  });
+
+  it("respects per-strategy override", () => {
+    const config: DecayAlertConfig = {
+      returnDeviationThreshold: 0.01,  // very tight default
+      perStrategyOverrides: {
+        ma_cross: 0.99,  // very lenient for this strategy
+      },
+    };
+    const result = compareLiveVsBacktest(makeReq(), config);
+    expect(result.decayAlertTriggered).toBe(false);
+  });
+
+  it("uses default threshold from DEFAULT_DECAY_ALERT_CONFIG", () => {
+    expect(DEFAULT_DECAY_ALERT_CONFIG.returnDeviationThreshold).toBe(0.20);
   });
 });

@@ -30,12 +30,14 @@ import {
   compareOutOfSample,
   findClosestBacktest,
   exportComparisonCsv,
+  DEFAULT_DECAY_ALERT_CONFIG,
   type LiveBacktestCompareResult,
   type SegmentGranularity,
   type PeriodSegmentedResult,
   type TradeMatchResult,
   type DriftHistory,
   type PerSymbolBreakdownResult,
+  type DecayAlertConfig,
 } from "../services/live-backtest-compare.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
@@ -108,6 +110,9 @@ function formatResult(result: LiveBacktestCompareResult) {
       观察: drift.observations,
     },
     权益曲线数据点: result.equityCurveOverlay.points.length,
+    曲线相关系数: fmt(result.curveCorrelation, 4),
+    平均信号延迟: result.avgSignalDelayMs > 0 ? `${fmt(result.avgSignalDelayMs / 1000, 1)}秒` : "N/A",
+    衰减告警触发: result.decayAlertTriggered ? "是" : "否",
   };
 
   // Benchmark comparison (if available)
@@ -159,6 +164,7 @@ export function createLiveBacktestCompareTool(
   equityHistoryPaper: EquityHistory,
   equityHistoryLive: EquityHistory,
   alertStore?: AlertStore,
+  decayAlertConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
 ) {
   return {
     name: "live_backtest_compare",
@@ -174,13 +180,14 @@ export function createLiveBacktestCompareTool(
       "action=report 生成完整对比报告, " +
       "action=out_of_sample 样本外验证（回测后实盘表现）, " +
       "action=closest_backtest 在多个回测中找到最匹配实盘走势的回测, " +
-      "action=export 导出CSV格式对比报告（含权益曲线和逐笔匹配）。",
+      "action=export 导出CSV格式对比报告（含权益曲线和逐笔匹配）。" +
+      "action=decay_alerts 查看衰减告警列表。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts"],
           description: "操作类型",
         },
         backtest_id: {
@@ -246,13 +253,13 @@ export function createLiveBacktestCompareTool(
 
       switch (action) {
         case "compare": {
-          const result = compareLiveVsBacktest(req);
+          const result = compareLiveVsBacktest(req, decayAlertConfig);
           fireDriftAlert(result);
           return formatResult(result);
         }
 
         case "drift_check": {
-          const result = compareLiveVsBacktest(req);
+          const result = compareLiveVsBacktest(req, decayAlertConfig);
           fireDriftAlert(result);
           return {
             策略: result.strategyId,
@@ -260,6 +267,9 @@ export function createLiveBacktestCompareTool(
             严重程度: result.drift.severity,
             收益偏差: `${fmt(result.returnComparison.returnDiff, 2)}%`,
             执行率: `${fmt(result.executionQuality.fillRate * 100, 0)}%`,
+            曲线相关系数: fmt(result.curveCorrelation, 4),
+            平均信号延迟: result.avgSignalDelayMs > 0 ? `${fmt(result.avgSignalDelayMs / 1000, 1)}秒` : "N/A",
+            衰减告警触发: result.decayAlertTriggered ? "是" : "否",
             观察: result.drift.observations,
           };
         }
@@ -360,7 +370,7 @@ export function createLiveBacktestCompareTool(
         }
 
         case "report": {
-          const result = compareLiveVsBacktest(req);
+          const result = compareLiveVsBacktest(req, decayAlertConfig);
           fireDriftAlert(result);
           const granularity = (args.granularity as SegmentGranularity) ?? "monthly";
           const segmented = comparePeriodSegmented(req, granularity);
@@ -567,7 +577,7 @@ export function createLiveBacktestCompareTool(
           const resolved2 = await resolveCompareData(args);
           if ("error" in resolved2) return resolved2;
           const { req: req2 } = resolved2;
-          const result2 = compareLiveVsBacktest(req2);
+          const result2 = compareLiveVsBacktest(req2, decayAlertConfig);
           const matched2 = matchTrades(req2);
           const csv = exportComparisonCsv(result2, matched2);
 
@@ -589,13 +599,34 @@ export function createLiveBacktestCompareTool(
           };
         }
 
+        case "decay_alerts": {
+          if (!alertStore) return { alerts: [], message: "告警存储未启用" };
+          const decayAlerts = alertStore.query({ source: "strategy" }).filter(
+            (a) => a.metadata?.driftScore != null,
+          );
+          if (decayAlerts.length === 0) {
+            return { message: "暂无策略衰减告警" };
+          }
+          return {
+            告警数: decayAlerts.length,
+            告警列表: decayAlerts.slice(0, 20).map((a) => ({
+              严重程度: a.severity,
+              消息: a.message,
+              策略: a.metadata?.strategyId ?? "N/A",
+              漂移得分: a.metadata?.driftScore ?? "N/A",
+              漂移严重程度: a.metadata?.driftSeverity ?? "N/A",
+              时间: a.timestamp,
+            })),
+          };
+        }
+
         default:
           return { error: `未知操作: ${action}` };
       }
     },
   };
 
-  /** Fire an alert via AlertStore when drift severity is high or critical. */
+  /** Fire an alert via AlertStore when drift severity is high/critical or decay alert is triggered. */
   function fireDriftAlert(result: LiveBacktestCompareResult): void {
     if (!alertStore) return;
     const { drift, strategyId } = result;
@@ -610,6 +641,21 @@ export function createLiveBacktestCompareTool(
           driftScore: drift.score,
           driftSeverity: drift.severity,
           components: drift.components,
+        },
+      );
+    }
+    // Also fire a specific decay alert when return deviation exceeds configured threshold
+    if (result.decayAlertTriggered && drift.severity !== "high" && drift.severity !== "critical") {
+      alertStore.add(
+        "warning",
+        "strategy",
+        `策略 ${strategyId} 收益偏离度超过阈值 (${result.returnComparison.returnDiff.toFixed(2)}%): 可能正在衰减`,
+        {
+          strategyId,
+          driftScore: drift.score,
+          driftSeverity: drift.severity,
+          decayAlertTriggered: true,
+          returnDiff: result.returnComparison.returnDiff,
         },
       );
     }

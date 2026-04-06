@@ -15,6 +15,19 @@
 import type { BacktestResult, TradingSignal, TradeRecord } from "../types.js";
 import type { EquitySnapshot } from "./equity-history.js";
 
+// ── Decay alert configuration ────────────────────────────────
+
+export interface DecayAlertConfig {
+  /** Default return deviation threshold (0-1). Default 0.20 (20%). */
+  returnDeviationThreshold: number;
+  /** Per-strategy threshold overrides. */
+  perStrategyOverrides?: Record<string, number>;
+}
+
+export const DEFAULT_DECAY_ALERT_CONFIG: DecayAlertConfig = {
+  returnDeviationThreshold: 0.20,
+};
+
 // ── Types ────────────────────────────────────────────────────
 
 export interface LiveBacktestCompareRequest {
@@ -115,6 +128,12 @@ export interface LiveBacktestCompareResult {
   executionQuality: ExecutionQuality;
   equityCurveOverlay: EquityCurveOverlay;
   drift: DriftAnalysis;
+  /** Pearson correlation between backtest and live equity curves (−1 to 1) */
+  curveCorrelation: number;
+  /** Average signal-to-execution delay in milliseconds */
+  avgSignalDelayMs: number;
+  /** Whether the return deviation exceeds the configured decay alert threshold */
+  decayAlertTriggered: boolean;
   /** Benchmark comparison (if benchmark data available) */
   benchmarkComparison?: BenchmarkComparison;
   /** Extended risk metrics (Sortino, Calmar, profitFactor) */
@@ -331,6 +350,7 @@ export interface DriftHistory {
  */
 export function compareLiveVsBacktest(
   req: LiveBacktestCompareRequest,
+  decayConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
 ): LiveBacktestCompareResult {
   const { strategyId, startDate, endDate, backtestResult, liveEquity, liveTrades, liveSignals } =
     req;
@@ -342,6 +362,20 @@ export function compareLiveVsBacktest(
   const overlay = buildEquityCurveOverlay(backtestResult, liveEquity);
   const drift = computeDrift(returnComp, drawdownComp, riskComp, execQuality);
 
+  // Curve correlation: Pearson correlation between overlapping equity curve points
+  const curveCorrelation = computeCurveCorrelation(overlay);
+
+  // Average signal delay
+  const avgSignalDelayMs = computeAvgSignalDelay(liveTrades, liveSignals);
+
+  // Decay alert: check if return deviation exceeds threshold
+  const threshold = decayConfig.perStrategyOverrides?.[strategyId]
+    ?? decayConfig.returnDeviationThreshold;
+  const returnDeviation = returnComp.backtestReturn !== 0
+    ? Math.abs(returnComp.liveReturn / returnComp.backtestReturn - 1)
+    : Math.abs(returnComp.returnDiff) / 100;
+  const decayAlertTriggered = returnDeviation >= threshold;
+
   const result: LiveBacktestCompareResult = {
     strategyId,
     period: { start: startDate, end: endDate },
@@ -351,6 +385,9 @@ export function compareLiveVsBacktest(
     executionQuality: execQuality,
     equityCurveOverlay: overlay,
     drift,
+    curveCorrelation,
+    avgSignalDelayMs,
+    decayAlertTriggered,
   };
 
   // Benchmark comparison (if benchmark data available in equity snapshots or backtest)
@@ -540,6 +577,61 @@ function buildEquityCurveOverlay(
     }));
 
   return { points };
+}
+
+// ── Curve correlation ────────────────────────────────────────
+
+function computeCurveCorrelation(overlay: EquityCurveOverlay): number {
+  // Only use points where both backtest and live values exist
+  const both = overlay.points.filter(
+    (p) => p.backtestValue != null && p.liveValue != null,
+  ) as Array<{ date: string; backtestValue: number; liveValue: number }>;
+
+  if (both.length < 2) return 0;
+
+  const n = both.length;
+  const meanBt = both.reduce((a, p) => a + p.backtestValue, 0) / n;
+  const meanLive = both.reduce((a, p) => a + p.liveValue, 0) / n;
+
+  let covSum = 0;
+  let varBt = 0;
+  let varLive = 0;
+  for (const p of both) {
+    const dBt = p.backtestValue - meanBt;
+    const dLive = p.liveValue - meanLive;
+    covSum += dBt * dLive;
+    varBt += dBt * dBt;
+    varLive += dLive * dLive;
+  }
+
+  const denom = Math.sqrt(varBt * varLive);
+  return denom > 0 ? covSum / denom : 0;
+}
+
+// ── Average signal delay ─────────────────────────────────────
+
+function computeAvgSignalDelay(
+  liveTrades: TradeRecord[],
+  liveSignals: TradingSignal[],
+): number {
+  let totalDelay = 0;
+  let count = 0;
+
+  for (const trade of liveTrades) {
+    const matchingSignal = liveSignals.find(
+      (s) =>
+        s.symbol === trade.symbol &&
+        s.strategyId === trade.strategyId &&
+        Math.abs(s.timestamp - new Date(trade.entryTime).getTime()) < 5 * 60 * 1000,
+    );
+    if (matchingSignal) {
+      const delay = Math.abs(new Date(trade.entryTime).getTime() - matchingSignal.timestamp);
+      totalDelay += delay;
+      count++;
+    }
+  }
+
+  return count > 0 ? totalDelay / count : 0;
 }
 
 // ── Period-segmented comparison ──────────────────────────────

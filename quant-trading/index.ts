@@ -662,6 +662,10 @@ const quantTradingPlugin = {
         equityHistoryPaper,
         equityHistoryLive,
         alertStore,
+        config.decayAlert ? {
+          returnDeviationThreshold: config.decayAlert.returnDeviationThreshold ?? 0.20,
+          perStrategyOverrides: config.decayAlert.perStrategyOverrides,
+        } : undefined,
       ),
     };
 

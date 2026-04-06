@@ -183,6 +183,26 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     }),
   });
 
+  // ── Equity drawdown series (for chart overlay) ────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/equity-history/drawdown",
+    handler: secure((_req, res) => {
+      const eh = resolveEquityHistory(urlParams(_req));
+      json(res, { status: "ok", series: eh.getDrawdownSeries(), periods: eh.getDrawdownPeriods() });
+    }),
+  });
+
+  // ── Extended metrics (Sharpe, Sortino, etc.) ─────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/equity-history/metrics",
+    handler: secure((_req, res) => {
+      const eh = resolveEquityHistory(urlParams(_req));
+      json(res, { status: "ok", data: { ...eh.getSummary(), ...eh.getExtendedMetrics() } });
+    }),
+  });
+
   // ── Benchmark comparison ──────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

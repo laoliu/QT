@@ -52,7 +52,7 @@ describe("Dashboard", () => {
     });
 
     it("contains SVG chart renderer function", () => {
-      expect(html).toContain("renderSvgChart");
+      expect(html).toContain("renderInteractiveSvgChart");
       expect(html).toContain("viewBox");
     });
 

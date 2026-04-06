@@ -172,6 +172,40 @@ export function getDashboardHtml(baseUrl: string): string {
     .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .chart-area { opacity: 0.1; }
     .chart-grid { stroke: var(--border); stroke-width: 0.5; }
+    /* Interactive chart tooltip */
+    .chart-tooltip {
+      position: absolute; pointer-events: none; z-index: 10;
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 12px; font-size: 12px; white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: none;
+    }
+    .chart-tooltip .tt-date { color: var(--text-dim); margin-bottom: 4px; }
+    .chart-tooltip .tt-row { display: flex; justify-content: space-between; gap: 12px; }
+    .chart-tooltip .tt-label { color: var(--text-dim); }
+    .chart-tooltip .tt-value { font-weight: 600; }
+    .chart-crosshair { stroke: var(--text-dim); stroke-width: 0.5; stroke-dasharray: 3,3; }
+    .chart-dot { fill: var(--accent); }
+    /* Drawdown overlay */
+    .chart-drawdown-area { fill: var(--red); opacity: 0.08; }
+    /* Daily PnL bars */
+    .pnl-bar-pos { fill: var(--green); opacity: 0.6; }
+    .pnl-bar-neg { fill: var(--red); opacity: 0.6; }
+    /* Range selector */
+    .range-selector { display: flex; gap: 4px; }
+    .range-btn {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;
+    }
+    .range-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .range-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    /* Extended metrics panel */
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 6px; margin-top: 8px; font-size: 12px;
+    }
+    .metric-item { display: flex; flex-direction: column; padding: 4px 0; }
+    .metric-val { font-weight: 600; font-size: 14px; }
+    .metric-lbl { color: var(--text-dim); font-size: 11px; }
     /* Alerts */
     .alert-item {
       padding: 8px 12px;
@@ -270,16 +304,32 @@ export function getDashboardHtml(baseUrl: string): string {
     <div class="card span-2">
       <h2>收益曲线
         <span id="equitySummary" style="font-size:12px;font-weight:400;color:var(--text-dim)"></span>
-        <select id="benchmarkSelect" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:4px;margin-left:8px;" onchange="loadBenchmarkOverlay()">
-          <option value="">无基准</option>
-          <option value="csi300" selected>沪深300</option>
-          <option value="csi500">中证500</option>
-          <option value="sse">上证综指</option>
-          <option value="spy">S&P 500</option>
-        </select>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="range-selector" id="rangeSelector">
+            <button class="range-btn" data-range="30" onclick="setEquityRange(30,this)">30天</button>
+            <button class="range-btn active" data-range="120" onclick="setEquityRange(120,this)">120天</button>
+            <button class="range-btn" data-range="365" onclick="setEquityRange(365,this)">1年</button>
+            <button class="range-btn" data-range="0" onclick="setEquityRange(0,this)">全部</button>
+          </div>
+          <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="showDrawdown" onchange="toggleDrawdownOverlay()" style="accent-color:var(--red);"> 回撤
+          </label>
+          <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="showPnlBars" onchange="togglePnlBars()" style="accent-color:var(--accent);"> 日盈亏
+          </label>
+          <select id="benchmarkSelect" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:4px;" onchange="loadBenchmarkOverlay()">
+            <option value="">无基准</option>
+            <option value="csi300" selected>沪深300</option>
+            <option value="csi500">中证500</option>
+            <option value="sse">上证综指</option>
+            <option value="spy">S&P 500</option>
+          </select>
+        </div>
       </h2>
       <div class="chart-container" id="equityChart"><div class="empty">暂无数据</div></div>
+      <div class="chart-tooltip" id="chartTooltip"></div>
       <div id="benchmarkStats" style="font-size:12px;color:var(--text-dim);margin-top:6px;"></div>
+      <div id="extendedMetrics" class="metrics-grid" style="display:none;"></div>
     </div>
 
     <!-- Daily P&L -->
@@ -570,154 +620,301 @@ export function getDashboardHtml(baseUrl: string): string {
         '<div class="stats"><div class="stat"><span class="value '+pctClass(d.netPnl)+'">¥'+fmt(d.netPnl)+'</span><span class="label">'+(d.date??'今日')+' 净盈亏</span></div></div>';
     }
 
-    // ── Equity chart (SVG) — powered by equity-history API ───
+    // ── Equity chart (interactive SVG) — powered by equity-history API ───
+    let _equityRangeLimit = 120;
+    let _equityHistory = null;  // cached raw data
+    let _drawdownSeries = null; // cached drawdown data
+    let _overlayData = null;    // cached benchmark overlay
+
+    function setEquityRange(limit, btn) {
+      _equityRangeLimit = limit;
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      loadEquityChart();
+    }
+
+    function toggleDrawdownOverlay() { renderCurrentChart(); }
+    function togglePnlBars() { renderCurrentChart(); }
+
     async function loadEquityChart() {
-      // Try dedicated equity-history endpoint first
-      const r = await api('/quant/api/equity-history?limit=120' + modeParam(true));
-      const history = r?.data;
+      var limitParam = _equityRangeLimit > 0 ? '?limit=' + _equityRangeLimit : '?';
+      var r = await api('/quant/api/equity-history' + limitParam + modeParam(true));
+      var history = r && r.data;
 
       if (history && Array.isArray(history) && history.length >= 2) {
-        renderSvgChart('equityChart', history.map(h => ({x: h.date, y: h.equity})));
-        // Load summary stats
-        const sr = await api('/quant/api/equity-history/summary' + modeParam(false));
-        const s = sr?.data;
-        if (s && s.totalDays > 0) {
-          const retCls = pctClass(s.totalReturnPct);
+        _equityHistory = history;
+        // Load drawdown data in parallel with metrics
+        var ddP = api('/quant/api/equity-history/drawdown' + modeParam(false));
+        var metricsP = api('/quant/api/equity-history/metrics' + modeParam(false));
+        var results = await Promise.all([ddP, metricsP]);
+        _drawdownSeries = results[0] && results[0].series;
+        renderCurrentChart();
+        // Show metrics
+        var m = results[1] && results[1].data;
+        if (m && m.totalDays > 0) {
+          var retCls = pctClass(m.totalReturnPct);
           document.getElementById('equitySummary').innerHTML =
-            '<span class="'+retCls+'">'+fmt(s.totalReturnPct)+'%</span> · ' +
-            '最大回撤 '+fmt(s.maxDrawdownPct)+'% · ' +
-            '胜率 '+fmt(s.winRate)+'% · ' +
-            s.totalDays+'天';
+            '<span class="'+retCls+'">'+fmt(m.totalReturnPct)+'%</span> · ' +
+            '回撤 '+fmt(m.maxDrawdownPct)+'% · ' +
+            '胜率 '+fmt(m.winRate)+'% · ' +
+            m.totalDays+'天';
+          // Extended metrics panel
+          var mp = document.getElementById('extendedMetrics');
+          mp.style.display = 'grid';
+          mp.innerHTML =
+            '<div class="metric-item"><span class="metric-val">'+m.sharpeRatio+'</span><span class="metric-lbl">Sharpe</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.sortinoRatio+'</span><span class="metric-lbl">Sortino</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.calmarRatio+'</span><span class="metric-lbl">Calmar</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.volatility+'%</span><span class="metric-lbl">波动率</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.profitFactor+'</span><span class="metric-lbl">盈亏比</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.maxConsecutiveWins+'</span><span class="metric-lbl">最大连胜</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+m.maxConsecutiveLosses+'</span><span class="metric-lbl">最大连亏</span></div>' +
+            '<div class="metric-item"><span class="metric-val">'+(m.bestDay?'¥'+fmt(m.bestDay.pnl):'--')+'</span><span class="metric-lbl">最佳单日</span></div>';
         }
         return;
       }
 
-      // Single data point — show current value instead of empty chart
+      // Single data point
       if (history && Array.isArray(history) && history.length === 1) {
-        const h = history[0];
+        var h = history[0];
         document.getElementById('equityChart').innerHTML =
-          '<div class="stats"><div class="stat"><span class="value">¥'+fmt(h.equity)+'</span><span class="label">'+h.date+' 净值（首日，暂无趋势）</span></div></div>';
+          '<div class="stats"><div class="stat"><span class="value">'+esc('¥')+fmt(h.equity)+'</span><span class="label">'+esc(h.date)+' 净值（首日，暂无趋势）</span></div></div>';
+        document.getElementById('extendedMetrics').style.display = 'none';
         return;
       }
 
       // Fallback: try pnl endpoint for legacy data
-      const pr = await api('/quant/api/pnl' + modeParam(false)); const d=pr?.data;
-      const legacyHistory = d?.equityHistory ?? d?.history;
+      var pr = await api('/quant/api/pnl' + modeParam(false)); var d = pr && pr.data;
+      var legacyHistory = d && (d.equityHistory || d.history);
       if (legacyHistory && Array.isArray(legacyHistory) && legacyHistory.length >= 2) {
-        renderSvgChart('equityChart', legacyHistory.map(h => ({x: h.date||h.timestamp, y: h.equity||h.value})));
+        _equityHistory = legacyHistory;
+        renderCurrentChart();
         return;
       }
 
       // Last fallback: show current equity value
-      const tv = d?.totalValue ?? d?.equity;
+      var tv = d && (d.totalValue != null ? d.totalValue : d.equity);
       if (tv != null) {
         document.getElementById('equityChart').innerHTML =
-          '<div class="stats"><div class="stat"><span class="value">¥'+fmt(tv)+'</span><span class="label">当前净值</span></div></div>';
+          '<div class="stats"><div class="stat"><span class="value">'+esc('¥')+fmt(tv)+'</span><span class="label">当前净值</span></div></div>';
       }
+      document.getElementById('extendedMetrics').style.display = 'none';
     }
 
-    function renderSvgChart(containerId, data, overlay) {
+    function renderCurrentChart() {
+      if (!_equityHistory || _equityHistory.length < 2) return;
+      var data = _equityHistory.map(function(h){return {x: h.date, y: h.equity, pnl: h.dailyPnl || 0}});
+      var showDD = document.getElementById('showDrawdown') && document.getElementById('showDrawdown').checked;
+      var showPnl = document.getElementById('showPnlBars') && document.getElementById('showPnlBars').checked;
+      renderInteractiveSvgChart('equityChart', data, _overlayData, showDD ? _drawdownSeries : null, showPnl);
+    }
+
+    function renderInteractiveSvgChart(containerId, data, overlay, drawdownSeries, showPnlBars) {
       if (!data.length) return;
-      const W = 600, H = 150, pad = {t:10,r:10,b:25,l:60};
-      const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+      var W = 600, H = showPnlBars ? 220 : 160;
+      var mainH = 130;
+      var pnlH = showPnlBars ? 50 : 0;
+      var pad = {t:10,r:10,b:(showPnlBars?70:25),l:60};
+      var cw = W-pad.l-pad.r, ch = mainH-pad.t-10;
 
       // Merge data ranges for proper scaling
-      const allY = [...data.map(d=>d.y), ...(overlay||[]).map(d=>d.y)];
-      const yMin = Math.min(...allY), yMax = Math.max(...allY);
-      const yRange = yMax - yMin || 1;
-      const xStep = cw / Math.max(data.length - 1, 1);
+      var allY = data.map(function(d){return d.y});
+      if (overlay) overlay.forEach(function(d){allY.push(d.y)});
+      var yMin = Math.min.apply(null,allY), yMax = Math.max.apply(null,allY);
+      var yRange = yMax - yMin || 1;
+      var xStep = cw / Math.max(data.length - 1, 1);
 
-      function buildPath(points) {
-        let p = '', a = '';
-        for (let i = 0; i < points.length; i++) {
-          const x = pad.l + i * xStep;
-          const y = pad.t + ch - ((points[i].y - yMin) / yRange) * ch;
-          p += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-          a += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-        }
-        a += 'L'+(pad.l + (points.length-1)*xStep)+','+(pad.t+ch)+'L'+pad.l+','+(pad.t+ch)+'Z';
-        return {path:p, area:a};
+      function xPos(i){return pad.l + i * xStep}
+      function yPos(v){return pad.t + ch - ((v - yMin) / yRange) * ch}
+
+      // Build main equity path
+      var pathD = '', areaD = '';
+      for (var i = 0; i < data.length; i++) {
+        var x = xPos(i), y = yPos(data[i].y);
+        pathD += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+        areaD += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
       }
+      areaD += 'L'+xPos(data.length-1)+','+(pad.t+ch)+'L'+pad.l+','+(pad.t+ch)+'Z';
 
-      // Determine line color
-      const color = data[data.length-1].y >= data[0].y ? 'var(--green)' : 'var(--red)';
-      const {path, area: areaPath} = buildPath(data);
+      var color = data[data.length-1].y >= data[0].y ? 'var(--green)' : 'var(--red)';
 
       // Grid lines
-      let grid = '';
-      for (let i = 0; i <= 3; i++) {
-        const gy = pad.t + (ch / 3) * i;
-        const val = yMax - (yRange / 3) * i;
+      var grid = '';
+      for (var gi = 0; gi <= 3; gi++) {
+        var gy = pad.t + (ch / 3) * gi;
+        var val = yMax - (yRange / 3) * gi;
         grid += '<line x1="'+pad.l+'" y1="'+gy+'" x2="'+(W-pad.r)+'" y2="'+gy+'" class="chart-grid"/>';
-        grid += '<text x="'+(pad.l-4)+'" y="'+(gy+4)+'" text-anchor="end" class="chart-label">¥'+fmt(val)+'</text>';
+        grid += '<text x="'+(pad.l-4)+'" y="'+(gy+4)+'" text-anchor="end" class="chart-label">'+esc('¥')+fmt(val)+'</text>';
       }
 
-      // X labels (first, mid, last)
-      const xl = [0, Math.floor(data.length/2), data.length-1];
-      for (const i of xl) {
-        if (data[i]) {
-          const x = pad.l + i * xStep;
-          grid += '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" class="chart-label">'+data[i].x+'</text>';
+      // X labels — show 5 evenly spaced
+      var xLabelCount = Math.min(5, data.length);
+      for (var xi = 0; xi < xLabelCount; xi++) {
+        var idx = Math.round(xi * (data.length - 1) / Math.max(xLabelCount - 1, 1));
+        if (data[idx]) {
+          grid += '<text x="'+xPos(idx)+'" y="'+(mainH+2)+'" text-anchor="middle" class="chart-label">'+esc(data[idx].x)+'</text>';
         }
       }
 
-      let overlayPaths = '';
+      // Drawdown overlay
+      var ddOverlay = '';
+      if (drawdownSeries && drawdownSeries.length) {
+        // Match drawdown data to our data by date
+        var ddMap = {};
+        drawdownSeries.forEach(function(d){ddMap[d.date]=d});
+        var ddPath = '';
+        for (var di = 0; di < data.length; di++) {
+          var dd = ddMap[data[di].x];
+          if (dd && dd.drawdown > 0) {
+            var peakY = yPos(dd.peak);
+            var eqY = yPos(dd.equity);
+            // Draw vertical rect from peak to equity
+            ddOverlay += '<rect x="'+(xPos(di)-xStep*0.4)+'" y="'+peakY+'" width="'+(xStep*0.8)+'" height="'+Math.max(eqY-peakY,0.5)+'" class="chart-drawdown-area"/>';
+          }
+        }
+      }
+
+      // Benchmark overlay
+      var overlayPaths = '';
       if (overlay && overlay.length >= 2) {
-        const oStep = cw / Math.max(overlay.length - 1, 1);
-        let op = '';
-        for (let i = 0; i < overlay.length; i++) {
-          const x = pad.l + i * oStep;
-          const y = pad.t + ch - ((overlay[i].y - yMin) / yRange) * ch;
-          op += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+        var oStep = cw / Math.max(overlay.length - 1, 1);
+        var op = '';
+        for (var oi = 0; oi < overlay.length; oi++) {
+          var ox = pad.l + oi * oStep;
+          var oy = pad.t + ch - ((overlay[oi].y - yMin) / yRange) * ch;
+          op += (oi === 0 ? 'M' : 'L') + ox.toFixed(1) + ',' + oy.toFixed(1);
         }
         overlayPaths = '<path d="'+op+'" stroke="var(--accent)" class="chart-line" stroke-dasharray="4,3" opacity="0.7"/>';
       }
 
+      // Daily PnL bars
+      var pnlBars = '';
+      if (showPnlBars) {
+        var pnlTop = mainH + 16;
+        var pnlVals = data.map(function(d){return d.pnl||0});
+        var pnlMax = Math.max.apply(null, pnlVals.map(function(v){return Math.abs(v)})) || 1;
+        var barW = Math.max(xStep * 0.6, 1);
+        var halfPnlH = pnlH / 2;
+        var pnlMid = pnlTop + halfPnlH;
+        // Zero line
+        pnlBars += '<line x1="'+pad.l+'" y1="'+pnlMid+'" x2="'+(W-pad.r)+'" y2="'+pnlMid+'" class="chart-grid"/>';
+        pnlBars += '<text x="'+(pad.l-4)+'" y="'+(pnlMid+3)+'" text-anchor="end" class="chart-label">0</text>';
+        for (var pi = 0; pi < data.length; pi++) {
+          var pv = data[pi].pnl || 0;
+          var bh = Math.abs(pv) / pnlMax * halfPnlH;
+          var bx = xPos(pi) - barW/2;
+          var by = pv >= 0 ? pnlMid - bh : pnlMid;
+          var cls = pv >= 0 ? 'pnl-bar-pos' : 'pnl-bar-neg';
+          pnlBars += '<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+Math.max(bh,0.5).toFixed(1)+'" class="'+cls+'"/>';
+        }
+      }
+
       // Legend
-      let legend = '<text x="'+(W-pad.r)+'" y="'+(pad.t+10)+'" text-anchor="end" class="chart-label" fill="'+color+'">策略</text>';
+      var legend = '<text x="'+(W-pad.r)+'" y="'+(pad.t+10)+'" text-anchor="end" class="chart-label" fill="'+color+'">策略</text>';
       if (overlay && overlay.length) {
         legend += '<text x="'+(W-pad.r)+'" y="'+(pad.t+22)+'" text-anchor="end" class="chart-label" fill="var(--accent)">基准</text>';
       }
 
-      document.getElementById(containerId).innerHTML =
-        '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">' +
-        grid +
-        '<path d="'+areaPath+'" fill="'+color+'" class="chart-area"/>' +
-        '<path d="'+path+'" stroke="'+color+'" class="chart-line"/>' +
-        overlayPaths +
-        legend +
+      // Invisible hover rects for tooltip interaction
+      var hoverRects = '';
+      for (var hi = 0; hi < data.length; hi++) {
+        var hx = xPos(hi) - xStep/2;
+        hoverRects += '<rect x="'+hx.toFixed(1)+'" y="0" width="'+xStep.toFixed(1)+'" height="'+H+'" fill="transparent" data-idx="'+hi+'"/>';
+      }
+
+      // Crosshair elements (hidden by default)
+      var crosshair = '<line id="crosshairV" x1="0" y1="'+pad.t+'" x2="0" y2="'+(pad.t+ch)+'" class="chart-crosshair" style="display:none"/>';
+      crosshair += '<circle id="crosshairDot" cx="0" cy="0" r="4" class="chart-dot" style="display:none"/>';
+
+      var svgContent =
+        '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" id="equitySvg">' +
+        grid + ddOverlay +
+        '<path d="'+areaD+'" fill="'+color+'" class="chart-area"/>' +
+        '<path d="'+pathD+'" stroke="'+color+'" class="chart-line"/>' +
+        overlayPaths + pnlBars + legend + crosshair + hoverRects +
         '</svg>';
+
+      document.getElementById(containerId).innerHTML = svgContent;
+
+      // Attach mouse events for tooltip
+      var svg = document.getElementById('equitySvg');
+      var tooltip = document.getElementById('chartTooltip');
+      var chartContainer = document.getElementById(containerId).parentElement;
+
+      svg.addEventListener('mousemove', function(e) {
+        var rect = svg.getBoundingClientRect();
+        var svgX = (e.clientX - rect.left) / rect.width * W;
+        // Find nearest data index
+        var nearIdx = Math.round((svgX - pad.l) / xStep);
+        if (nearIdx < 0) nearIdx = 0;
+        if (nearIdx >= data.length) nearIdx = data.length - 1;
+        var pt = data[nearIdx];
+        if (!pt) return;
+
+        // Show crosshair
+        var cx = xPos(nearIdx), cy = yPos(pt.y);
+        var vLine = document.getElementById('crosshairV');
+        var dot = document.getElementById('crosshairDot');
+        if (vLine) { vLine.setAttribute('x1',cx); vLine.setAttribute('x2',cx); vLine.style.display=''; }
+        if (dot) { dot.setAttribute('cx',cx); dot.setAttribute('cy',cy); dot.style.display=''; }
+
+        // Show tooltip
+        var pnlVal = pt.pnl || 0;
+        var pnlCls = pnlVal >= 0 ? 'positive' : 'negative';
+        var returnPct = data[0].y > 0 ? ((pt.y - data[0].y) / data[0].y * 100) : 0;
+        var retCls = returnPct >= 0 ? 'positive' : 'negative';
+        tooltip.innerHTML =
+          '<div class="tt-date">'+esc(pt.x)+'</div>' +
+          '<div class="tt-row"><span class="tt-label">净值</span><span class="tt-value">'+esc('¥')+fmt(pt.y)+'</span></div>' +
+          '<div class="tt-row"><span class="tt-label">日盈亏</span><span class="tt-value '+pnlCls+'">'+esc('¥')+fmt(pnlVal)+'</span></div>' +
+          '<div class="tt-row"><span class="tt-label">累计收益</span><span class="tt-value '+retCls+'">'+fmt(returnPct)+'%</span></div>';
+        tooltip.style.display = 'block';
+
+        // Position tooltip relative to chart container
+        var containerRect = chartContainer.getBoundingClientRect();
+        var ttX = e.clientX - containerRect.left + 12;
+        var ttY = e.clientY - containerRect.top - 10;
+        // Keep tooltip within bounds
+        if (ttX + 180 > containerRect.width) ttX = ttX - 200;
+        if (ttY < 0) ttY = 10;
+        tooltip.style.left = ttX + 'px';
+        tooltip.style.top = ttY + 'px';
+      });
+
+      svg.addEventListener('mouseleave', function() {
+        var vLine = document.getElementById('crosshairV');
+        var dot = document.getElementById('crosshairDot');
+        if (vLine) vLine.style.display = 'none';
+        if (dot) dot.style.display = 'none';
+        tooltip.style.display = 'none';
+      });
     }
 
     // ── Benchmark overlay ───────────────────────────────────
     async function loadBenchmarkOverlay() {
-      const sel = document.getElementById('benchmarkSelect');
-      const benchId = sel ? sel.value : '';
+      var sel = document.getElementById('benchmarkSelect');
+      var benchId = sel ? sel.value : '';
       if (!benchId) {
-        // Reload chart without overlay
-        await loadEquityChart();
+        _overlayData = null;
+        renderCurrentChart();
         document.getElementById('benchmarkStats').innerHTML = '';
         return;
       }
-      const r = await api('/quant/api/benchmark/compare?benchmark=' + benchId + modeParam(true));
+      var r = await api('/quant/api/benchmark/compare?benchmark=' + benchId + modeParam(true));
       if (!r || r.status !== 'ok' || !r.data) {
         document.getElementById('benchmarkStats').innerHTML = '<span style="color:var(--text-dim)">基准数据不足</span>';
         return;
       }
-      const cmp = r.data;
-      // Re-render chart with both curves using normalized equity values
-      const eqR = await api('/quant/api/equity-history?limit=120' + modeParam(true));
-      const history = eqR?.data;
-      if (history && history.length >= 2) {
-        const first = history[0].equity;
-        const stratData = history.map(h => ({x: h.date, y: h.equity}));
-        // Scale benchmark to same starting equity for visual comparison
-        const benchData = cmp.data.map(d => ({x: d.date, y: first * d.normalizedReturn}));
-        renderSvgChart('equityChart', stratData, benchData);
+      var cmp = r.data;
+      // Build overlay data scaled to starting equity
+      if (_equityHistory && _equityHistory.length >= 2) {
+        var first = _equityHistory[0].equity;
+        _overlayData = cmp.data.map(function(d){return {x: d.date, y: first * d.normalizedReturn}});
+        renderCurrentChart();
       }
       // Show stats
-      const s = cmp.stats;
-      const exCls = pctClass(s.excessReturn);
+      var s = cmp.stats;
+      var exCls = pctClass(s.excessReturn);
       document.getElementById('benchmarkStats').innerHTML =
         '策略: <span class="'+pctClass(s.strategyReturnPct)+'">'+fmt(s.strategyReturnPct)+'%</span> · ' +
         cmp.benchmark.name+': <span class="'+pctClass(s.benchmarkReturnPct)+'">'+fmt(s.benchmarkReturnPct)+'%</span> · ' +

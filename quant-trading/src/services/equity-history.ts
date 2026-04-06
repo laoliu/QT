@@ -272,6 +272,224 @@ export class EquityHistory {
     };
   }
 
+  /**
+   * Compute drawdown periods — contiguous stretches where equity is below its running peak.
+   * Returns an array of { start, end, peakEquity, troughEquity, drawdownPct, recoveryDays }.
+   */
+  getDrawdownPeriods(): Array<{
+    start: string;
+    end: string;
+    peakDate: string;
+    troughDate: string;
+    peakEquity: number;
+    troughEquity: number;
+    drawdownPct: number;
+    durationDays: number;
+    recovered: boolean;
+  }> {
+    const sorted = this.getAll();
+    if (sorted.length < 2) return [];
+
+    const periods: Array<{
+      start: string;
+      end: string;
+      peakDate: string;
+      troughDate: string;
+      peakEquity: number;
+      troughEquity: number;
+      drawdownPct: number;
+      durationDays: number;
+      recovered: boolean;
+    }> = [];
+
+    let peak = sorted[0]!.equity;
+    let peakDate = sorted[0]!.date;
+    let inDrawdown = false;
+    let currentStart = "";
+    let trough = Infinity;
+    let troughDate = "";
+
+    for (let i = 1; i < sorted.length; i++) {
+      const s = sorted[i]!;
+      if (s.equity >= peak) {
+        // Recovered or new peak
+        if (inDrawdown) {
+          periods.push({
+            start: currentStart,
+            end: s.date,
+            peakDate,
+            troughDate,
+            peakEquity: peak,
+            troughEquity: trough,
+            drawdownPct: peak > 0 ? ((peak - trough) / peak) * 100 : 0,
+            durationDays: i - sorted.findIndex((x) => x.date === currentStart),
+            recovered: true,
+          });
+          inDrawdown = false;
+        }
+        peak = s.equity;
+        peakDate = s.date;
+        trough = Infinity;
+      } else {
+        // Below peak
+        if (!inDrawdown) {
+          inDrawdown = true;
+          currentStart = s.date;
+          trough = s.equity;
+          troughDate = s.date;
+        }
+        if (s.equity < trough) {
+          trough = s.equity;
+          troughDate = s.date;
+        }
+      }
+    }
+
+    // If still in drawdown at end of data
+    if (inDrawdown) {
+      const last = sorted[sorted.length - 1]!;
+      periods.push({
+        start: currentStart,
+        end: last.date,
+        peakDate,
+        troughDate,
+        peakEquity: peak,
+        troughEquity: trough,
+        drawdownPct: peak > 0 ? ((peak - trough) / peak) * 100 : 0,
+        durationDays: sorted.length - sorted.findIndex((x) => x.date === currentStart),
+        recovered: false,
+      });
+    }
+
+    return periods;
+  }
+
+  /**
+   * Compute running drawdown for each snapshot — used for drawdown overlay on chart.
+   * Returns array of { date, equity, drawdown, drawdownPct, peak } for every snapshot.
+   */
+  getDrawdownSeries(): Array<{
+    date: string;
+    equity: number;
+    drawdown: number;
+    drawdownPct: number;
+    peak: number;
+  }> {
+    const sorted = this.getAll();
+    let peak = 0;
+    return sorted.map((s) => {
+      if (s.equity > peak) peak = s.equity;
+      const dd = peak - s.equity;
+      return {
+        date: s.date,
+        equity: s.equity,
+        drawdown: dd,
+        drawdownPct: peak > 0 ? (dd / peak) * 100 : 0,
+        peak,
+      };
+    });
+  }
+
+  /**
+   * Extended performance metrics: Sharpe, Sortino, Calmar ratios.
+   * Uses daily returns with risk-free rate of 0 (common for short-term trading).
+   */
+  getExtendedMetrics(): {
+    sharpeRatio: number;
+    sortinoRatio: number;
+    calmarRatio: number;
+    volatility: number;
+    avgDailyReturn: number;
+    maxConsecutiveWins: number;
+    maxConsecutiveLosses: number;
+    profitFactor: number;
+  } {
+    const sorted = this.getAll();
+    const empty = {
+      sharpeRatio: 0,
+      sortinoRatio: 0,
+      calmarRatio: 0,
+      volatility: 0,
+      avgDailyReturn: 0,
+      maxConsecutiveWins: 0,
+      maxConsecutiveLosses: 0,
+      profitFactor: 0,
+    };
+    if (sorted.length < 2) return empty;
+
+    // Compute daily returns
+    const dailyReturns: number[] = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]!.equity;
+      const curr = sorted[i]!.equity;
+      dailyReturns.push(prev > 0 ? (curr - prev) / prev : 0);
+    }
+
+    const n = dailyReturns.length;
+    const avgReturn = dailyReturns.reduce((s, r) => s + r, 0) / n;
+
+    // Standard deviation (volatility)
+    const variance = dailyReturns.reduce((s, r) => s + (r - avgReturn) ** 2, 0) / n;
+    const stdDev = Math.sqrt(variance);
+
+    // Downside deviation (for Sortino)
+    const downsideVariance =
+      dailyReturns.filter((r) => r < 0).reduce((s, r) => s + r ** 2, 0) / n;
+    const downsideDev = Math.sqrt(downsideVariance);
+
+    // Annualized (252 trading days)
+    const annualizedReturn = avgReturn * 252;
+    const annualizedVol = stdDev * Math.sqrt(252);
+    const annualizedDownside = downsideDev * Math.sqrt(252);
+
+    // Sharpe = annualized return / annualized vol
+    const sharpeRatio = annualizedVol > 0 ? annualizedReturn / annualizedVol : 0;
+
+    // Sortino = annualized return / annualized downside deviation
+    const sortinoRatio = annualizedDownside > 0 ? annualizedReturn / annualizedDownside : 0;
+
+    // Calmar = annualized return / max drawdown %
+    const summary = this.getSummary();
+    const calmarRatio =
+      summary.maxDrawdownPct > 0 ? (annualizedReturn * 100) / summary.maxDrawdownPct : 0;
+
+    // Max consecutive wins/losses
+    let maxWins = 0;
+    let maxLosses = 0;
+    let curWins = 0;
+    let curLosses = 0;
+    for (const r of dailyReturns) {
+      if (r > 0) {
+        curWins++;
+        curLosses = 0;
+        if (curWins > maxWins) maxWins = curWins;
+      } else if (r < 0) {
+        curLosses++;
+        curWins = 0;
+        if (curLosses > maxLosses) maxLosses = curLosses;
+      } else {
+        curWins = 0;
+        curLosses = 0;
+      }
+    }
+
+    // Profit factor = gross profit / gross loss
+    const grossProfit = dailyReturns.filter((r) => r > 0).reduce((s, r) => s + r, 0);
+    const grossLoss = Math.abs(dailyReturns.filter((r) => r < 0).reduce((s, r) => s + r, 0));
+    const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+
+    return {
+      sharpeRatio: Number(sharpeRatio.toFixed(3)),
+      sortinoRatio: Number(sortinoRatio.toFixed(3)),
+      calmarRatio: Number(calmarRatio.toFixed(3)),
+      volatility: Number((annualizedVol * 100).toFixed(2)),
+      avgDailyReturn: Number((avgReturn * 100).toFixed(4)),
+      maxConsecutiveWins: maxWins,
+      maxConsecutiveLosses: maxLosses,
+      profitFactor: Number((profitFactor === Infinity ? 999 : profitFactor).toFixed(2)),
+    };
+  }
+
   /** Close: stop auto-save and flush. */
   async close(): Promise<void> {
     this.stopAutoSave();

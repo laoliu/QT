@@ -139,6 +139,32 @@ export class BasketOrderService {
     return templates.find((t) => t.templateId === templateId) ?? null;
   }
 
+  async cloneTemplate(
+    templateId: string,
+    newName?: string,
+  ): Promise<BasketTemplate | null> {
+    const release = await templateMutex.acquire();
+    try {
+      const templates = await loadTemplates(this.cfg);
+      const src = templates.find((t) => t.templateId === templateId);
+      if (!src) return null;
+      const now = new Date().toISOString();
+      const clone: BasketTemplate = {
+        templateId: randomUUID().slice(0, 8),
+        name: newName ?? `${src.name} (副本)`,
+        description: src.description,
+        items: src.items.map((it) => ({ ...it })),
+        createdAt: now,
+        updatedAt: now,
+      };
+      templates.push(clone);
+      await saveTemplates(templates, this.cfg);
+      return clone;
+    } finally {
+      release();
+    }
+  }
+
   async deleteTemplate(templateId: string): Promise<boolean> {
     const release = await templateMutex.acquire();
     try {
@@ -352,6 +378,42 @@ export class BasketOrderService {
   async getBasketOrder(basketId: string): Promise<BasketOrder | null> {
     const orders = await loadBasketOrders(this.cfg);
     return orders.find((o) => o.basketId === basketId) ?? null;
+  }
+
+  // ── Basket transform helpers ─────────────────────────────────
+
+  /** Reverse all sides in a list of items (buy→sell, sell→buy). */
+  reverseItems(items: BasketItem[]): BasketItem[] {
+    return items.map((it) => ({
+      ...it,
+      side: it.side === "sell" ? ("buy" as const) : ("sell" as const),
+    }));
+  }
+
+  /** Adjust quantities/prices by a multiplier. */
+  adjustItems(
+    items: BasketItem[],
+    opts: { quantityMultiplier?: number; priceMultiplier?: number; priceOffset?: number },
+  ): BasketItem[] {
+    return items.map((it) => {
+      const adjusted = { ...it };
+      if (opts.quantityMultiplier !== undefined && adjusted.quantity) {
+        adjusted.quantity = Math.floor(adjusted.quantity * opts.quantityMultiplier / 100) * 100;
+        if (adjusted.quantity < 0) adjusted.quantity = 0;
+      }
+      if (opts.quantityMultiplier !== undefined && adjusted.amount) {
+        adjusted.amount = Math.round(adjusted.amount * opts.quantityMultiplier * 100) / 100;
+        if (adjusted.amount < 0) adjusted.amount = 0;
+      }
+      if (opts.priceMultiplier !== undefined && adjusted.price) {
+        adjusted.price = Math.round(adjusted.price * opts.priceMultiplier * 100) / 100;
+      }
+      if (opts.priceOffset !== undefined && adjusted.price) {
+        adjusted.price = Math.round((adjusted.price + opts.priceOffset) * 100) / 100;
+        if (adjusted.price < 0) adjusted.price = 0;
+      }
+      return adjusted;
+    });
   }
 
   // ── Private helpers ──────────────────────────────────────────

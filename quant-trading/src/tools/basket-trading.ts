@@ -26,6 +26,7 @@ import type { OrderRequest } from "../broker/adapter.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { BasketOrderService } from "../services/basket-order.js";
+import type { FavoritesStore } from "../services/favorites-store.js";
 import type { BasketItem, QuantTradingConfig } from "../types.js";
 
 export function createBasketTradingTool(
@@ -33,6 +34,7 @@ export function createBasketTradingTool(
   config: QuantTradingConfig,
   basketService: BasketOrderService,
   getEngine: () => LiveEngine | null,
+  favoritesStore?: FavoritesStore,
 ) {
   // Shared quote fetcher
   const provider = createDataProvider(config);
@@ -66,9 +68,13 @@ export function createBasketTradingTool(
       "篮子交易工具 — 批量下单、模板管理、一键买卖多只股票。\n" +
       "action=create_template 创建篮子模板, action=list_templates 列出模板, " +
       "action=delete_template 删除模板, action=update_template 修改模板, " +
+      "action=clone_template 复制模板, " +
       "action=preview 预览篮子下单计划(不下单), action=execute 执行篮子下单, " +
       "action=execute_template 执行已保存的模板, action=cancel_basket 撤销整个篮子, " +
-      "action=list_baskets 查看篮子执行历史, action=get_basket 查看篮子详情。\n\n" +
+      "action=list_baskets 查看篮子执行历史, action=get_basket 查看篮子详情, " +
+      "action=basket_from_portfolio 从当前持仓创建篮子(一键清仓/批量卖出), " +
+      "action=basket_from_favorites 从自选股创建篮子, " +
+      "action=reverse 反转篮子买卖方向, action=adjust 批量调整数量/价格。\n\n" +
       "items 格式: [{symbol:'600519',side:'buy',quantity:100}, {symbol:'000001',side:'buy',amount:50000}]\n" +
       "支持按数量(quantity)、按金额(amount)、按权重(weight+total_amount)三种方式指定。",
     parameters: {
@@ -81,12 +87,17 @@ export function createBasketTradingTool(
             "list_templates",
             "delete_template",
             "update_template",
+            "clone_template",
             "preview",
             "execute",
             "execute_template",
             "cancel_basket",
             "list_baskets",
             "get_basket",
+            "basket_from_portfolio",
+            "basket_from_favorites",
+            "reverse",
+            "adjust",
           ],
           description: "操作类型",
         },
@@ -112,8 +123,14 @@ export function createBasketTradingTool(
           type: "number",
           description: "总金额(元)，配合items中的weight按比例分配",
         },
-        template_id: { type: "string", description: "模板ID（用于 execute_template/delete/update）" },
+        template_id: { type: "string", description: "模板ID（用于 execute_template/delete/update/clone）" },
         basket_id: { type: "string", description: "篮子ID（用于 cancel_basket/get_basket）" },
+        side: { type: "string", enum: ["buy", "sell"], description: "买卖方向（用于 basket_from_portfolio/basket_from_favorites）" },
+        category: { type: "string", description: "自选股分类（用于 basket_from_favorites，可选）" },
+        tags: { type: "array", items: { type: "string" }, description: "自选股标签（用于 basket_from_favorites，可选）" },
+        quantity_multiplier: { type: "number", description: "数量/金额倍数（用于 adjust，如0.5=减半，2=翻倍）" },
+        price_multiplier: { type: "number", description: "价格倍数（用于 adjust，如1.02=涨2%）" },
+        price_offset: { type: "number", description: "价格偏移量（用于 adjust，如-0.5=降0.5元）" },
       },
       required: ["action"],
     },
@@ -326,6 +343,154 @@ export function createBasketTradingTool(
               status: r.status,
               orderId: r.orderId?.slice(0, 8),
               reason: r.reason,
+            })),
+          };
+        }
+
+        case "clone_template": {
+          const tid = args.template_id as string;
+          if (!tid) return { error: "请提供 template_id" };
+          const newName = args.name as string | undefined;
+          const cloned = await basketService.cloneTemplate(tid, newName);
+          if (!cloned) return { error: `未找到模板 ${tid}` };
+          return {
+            message: "模板已复制",
+            templateId: cloned.templateId,
+            name: cloned.name,
+            itemCount: cloned.items.length,
+          };
+        }
+
+        // ── Basket from portfolio / favorites ────────────────
+
+        case "basket_from_portfolio": {
+          const engine = getEngine();
+          if (!engine?.orderManager?.broker) {
+            return { error: "交易引擎未启动，无法获取持仓" };
+          }
+          const positions = await engine.orderManager.broker.queryPositions();
+          if (positions.length === 0) return { error: "当前无持仓" };
+
+          const side = (args.side as string) ?? "sell";
+          const items: BasketItem[] = positions
+            .filter((p) => p.availableQty > 0)
+            .map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              side: side as "buy" | "sell",
+              quantity: p.availableQty,
+            }));
+
+          if (items.length === 0) return { error: "无可操作持仓（可能全部冻结）" };
+
+          const basketName = (args.name as string) ?? (side === "sell" ? "一键清仓" : "持仓加仓");
+          const tpl = await basketService.createTemplate(basketName, items);
+          return {
+            message: `已从持仓创建篮子模板 (${items.length}只)`,
+            templateId: tpl.templateId,
+            name: tpl.name,
+            items: items.map((it) => ({
+              symbol: it.symbol,
+              name: it.name,
+              side: it.side,
+              quantity: it.quantity,
+            })),
+            hint: "使用 action=preview template_id=... 预览下单计划，或 action=execute_template 直接执行",
+          };
+        }
+
+        case "basket_from_favorites": {
+          if (!favoritesStore) {
+            return { error: "自选股服务不可用" };
+          }
+          const category = args.category as string | undefined;
+          const tags = args.tags as string[] | undefined;
+          const allFavs = favoritesStore.listFavorites({ category, tags });
+          if (allFavs.length === 0) {
+            return { error: category || tags ? "没有匹配的自选股" : "自选股列表为空" };
+          }
+
+          const side = (args.side as string) ?? "buy";
+          const items: BasketItem[] = allFavs.map((f) => ({
+            symbol: f.code,
+            name: f.name,
+            side: side as "buy" | "sell",
+          }));
+
+          const label = category ? `自选-${category}` : "自选股篮子";
+          const basketName = (args.name as string) ?? label;
+          const tpl = await basketService.createTemplate(basketName, items);
+          return {
+            message: `已从自选股创建篮子模板 (${items.length}只)`,
+            templateId: tpl.templateId,
+            name: tpl.name,
+            items: items.map((it) => ({ symbol: it.symbol, name: it.name, side: it.side })),
+            hint: "请为每只股票补充 quantity 或 amount，然后 action=execute_template 执行",
+          };
+        }
+
+        // ── Transform actions ────────────────────────────────
+
+        case "reverse": {
+          const tid = args.template_id as string;
+          if (!tid) return { error: "请提供 template_id" };
+          const tpl = await basketService.getTemplate(tid);
+          if (!tpl) return { error: `未找到模板 ${tid}` };
+
+          const reversed = basketService.reverseItems(tpl.items);
+          const newName = (args.name as string) ?? `${tpl.name} (反转)`;
+          const newTpl = await basketService.createTemplate(newName, reversed, tpl.description);
+          return {
+            message: `已创建反转模板`,
+            templateId: newTpl.templateId,
+            name: newTpl.name,
+            items: reversed.map((it) => ({
+              symbol: it.symbol,
+              side: it.side,
+              quantity: it.quantity,
+              amount: it.amount,
+            })),
+          };
+        }
+
+        case "adjust": {
+          const tid = args.template_id as string;
+          if (!tid) return { error: "请提供 template_id" };
+          const tpl = await basketService.getTemplate(tid);
+          if (!tpl) return { error: `未找到模板 ${tid}` };
+
+          const qtyMul = args.quantity_multiplier as number | undefined;
+          const priceMul = args.price_multiplier as number | undefined;
+          const priceOff = args.price_offset as number | undefined;
+
+          if (qtyMul === undefined && priceMul === undefined && priceOff === undefined) {
+            return { error: "请至少提供 quantity_multiplier、price_multiplier 或 price_offset 之一" };
+          }
+
+          const adjusted = basketService.adjustItems(tpl.items, {
+            quantityMultiplier: qtyMul,
+            priceMultiplier: priceMul,
+            priceOffset: priceOff,
+          });
+
+          const updated = await basketService.updateTemplate(tid, { items: adjusted });
+          if (!updated) return { error: "更新失败" };
+
+          const changes: string[] = [];
+          if (qtyMul !== undefined) changes.push(`数量×${qtyMul}`);
+          if (priceMul !== undefined) changes.push(`价格×${priceMul}`);
+          if (priceOff !== undefined) changes.push(`价格${priceOff >= 0 ? "+" : ""}${priceOff}`);
+
+          return {
+            message: `模板已调整 (${changes.join(", ")})`,
+            templateId: updated.templateId,
+            name: updated.name,
+            items: adjusted.map((it) => ({
+              symbol: it.symbol,
+              side: it.side,
+              quantity: it.quantity,
+              amount: it.amount,
+              price: it.price,
             })),
           };
         }

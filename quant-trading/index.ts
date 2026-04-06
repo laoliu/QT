@@ -659,7 +659,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
-      basket_trading: createBasketTradingTool(api, config, basketOrderService, getEngine),
+      basket_trading: createBasketTradingTool(api, config, basketOrderService, getEngine, favoritesStore),
     };
 
     const toolLabels: Record<string, string> = {

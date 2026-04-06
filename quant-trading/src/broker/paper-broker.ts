@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
  * - Limit orders are queued and matched against the next quote update.
  * - Direction guards: buy/sell_open reject when a conflicting position exists.
  * - Over-cover/over-sell are clamped to available position quantity.
- * - Commission: 0.025% buy + 0.025% sell + 0.1% stamp duty on sell (A-share defaults).
+ * - Commission: 0.025% buy + 0.025% sell + 0.05% stamp duty on sell (A-share post-Aug 2023 rate).
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -27,6 +27,7 @@ import type {
   QuantTradingConfig,
 } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { isCnMarketOpenWithCalendar } from "../utils/trading-calendar.js";
 import type {
   IBrokerAdapter,
   OrderFilter,
@@ -151,7 +152,7 @@ async function saveOrders(orders: Order[], cfg: QuantTradingConfig): Promise<voi
 
 const CN_BUY_COMMISSION = 0.00025;
 const CN_SELL_COMMISSION = 0.00025;
-const CN_STAMP_DUTY = 0.001; // 0.1% on sell
+const CN_STAMP_DUTY = 0.0005; // 0.05% on sell (post-Aug 2023 rate)
 /** Per-contract commission for CN exchange options (¥1.7 to be conservative). */
 const CN_OPTION_FEE_PER_CONTRACT = 1.7;
 /** Simplified futures commission: per-lot fee (covers most products). */
@@ -183,6 +184,20 @@ function calcCommission(
   }
   // US/HK: simplified flat $1 per 100 shares
   return Math.max(1, Math.ceil(qty / 100));
+}
+
+// ── T+1 market helpers ──────────────────────────────────────────
+
+/** Returns true if the market enforces T+1 (cannot sell shares bought today). */
+function isTPlus1Market(market: MarketType): boolean {
+  return market === "cn_stock" || market === "fund";
+}
+
+/** Get today's date string in CST (YYYY-MM-DD). */
+function todayCST(): string {
+  const now = new Date();
+  const cst = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return cst.toISOString().slice(0, 10);
 }
 
 // ── PaperBroker ──────────────────────────────────────────────────
@@ -418,15 +433,33 @@ export class PaperBroker implements IBrokerAdapter {
     // Use initial cash from portfolio creation (new portfolios default to 100k)
     const initCash = p.initialCash ?? 100_000;
     const profit = totalAssets - initCash;
+
+    // Compute frozenCash from pending buy orders
+    const frozenCash = this.pendingLimitOrders.reduce((sum, o) => {
+      if (o.side === "buy" || o.side === "buy_open") {
+        const estPrice = o.price ?? 0;
+        return sum + estPrice * o.quantity;
+      }
+      return sum;
+    }, 0);
+
+    // Compute todayProfit: unrealized P&L from positions
+    // (Sufficient for paper mode PnL monitoring / circuit breaker)
+    const todayProfit = p.positions.reduce((sum, pos) => {
+      const curPrice = pos.currentPrice ?? pos.avgCost;
+      return sum + (curPrice - pos.avgCost) * pos.quantity;
+    }, 0);
+
     return {
       accountId: "paper",
       brokerType: "paper",
       cash: p.cash,
-      frozenCash: 0,
+      frozenCash,
       totalAssets,
       marketValue: mv,
       profit,
       profitPct: profit / initCash,
+      todayProfit,
       lastSyncAt: new Date().toISOString(),
     };
   }
@@ -634,6 +667,16 @@ export class PaperBroker implements IBrokerAdapter {
               const { multiplier, marginRate } = this.getFuturesSpec(order.symbol);
               pos.frozenMargin = pos.avgCost * total * multiplier * marginRate;
             }
+            // T+1 tracking: accumulate today's buy quantity
+            if (isTPlus1Market(order.market)) {
+              const today = todayCST();
+              if (pos.todayBuyDate === today) {
+                pos.todayBuyQty = (pos.todayBuyQty ?? 0) + qty;
+              } else {
+                pos.todayBuyDate = today;
+                pos.todayBuyQty = qty;
+              }
+            }
           } else {
             const newPos: PortfolioPosition = {
               symbol: order.symbol,
@@ -650,6 +693,11 @@ export class PaperBroker implements IBrokerAdapter {
             if (isFutures) {
               const { multiplier, marginRate } = this.getFuturesSpec(order.symbol);
               newPos.frozenMargin = fillPrice * qty * multiplier * marginRate;
+            }
+            // T+1 tracking for new positions
+            if (isTPlus1Market(order.market)) {
+              newPos.todayBuyQty = qty;
+              newPos.todayBuyDate = todayCST();
             }
             portfolio.positions.push(newPos);
           }
@@ -716,8 +764,21 @@ export class PaperBroker implements IBrokerAdapter {
           );
           return;
         }
+        // T+1 enforcement: shares bought today are not sellable in A-share markets
+        let availableQty = pos.quantity;
+        if (isTPlus1Market(order.market)) {
+          const today = todayCST();
+          const lockedQty = pos.todayBuyDate === today ? (pos.todayBuyQty ?? 0) : 0;
+          availableQty = Math.max(0, pos.quantity - lockedQty);
+          if (availableQty <= 0) {
+            console.warn(
+              `[PaperBroker] ${order.side} rejected: T+1 rule — all ${pos.quantity} shares of ${order.symbol} were bought today`,
+            );
+            return;
+          }
+        }
         // Clamp qty to available position to prevent over-selling
-        const clampedQty = Math.min(qty, pos.quantity);
+        const clampedQty = Math.min(qty, availableQty);
         const tax = fill.tax ?? 0;
         if (isFutures) {
           // Futures sell_close: release margin + realize P&L
@@ -1030,14 +1091,22 @@ export class PaperBroker implements IBrokerAdapter {
   }
 
   private paperPositionToLive(pos: PortfolioPosition, now: string): LivePosition {
+    // T+1: compute available qty by excluding today's buys for A-share markets
+    const today = todayCST();
+    const lockedQty =
+      isTPlus1Market(pos.market) && pos.todayBuyDate === today
+        ? (pos.todayBuyQty ?? 0)
+        : 0;
+    const absQty = Math.abs(pos.quantity);
+    const availableQty = pos.quantity > 0 ? Math.max(0, absQty - lockedQty) : absQty;
     return {
       symbol: pos.symbol,
       name: pos.name,
       market: pos.market,
       quantity: pos.quantity,
-      availableQty: Math.abs(pos.quantity), // paper: all available (abs for shorts)
-      frozenQty: 0,
-      todayBuyQty: 0,
+      availableQty,
+      frozenQty: lockedQty,
+      todayBuyQty: pos.todayBuyDate === today ? (pos.todayBuyQty ?? 0) : 0,
       avgCost: pos.avgCost,
       currentPrice: pos.currentPrice,
       marketValue: pos.marketValue,
@@ -1061,18 +1130,11 @@ export class PaperBroker implements IBrokerAdapter {
 
 /**
  * Returns true if the CN stock market is currently open (Beijing time).
- * Morning: 09:30–11:30, Afternoon: 13:00–15:00, Mon–Fri.
+ * Morning: 09:30–11:30, Afternoon: 13:00–15:00, trading days only.
+ * Uses trading calendar for holiday awareness.
  */
 export function isCnMarketOpen(_market?: MarketType): boolean {
-  const now = new Date();
-  // Convert to CST (UTC+8)
-  const cst = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const day = cst.getUTCDay(); // 0=Sun, 6=Sat
-  if (day === 0 || day === 6) return false;
-  const h = cst.getUTCHours();
-  const m = cst.getUTCMinutes();
-  const hm = h * 100 + m;
-  return (hm >= 930 && hm <= 1130) || (hm >= 1300 && hm <= 1500);
+  return isCnMarketOpenWithCalendar();
 }
 
 /**

@@ -257,6 +257,12 @@ export type PortfolioPosition = {
   underlying?: string;
   exerciseType?: ExerciseType;
 
+  // ── T+1 tracking (A-share same-day buy cannot sell) ──
+  /** Quantity bought today (T+1 locked, cannot sell until next trading day) */
+  todayBuyQty?: number;
+  /** Date string (YYYY-MM-DD) when todayBuyQty was last updated */
+  todayBuyDate?: string;
+
   // ── Futures-specific fields (persisted for futures positions) ──
   /** Frozen margin for this position (CNY) */
   frozenMargin?: number;

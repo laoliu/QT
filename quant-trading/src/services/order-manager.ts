@@ -184,7 +184,10 @@ export class OrderManager {
     this.cfg = cfg;
     this.broker = broker;
     this.api = api;
-    this.riskGate = new RiskGate(cfg.tradingAccount?.riskLimits as RiskLimitsConfig | undefined);
+    this.riskGate = new RiskGate(
+      cfg.tradingAccount?.riskLimits as RiskLimitsConfig | undefined,
+      cfg.dataDir ?? null,
+    );
     this.confirmMgr = new ConfirmationManager(cfg, api);
 
     // Wire broker callbacks
@@ -194,7 +197,7 @@ export class OrderManager {
     );
 
     // Rebuild openBuys from persisted orders — handleFill awaits this
-    this.initialized = this.rebuildOpenBuys();
+    this.initialized = this.rebuildOpenBuys().then(() => this.reconcileOrders());
   }
 
   /**
@@ -226,6 +229,60 @@ export class OrderManager {
       }
     } catch {
       // Ignore — may not have data dir yet
+    }
+  }
+
+  /**
+   * Reconcile local order state with broker on startup.
+   * Re-queries the broker for orders that are locally in 'submitted' or 'partial'
+   * status, and updates their status if the broker reports them as filled/cancelled.
+   * This handles fills that arrived while the process was offline.
+   */
+  private async reconcileOrders(): Promise<void> {
+    try {
+      const orders = await loadOrders(this.cfg);
+      const pendingOrders = orders.filter(
+        (o) => o.status === "submitted" || o.status === "partial",
+      );
+      if (pendingOrders.length === 0) return;
+
+      for (const localOrder of pendingOrders) {
+        try {
+          const brokerOrder = await this.broker.queryOrder(localOrder.orderId);
+          if (!brokerOrder) {
+            // Broker doesn't know about this order — mark as cancelled (orphan)
+            await updateOrder(
+              localOrder.orderId,
+              { status: "cancelled", errorMsg: "reconcile: order not found at broker after restart" },
+              this.cfg,
+            );
+            continue;
+          }
+          // Sync status from broker
+          if (
+            brokerOrder.status !== localOrder.status &&
+            (brokerOrder.status === "filled" || brokerOrder.status === "cancelled" || brokerOrder.status === "rejected")
+          ) {
+            await updateOrder(
+              localOrder.orderId,
+              {
+                status: brokerOrder.status,
+                filledQty: brokerOrder.filledQty ?? localOrder.filledQty,
+                avgFillPrice: brokerOrder.avgFillPrice ?? localOrder.avgFillPrice,
+                filledAt: brokerOrder.filledAt ?? localOrder.filledAt,
+              },
+              this.cfg,
+            );
+            console.log(
+              `[OrderManager] reconcile: ${localOrder.orderId} ${localOrder.status} → ${brokerOrder.status}`,
+            );
+          }
+        } catch {
+          // Individual order query failed — skip, will retry next restart
+        }
+      }
+    } catch {
+      // Reconciliation is best-effort — don't block startup
     }
   }
 

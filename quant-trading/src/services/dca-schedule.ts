@@ -11,6 +11,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { QuantTradingConfig } from "../types.js";
+import { isTradingDay } from "../utils/trading-calendar.js";
 import type { OrderManager } from "./order-manager.js";
 import { computePositionSize } from "./position-sizer.js";
 
@@ -275,8 +276,9 @@ export class DcaScheduleService {
 
     if (freq === "daily") {
       if (next <= now) next.setDate(next.getDate() + 1);
-      // Skip weekends
-      while (next.getDay() === 0 || next.getDay() === 6) {
+      // Skip non-trading days (weekends + holidays)
+      for (let i = 0; i < 15; i++) {
+        if (isTradingDay(next.toISOString().slice(0, 10))) break;
         next.setDate(next.getDate() + 1);
       }
     } else if (freq === "weekly" || freq === "biweekly") {
@@ -295,6 +297,12 @@ export class DcaScheduleService {
       if (next <= now) {
         next.setMonth(next.getMonth() + 1);
       }
+    }
+
+    // Final guard: skip forward if the computed date is a non-trading day
+    for (let i = 0; i < 15; i++) {
+      if (isTradingDay(next.toISOString().slice(0, 10))) break;
+      next.setDate(next.getDate() + 1);
     }
 
     return next;

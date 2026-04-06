@@ -3,13 +3,18 @@
  *
  * Compares live/paper trading performance against backtest expectations,
  * computing return deviation, slippage analysis, win rate comparison,
- * equity curve correlation, and per-strategy health scoring.
+ * equity curve correlation, fee impact, holding period analysis,
+ * monthly return deviation, and per-strategy health scoring.
  *
  * Actions:
  *   full_report   — comprehensive deviation analysis
  *   slippage      — slippage-only analysis
  *   equity_curve  — equity curve correlation
  *   alerts        — deviation alerts only
+ *   fee_impact    — fee impact comparison
+ *   holding       — holding period analysis
+ *   monthly       — monthly return deviation
+ *   win_loss      — win/loss size and streak analysis
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -43,15 +48,19 @@ export function createLiveBacktestDeviationTool(
     name: "live_backtest_deviation",
     description:
       "实盘vs回测偏差分析。对比实盘/模拟盘交易表现与回测预期的差异，" +
-      "包含收益率偏差、滑点分析、胜率对比、资金曲线相关性和策略健康评分。" +
+      "包含收益率偏差、年化收益偏差、夏普/索提诺比率偏差、滑点分析、胜率对比、" +
+      "资金曲线相关性、费用影响对比、持仓周期分析、月度收益偏差、" +
+      "连胜连亏分析和策略健康评分。" +
       "action=full_report 完整报告, action=slippage 滑点分析, " +
-      "action=equity_curve 资金曲线相关性, action=alerts 偏差告警。",
+      "action=equity_curve 资金曲线相关性, action=alerts 偏差告警, " +
+      "action=fee_impact 费用影响对比, action=holding 持仓周期分析, " +
+      "action=monthly 月度收益偏差, action=win_loss 盈亏/连胜连亏分析。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["full_report", "slippage", "equity_curve", "alerts"],
+          enum: ["full_report", "slippage", "equity_curve", "alerts", "fee_impact", "holding", "monthly", "win_loss"],
           description: "分析类型",
         },
         backtest_id: {
@@ -102,16 +111,24 @@ export function createLiveBacktestDeviationTool(
           action: "slippage",
           totalTrades: slippage.totalTrades,
           avgSlippageBps: `${slippage.avgSlippageBps.toFixed(1)} bps`,
+          medianSlippageBps: `${slippage.medianSlippageBps.toFixed(1)} bps`,
           maxSlippageBps: `${slippage.maxSlippageBps.toFixed(1)} bps`,
+          p95SlippageBps: `${slippage.p95SlippageBps.toFixed(1)} bps`,
           slippageStdBps: `${slippage.slippageStdBps.toFixed(1)} bps`,
           totalSlippageCost: `¥${slippage.totalSlippageCost.toFixed(2)}`,
           slippagePctOfCapital: `${slippage.slippagePctOfCapital.toFixed(2)}%`,
           buyAvgSlippageBps: `${slippage.buyAvgSlippageBps.toFixed(1)} bps`,
           sellAvgSlippageBps: `${slippage.sellAvgSlippageBps.toFixed(1)} bps`,
+          topSlippageTrades: slippage.tradeDetails
+            .sort((a, b) => b.slippageBps - a.slippageBps)
+            .slice(0, 5)
+            .map((d) => ({ symbol: d.symbol, slippage: `${d.slippageBps.toFixed(1)} bps`, side: d.side })),
           summary:
             slippage.avgSlippageBps > 10
               ? "滑点偏高，建议检查订单执行质量或调整下单策略"
-              : "滑点在合理范围内",
+              : slippage.avgSlippageBps > 5
+                ? "滑点略高于正常范围，建议关注大单执行"
+                : "滑点在合理范围内",
         };
       }
 
@@ -174,7 +191,9 @@ export function createLiveBacktestDeviationTool(
             })),
             slippage: {
               avgSlippageBps: `${report.slippage.avgSlippageBps.toFixed(1)} bps`,
+              medianSlippageBps: `${report.slippage.medianSlippageBps.toFixed(1)} bps`,
               maxSlippageBps: `${report.slippage.maxSlippageBps.toFixed(1)} bps`,
+              p95SlippageBps: `${report.slippage.p95SlippageBps.toFixed(1)} bps`,
               totalSlippageCost: `¥${report.slippage.totalSlippageCost.toFixed(2)}`,
               slippagePctOfCapital: `${report.slippage.slippagePctOfCapital.toFixed(2)}%`,
             },
@@ -190,6 +209,43 @@ export function createLiveBacktestDeviationTool(
                       }
                     : null,
                 }
+              : null,
+            feeImpact: report.feeImpact
+              ? {
+                  backtestFees: `¥${report.feeImpact.backtestFees.toFixed(2)}`,
+                  liveFees: `¥${report.feeImpact.liveFees.toFixed(2)}`,
+                  feeDifference: `¥${report.feeImpact.feeDifference.toFixed(2)}`,
+                  backtestFeeImpactPct: `${report.feeImpact.backtestFeeImpactPct.toFixed(2)}%`,
+                  liveFeeImpactPct: `${report.feeImpact.liveFeeImpactPct.toFixed(2)}%`,
+                }
+              : null,
+            holdingPeriod: {
+              backtestAvgDays: report.holdingPeriod.backtestAvgDays.toFixed(1),
+              liveAvgDays: report.holdingPeriod.liveAvgDays.toFixed(1),
+              liveMedianDays: report.holdingPeriod.liveMedianDays.toFixed(1),
+              deviationDays: report.holdingPeriod.deviationDays.toFixed(1),
+              distribution: report.holdingPeriod.liveDistribution,
+            },
+            winLoss: {
+              liveAvgWin: `¥${report.winLossComparison.liveAvgWin.toFixed(2)}`,
+              liveAvgLoss: `¥${report.winLossComparison.liveAvgLoss.toFixed(2)}`,
+              maxConsecWins: report.winLossComparison.liveMaxConsecWins,
+              maxConsecLosses: report.winLossComparison.liveMaxConsecLosses,
+              currentStreak: report.winLossComparison.liveCurrentStreak,
+              currentStreakLabel: report.winLossComparison.liveCurrentStreak > 0
+                ? `连赢${report.winLossComparison.liveCurrentStreak}笔`
+                : report.winLossComparison.liveCurrentStreak < 0
+                  ? `连亏${Math.abs(report.winLossComparison.liveCurrentStreak)}笔`
+                  : "无连续记录",
+            },
+            monthlyReturns: report.monthlyReturns
+              ? report.monthlyReturns.map((mr) => ({
+                  month: mr.month,
+                  backtest: `${mr.backtestReturn.toFixed(2)}%`,
+                  live: `${mr.liveReturn.toFixed(2)}%`,
+                  deviation: `${mr.deviation.toFixed(2)}pp`,
+                  severity: mr.severity,
+                }))
               : null,
             strategies: report.byStrategy.map((s) => ({
               strategyId: s.strategyId,
@@ -255,6 +311,88 @@ export function createLiveBacktestDeviationTool(
             recommendation: report.alerts.some((a) => a.severity === "critical")
               ? "存在严重偏差，建议暂停策略并检查原因"
               : "存在轻微偏差，建议持续监控",
+          };
+
+        case "fee_impact":
+          if (!report.feeImpact) {
+            return { error: "回测结果中未包含费用数据，无法进行费用对比分析" };
+          }
+          return {
+            action: "fee_impact",
+            backtestFees: `¥${report.feeImpact.backtestFees.toFixed(2)}`,
+            liveFees: `¥${report.feeImpact.liveFees.toFixed(2)}`,
+            feeDifference: `¥${report.feeImpact.feeDifference.toFixed(2)}`,
+            feeDiffPctOfCapital: `${report.feeImpact.feeDiffPctOfCapital.toFixed(2)}%`,
+            backtestFeeImpactPct: `${report.feeImpact.backtestFeeImpactPct.toFixed(2)}%`,
+            liveFeeImpactPct: `${report.feeImpact.liveFeeImpactPct.toFixed(2)}%`,
+            summary: report.feeImpact.feeDifference > 0
+              ? `实盘费用高于回测模拟 ¥${report.feeImpact.feeDifference.toFixed(2)}，占资金 ${report.feeImpact.feeDiffPctOfCapital.toFixed(2)}%`
+              : report.feeImpact.feeDifference < 0
+                ? `实盘费用低于回测模拟 ¥${Math.abs(report.feeImpact.feeDifference).toFixed(2)}，实际交易成本控制良好`
+                : "实盘费用与回测模拟基本一致",
+          };
+
+        case "holding":
+          return {
+            action: "holding",
+            backtestAvgDays: report.holdingPeriod.backtestAvgDays.toFixed(1),
+            liveAvgDays: report.holdingPeriod.liveAvgDays.toFixed(1),
+            liveMedianDays: report.holdingPeriod.liveMedianDays.toFixed(1),
+            deviationDays: report.holdingPeriod.deviationDays.toFixed(1),
+            distribution: report.holdingPeriod.liveDistribution,
+            summary: Math.abs(report.holdingPeriod.deviationDays) > 5
+              ? `持仓周期偏差 ${report.holdingPeriod.deviationDays.toFixed(1)} 天，${report.holdingPeriod.deviationDays > 0 ? "实盘持仓时间偏长，可能错过最佳卖点" : "实盘持仓时间偏短，可能过早止盈止损"}`
+              : "持仓周期与回测预期基本一致",
+          };
+
+        case "monthly":
+          if (!report.monthlyReturns || report.monthlyReturns.length === 0) {
+            return { error: "月度收益数据不足，需要回测结果包含 monthlyReturns 字段" };
+          }
+          return {
+            action: "monthly",
+            months: report.monthlyReturns.map((mr) => ({
+              month: mr.month,
+              backtestReturn: `${mr.backtestReturn.toFixed(2)}%`,
+              liveReturn: `${mr.liveReturn.toFixed(2)}%`,
+              deviation: `${mr.deviation.toFixed(2)}pp`,
+              severity: mr.severity,
+              severityCn: mr.severity === "critical" ? "严重" : mr.severity === "warning" ? "警告" : "正常",
+            })),
+            worstMonth: (() => {
+              const worst = [...report.monthlyReturns].sort((a, b) => b.deviation - a.deviation)[0];
+              return worst ? { month: worst.month, deviation: `${worst.deviation.toFixed(2)}pp` } : null;
+            })(),
+            criticalMonths: report.monthlyReturns.filter((m) => m.severity === "critical").length,
+            warningMonths: report.monthlyReturns.filter((m) => m.severity === "warning").length,
+            summary: report.monthlyReturns.some((m) => m.severity === "critical")
+              ? "部分月份收益偏差严重，建议逐月排查策略执行问题"
+              : report.monthlyReturns.some((m) => m.severity === "warning")
+                ? "部分月份存在轻微偏差，整体趋势可接受"
+                : "各月度收益与回测预期基本吻合",
+          };
+
+        case "win_loss":
+          return {
+            action: "win_loss",
+            liveAvgWin: `¥${report.winLossComparison.liveAvgWin.toFixed(2)}`,
+            liveAvgLoss: `¥${report.winLossComparison.liveAvgLoss.toFixed(2)}`,
+            avgWinLossRatio: report.winLossComparison.liveAvgLoss > 0
+              ? (report.winLossComparison.liveAvgWin / report.winLossComparison.liveAvgLoss).toFixed(2)
+              : "∞",
+            maxConsecWins: report.winLossComparison.liveMaxConsecWins,
+            maxConsecLosses: report.winLossComparison.liveMaxConsecLosses,
+            currentStreak: report.winLossComparison.liveCurrentStreak,
+            currentStreakLabel: report.winLossComparison.liveCurrentStreak > 0
+              ? `连赢${report.winLossComparison.liveCurrentStreak}笔`
+              : report.winLossComparison.liveCurrentStreak < 0
+                ? `连亏${Math.abs(report.winLossComparison.liveCurrentStreak)}笔`
+                : "无连续记录",
+            summary: report.winLossComparison.liveMaxConsecLosses >= 5
+              ? `最大连亏 ${report.winLossComparison.liveMaxConsecLosses} 笔，需关注策略稳定性和风控`
+              : report.winLossComparison.liveCurrentStreak < -3
+                ? `当前连亏 ${Math.abs(report.winLossComparison.liveCurrentStreak)} 笔，建议检查市场环境是否适配策略`
+                : "盈亏分布正常",
           };
 
         default:

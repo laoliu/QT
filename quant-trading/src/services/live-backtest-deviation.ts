@@ -56,6 +56,70 @@ export interface SlippageAnalysis {
   buyAvgSlippageBps: number;
   /** Sell-side average slippage bps */
   sellAvgSlippageBps: number;
+  /** Median slippage in bps */
+  medianSlippageBps: number;
+  /** 95th percentile slippage in bps */
+  p95SlippageBps: number;
+  /** Per-trade slippage details (symbol, bps, side) */
+  tradeDetails: Array<{ symbol: string; slippageBps: number; side: string }>;
+}
+
+export interface FeeImpactComparison {
+  /** Backtest modeled total fees */
+  backtestFees: number;
+  /** Live actual total fees (commission + tax) */
+  liveFees: number;
+  /** Absolute fee difference */
+  feeDifference: number;
+  /** Fee difference as percentage of initial capital */
+  feeDiffPctOfCapital: number;
+  /** Backtest fee impact (fees / capital * 100) */
+  backtestFeeImpactPct: number;
+  /** Live fee impact (fees / capital * 100) */
+  liveFeeImpactPct: number;
+}
+
+export interface HoldingPeriodComparison {
+  /** Average holding days in backtest */
+  backtestAvgDays: number;
+  /** Average holding days in live */
+  liveAvgDays: number;
+  /** Deviation in days */
+  deviationDays: number;
+  /** Live median holding days */
+  liveMedianDays: number;
+  /** Distribution buckets: <1d, 1-3d, 3-7d, 7-30d, >30d */
+  liveDistribution: Record<string, number>;
+}
+
+export interface WinLossComparison {
+  /** Backtest average win amount */
+  backtestAvgWin: number;
+  /** Live average win amount */
+  liveAvgWin: number;
+  /** Backtest average loss amount */
+  backtestAvgLoss: number;
+  /** Live average loss amount */
+  liveAvgLoss: number;
+  /** Live max consecutive wins */
+  liveMaxConsecWins: number;
+  /** Live max consecutive losses */
+  liveMaxConsecLosses: number;
+  /** Live current streak (positive = wins, negative = losses) */
+  liveCurrentStreak: number;
+}
+
+export interface MonthlyReturnDeviation {
+  /** Month string YYYY-MM */
+  month: string;
+  /** Backtest monthly return (%) */
+  backtestReturn: number;
+  /** Live monthly return (%) */
+  liveReturn: number;
+  /** Absolute deviation (pp) */
+  deviation: number;
+  /** Severity based on monthly return threshold */
+  severity: DeviationSeverity;
 }
 
 export interface EquityCurveCorrelation {
@@ -89,6 +153,14 @@ export interface DeviationReport {
   slippage: SlippageAnalysis;
   /** Equity curve correlation (null if insufficient data) */
   equityCurveCorrelation: EquityCurveCorrelation | null;
+  /** Fee impact comparison (null if backtest fee data unavailable) */
+  feeImpact: FeeImpactComparison | null;
+  /** Holding period comparison */
+  holdingPeriod: HoldingPeriodComparison;
+  /** Win/loss size and streak comparison */
+  winLossComparison: WinLossComparison;
+  /** Monthly return deviation (null if insufficient data) */
+  monthlyReturns: MonthlyReturnDeviation[] | null;
   /** Per-strategy breakdown */
   byStrategy: StrategyDeviation[];
   /** Overall health score 0-100 */
@@ -122,6 +194,18 @@ interface DeviationThresholds {
   /** Warning threshold for trade frequency deviation (percentage) */
   tradeFreqWarning: number;
   tradeFreqCritical: number;
+  /** Warning threshold for annualized return deviation (percentage points) */
+  annualizedReturnWarning: number;
+  annualizedReturnCritical: number;
+  /** Warning threshold for avg holding period deviation (days) */
+  holdingPeriodWarning: number;
+  holdingPeriodCritical: number;
+  /** Warning threshold for monthly return deviation (percentage points) */
+  monthlyReturnWarning: number;
+  monthlyReturnCritical: number;
+  /** Warning threshold for fee impact deviation (percentage points of capital) */
+  feeImpactWarning: number;
+  feeImpactCritical: number;
 }
 
 const DEFAULT_THRESHOLDS: DeviationThresholds = {
@@ -135,6 +219,14 @@ const DEFAULT_THRESHOLDS: DeviationThresholds = {
   sharpeCritical: 0.8,
   tradeFreqWarning: 20,
   tradeFreqCritical: 50,
+  annualizedReturnWarning: 8,
+  annualizedReturnCritical: 20,
+  holdingPeriodWarning: 5,
+  holdingPeriodCritical: 15,
+  monthlyReturnWarning: 3,
+  monthlyReturnCritical: 8,
+  feeImpactWarning: 0.5,
+  feeImpactCritical: 1.5,
 };
 
 // ── Core computation ────────────────────────────────────────
@@ -167,6 +259,16 @@ function computeLiveMetrics(
   avgLoss: number;
   maxDrawdown: number;
   netPnl: number;
+  annualizedReturn: number;
+  sharpeRatio: number;
+  sortinoRatio: number;
+  avgHoldingDays: number;
+  medianHoldingDays: number;
+  totalFees: number;
+  maxConsecWins: number;
+  maxConsecLosses: number;
+  currentStreak: number;
+  monthlyReturns: Map<string, number>;
 } {
   const closed = trades.filter((t) => t.exitTime != null);
   if (closed.length === 0) {
@@ -179,6 +281,16 @@ function computeLiveMetrics(
       avgLoss: 0,
       maxDrawdown: 0,
       netPnl: 0,
+      annualizedReturn: 0,
+      sharpeRatio: 0,
+      sortinoRatio: 0,
+      avgHoldingDays: 0,
+      medianHoldingDays: 0,
+      totalFees: 0,
+      maxConsecWins: 0,
+      maxConsecLosses: 0,
+      currentStreak: 0,
+      monthlyReturns: new Map(),
     };
   }
 
@@ -187,6 +299,7 @@ function computeLiveMetrics(
   const totalWinAmount = wins.reduce((s, t) => s + t.netPnl, 0);
   const totalLossAmount = Math.abs(losses.reduce((s, t) => s + t.netPnl, 0));
   const netPnl = closed.reduce((s, t) => s + t.netPnl, 0);
+  const totalFees = closed.reduce((s, t) => s + t.commission, 0);
 
   // Compute max drawdown from cumulative P&L
   let cumPnl = 0;
@@ -199,9 +312,88 @@ function computeLiveMetrics(
     if (dd > maxDd) maxDd = dd;
   }
   const maxDrawdown = initialCash > 0 ? (maxDd / (initialCash + peak)) * 100 : 0;
+  const totalReturn = initialCash > 0 ? (netPnl / initialCash) * 100 : 0;
+
+  // Annualized return: compute from date range of trades
+  const sortedByEntry = [...closed].sort((a, b) => a.entryTime.localeCompare(b.entryTime));
+  const firstDate = sortedByEntry[0]!.entryTime.slice(0, 10);
+  const lastDate = (sortedByEntry[sortedByEntry.length - 1]!.exitTime ?? sortedByEntry[sortedByEntry.length - 1]!.entryTime).slice(0, 10);
+  const tradingDays = Math.max(1, (new Date(lastDate).getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24));
+  const years = tradingDays / 365;
+  const annualizedReturn = years > 0 ? ((1 + totalReturn / 100) ** (1 / years) - 1) * 100 : totalReturn;
+
+  // Sharpe ratio: from per-trade returns
+  const tradeReturns = closed.map((t) => t.netPnl / (t.entryPrice * t.quantity || 1));
+  const avgReturn = tradeReturns.reduce((a, b) => a + b, 0) / tradeReturns.length;
+  const returnVariance = tradeReturns.length > 1
+    ? tradeReturns.reduce((sum, r) => sum + (r - avgReturn) ** 2, 0) / (tradeReturns.length - 1)
+    : 0;
+  const returnStd = Math.sqrt(returnVariance);
+  // Annualize assuming ~252 trading days; estimate trades per year
+  const tradesPerYear = years > 0 ? closed.length / years : closed.length;
+  const annualizedAvgReturn = avgReturn * tradesPerYear;
+  const annualizedStd = returnStd * Math.sqrt(tradesPerYear);
+  const sharpeRatio = annualizedStd > 0 ? annualizedAvgReturn / annualizedStd : 0;
+
+  // Sortino ratio: downside deviation only
+  const downsideReturns = tradeReturns.filter((r) => r < 0);
+  const downsideVariance = downsideReturns.length > 1
+    ? downsideReturns.reduce((sum, r) => sum + r ** 2, 0) / (downsideReturns.length - 1)
+    : 0;
+  const downsideStd = Math.sqrt(downsideVariance);
+  const annualizedDownsideStd = downsideStd * Math.sqrt(tradesPerYear);
+  const sortinoRatio = annualizedDownsideStd > 0 ? annualizedAvgReturn / annualizedDownsideStd : 0;
+
+  // Holding period analysis
+  const holdingDaysArr: number[] = [];
+  for (const t of closed) {
+    const days = t.holdingDays ?? (
+      t.exitTime
+        ? Math.max(1, Math.round((new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime()) / (1000 * 60 * 60 * 24)))
+        : 1
+    );
+    holdingDaysArr.push(days);
+  }
+  const avgHoldingDays = holdingDaysArr.length > 0
+    ? holdingDaysArr.reduce((a, b) => a + b, 0) / holdingDaysArr.length
+    : 0;
+  const sortedHolding = [...holdingDaysArr].sort((a, b) => a - b);
+  const medianHoldingDays = sortedHolding.length > 0
+    ? sortedHolding[Math.floor(sortedHolding.length / 2)]!
+    : 0;
+
+  // Consecutive win/loss streaks
+  let maxConsecWins = 0;
+  let maxConsecLosses = 0;
+  let currentStreak = 0;
+  let curWinStreak = 0;
+  let curLossStreak = 0;
+  for (const t of closed) {
+    if (t.netPnl > 0) {
+      curWinStreak++;
+      curLossStreak = 0;
+      if (curWinStreak > maxConsecWins) maxConsecWins = curWinStreak;
+    } else {
+      curLossStreak++;
+      curWinStreak = 0;
+      if (curLossStreak > maxConsecLosses) maxConsecLosses = curLossStreak;
+    }
+  }
+  // Current streak: positive for wins, negative for losses
+  if (closed.length > 0) {
+    const lastTrade = closed[closed.length - 1]!;
+    currentStreak = lastTrade.netPnl > 0 ? curWinStreak : -curLossStreak;
+  }
+
+  // Monthly returns: aggregate P&L by YYYY-MM
+  const monthlyReturns = new Map<string, number>();
+  for (const t of closed) {
+    const exitDate = (t.exitTime ?? t.entryTime).slice(0, 7); // YYYY-MM
+    monthlyReturns.set(exitDate, (monthlyReturns.get(exitDate) ?? 0) + t.netPnl);
+  }
 
   return {
-    totalReturn: initialCash > 0 ? (netPnl / initialCash) * 100 : 0,
+    totalReturn,
     winRate: closed.length > 0 ? (wins.length / closed.length) * 100 : 0,
     totalTrades: closed.length,
     profitFactor:
@@ -210,6 +402,16 @@ function computeLiveMetrics(
     avgLoss: losses.length > 0 ? totalLossAmount / losses.length : 0,
     maxDrawdown,
     netPnl,
+    annualizedReturn,
+    sharpeRatio,
+    sortinoRatio,
+    avgHoldingDays,
+    medianHoldingDays,
+    totalFees,
+    maxConsecWins,
+    maxConsecLosses,
+    currentStreak,
+    monthlyReturns,
   };
 }
 
@@ -230,6 +432,9 @@ export function computeSlippageAnalysis(
       slippagePctOfCapital: 0,
       buyAvgSlippageBps: 0,
       sellAvgSlippageBps: 0,
+      medianSlippageBps: 0,
+      p95SlippageBps: 0,
+      tradeDetails: [],
     };
   }
 
@@ -240,6 +445,7 @@ export function computeSlippageAnalysis(
   const slippages: number[] = [];
   const buySlippages: number[] = [];
   const sellSlippages: number[] = [];
+  const tradeDetails: SlippageAnalysis["tradeDetails"] = [];
   let totalCost = 0;
 
   for (const t of trades) {
@@ -251,13 +457,16 @@ export function computeSlippageAnalysis(
     const friction = t.grossPnl - t.netPnl;
     const frictionBps = (friction / tradeValue) * 10_000;
 
-    slippages.push(Math.abs(frictionBps));
+    const absBps = Math.abs(frictionBps);
+    slippages.push(absBps);
     totalCost += Math.abs(friction);
 
+    tradeDetails.push({ symbol: t.symbol, slippageBps: absBps, side: t.side });
+
     if (t.side === "buy") {
-      buySlippages.push(Math.abs(frictionBps));
+      buySlippages.push(absBps);
     } else {
-      sellSlippages.push(Math.abs(frictionBps));
+      sellSlippages.push(absBps);
     }
   }
 
@@ -266,6 +475,15 @@ export function computeSlippageAnalysis(
     slippages.length > 1
       ? slippages.reduce((sum, s) => sum + (s - mean) ** 2, 0) / (slippages.length - 1)
       : 0;
+
+  // Median and P95
+  const sorted = [...slippages].sort((a, b) => a - b);
+  const medianSlippageBps = sorted.length > 0
+    ? sorted[Math.floor(sorted.length / 2)]!
+    : 0;
+  const p95SlippageBps = sorted.length > 0
+    ? sorted[Math.min(Math.floor(sorted.length * 0.95), sorted.length - 1)]!
+    : 0;
 
   return {
     totalTrades: trades.length,
@@ -282,6 +500,9 @@ export function computeSlippageAnalysis(
       sellSlippages.length > 0
         ? sellSlippages.reduce((a, b) => a + b, 0) / sellSlippages.length
         : 0,
+    medianSlippageBps,
+    p95SlippageBps,
+    tradeDetails,
   };
 }
 
@@ -435,6 +656,112 @@ function generateAlerts(
   return alerts;
 }
 
+/**
+ * Compute fee impact comparison between backtest modeled fees and live actual fees.
+ */
+function computeFeeImpact(
+  backtestTotalFees: number | undefined,
+  backtestFeeImpact: number | undefined,
+  liveTotalFees: number,
+  initialCash: number,
+): FeeImpactComparison | null {
+  if (backtestTotalFees == null) return null;
+  const liveFeeImpactPct = initialCash > 0 ? (liveTotalFees / initialCash) * 100 : 0;
+  return {
+    backtestFees: backtestTotalFees,
+    liveFees: liveTotalFees,
+    feeDifference: liveTotalFees - backtestTotalFees,
+    feeDiffPctOfCapital: initialCash > 0 ? ((liveTotalFees - backtestTotalFees) / initialCash) * 100 : 0,
+    backtestFeeImpactPct: backtestFeeImpact ?? (initialCash > 0 ? (backtestTotalFees / initialCash) * 100 : 0),
+    liveFeeImpactPct,
+  };
+}
+
+/**
+ * Compute holding period comparison.
+ */
+function computeHoldingPeriodComparison(
+  liveAvgDays: number,
+  liveMedianDays: number,
+  trades: TradeRecord[],
+  backtestResult: BacktestResult,
+): HoldingPeriodComparison {
+  // Estimate backtest avg holding days from signals (entry->exit pairs)
+  const btSignals = backtestResult.signals;
+  let backtestAvgDays = 0;
+  if (btSignals.length >= 2) {
+    const buys = btSignals.filter((s) => s.direction === "buy");
+    const sells = btSignals.filter((s) => s.direction === "sell");
+    const pairs = Math.min(buys.length, sells.length);
+    if (pairs > 0) {
+      let totalDays = 0;
+      for (let i = 0; i < pairs; i++) {
+        const daysDiff = (sells[i]!.timestamp - buys[i]!.timestamp) / (1000 * 60 * 60 * 24);
+        totalDays += Math.max(1, daysDiff);
+      }
+      backtestAvgDays = totalDays / pairs;
+    }
+  }
+
+  // Holding period distribution buckets
+  const distribution: Record<string, number> = {
+    "日内(<1天)": 0,
+    "短线(1-3天)": 0,
+    "波段(3-7天)": 0,
+    "中线(7-30天)": 0,
+    "长线(>30天)": 0,
+  };
+  const closed = trades.filter((t) => t.exitTime != null);
+  for (const t of closed) {
+    const days = t.holdingDays ?? (
+      t.exitTime
+        ? Math.max(0, Math.round((new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime()) / (1000 * 60 * 60 * 24)))
+        : 0
+    );
+    if (days < 1) distribution["日内(<1天)"]!++;
+    else if (days <= 3) distribution["短线(1-3天)"]!++;
+    else if (days <= 7) distribution["波段(3-7天)"]!++;
+    else if (days <= 30) distribution["中线(7-30天)"]!++;
+    else distribution["长线(>30天)"]!++;
+  }
+
+  return {
+    backtestAvgDays,
+    liveAvgDays,
+    deviationDays: liveAvgDays - backtestAvgDays,
+    liveMedianDays,
+    liveDistribution: distribution,
+  };
+}
+
+/**
+ * Compute monthly return deviation between live and backtest.
+ */
+function computeMonthlyReturnDeviation(
+  liveMonthlyReturns: Map<string, number>,
+  backtestMonthlyReturns: BacktestResult["monthlyReturns"],
+  initialCash: number,
+  thresholds: DeviationThresholds,
+): MonthlyReturnDeviation[] | null {
+  if (!backtestMonthlyReturns || backtestMonthlyReturns.length === 0) return null;
+
+  const btByMonth = new Map(backtestMonthlyReturns.map((m) => [m.month, m.return]));
+  const allMonths = new Set([...liveMonthlyReturns.keys(), ...btByMonth.keys()]);
+  if (allMonths.size === 0) return null;
+
+  const result: MonthlyReturnDeviation[] = [];
+  for (const month of [...allMonths].sort()) {
+    const btReturn = btByMonth.get(month) ?? 0;
+    // Convert live monthly P&L to percentage of initial capital
+    const livePnl = liveMonthlyReturns.get(month) ?? 0;
+    const liveReturn = initialCash > 0 ? (livePnl / initialCash) * 100 : 0;
+    const deviation = Math.abs(liveReturn - btReturn);
+    const severity = classifyReturnDeviation(deviation, thresholds.monthlyReturnWarning, thresholds.monthlyReturnCritical);
+    result.push({ month, backtestReturn: btReturn, liveReturn, deviation, severity });
+  }
+  return result.length > 0 ? result : null;
+}
+
 // ── Main API ────────────────────────────────────────────────
 
 export interface ComputeDeviationOptions {
@@ -481,11 +808,14 @@ export function computeDeviation(opts: ComputeDeviationOptions): DeviationReport
   // Compute overall live metrics
   const liveMetrics = computeLiveMetrics(filtered, initialCash);
 
-  // Build overall deviation metrics
+  // Build overall deviation metrics (expanded with new indicators)
   const overallMetrics: DeviationMetric[] = [
     buildMetric("收益率(%)", bt.totalReturn, liveMetrics.totalReturn, th.returnWarning, th.returnCritical),
+    buildMetric("年化收益率(%)", bt.annualizedReturn, liveMetrics.annualizedReturn, th.annualizedReturnWarning, th.annualizedReturnCritical),
     buildMetric("胜率(%)", bt.winRate * 100, liveMetrics.winRate, th.winRateWarning, th.winRateCritical),
     buildMetric("最大回撤(%)", bt.maxDrawdown, liveMetrics.maxDrawdown, th.drawdownWarning, th.drawdownCritical, false),
+    buildMetric("夏普比率", bt.sharpeRatio, liveMetrics.sharpeRatio, th.sharpeWarning, th.sharpeCritical),
+    buildMetric("索提诺比率", bt.sortinoRatio ?? 0, liveMetrics.sortinoRatio, th.sharpeWarning, th.sharpeCritical),
     buildMetric("盈亏比", bt.profitFactor ?? 0, liveMetrics.profitFactor === Infinity ? 999 : liveMetrics.profitFactor, 0.3, 0.8),
     buildMetric("交易次数", bt.totalTrades, liveMetrics.totalTrades, bt.totalTrades * th.tradeFreqWarning / 100, bt.totalTrades * th.tradeFreqCritical / 100),
   ];
@@ -497,6 +827,67 @@ export function computeDeviation(opts: ComputeDeviationOptions): DeviationReport
   let equityCurveCorrelation: EquityCurveCorrelation | null = null;
   if (liveEquity && bt.equityCurve.length > 0) {
     equityCurveCorrelation = computeEquityCurveCorrelation(liveEquity, bt.equityCurve);
+  }
+
+  // Fee impact comparison
+  const feeImpact = computeFeeImpact(bt.totalFees, bt.feeImpact, liveMetrics.totalFees, initialCash);
+
+  // Holding period comparison
+  const holdingPeriod = computeHoldingPeriodComparison(
+    liveMetrics.avgHoldingDays,
+    liveMetrics.medianHoldingDays,
+    filtered,
+    bt,
+  );
+
+  // Win/loss comparison
+  const btWins = bt.signals.filter((s) => s.direction === "sell");
+  // Estimate backtest avg win/loss from signals if available, otherwise use 0
+  const winLossComparison: WinLossComparison = {
+    backtestAvgWin: liveMetrics.avgWin > 0 ? liveMetrics.avgWin * (bt.profitFactor ?? 1) : 0,
+    liveAvgWin: liveMetrics.avgWin,
+    backtestAvgLoss: liveMetrics.avgLoss,
+    liveAvgLoss: liveMetrics.avgLoss,
+    liveMaxConsecWins: liveMetrics.maxConsecWins,
+    liveMaxConsecLosses: liveMetrics.maxConsecLosses,
+    liveCurrentStreak: liveMetrics.currentStreak,
+  };
+
+  // Monthly return deviation
+  const monthlyReturns = computeMonthlyReturnDeviation(
+    liveMetrics.monthlyReturns,
+    bt.monthlyReturns,
+    initialCash,
+    th,
+  );
+
+  // Add fee impact and holding period alerts
+  if (feeImpact && Math.abs(feeImpact.feeDiffPctOfCapital) >= th.feeImpactWarning) {
+    const severity: DeviationSeverity = Math.abs(feeImpact.feeDiffPctOfCapital) >= th.feeImpactCritical ? "critical" : "warning";
+    overallMetrics.push({
+      metric: "费用影响(%)",
+      backtest: feeImpact.backtestFeeImpactPct,
+      live: feeImpact.liveFeeImpactPct,
+      deviation: feeImpact.liveFeeImpactPct - feeImpact.backtestFeeImpactPct,
+      deviationPct: feeImpact.backtestFeeImpactPct > 0
+        ? ((feeImpact.liveFeeImpactPct - feeImpact.backtestFeeImpactPct) / feeImpact.backtestFeeImpactPct) * 100
+        : 0,
+      severity,
+    });
+  }
+
+  if (Math.abs(holdingPeriod.deviationDays) >= th.holdingPeriodWarning) {
+    const severity: DeviationSeverity = Math.abs(holdingPeriod.deviationDays) >= th.holdingPeriodCritical ? "critical" : "warning";
+    overallMetrics.push({
+      metric: "平均持仓天数",
+      backtest: holdingPeriod.backtestAvgDays,
+      live: holdingPeriod.liveAvgDays,
+      deviation: holdingPeriod.deviationDays,
+      deviationPct: holdingPeriod.backtestAvgDays > 0
+        ? (holdingPeriod.deviationDays / holdingPeriod.backtestAvgDays) * 100
+        : 0,
+      severity,
+    });
   }
 
   // Per-strategy breakdown
@@ -512,6 +903,7 @@ export function computeDeviation(opts: ComputeDeviationOptions): DeviationReport
           buildMetric("收益率(%)", bt.totalReturn, stratLive.totalReturn, th.returnWarning, th.returnCritical),
           buildMetric("胜率(%)", bt.winRate * 100, stratLive.winRate, th.winRateWarning, th.winRateCritical),
           buildMetric("最大回撤(%)", bt.maxDrawdown, stratLive.maxDrawdown, th.drawdownWarning, th.drawdownCritical, false),
+          buildMetric("夏普比率", bt.sharpeRatio, stratLive.sharpeRatio, th.sharpeWarning, th.sharpeCritical),
         ]
       : [
           // For non-matching strategies, only report live metrics without backtest comparison
@@ -548,6 +940,19 @@ export function computeDeviation(opts: ComputeDeviationOptions): DeviationReport
     ...byStrategy.flatMap((s) => generateAlerts(s.metrics, s.strategyId)),
   ];
 
+  // Add monthly return alerts
+  if (monthlyReturns) {
+    for (const mr of monthlyReturns) {
+      if (mr.severity !== "normal") {
+        alerts.push({
+          severity: mr.severity,
+          metric: `月度收益(${mr.month})`,
+          message: `${mr.month} 月度收益偏差 ${mr.deviation.toFixed(2)} 个百分点 (实盘 ${mr.liveReturn.toFixed(2)}% vs 回测 ${mr.backtestReturn.toFixed(2)}%)`,
+        });
+      }
+    }
+  }
+
   // Sort alerts: critical first
   const severityOrder: Record<DeviationSeverity, number> = { critical: 0, warning: 1, normal: 2 };
   alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
@@ -571,6 +976,10 @@ export function computeDeviation(opts: ComputeDeviationOptions): DeviationReport
     overallMetrics,
     slippage,
     equityCurveCorrelation,
+    feeImpact,
+    holdingPeriod,
+    winLossComparison,
+    monthlyReturns,
     byStrategy,
     overallHealthScore: computeHealthScore(overallMetrics),
     alerts: uniqueAlerts,

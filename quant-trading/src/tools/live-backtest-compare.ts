@@ -17,6 +17,9 @@
  *   regime_compare   — regime-aware comparison (adjusts drift for market conditions)
  *   position_weighted — position-size-weighted comparison
  *   scheduled_check  — batch drift check across all monitored strategies
+ *   intraday_analysis — execution quality by time-of-day (30-min buckets)
+ *   whatif_replay     — what-if replay: hypothetical return if all missed signals executed
+ *   drawdown_episodes — compare individual drawdown episodes between backtest and live
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -39,6 +42,9 @@ import {
   comparePortfolio,
   checkReoptimizeNeed,
   compareWithCustomBenchmark,
+  analyzeIntradayExecution,
+  replayWhatIf,
+  compareDrawdownEpisodes,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareResult,
@@ -200,13 +206,16 @@ export function createLiveBacktestCompareTool(
       "action=scheduled_check 批量策略漂移巡检（定时监控多策略健康状态）。" +
       "action=portfolio_compare 多策略组合级对比（将多策略实盘组合与混合回测对比）。" +
       "action=reoptimize_check 重新优化建议（综合分析策略是否需要重新优化参数）。" +
-      "action=custom_benchmark 自定义基准对比（指定基准标的进行Alpha/Beta/跟踪误差分析）。",
+      "action=custom_benchmark 自定义基准对比（指定基准标的进行Alpha/Beta/跟踪误差分析）。" +
+      "action=intraday_analysis 日内执行分析（按30分钟时段分析信号执行质量和滑点分布）。" +
+      "action=whatif_replay 假设情景回放（如果执行了所有遗漏信号，收益会怎样）。" +
+      "action=drawdown_episodes 回撤事件对比（逐一对比回测和实盘的回撤事件深度和恢复速度）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check", "portfolio_compare", "reoptimize_check", "custom_benchmark"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check", "portfolio_compare", "reoptimize_check", "custom_benchmark", "intraday_analysis", "whatif_replay", "drawdown_episodes"],
           description: "操作类型",
         },
         backtest_id: {
@@ -245,6 +254,10 @@ export function createLiveBacktestCompareTool(
           type: "string",
           enum: ["cn_stock", "us_stock", "hk_stock"],
           description: "基准标的市场 (custom_benchmark使用，默认cn_stock)",
+        },
+        min_drawdown_pct: {
+          type: "number",
+          description: "回撤事件最小阈值% (drawdown_episodes使用，默认2)",
         },
       },
       required: ["action"],
@@ -993,6 +1006,82 @@ export function createLiveBacktestCompareTool(
             归因: attrLabels[benchResult.attribution] ?? benchResult.attribution,
             权益曲线数据点: benchResult.curves.dates.length,
             观察: benchResult.observations,
+          };
+        }
+
+        case "intraday_analysis": {
+          const intradayResult = analyzeIntradayExecution(req);
+          return {
+            策略: intradayResult.strategyId,
+            期间: `${intradayResult.period.start} ~ ${intradayResult.period.end}`,
+            最差时段: intradayResult.worstSlot ?? "N/A",
+            最佳时段: intradayResult.bestSlot ?? "N/A",
+            时段明细: intradayResult.buckets.map((b) => ({
+              时段: b.slot,
+              回测信号数: b.backtestSignalCount,
+              实盘交易数: b.liveTradeCount,
+              执行率: `${fmt(b.fillRate * 100, 0)}%`,
+              平均滑点: `${fmt(b.avgSlippagePct, 3)}%`,
+              平均延迟: b.avgDelayMs > 0 ? `${fmt(b.avgDelayMs / 1000, 1)}秒` : "N/A",
+            })),
+            观察: intradayResult.observations,
+          };
+        }
+
+        case "whatif_replay": {
+          const whatifResult = replayWhatIf(req);
+          return {
+            策略: whatifResult.strategyId,
+            期间: `${whatifResult.period.start} ~ ${whatifResult.period.end}`,
+            实际收益: `${fmt(whatifResult.actualReturn, 2)}%`,
+            假设收益: `${fmt(whatifResult.hypotheticalReturn, 2)}%`,
+            机会成本: `${fmt(whatifResult.missedOpportunityCost, 2)}%`,
+            遗漏信号数: `${whatifResult.missedSignalCount} / ${whatifResult.totalBacktestSignals}`,
+            遗漏信号明细: whatifResult.missedSignals.slice(0, 15).map((s) => ({
+              标的: s.symbol,
+              方向: s.direction === "buy" ? "买入" : s.direction === "sell" ? "卖出" : s.direction === "short" ? "做空" : "平仓",
+              信号价格: fmt(s.signalPrice, 2),
+              信号时间: s.signalTime,
+              估计盈亏: `¥${fmt(s.estimatedPnl, 2)}`,
+              结果: s.outcome === "win" ? "盈利" : s.outcome === "loss" ? "亏损" : "未知",
+            })),
+            提示: whatifResult.missedSignals.length > 15 ? `仅显示前15条，共${whatifResult.missedSignals.length}条` : undefined,
+            观察: whatifResult.observations,
+          };
+        }
+
+        case "drawdown_episodes": {
+          const minDd = (args.min_drawdown_pct as number) ?? 2;
+          const ddResult = compareDrawdownEpisodes(req, minDd);
+          return {
+            策略: ddResult.strategyId,
+            期间: `${ddResult.period.start} ~ ${ddResult.period.end}`,
+            回测回撤事件数: ddResult.backtestEpisodes.length,
+            实盘回撤事件数: ddResult.liveEpisodes.length,
+            实盘超过回测最大回撤: ddResult.liveWorstExceedsBacktest ? "是" : "否",
+            回撤倍率: `${fmt(ddResult.drawdownRatio, 2)}x`,
+            恢复速度对比: {
+              回测平均恢复天数: ddResult.avgRecoveryComparison.backtestAvgRecoveryDays ?? "N/A",
+              实盘平均恢复天数: ddResult.avgRecoveryComparison.liveAvgRecoveryDays ?? "N/A",
+              实盘恢复更慢: ddResult.avgRecoveryComparison.liveRecoverySlower ? "是" : "否",
+            },
+            回测回撤事件: ddResult.backtestEpisodes.slice(0, 5).map((e) => ({
+              开始: e.startDate,
+              最深点: e.troughDate,
+              恢复: e.recoveryDate ?? "未恢复",
+              最大回撤: `${fmt(e.maxDrawdown, 2)}%`,
+              下跌天数: e.durationToTrough,
+              恢复天数: e.recoveryDays ?? "N/A",
+            })),
+            实盘回撤事件: ddResult.liveEpisodes.slice(0, 5).map((e) => ({
+              开始: e.startDate,
+              最深点: e.troughDate,
+              恢复: e.recoveryDate ?? "未恢复",
+              最大回撤: `${fmt(e.maxDrawdown, 2)}%`,
+              下跌天数: e.durationToTrough,
+              恢复天数: e.recoveryDays ?? "N/A",
+            })),
+            观察: ddResult.observations,
           };
         }
 

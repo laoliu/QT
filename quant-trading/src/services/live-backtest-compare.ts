@@ -2695,3 +2695,549 @@ export function compareWithCustomBenchmark(
     observations,
   };
 }
+
+// ── Intraday execution analysis ────────────────────────────────
+
+export interface IntradayBucket {
+  /** Time slot label, e.g. "09:30-10:00" */
+  slot: string;
+  /** Number of backtest signals in this slot */
+  backtestSignalCount: number;
+  /** Number of live executions in this slot */
+  liveTradeCount: number;
+  /** Average slippage (%) for trades in this slot */
+  avgSlippagePct: number;
+  /** Average delay (ms) from signal to execution in this slot */
+  avgDelayMs: number;
+  /** Average fill rate (0-1) in this slot */
+  fillRate: number;
+}
+
+export interface IntradayAnalysisResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Bucketed results by time-of-day slot */
+  buckets: IntradayBucket[];
+  /** The time slot with worst execution quality */
+  worstSlot: string | null;
+  /** The time slot with best execution quality */
+  bestSlot: string | null;
+  /** Observations about intraday patterns */
+  observations: string[];
+}
+
+/**
+ * Analyze execution quality by time-of-day.
+ * Buckets signals and trades into 30-minute slots within the trading day
+ * (09:30-11:30, 13:00-15:00 for A-share) to identify timing-related slippage.
+ */
+export function analyzeIntradayExecution(
+  req: LiveBacktestCompareRequest,
+): IntradayAnalysisResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades, liveSignals } = req;
+
+  // A-share trading slots (30-minute buckets)
+  const slots = [
+    "09:30-10:00", "10:00-10:30", "10:30-11:00", "11:00-11:30",
+    "13:00-13:30", "13:30-14:00", "14:00-14:30", "14:30-15:00",
+  ];
+
+  const slotData = new Map<string, {
+    btSignals: number;
+    liveTrades: number;
+    slippageSum: number;
+    slippageCount: number;
+    delaySum: number;
+    delayCount: number;
+  }>();
+
+  for (const slot of slots) {
+    slotData.set(slot, { btSignals: 0, liveTrades: 0, slippageSum: 0, slippageCount: 0, delaySum: 0, delayCount: 0 });
+  }
+
+  function getSlot(timeStr: string): string | null {
+    // Extract HH:MM from ISO timestamp or time string
+    const match = timeStr.match(/(\d{2}):(\d{2})/);
+    if (!match) return null;
+    const h = Number.parseInt(match[1]!, 10);
+    const m = Number.parseInt(match[2]!, 10);
+    const minutes = h * 60 + m;
+
+    if (minutes >= 570 && minutes < 600) return "09:30-10:00";
+    if (minutes >= 600 && minutes < 630) return "10:00-10:30";
+    if (minutes >= 630 && minutes < 660) return "10:30-11:00";
+    if (minutes >= 660 && minutes < 690) return "11:00-11:30";
+    if (minutes >= 780 && minutes < 810) return "13:00-13:30";
+    if (minutes >= 810 && minutes < 840) return "13:30-14:00";
+    if (minutes >= 840 && minutes < 870) return "14:00-14:30";
+    if (minutes >= 870 && minutes < 900) return "14:30-15:00";
+    return null;
+  }
+
+  // Count backtest signals per slot
+  for (const sig of backtestResult.signals) {
+    const sigDate = new Date(sig.timestamp).toISOString().slice(0, 10);
+    if (sigDate < startDate || sigDate > endDate) continue;
+    const timeStr = new Date(sig.timestamp).toISOString();
+    const slot = getSlot(timeStr);
+    if (slot) {
+      const d = slotData.get(slot)!;
+      d.btSignals++;
+    }
+  }
+
+  // Count live trades per slot and compute slippage
+  for (const trade of liveTrades) {
+    const slot = getSlot(trade.entryTime);
+    if (!slot) continue;
+
+    const d = slotData.get(slot)!;
+    d.liveTrades++;
+
+    // Find matching signal for slippage and delay
+    const matchingSignal = liveSignals.find(
+      (s) =>
+        s.symbol === trade.symbol &&
+        s.strategyId === trade.strategyId &&
+        Math.abs(s.timestamp - new Date(trade.entryTime).getTime()) < 5 * 60 * 1000,
+    );
+    if (matchingSignal && matchingSignal.price > 0) {
+      const slippage = Math.abs(trade.entryPrice - matchingSignal.price) / matchingSignal.price * 100;
+      d.slippageSum += slippage;
+      d.slippageCount++;
+
+      const delay = Math.abs(new Date(trade.entryTime).getTime() - matchingSignal.timestamp);
+      d.delaySum += delay;
+      d.delayCount++;
+    }
+  }
+
+  const buckets: IntradayBucket[] = [];
+  for (const slot of slots) {
+    const d = slotData.get(slot)!;
+    buckets.push({
+      slot,
+      backtestSignalCount: d.btSignals,
+      liveTradeCount: d.liveTrades,
+      avgSlippagePct: d.slippageCount > 0 ? Math.round(d.slippageSum / d.slippageCount * 1000) / 1000 : 0,
+      avgDelayMs: d.delayCount > 0 ? Math.round(d.delaySum / d.delayCount) : 0,
+      fillRate: d.btSignals > 0 ? Math.min(1, d.liveTrades / d.btSignals) : 0,
+    });
+  }
+
+  // Find worst/best slots (by slippage, among slots with trades)
+  const activeBuckets = buckets.filter((b) => b.liveTradeCount > 0);
+  let worstSlot: string | null = null;
+  let bestSlot: string | null = null;
+  if (activeBuckets.length > 0) {
+    worstSlot = activeBuckets.reduce((a, b) => b.avgSlippagePct > a.avgSlippagePct ? b : a).slot;
+    bestSlot = activeBuckets.reduce((a, b) => b.avgSlippagePct < a.avgSlippagePct ? b : a).slot;
+  }
+
+  // Generate observations
+  const observations: string[] = [];
+  const totalBtSignals = buckets.reduce((a, b) => a + b.backtestSignalCount, 0);
+  const totalLiveTrades = buckets.reduce((a, b) => a + b.liveTradeCount, 0);
+
+  if (totalBtSignals === 0 && totalLiveTrades === 0) {
+    observations.push("无可分析的日内交易数据");
+  } else {
+    // Check for morning concentration
+    const morningBt = buckets.slice(0, 4).reduce((a, b) => a + b.backtestSignalCount, 0);
+    const afternoonBt = buckets.slice(4).reduce((a, b) => a + b.backtestSignalCount, 0);
+    if (morningBt > 0 && afternoonBt > 0) {
+      const ratio = morningBt / (morningBt + afternoonBt);
+      if (ratio > 0.7) {
+        observations.push(`回测信号集中在上午 (${(ratio * 100).toFixed(0)}%)，注意开盘冲击成本`);
+      } else if (ratio < 0.3) {
+        observations.push(`回测信号集中在下午 (${((1 - ratio) * 100).toFixed(0)}%)，注意尾盘流动性`);
+      }
+    }
+
+    if (worstSlot) {
+      const worstBucket = buckets.find((b) => b.slot === worstSlot)!;
+      if (worstBucket.avgSlippagePct > 0.2) {
+        observations.push(`${worstSlot} 时段滑点最高 (${worstBucket.avgSlippagePct.toFixed(3)}%)，建议避免该时段市价下单`);
+      }
+    }
+
+    // Check for opening auction impact (09:30-10:00)
+    const openingBucket = buckets[0]!;
+    if (openingBucket.liveTradeCount > 0 && openingBucket.avgSlippagePct > 0.15) {
+      observations.push(`开盘半小时滑点 ${openingBucket.avgSlippagePct.toFixed(3)}%，考虑使用限价单或延后执行`);
+    }
+
+    // Check for closing rush (14:30-15:00)
+    const closingBucket = buckets[buckets.length - 1]!;
+    if (closingBucket.liveTradeCount > 0 && closingBucket.avgSlippagePct > 0.15) {
+      observations.push(`尾盘半小时滑点 ${closingBucket.avgSlippagePct.toFixed(3)}%，注意收盘前流动性变化`);
+    }
+
+    // Check for unexecuted signals in specific slots
+    for (const bucket of buckets) {
+      if (bucket.backtestSignalCount > 0 && bucket.fillRate < 0.5) {
+        observations.push(`${bucket.slot} 时段信号执行率仅 ${(bucket.fillRate * 100).toFixed(0)}%，需检查该时段下单通道`);
+      }
+    }
+  }
+
+  return { strategyId, period: { start: startDate, end: endDate }, buckets, worstSlot, bestSlot, observations };
+}
+
+// ── What-if scenario replay ────────────────────────────────────
+
+export interface WhatIfReplayResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Actual live performance */
+  actualReturn: number;
+  /** Hypothetical return if all missed signals had been executed */
+  hypotheticalReturn: number;
+  /** Difference: hypothetical - actual */
+  missedOpportunityCost: number;
+  /** Number of missed signals included in the replay */
+  missedSignalCount: number;
+  /** Total number of backtest signals in the period */
+  totalBacktestSignals: number;
+  /** Breakdown of missed signals with estimated P&L */
+  missedSignals: Array<{
+    symbol: string;
+    direction: "buy" | "sell" | "short" | "cover";
+    signalTime: string;
+    signalPrice: number;
+    /** Estimated P&L if the signal had been executed (based on backtest trade result) */
+    estimatedPnl: number;
+    /** Whether this missed signal was a winner or loser in backtest */
+    outcome: "win" | "loss" | "unknown";
+  }>;
+  /** Observations */
+  observations: string[];
+}
+
+/**
+ * Replay what would have happened if all missed signals had been executed.
+ * Uses backtest P&L as proxy for missed-trade outcomes.
+ */
+export function replayWhatIf(
+  req: LiveBacktestCompareRequest,
+): WhatIfReplayResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity, liveTrades, liveSignals } = req;
+
+  // First, find the matched/missed trades using existing logic
+  const matched = matchTrades(req);
+
+  // Get actual live return
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  let actualReturn = 0;
+  let liveInitialEquity = 0;
+  if (sortedLive.length >= 2) {
+    liveInitialEquity = sortedLive[0]!.equity;
+    const finalEquity = sortedLive[sortedLive.length - 1]!.equity;
+    actualReturn = liveInitialEquity > 0 ? ((finalEquity - liveInitialEquity) / liveInitialEquity) * 100 : 0;
+  }
+
+  // For each missed signal, estimate the P&L from backtest
+  const missedSignals: WhatIfReplayResult["missedSignals"] = [];
+  let totalMissedPnl = 0;
+
+  for (const m of matched.matches) {
+    if (m.matchType !== "missed") continue;
+
+    const sig = m.backtestSignal;
+    // Try to estimate the missed trade's P&L from backtest signals:
+    // Look for the next opposing signal for the same symbol to estimate the trade outcome
+    const sigIdx = backtestResult.signals.findIndex(
+      (s) => s.timestamp === sig.timestamp && s.symbol === sig.symbol && s.direction === sig.direction,
+    );
+
+    let estimatedPnl = 0;
+    let outcome: "win" | "loss" | "unknown" = "unknown";
+
+    if (sigIdx >= 0) {
+      // Find the next signal that closes this position
+      const closeSignal = backtestResult.signals.find(
+        (s, i) =>
+          i > sigIdx &&
+          s.symbol === sig.symbol &&
+          ((sig.direction === "buy" && (s.direction === "sell" || s.direction === "short")) ||
+           (sig.direction === "sell" && s.direction === "buy") ||
+           (sig.direction === "short" && (s.direction === "cover" || s.direction === "buy")) ||
+           (sig.direction === "cover" && s.direction === "short")),
+      );
+
+      if (closeSignal) {
+        const priceDiff = sig.direction === "buy" || sig.direction === "cover"
+          ? closeSignal.price - sig.price
+          : sig.price - closeSignal.price;
+        // Assume quantity=100 shares if not specified
+        const qty = sig.quantity ?? 100;
+        estimatedPnl = priceDiff * qty;
+        outcome = estimatedPnl > 0 ? "win" : "loss";
+      }
+    }
+
+    totalMissedPnl += estimatedPnl;
+    missedSignals.push({
+      symbol: sig.symbol,
+      direction: sig.direction,
+      signalTime: new Date(sig.timestamp).toISOString(),
+      signalPrice: sig.price,
+      estimatedPnl: Math.round(estimatedPnl * 100) / 100,
+      outcome,
+    });
+  }
+
+  // Hypothetical return = actual return + missed P&L as % of initial equity
+  const missedReturnPct = liveInitialEquity > 0 ? (totalMissedPnl / liveInitialEquity) * 100 : 0;
+  const hypotheticalReturn = Math.round((actualReturn + missedReturnPct) * 100) / 100;
+  const missedOpportunityCost = Math.round(missedReturnPct * 100) / 100;
+
+  // Observations
+  const observations: string[] = [];
+  const missedWins = missedSignals.filter((s) => s.outcome === "win").length;
+  const missedLosses = missedSignals.filter((s) => s.outcome === "loss").length;
+
+  if (missedSignals.length === 0) {
+    observations.push("所有回测信号均已执行，无遗漏");
+  } else {
+    observations.push(`共遗漏 ${missedSignals.length} 个信号，估计机会成本 ${missedOpportunityCost >= 0 ? "+" : ""}${missedOpportunityCost.toFixed(2)}%`);
+
+    if (missedWins > missedLosses) {
+      observations.push(`遗漏信号中盈利信号 ${missedWins} 个 > 亏损信号 ${missedLosses} 个，信号执行不力导致错失收益`);
+    } else if (missedLosses > missedWins) {
+      observations.push(`遗漏信号中亏损信号 ${missedLosses} 个 > 盈利信号 ${missedWins} 个，未执行反而避免了部分亏损`);
+    }
+
+    if (missedOpportunityCost > 3) {
+      observations.push("机会成本显著（>3%），建议改善信号执行机制或使用自动化下单");
+    } else if (missedOpportunityCost < -1) {
+      observations.push("遗漏信号整体为亏损信号，说明执行筛选反而提升了绩效");
+    }
+
+    // Group by symbol to find problematic stocks
+    const bySymbol = new Map<string, number>();
+    for (const s of missedSignals) {
+      bySymbol.set(s.symbol, (bySymbol.get(s.symbol) ?? 0) + 1);
+    }
+    const topMissed = [...bySymbol.entries()].sort((a, b) => b[1] - a[1]);
+    if (topMissed.length > 0 && topMissed[0]![1] >= 2) {
+      observations.push(`遗漏信号最多的标的: ${topMissed[0]![0]} (${topMissed[0]![1]}次)，检查该标的的流动性和交易限制`);
+    }
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    actualReturn: Math.round(actualReturn * 100) / 100,
+    hypotheticalReturn,
+    missedOpportunityCost,
+    missedSignalCount: missedSignals.length,
+    totalBacktestSignals: matched.summary.totalBacktestSignals,
+    missedSignals,
+    observations,
+  };
+}
+
+// ── Drawdown episode comparison ────────────────────────────────
+
+export interface DrawdownEpisode {
+  /** Episode start date */
+  startDate: string;
+  /** Episode end (deepest point) date */
+  troughDate: string;
+  /** Recovery date (null if still in drawdown) */
+  recoveryDate: string | null;
+  /** Maximum drawdown depth (%) */
+  maxDrawdown: number;
+  /** Duration from start to trough (days) */
+  durationToTrough: number;
+  /** Duration from trough to recovery (days), null if not recovered */
+  recoveryDays: number | null;
+}
+
+export interface DrawdownEpisodeCompareResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Backtest drawdown episodes */
+  backtestEpisodes: DrawdownEpisode[];
+  /** Live drawdown episodes */
+  liveEpisodes: DrawdownEpisode[];
+  /** Whether live experienced deeper drawdowns than backtest predicted */
+  liveWorstExceedsBacktest: boolean;
+  /** Ratio: live worst drawdown / backtest worst drawdown */
+  drawdownRatio: number;
+  /** Average recovery time comparison */
+  avgRecoveryComparison: {
+    backtestAvgRecoveryDays: number | null;
+    liveAvgRecoveryDays: number | null;
+    liveRecoverySlower: boolean;
+  };
+  /** Observations */
+  observations: string[];
+}
+
+/**
+ * Extract and compare individual drawdown episodes between backtest and live.
+ * A drawdown episode starts when equity drops from a peak and ends when it
+ * recovers to the previous peak level. Only episodes with depth ≥ threshold
+ * (default 2%) are included.
+ */
+export function compareDrawdownEpisodes(
+  req: LiveBacktestCompareRequest,
+  minDrawdownPct: number = 2,
+): DrawdownEpisodeCompareResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity } = req;
+
+  // Extract episodes from backtest equity curve
+  const btEpisodes = extractDrawdownEpisodes(
+    backtestResult.equityCurve.map((p) => ({ date: p.date, value: p.value })),
+    minDrawdownPct,
+  );
+
+  // Extract episodes from live equity
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  const liveEpisodes = extractDrawdownEpisodes(
+    sortedLive.map((s) => ({ date: s.date, value: s.equity })),
+    minDrawdownPct,
+  );
+
+  // Compare worst drawdowns
+  const btWorst = btEpisodes.reduce((a, b) => b.maxDrawdown > a.maxDrawdown ? b : a, { maxDrawdown: 0 } as DrawdownEpisode);
+  const liveWorst = liveEpisodes.reduce((a, b) => b.maxDrawdown > a.maxDrawdown ? b : a, { maxDrawdown: 0 } as DrawdownEpisode);
+  const liveWorstExceedsBacktest = liveWorst.maxDrawdown > btWorst.maxDrawdown;
+  const drawdownRatio = btWorst.maxDrawdown > 0 ? Math.round(liveWorst.maxDrawdown / btWorst.maxDrawdown * 100) / 100 : 0;
+
+  // Average recovery time
+  const btRecoveries = btEpisodes.filter((e) => e.recoveryDays != null).map((e) => e.recoveryDays!);
+  const liveRecoveries = liveEpisodes.filter((e) => e.recoveryDays != null).map((e) => e.recoveryDays!);
+  const btAvgRecovery = btRecoveries.length > 0 ? Math.round(btRecoveries.reduce((a, b) => a + b, 0) / btRecoveries.length) : null;
+  const liveAvgRecovery = liveRecoveries.length > 0 ? Math.round(liveRecoveries.reduce((a, b) => a + b, 0) / liveRecoveries.length) : null;
+  const liveRecoverySlower = btAvgRecovery != null && liveAvgRecovery != null && liveAvgRecovery > btAvgRecovery;
+
+  // Observations
+  const observations: string[] = [];
+
+  if (btEpisodes.length === 0 && liveEpisodes.length === 0) {
+    observations.push(`回测和实盘均无超过 ${minDrawdownPct}% 的回撤事件`);
+  } else {
+    observations.push(`回测 ${btEpisodes.length} 次回撤事件，实盘 ${liveEpisodes.length} 次`);
+
+    if (liveEpisodes.length > btEpisodes.length * 1.5 + 1) {
+      observations.push("实盘回撤事件数显著多于回测，策略在实盘环境中波动更大");
+    }
+
+    if (liveWorstExceedsBacktest && liveWorst.maxDrawdown > 0) {
+      observations.push(
+        `实盘最大回撤 ${liveWorst.maxDrawdown.toFixed(2)}% 超过回测最大回撤 ${btWorst.maxDrawdown.toFixed(2)}%` +
+        `（倍率 ${drawdownRatio.toFixed(2)}x），需警惕风控阈值`,
+      );
+    }
+
+    if (liveRecoverySlower) {
+      observations.push(
+        `实盘平均恢复时间 ${liveAvgRecovery} 天 > 回测 ${btAvgRecovery} 天，实盘恢复能力弱于回测预期`,
+      );
+    }
+
+    // Check if any live episode is still in drawdown
+    const unrecovedLive = liveEpisodes.filter((e) => e.recoveryDate == null);
+    if (unrecovedLive.length > 0) {
+      const deepest = unrecovedLive.reduce((a, b) => b.maxDrawdown > a.maxDrawdown ? b : a);
+      observations.push(`当前仍有 ${unrecovedLive.length} 个未恢复的回撤事件，最深 ${deepest.maxDrawdown.toFixed(2)}%`);
+    }
+
+    // Check if live drawdown nearing user's risk limit (15% from USER.md)
+    if (liveWorst.maxDrawdown > 12) {
+      observations.push(`实盘最大回撤接近风控上限（15%），建议降低仓位或收紧止损`);
+    }
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    backtestEpisodes: btEpisodes,
+    liveEpisodes: liveEpisodes,
+    liveWorstExceedsBacktest,
+    drawdownRatio,
+    avgRecoveryComparison: {
+      backtestAvgRecoveryDays: btAvgRecovery,
+      liveAvgRecoveryDays: liveAvgRecovery,
+      liveRecoverySlower,
+    },
+    observations,
+  };
+}
+
+function extractDrawdownEpisodes(
+  curve: Array<{ date: string; value: number }>,
+  minDrawdownPct: number,
+): DrawdownEpisode[] {
+  if (curve.length < 2) return [];
+
+  const episodes: DrawdownEpisode[] = [];
+  let peak = curve[0]!.value;
+  let peakDate = curve[0]!.date;
+  let inDrawdown = false;
+  let episodeStart = "";
+  let troughDate = "";
+  let troughValue = Infinity;
+  let maxDd = 0;
+
+  for (let i = 1; i < curve.length; i++) {
+    const point = curve[i]!;
+
+    if (point.value >= peak) {
+      // New peak or recovery
+      if (inDrawdown && maxDd >= minDrawdownPct) {
+        // Record this episode
+        const startMs = new Date(episodeStart).getTime();
+        const troughMs = new Date(troughDate).getTime();
+        const recoveryMs = new Date(point.date).getTime();
+        episodes.push({
+          startDate: episodeStart,
+          troughDate,
+          recoveryDate: point.date,
+          maxDrawdown: Math.round(maxDd * 100) / 100,
+          durationToTrough: Math.round((troughMs - startMs) / 86_400_000),
+          recoveryDays: Math.round((recoveryMs - troughMs) / 86_400_000),
+        });
+      }
+      peak = point.value;
+      peakDate = point.date;
+      inDrawdown = false;
+      troughValue = Infinity;
+      maxDd = 0;
+    } else {
+      // In drawdown
+      const dd = peak > 0 ? ((peak - point.value) / peak) * 100 : 0;
+      if (!inDrawdown) {
+        inDrawdown = true;
+        episodeStart = peakDate;
+        troughValue = point.value;
+        troughDate = point.date;
+        maxDd = dd;
+      }
+      if (dd > maxDd) {
+        maxDd = dd;
+        troughValue = point.value;
+        troughDate = point.date;
+      }
+    }
+  }
+
+  // If still in drawdown at the end, record as unrecovered episode
+  if (inDrawdown && maxDd >= minDrawdownPct) {
+    const startMs = new Date(episodeStart).getTime();
+    const troughMs = new Date(troughDate).getTime();
+    episodes.push({
+      startDate: episodeStart,
+      troughDate,
+      recoveryDate: null,
+      maxDrawdown: Math.round(maxDd * 100) / 100,
+      durationToTrough: Math.round((troughMs - startMs) / 86_400_000),
+      recoveryDays: null,
+    });
+  }
+
+  return episodes;
+}

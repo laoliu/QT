@@ -15,6 +15,9 @@ import {
   comparePortfolio,
   checkReoptimizeNeed,
   compareWithCustomBenchmark,
+  analyzeIntradayExecution,
+  replayWhatIf,
+  compareDrawdownEpisodes,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareRequest,
@@ -939,5 +942,181 @@ describe("compareWithCustomBenchmark", () => {
     // No overlap, so metrics should be zero/default
     expect(result.beta).toBe(0);
     expect(result.informationRatio).toBe(0);
+  });
+});
+
+// ── analyzeIntradayExecution ────────────────────────────────────
+
+describe("analyzeIntradayExecution", () => {
+  it("returns correct structure with all time slots", () => {
+    const req = makeReq({
+      liveTrades: [
+        makeTrade({ entryTime: "2024-03-01T09:35:00" }),
+        makeTrade({ entryTime: "2024-06-15T14:10:00", side: "sell", grossPnl: -100, netPnl: -105 }),
+      ],
+      liveSignals: [
+        makeSignal({ timestamp: new Date("2024-03-01T09:34:00Z").getTime() }),
+        makeSignal({ timestamp: new Date("2024-06-15T14:09:00Z").getTime() }),
+      ],
+    });
+    const result = analyzeIntradayExecution(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.buckets).toHaveLength(8); // 8 half-hour slots
+    expect(result.buckets[0]!.slot).toBe("09:30-10:00");
+    expect(result.buckets[7]!.slot).toBe("14:30-15:00");
+  });
+
+  it("assigns trades to correct time slots", () => {
+    const req = makeReq({
+      liveTrades: [
+        makeTrade({ entryTime: "2024-03-01T09:35:00" }),
+        makeTrade({ entryTime: "2024-03-02T09:45:00" }),
+        makeTrade({ entryTime: "2024-04-01T14:35:00", side: "sell", grossPnl: 50, netPnl: 45 }),
+      ],
+      liveSignals: [],
+    });
+    const result = analyzeIntradayExecution(req);
+    const slot0930 = result.buckets.find((b) => b.slot === "09:30-10:00")!;
+    expect(slot0930.liveTradeCount).toBe(2);
+    const slot1430 = result.buckets.find((b) => b.slot === "14:30-15:00")!;
+    expect(slot1430.liveTradeCount).toBe(1);
+  });
+
+  it("handles empty trade data", () => {
+    const req = makeReq({ liveTrades: [], liveSignals: [] });
+    const result = analyzeIntradayExecution(req);
+    expect(result.worstSlot).toBeNull();
+    expect(result.bestSlot).toBeNull();
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+});
+
+// ── replayWhatIf ────────────────────────────────────────────────
+
+describe("replayWhatIf", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = replayWhatIf(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(typeof result.actualReturn).toBe("number");
+    expect(typeof result.hypotheticalReturn).toBe("number");
+    expect(typeof result.missedOpportunityCost).toBe("number");
+    expect(result.totalBacktestSignals).toBeGreaterThan(0);
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+
+  it("reports zero missed signals when all are executed", () => {
+    // Create a request where all backtest signals have matching live trades
+    const bt = makeBacktest({
+      signals: [
+        makeSignal({ timestamp: new Date("2024-03-01T09:30:00Z").getTime(), direction: "buy" }),
+      ],
+    });
+    const req = makeReq({
+      backtestResult: bt,
+      liveTrades: [
+        makeTrade({ entryTime: "2024-03-01T09:31:00", side: "buy" }),
+      ],
+      liveSignals: [
+        makeSignal({ timestamp: new Date("2024-03-01T09:30:00Z").getTime() }),
+      ],
+    });
+    const result = replayWhatIf(req);
+    expect(result.missedSignalCount).toBe(0);
+    expect(result.missedOpportunityCost).toBe(0);
+  });
+
+  it("detects missed signals", () => {
+    // Backtest has 3 signals, live only has 1 trade
+    const bt = makeBacktest({
+      signals: [
+        makeSignal({ timestamp: new Date("2024-03-01T09:30:00Z").getTime(), direction: "buy" }),
+        makeSignal({ timestamp: new Date("2024-04-15T09:30:00Z").getTime(), direction: "sell", price: 1850 }),
+        makeSignal({ timestamp: new Date("2024-06-15T09:30:00Z").getTime(), direction: "buy" }),
+      ],
+    });
+    const req = makeReq({
+      backtestResult: bt,
+      liveTrades: [
+        makeTrade({ entryTime: "2024-03-01T09:31:00", side: "buy" }),
+      ],
+      liveSignals: [
+        makeSignal({ timestamp: new Date("2024-03-01T09:30:00Z").getTime() }),
+      ],
+    });
+    const result = replayWhatIf(req);
+    expect(result.missedSignalCount).toBeGreaterThan(0);
+  });
+});
+
+// ── compareDrawdownEpisodes ─────────────────────────────────────
+
+describe("compareDrawdownEpisodes", () => {
+  it("returns correct structure", () => {
+    const req = makeReq();
+    const result = compareDrawdownEpisodes(req);
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.period).toEqual({ start: "2024-01-01", end: "2024-06-30" });
+    expect(Array.isArray(result.backtestEpisodes)).toBe(true);
+    expect(Array.isArray(result.liveEpisodes)).toBe(true);
+    expect(typeof result.liveWorstExceedsBacktest).toBe("boolean");
+    expect(typeof result.drawdownRatio).toBe("number");
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+
+  it("detects drawdown episodes in equity curve with dips", () => {
+    const bt = makeBacktest({
+      equityCurve: [
+        { date: "2024-01-01", value: 100000 },
+        { date: "2024-02-01", value: 105000 },
+        { date: "2024-03-01", value: 100000 }, // -4.76% drawdown
+        { date: "2024-04-01", value: 106000 }, // recovery
+        { date: "2024-05-01", value: 110000 },
+        { date: "2024-06-01", value: 103000 }, // -6.36% drawdown
+        { date: "2024-06-30", value: 115000 }, // recovery
+      ],
+    });
+    const req = makeReq({ backtestResult: bt });
+    const result = compareDrawdownEpisodes(req, 2);
+    expect(result.backtestEpisodes.length).toBeGreaterThanOrEqual(2);
+    expect(result.backtestEpisodes[0]!.maxDrawdown).toBeGreaterThanOrEqual(2);
+  });
+
+  it("identifies unrecovered drawdown at end of period", () => {
+    const liveEquity = [
+      makeEquitySnap("2024-01-01", 100000),
+      makeEquitySnap("2024-02-01", 105000),
+      makeEquitySnap("2024-03-01", 103000),
+      makeEquitySnap("2024-04-01", 106000),
+      makeEquitySnap("2024-05-01", 107000),
+      makeEquitySnap("2024-06-01", 100000), // deep drawdown
+      makeEquitySnap("2024-06-30", 101000), // not recovered to 107000 peak
+    ];
+    const req = makeReq({ liveEquity });
+    const result = compareDrawdownEpisodes(req, 2);
+    const unrecovered = result.liveEpisodes.filter((e) => e.recoveryDate === null);
+    expect(unrecovered.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles monotonically increasing equity (no drawdowns)", () => {
+    const req = makeReq(); // default live equity is monotonically increasing
+    const result = compareDrawdownEpisodes(req, 2);
+    expect(result.liveEpisodes).toHaveLength(0);
+  });
+
+  it("respects min_drawdown_pct threshold", () => {
+    const liveEquity = [
+      makeEquitySnap("2024-01-01", 100000),
+      makeEquitySnap("2024-02-01", 99500), // -0.5% drawdown, under threshold
+      makeEquitySnap("2024-03-01", 100500),
+      makeEquitySnap("2024-04-01", 100000),
+      makeEquitySnap("2024-05-01", 101000),
+      makeEquitySnap("2024-06-01", 102000),
+      makeEquitySnap("2024-06-30", 103000),
+    ];
+    const req = makeReq({ liveEquity });
+    const result = compareDrawdownEpisodes(req, 2);
+    // -0.5% is under 2% threshold, so no episodes
+    expect(result.liveEpisodes).toHaveLength(0);
   });
 });

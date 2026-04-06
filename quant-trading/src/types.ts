@@ -1036,3 +1036,133 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Trading Performance Report ──────────────────────────────────
+
+/** Standardized performance metric identifiers. */
+export type PerformanceMetricId =
+  | "total_return"
+  | "annualized_return"
+  | "total_pnl"
+  | "total_commission"
+  | "net_pnl"
+  | "sharpe_ratio"
+  | "sortino_ratio"
+  | "calmar_ratio"
+  | "max_drawdown"
+  | "max_drawdown_pct"
+  | "max_drawdown_duration"
+  | "volatility"
+  | "win_rate"
+  | "profit_factor"
+  | "avg_win"
+  | "avg_loss"
+  | "largest_win"
+  | "largest_loss"
+  | "avg_holding_days"
+  | "total_trades"
+  | "win_trades"
+  | "loss_trades"
+  | "expectancy"
+  | "recovery_factor"
+  | "payoff_ratio"
+  | "value_at_risk_95"
+  | "conditional_var_95"
+  | "beta"
+  | "alpha"
+  | "information_ratio"
+  | "treynor_ratio";
+
+/** A single computed metric with its value and display metadata. */
+export type PerformanceMetricEntry = {
+  id: PerformanceMetricId;
+  /** Display label (Chinese). */
+  label: string;
+  value: number;
+  /** Formatted display string, e.g. "12.34%", "¥1,234.56". */
+  formatted: string;
+  /** Unit category for formatting. */
+  unit: "pct" | "currency" | "ratio" | "days" | "count";
+};
+
+/** Query parameters for generating a performance report. */
+export type PerformanceReportQuery = {
+  /** Filter by trading mode (paper / live). If omitted, uses current mode. */
+  mode?: "paper" | "live";
+  /** Filter by account ID. If omitted, includes all accounts. */
+  accountId?: string;
+  /** Filter by strategy IDs. If omitted, includes all strategies. */
+  strategyIds?: string[];
+  /** Filter by symbol codes. If omitted, includes all symbols. */
+  symbols?: string[];
+  /** Start date (inclusive), YYYY-MM-DD. */
+  startDate?: string;
+  /** End date (inclusive), YYYY-MM-DD. */
+  endDate?: string;
+  /** Benchmark symbol for relative metrics (e.g. "000300" for CSI 300). */
+  benchmark?: string;
+  /** Which metric IDs to include. If omitted, includes all. */
+  metrics?: PerformanceMetricId[];
+};
+
+/** Aggregated trade statistics for a single grouping dimension. */
+export type TradeAggregation = {
+  /** Grouping key (strategy ID, symbol code, or period string). */
+  key: string;
+  /** Display label. */
+  label?: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  grossPnl: number;
+  netPnl: number;
+  commission: number;
+  avgWin: number;
+  avgLoss: number;
+  largestWin: number;
+  largestLoss: number;
+  profitFactor: number;
+  avgHoldingDays: number;
+  /** Percentage contribution to total portfolio PnL. */
+  contributionPct: number;
+};
+
+/** Equity curve data point. */
+export type EquityCurvePoint = {
+  date: string;
+  equity: number;
+  cash: number;
+  marketValue: number;
+  dailyPnl: number;
+  /** Drawdown from peak, expressed as positive percentage (0-100). */
+  drawdownPct: number;
+  /** Benchmark equity value (if requested). */
+  benchmarkValue?: number;
+};
+
+/** Complete trading performance report. */
+export type TradingPerformanceReport = {
+  /** Report generation timestamp (ISO string). */
+  generatedAt: string;
+  /** Query parameters that produced this report. */
+  query: PerformanceReportQuery;
+  /** Date range of actual data (may differ from query if data is sparse). */
+  dateRange: { from: string; to: string };
+  /** Core performance metrics. */
+  metrics: PerformanceMetricEntry[];
+  /** Trade breakdown by strategy. */
+  byStrategy: TradeAggregation[];
+  /** Trade breakdown by symbol. */
+  bySymbol: TradeAggregation[];
+  /** Trade breakdown by month (YYYY-MM). */
+  byMonth: TradeAggregation[];
+  /** Daily equity curve with drawdown overlay. */
+  equityCurve: EquityCurvePoint[];
+  /** Monthly return heatmap data (YYYY-MM → return%). */
+  monthlyReturns: Array<{ month: string; returnPct: number }>;
+  /** Number of trade records analyzed. */
+  totalTradesAnalyzed: number;
+  /** Number of equity snapshots used. */
+  totalEquitySnapshots: number;
+};

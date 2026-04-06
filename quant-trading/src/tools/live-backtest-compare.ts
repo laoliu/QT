@@ -14,6 +14,9 @@
  *   out_of_sample    — forward walk validation (post-backtest live performance)
  *   closest_backtest — find best-matching backtest among multiple candidates
  *   export           — export comparison results as CSV file
+ *   regime_compare   — regime-aware comparison (adjusts drift for market conditions)
+ *   position_weighted — position-size-weighted comparison
+ *   scheduled_check  — batch drift check across all monitored strategies
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -30,7 +33,11 @@ import {
   compareOutOfSample,
   findClosestBacktest,
   exportComparisonCsv,
+  compareRegimeAware,
+  comparePositionWeighted,
+  runScheduledDriftCheck,
   DEFAULT_DECAY_ALERT_CONFIG,
+  DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareResult,
   type SegmentGranularity,
   type PeriodSegmentedResult,
@@ -38,6 +45,7 @@ import {
   type DriftHistory,
   type PerSymbolBreakdownResult,
   type DecayAlertConfig,
+  type ScheduledDriftCheckConfig,
 } from "../services/live-backtest-compare.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
@@ -181,13 +189,16 @@ export function createLiveBacktestCompareTool(
       "action=out_of_sample 样本外验证（回测后实盘表现）, " +
       "action=closest_backtest 在多个回测中找到最匹配实盘走势的回测, " +
       "action=export 导出CSV格式对比报告（含权益曲线和逐笔匹配）。" +
-      "action=decay_alerts 查看衰减告警列表。",
+      "action=decay_alerts 查看衰减告警列表。" +
+      "action=regime_compare 市场环境感知对比（根据牛熊/波动率调整漂移评分）。" +
+      "action=position_weighted 仓位加权对比（按实际持仓大小加权漂移贡献）。" +
+      "action=scheduled_check 批量策略漂移巡检（定时监控多策略健康状态）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check"],
           description: "操作类型",
         },
         backtest_id: {
@@ -213,6 +224,10 @@ export function createLiveBacktestCompareTool(
         window_days: {
           type: "number",
           description: "漂移跟踪滚动窗口天数 (drift_history使用，默认30)",
+        },
+        alert_threshold: {
+          type: "number",
+          description: "漂移告警阈值 (scheduled_check使用，0-100，默认35)",
         },
       },
       required: ["action"],
@@ -616,6 +631,147 @@ export function createLiveBacktestCompareTool(
               漂移得分: a.metadata?.driftScore ?? "N/A",
               漂移严重程度: a.metadata?.driftSeverity ?? "N/A",
               时间: a.timestamp,
+            })),
+          };
+        }
+
+        case "regime_compare": {
+          const regimeResult = compareRegimeAware(req, decayAlertConfig);
+          const rc2 = regimeResult.comparison.returnComparison;
+          const regimeLabels: Record<string, string> = {
+            bull: "牛市", bear: "熊市", sideways: "震荡市",
+            high_volatility: "高波动市", low_volatility: "低波动市",
+          };
+          return {
+            策略: regimeResult.strategyId,
+            期间: `${regimeResult.period.start} ~ ${regimeResult.period.end}`,
+            市场环境: regimeLabels[regimeResult.regime] ?? regimeResult.regime,
+            原始漂移得分: `${regimeResult.comparison.drift.score}/100`,
+            调整后漂移得分: `${regimeResult.adjustedDriftScore}/100`,
+            收益偏差: `${fmt(rc2.returnDiff, 2)}%`,
+            漂移归因: {
+              市场环境导致: `${regimeResult.regimeAttribution.regimeExplainedPct}%`,
+              策略自身导致: `${regimeResult.regimeAttribution.strategySpecificPct}%`,
+            },
+            环境分析: regimeResult.regimeObservations,
+            原始对比: formatResult(regimeResult.comparison),
+          };
+        }
+
+        case "position_weighted": {
+          const pwResult = comparePositionWeighted(req);
+          return {
+            策略: pwResult.strategyId,
+            期间: `${pwResult.period.start} ~ ${pwResult.period.end}`,
+            加权收益对比: {
+              回测加权收益: `${fmt(pwResult.weightedReturnComparison.backtestWeightedReturn, 2)}%`,
+              实盘加权收益: `${fmt(pwResult.weightedReturnComparison.liveWeightedReturn, 2)}%`,
+              加权收益偏差: `${fmt(pwResult.weightedReturnComparison.weightedReturnDiff, 2)}%`,
+            },
+            加权漂移得分: `${pwResult.weightedDriftScore}/100`,
+            标的仓位权重: pwResult.symbolWeights.slice(0, 10).map((s) => ({
+              标的: s.symbol,
+              资金占比: `${s.capitalWeight.toFixed(1)}%`,
+              加权漂移贡献: fmt(s.weightedDriftContribution, 2),
+              实盘收益: `${fmt(s.liveReturn, 2)}%`,
+              回测收益: `${fmt(s.backtestReturn, 2)}%`,
+            })),
+            观察: pwResult.observations,
+          };
+        }
+
+        case "scheduled_check": {
+          const mode4 = (args.mode as string) ?? "paper";
+          const windowDays2 = (args.window_days as number) ?? 30;
+          const alertThreshold = (args.alert_threshold as number) ?? 35;
+
+          // Gather all strategies with backtest records
+          const entries3 = backtestStore.query({
+            sortBy: "createdAt",
+            sortDir: "desc",
+            limit: 50,
+          });
+
+          // Group by strategyId and take the latest backtest per strategy
+          const latestByStrategy = new Map<string, typeof entries3[0]>();
+          for (const e of entries3) {
+            if (!latestByStrategy.has(e.strategyId)) {
+              latestByStrategy.set(e.strategyId, e);
+            }
+          }
+
+          const eh4 = mode4 === "live" ? equityHistoryLive : equityHistoryPaper;
+          const now = new Date();
+          const windowEnd = now.toISOString().slice(0, 10);
+          const windowStart = new Date(now.getTime() - windowDays2 * 86_400_000).toISOString().slice(0, 10);
+
+          const strategiesData: Parameters<typeof runScheduledDriftCheck>[0] = [];
+          const allTrades3 = await loadTrades(config);
+          const allSignals3 = await loadSignals(config);
+
+          for (const [sid, entry] of latestByStrategy) {
+            const btRecord = backtestStore.getFullResult(entry.id);
+            if (!btRecord) continue;
+
+            const liveEq = eh4.getRange(windowStart, windowEnd);
+            if (liveEq.length < 2) continue;
+
+            strategiesData.push({
+              strategyId: sid,
+              backtestResult: btRecord.result,
+              liveEquity: liveEq,
+              liveTrades: allTrades3.filter((t) => t.strategyId === sid),
+              liveSignals: allSignals3.filter((s) => s.strategyId === sid),
+            });
+          }
+
+          if (strategiesData.length === 0) {
+            return { message: "未找到可监控的策略（需要有回测记录和权益数据）" };
+          }
+
+          const schedConfig: ScheduledDriftCheckConfig = {
+            ...DEFAULT_SCHEDULED_DRIFT_CONFIG,
+            windowDays: windowDays2,
+            alertThreshold,
+            mode: mode4 as "paper" | "live",
+            strategyIds: [...latestByStrategy.keys()],
+          };
+
+          const checkResult = runScheduledDriftCheck(strategiesData, schedConfig, decayAlertConfig);
+
+          // Fire alerts for strategies that triggered
+          for (const sr of checkResult.strategyResults) {
+            if (sr.alertTriggered && alertStore) {
+              alertStore.add(
+                sr.severity === "critical" ? "critical" : "warning",
+                "strategy",
+                `定时巡检: 策略 ${sr.strategyId} 漂移${sr.severity === "critical" ? "严重" : "偏高"} (${sr.driftScore}/100)`,
+                {
+                  strategyId: sr.strategyId,
+                  driftScore: sr.driftScore,
+                  driftSeverity: sr.severity,
+                  scheduledCheck: true,
+                },
+              );
+            }
+          }
+
+          const healthLabels = { healthy: "健康", warning: "警告", critical: "危险" };
+          return {
+            检查时间: checkResult.checkTime,
+            监控策略数: checkResult.strategyResults.length,
+            告警策略数: checkResult.alertedStrategies.length,
+            组合健康状态: healthLabels[checkResult.portfolioHealth],
+            告警策略: checkResult.alertedStrategies.length > 0
+              ? checkResult.alertedStrategies.join(", ")
+              : "无",
+            策略详情: checkResult.strategyResults.map((r) => ({
+              策略: r.strategyId,
+              漂移得分: `${r.driftScore}/100`,
+              严重程度: r.severity,
+              收益偏差: `${fmt(r.returnDiff, 2)}%`,
+              触发告警: r.alertTriggered ? "是" : "否",
+              观察: r.observations,
             })),
           };
         }

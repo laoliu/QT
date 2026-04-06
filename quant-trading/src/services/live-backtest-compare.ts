@@ -343,6 +343,98 @@ export interface DriftHistory {
   alertCount: number;
 }
 
+// ── Market regime types ────────────────────────────────────
+
+export type MarketRegime = "bull" | "bear" | "sideways" | "high_volatility" | "low_volatility";
+
+export interface RegimeAwareCompareResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Detected market regime during comparison period */
+  regime: MarketRegime;
+  /** Raw comparison result */
+  comparison: LiveBacktestCompareResult;
+  /** Adjusted drift score that accounts for regime expectations */
+  adjustedDriftScore: number;
+  /** How much of the drift is attributable to regime change vs strategy decay */
+  regimeAttribution: {
+    /** Drift explained by regime change (0-100%) */
+    regimeExplainedPct: number;
+    /** Drift that is strategy-specific (0-100%) */
+    strategySpecificPct: number;
+  };
+  /** Regime-contextual observations */
+  regimeObservations: string[];
+}
+
+// ── Position-weighted comparison types ──────────────────────
+
+export interface PositionWeightedCompareResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Capital-weighted return comparison (weighted by actual position size) */
+  weightedReturnComparison: {
+    backtestWeightedReturn: number;
+    liveWeightedReturn: number;
+    weightedReturnDiff: number;
+  };
+  /** Capital-weighted drift score (positions with more capital weigh more) */
+  weightedDriftScore: number;
+  /** Per-symbol weights and their contributions to total drift */
+  symbolWeights: Array<{
+    symbol: string;
+    /** Capital allocated to this symbol as fraction of total portfolio */
+    capitalWeight: number;
+    /** This symbol's contribution to the weighted drift score */
+    weightedDriftContribution: number;
+    liveReturn: number;
+    backtestReturn: number;
+  }>;
+  /** Observations about capital-weighted performance */
+  observations: string[];
+}
+
+// ── Auto-scheduled monitoring types ─────────────────────────
+
+export interface ScheduledDriftCheckConfig {
+  /** Strategies to monitor */
+  strategyIds: string[];
+  /** Check frequency: "daily" | "weekly" */
+  frequency: "daily" | "weekly";
+  /** Rolling window in days for drift calculation (default 30) */
+  windowDays: number;
+  /** Drift score threshold to trigger alert (default 35 = "high") */
+  alertThreshold: number;
+  /** Trading mode: paper or live */
+  mode: "paper" | "live";
+}
+
+export const DEFAULT_SCHEDULED_DRIFT_CONFIG: ScheduledDriftCheckConfig = {
+  strategyIds: [],
+  frequency: "daily",
+  windowDays: 30,
+  alertThreshold: 35,
+  mode: "paper",
+};
+
+export interface ScheduledDriftCheckResult {
+  /** When this check was performed */
+  checkTime: string;
+  /** Results per strategy */
+  strategyResults: Array<{
+    strategyId: string;
+    driftScore: number;
+    severity: DriftSeverity;
+    returnDiff: number;
+    alertTriggered: boolean;
+    observations: string[];
+  }>;
+  /** Strategies that need attention */
+  alertedStrategies: string[];
+  /** Overall portfolio health: "healthy" | "warning" | "critical" */
+  portfolioHealth: "healthy" | "warning" | "critical";
+}
+
 // ── Implementation ──────────────────────────────────────────
 
 /**
@@ -1668,5 +1760,359 @@ export function findClosestBacktest(
     liveReturn,
     candidates,
     bestMatch: candidates.length > 0 ? candidates[0]! : null,
+  };
+}
+
+// ── Regime-aware comparison ─────────────────────────────────
+
+/**
+ * Detect market regime from equity curve behavior and benchmark data.
+ */
+function detectMarketRegime(
+  liveEquity: EquitySnapshot[],
+  backtestResult: BacktestResult,
+): MarketRegime {
+  // Use benchmark curve if available, otherwise use live equity as proxy
+  const sorted = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length < 5) return "sideways";
+
+  const hasBenchmark = sorted.some((s) => s.benchmark != null && s.benchmark > 0);
+  const values = hasBenchmark
+    ? sorted.filter((s) => s.benchmark != null).map((s) => s.benchmark!)
+    : sorted.map((s) => s.equity);
+
+  if (values.length < 5) return "sideways";
+
+  // Calculate trend: linear regression slope
+  const n = values.length;
+  const xMean = (n - 1) / 2;
+  const yMean = values.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * (values[i]! - yMean);
+    den += (i - xMean) ** 2;
+  }
+  const slope = den > 0 ? num / den : 0;
+  const slopePct = yMean > 0 ? (slope / yMean) * 100 : 0;
+
+  // Calculate volatility: std of daily returns
+  const dailyReturns: number[] = [];
+  for (let i = 1; i < values.length; i++) {
+    if (values[i - 1]! > 0) {
+      dailyReturns.push((values[i]! - values[i - 1]!) / values[i - 1]!);
+    }
+  }
+  const retMean = dailyReturns.length > 0
+    ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+    : 0;
+  const retVariance = dailyReturns.length > 1
+    ? dailyReturns.reduce((a, r) => a + (r - retMean) ** 2, 0) / (dailyReturns.length - 1)
+    : 0;
+  const annualizedVol = Math.sqrt(retVariance) * Math.sqrt(252) * 100;
+
+  // Classify regime
+  if (annualizedVol > 30) return "high_volatility";
+  if (annualizedVol < 10) return "low_volatility";
+  if (slopePct > 0.3) return "bull";
+  if (slopePct < -0.3) return "bear";
+  return "sideways";
+}
+
+/**
+ * Get expected drift adjustments for each market regime.
+ * In bear/high-vol markets, some drift is expected and the score should be relaxed.
+ */
+function getRegimeAdjustment(regime: MarketRegime): {
+  driftMultiplier: number;
+  expectedReturnDrift: number;
+} {
+  switch (regime) {
+    case "bull":
+      return { driftMultiplier: 1.0, expectedReturnDrift: 0 };
+    case "bear":
+      return { driftMultiplier: 0.7, expectedReturnDrift: 5 };
+    case "sideways":
+      return { driftMultiplier: 0.9, expectedReturnDrift: 2 };
+    case "high_volatility":
+      return { driftMultiplier: 0.6, expectedReturnDrift: 8 };
+    case "low_volatility":
+      return { driftMultiplier: 1.1, expectedReturnDrift: 0 };
+  }
+}
+
+/**
+ * Compare live vs backtest with market regime context.
+ * Adjusts drift scoring based on detected market conditions.
+ */
+export function compareRegimeAware(
+  req: LiveBacktestCompareRequest,
+  decayConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
+): RegimeAwareCompareResult {
+  const regime = detectMarketRegime(req.liveEquity, req.backtestResult);
+  const comparison = compareLiveVsBacktest(req, decayConfig);
+  const adjustment = getRegimeAdjustment(regime);
+
+  // Adjust drift score: reduce score in difficult market regimes
+  const rawDrift = comparison.drift.score;
+  const adjustedDriftScore = Math.round(
+    Math.max(0, Math.min(100, rawDrift * adjustment.driftMultiplier)),
+  );
+
+  // Attribute how much drift is regime vs strategy
+  const expectedDrift = adjustment.expectedReturnDrift;
+  const actualReturnDrift = Math.abs(comparison.returnComparison.returnDiff);
+  const regimeExplainedPct = actualReturnDrift > 0
+    ? Math.min(100, (expectedDrift / actualReturnDrift) * 100)
+    : 0;
+
+  const regimeObservations: string[] = [];
+  const regimeLabels: Record<MarketRegime, string> = {
+    bull: "牛市",
+    bear: "熊市",
+    sideways: "震荡市",
+    high_volatility: "高波动市",
+    low_volatility: "低波动市",
+  };
+  regimeObservations.push(`检测到市场处于 ${regimeLabels[regime]} 环境`);
+
+  if (regime === "bear" || regime === "high_volatility") {
+    regimeObservations.push(
+      `在${regimeLabels[regime]}中，策略表现回撤属于预期范围，` +
+      `原始漂移得分 ${rawDrift} 调整为 ${adjustedDriftScore}`,
+    );
+  }
+
+  if (regimeExplainedPct > 50) {
+    regimeObservations.push(
+      `收益偏差中约 ${regimeExplainedPct.toFixed(0)}% 可归因于市场环境变化，非策略本身衰减`,
+    );
+  } else if (regimeExplainedPct < 20) {
+    regimeObservations.push("大部分漂移来自策略自身，建议审查策略参数");
+  }
+
+  return {
+    strategyId: req.strategyId,
+    period: { start: req.startDate, end: req.endDate },
+    regime,
+    comparison,
+    adjustedDriftScore,
+    regimeAttribution: {
+      regimeExplainedPct: Math.round(regimeExplainedPct),
+      strategySpecificPct: Math.round(100 - regimeExplainedPct),
+    },
+    regimeObservations,
+  };
+}
+
+// ── Position-weighted comparison ───────────────────────────
+
+/**
+ * Compare live vs backtest with position-size weighting.
+ * Drift from larger positions contributes more to the weighted score.
+ */
+export function comparePositionWeighted(
+  req: LiveBacktestCompareRequest,
+): PositionWeightedCompareResult {
+  const { strategyId, startDate, endDate, backtestResult, liveTrades } = req;
+
+  // Group live trades by symbol and compute capital per symbol
+  const symbolCapital = new Map<string, number>();
+  let totalCapital = 0;
+  for (const trade of liveTrades) {
+    const capital = trade.entryPrice * trade.quantity;
+    symbolCapital.set(trade.symbol, (symbolCapital.get(trade.symbol) ?? 0) + capital);
+    totalCapital += capital;
+  }
+
+  // Also include symbols from backtest signals that may not be in live trades
+  for (const sig of backtestResult.signals) {
+    if (!symbolCapital.has(sig.symbol)) {
+      symbolCapital.set(sig.symbol, 0);
+    }
+  }
+
+  // Compute per-symbol weights and returns
+  const btTotalPnl = backtestResult.finalValue - backtestResult.initialCash;
+  const btSignalsBySymbol = new Map<string, number>();
+  let totalBtSignals = 0;
+  for (const s of backtestResult.signals) {
+    const d = new Date(s.timestamp).toISOString().slice(0, 10);
+    if (d >= startDate && d <= endDate) {
+      btSignalsBySymbol.set(s.symbol, (btSignalsBySymbol.get(s.symbol) ?? 0) + 1);
+      totalBtSignals++;
+    }
+  }
+
+  const symbolWeights: PositionWeightedCompareResult["symbolWeights"] = [];
+  let weightedLiveReturn = 0;
+  let weightedBtReturn = 0;
+  let weightedDriftScore = 0;
+
+  for (const [symbol, capital] of symbolCapital) {
+    const weight = totalCapital > 0 ? capital / totalCapital : 1 / symbolCapital.size;
+
+    // Live return for this symbol
+    const symTrades = liveTrades.filter((t) => t.symbol === symbol && t.exitPrice != null);
+    const livePnl = symTrades.reduce((a, t) => a + t.netPnl, 0);
+    const liveReturn = capital > 0 ? (livePnl / capital) * 100 : 0;
+
+    // Backtest return estimation (proportional)
+    const symBtSignals = btSignalsBySymbol.get(symbol) ?? 0;
+    const signalShare = totalBtSignals > 0 ? symBtSignals / totalBtSignals : 0;
+    const btPnl = signalShare * btTotalPnl;
+    const btReturn = backtestResult.initialCash > 0
+      ? (btPnl / backtestResult.initialCash) * 100
+      : 0;
+
+    const returnDiff = Math.abs(liveReturn - btReturn);
+    const symbolDrift = Math.min(100, returnDiff * 2);
+
+    weightedLiveReturn += liveReturn * weight;
+    weightedBtReturn += btReturn * weight;
+    weightedDriftScore += symbolDrift * weight;
+
+    symbolWeights.push({
+      symbol,
+      capitalWeight: Math.round(weight * 10000) / 100,
+      weightedDriftContribution: Math.round(symbolDrift * weight * 100) / 100,
+      liveReturn: Math.round(liveReturn * 100) / 100,
+      backtestReturn: Math.round(btReturn * 100) / 100,
+    });
+  }
+
+  // Sort by weighted drift contribution descending
+  symbolWeights.sort((a, b) => b.weightedDriftContribution - a.weightedDriftContribution);
+
+  const observations: string[] = [];
+  if (symbolWeights.length > 0 && symbolWeights[0]!.weightedDriftContribution > weightedDriftScore * 0.5) {
+    observations.push(
+      `标的 ${symbolWeights[0]!.symbol} 贡献了超过50%的加权漂移，` +
+      `资金占比 ${symbolWeights[0]!.capitalWeight.toFixed(1)}%`,
+    );
+  }
+
+  const equalWeightDrift = symbolWeights.length > 0
+    ? symbolWeights.reduce((a, s) => a + s.weightedDriftContribution, 0) / symbolWeights.length * symbolWeights.length
+    : 0;
+  if (Math.abs(weightedDriftScore - equalWeightDrift) > 5) {
+    observations.push(
+      `加权漂移 (${weightedDriftScore.toFixed(0)}) 与等权漂移差异明显，` +
+      "重仓标的对总漂移影响较大",
+    );
+  }
+
+  if (observations.length === 0) {
+    observations.push("各标的仓位对漂移贡献较均衡");
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    weightedReturnComparison: {
+      backtestWeightedReturn: Math.round(weightedBtReturn * 100) / 100,
+      liveWeightedReturn: Math.round(weightedLiveReturn * 100) / 100,
+      weightedReturnDiff: Math.round((weightedLiveReturn - weightedBtReturn) * 100) / 100,
+    },
+    weightedDriftScore: Math.round(weightedDriftScore),
+    symbolWeights,
+    observations,
+  };
+}
+
+// ── Scheduled drift monitoring ──────────────────────────────
+
+/**
+ * Run a batch drift check across multiple strategies.
+ * Designed to be called periodically (daily/weekly) by a scheduler.
+ */
+export function runScheduledDriftCheck(
+  strategies: Array<{
+    strategyId: string;
+    backtestResult: BacktestResult;
+    liveEquity: EquitySnapshot[];
+    liveTrades: TradeRecord[];
+    liveSignals: TradingSignal[];
+  }>,
+  config: ScheduledDriftCheckConfig = DEFAULT_SCHEDULED_DRIFT_CONFIG,
+  decayConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
+): ScheduledDriftCheckResult {
+  const checkTime = new Date().toISOString();
+  const strategyResults: ScheduledDriftCheckResult["strategyResults"] = [];
+  const alertedStrategies: string[] = [];
+
+  const now = new Date();
+  const windowEnd = now.toISOString().slice(0, 10);
+  const windowStart = new Date(now.getTime() - config.windowDays * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  for (const entry of strategies) {
+    // Filter data to the rolling window
+    const windowEquity = entry.liveEquity.filter(
+      (s) => s.date >= windowStart && s.date <= windowEnd,
+    );
+    const windowTrades = entry.liveTrades.filter(
+      (t) => t.entryTime >= windowStart && t.entryTime <= windowEnd + "T23:59:59",
+    );
+    const windowSignals = entry.liveSignals.filter((s) => {
+      const d = new Date(s.timestamp).toISOString().slice(0, 10);
+      return d >= windowStart && d <= windowEnd;
+    });
+
+    if (windowEquity.length < 2) {
+      strategyResults.push({
+        strategyId: entry.strategyId,
+        driftScore: 0,
+        severity: "low",
+        returnDiff: 0,
+        alertTriggered: false,
+        observations: ["监控窗口内数据不足，跳过本次检查"],
+      });
+      continue;
+    }
+
+    const req: LiveBacktestCompareRequest = {
+      strategyId: entry.strategyId,
+      startDate: windowStart,
+      endDate: windowEnd,
+      backtestResult: entry.backtestResult,
+      liveEquity: windowEquity,
+      liveTrades: windowTrades,
+      liveSignals: windowSignals,
+    };
+
+    const result = compareLiveVsBacktest(req, decayConfig);
+    const alertTriggered = result.drift.score >= config.alertThreshold;
+
+    if (alertTriggered) {
+      alertedStrategies.push(entry.strategyId);
+    }
+
+    strategyResults.push({
+      strategyId: entry.strategyId,
+      driftScore: result.drift.score,
+      severity: result.drift.severity,
+      returnDiff: result.returnComparison.returnDiff,
+      alertTriggered,
+      observations: result.drift.observations,
+    });
+  }
+
+  // Determine portfolio health
+  let portfolioHealth: ScheduledDriftCheckResult["portfolioHealth"] = "healthy";
+  const alertRatio = strategies.length > 0 ? alertedStrategies.length / strategies.length : 0;
+  const hasCritical = strategyResults.some((r) => r.severity === "critical");
+  if (hasCritical || alertRatio > 0.5) {
+    portfolioHealth = "critical";
+  } else if (alertedStrategies.length > 0) {
+    portfolioHealth = "warning";
+  }
+
+  return {
+    checkTime,
+    strategyResults,
+    alertedStrategies,
+    portfolioHealth,
   };
 }

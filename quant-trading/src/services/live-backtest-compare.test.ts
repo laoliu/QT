@@ -9,7 +9,11 @@ import {
   compareBySymbol,
   compareOutOfSample,
   findClosestBacktest,
+  compareRegimeAware,
+  comparePositionWeighted,
+  runScheduledDriftCheck,
   DEFAULT_DECAY_ALERT_CONFIG,
+  DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareRequest,
   type DecayAlertConfig,
 } from "./live-backtest-compare.js";
@@ -481,5 +485,199 @@ describe("decayAlertTriggered", () => {
 
   it("uses default threshold from DEFAULT_DECAY_ALERT_CONFIG", () => {
     expect(DEFAULT_DECAY_ALERT_CONFIG.returnDeviationThreshold).toBe(0.20);
+  });
+});
+
+describe("compareRegimeAware", () => {
+  it("returns regime-aware comparison with adjusted drift score", () => {
+    const result = compareRegimeAware(makeReq());
+    expect(result.strategyId).toBe("ma_cross");
+    expect(["bull", "bear", "sideways", "high_volatility", "low_volatility"]).toContain(result.regime);
+    expect(result.adjustedDriftScore).toBeGreaterThanOrEqual(0);
+    expect(result.adjustedDriftScore).toBeLessThanOrEqual(100);
+    expect(result.comparison).toBeDefined();
+    expect(result.regimeAttribution.regimeExplainedPct + result.regimeAttribution.strategySpecificPct).toBe(100);
+    expect(result.regimeObservations.length).toBeGreaterThan(0);
+  });
+
+  it("adjusts drift score downward in bear market", () => {
+    // Create declining benchmark to simulate bear market
+    const equity = [
+      makeEquitySnap("2024-01-01", 100000, 4000),
+      makeEquitySnap("2024-02-01", 99000, 3800),
+      makeEquitySnap("2024-03-01", 97000, 3600),
+      makeEquitySnap("2024-04-01", 95000, 3400),
+      makeEquitySnap("2024-05-01", 93000, 3200),
+      makeEquitySnap("2024-06-01", 91000, 3000),
+      makeEquitySnap("2024-06-30", 90000, 2900),
+    ];
+    const req = makeReq({ liveEquity: equity });
+    const regimeResult = compareRegimeAware(req);
+    const rawResult = compareLiveVsBacktest(req);
+
+    // In a bear/declining market, adjusted score should be <= raw score
+    expect(regimeResult.adjustedDriftScore).toBeLessThanOrEqual(rawResult.drift.score);
+  });
+
+  it("handles insufficient data gracefully", () => {
+    const req = makeReq({ liveEquity: [makeEquitySnap("2024-01-01", 100000)] });
+    const result = compareRegimeAware(req);
+    expect(result.regime).toBe("sideways"); // Default when data is insufficient
+    expect(result.comparison).toBeDefined();
+  });
+});
+
+describe("comparePositionWeighted", () => {
+  it("returns position-weighted comparison with symbol weights", () => {
+    const result = comparePositionWeighted(makeReq());
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.weightedReturnComparison).toBeDefined();
+    expect(typeof result.weightedReturnComparison.liveWeightedReturn).toBe("number");
+    expect(typeof result.weightedDriftScore).toBe("number");
+    expect(result.symbolWeights.length).toBeGreaterThan(0);
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+
+  it("weights drift by capital allocation", () => {
+    // Create trades with very different position sizes
+    const largeTrade = makeTrade({
+      symbol: "600519",
+      quantity: 1000,
+      entryPrice: 1800,
+      entryTime: "2024-03-01T09:31:00",
+      netPnl: -5000,
+      grossPnl: -4900,
+      exitPrice: 1795,
+    });
+    const smallTrade = makeTrade({
+      symbol: "000001",
+      quantity: 100,
+      entryPrice: 10,
+      entryTime: "2024-04-01T09:31:00",
+      netPnl: 50,
+      grossPnl: 55,
+      exitPrice: 10.5,
+    });
+    const bt = makeBacktest({
+      signals: [
+        makeSignal({ symbol: "600519", timestamp: new Date("2024-03-01").getTime() }),
+        makeSignal({ symbol: "000001", timestamp: new Date("2024-04-01").getTime() }),
+      ],
+    });
+    const req = makeReq({
+      backtestResult: bt,
+      liveTrades: [largeTrade, smallTrade],
+    });
+    const result = comparePositionWeighted(req);
+
+    // 600519 should have much higher weight than 000001
+    const large = result.symbolWeights.find((s) => s.symbol === "600519");
+    const small = result.symbolWeights.find((s) => s.symbol === "000001");
+    expect(large).toBeDefined();
+    expect(small).toBeDefined();
+    expect(large!.capitalWeight).toBeGreaterThan(small!.capitalWeight);
+  });
+
+  it("handles empty trades gracefully", () => {
+    const req = makeReq({ liveTrades: [] });
+    const result = comparePositionWeighted(req);
+    expect(result.weightedDriftScore).toBeGreaterThanOrEqual(0);
+    // Should still have symbols from backtest signals
+    expect(result.symbolWeights.length).toBeGreaterThan(0);
+  });
+});
+
+describe("runScheduledDriftCheck", () => {
+  it("returns batch check results across multiple strategies", () => {
+    const req1 = makeReq();
+    const req2 = makeReq({
+      strategyId: "rsi_strategy",
+      backtestResult: makeBacktest({ strategyId: "rsi_strategy", totalReturn: 30 }),
+    });
+
+    const strategies = [
+      {
+        strategyId: "ma_cross",
+        backtestResult: req1.backtestResult,
+        liveEquity: req1.liveEquity,
+        liveTrades: req1.liveTrades,
+        liveSignals: req1.liveSignals,
+      },
+      {
+        strategyId: "rsi_strategy",
+        backtestResult: req2.backtestResult,
+        liveEquity: req2.liveEquity,
+        liveTrades: req2.liveTrades,
+        liveSignals: req2.liveSignals,
+      },
+    ];
+
+    const result = runScheduledDriftCheck(strategies);
+    expect(result.checkTime).toBeDefined();
+    expect(result.strategyResults.length).toBe(2);
+    expect(["healthy", "warning", "critical"]).toContain(result.portfolioHealth);
+
+    for (const sr of result.strategyResults) {
+      expect(sr.driftScore).toBeGreaterThanOrEqual(0);
+      expect(sr.driftScore).toBeLessThanOrEqual(100);
+      expect(typeof sr.alertTriggered).toBe("boolean");
+    }
+  });
+
+  it("skips strategies with insufficient data", () => {
+    const strategies = [
+      {
+        strategyId: "empty_strat",
+        backtestResult: makeBacktest(),
+        liveEquity: [makeEquitySnap("2024-06-30", 100000)],
+        liveTrades: [],
+        liveSignals: [],
+      },
+    ];
+
+    const result = runScheduledDriftCheck(strategies);
+    expect(result.strategyResults.length).toBe(1);
+    expect(result.strategyResults[0]!.observations).toContain("监控窗口内数据不足，跳过本次检查");
+  });
+
+  it("marks portfolio as critical when multiple strategies alert", () => {
+    // Create strategies with very poor live performance vs backtest
+    // Use current dates so they fall within the rolling window
+    const now = new Date();
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now.getTime() - (6 - i) * 4 * 86_400_000);
+      return d.toISOString().slice(0, 10);
+    });
+    const poorEquity = dates.map((d, i) =>
+      makeEquitySnap(d, 100000 - i * 8000),
+    );
+
+    const strategies = [
+      {
+        strategyId: "bad_strat_1",
+        backtestResult: makeBacktest({ totalReturn: 50, strategyId: "bad_strat_1" }),
+        liveEquity: poorEquity,
+        liveTrades: [] as TradeRecord[],
+        liveSignals: [] as TradingSignal[],
+      },
+      {
+        strategyId: "bad_strat_2",
+        backtestResult: makeBacktest({ totalReturn: 40, strategyId: "bad_strat_2" }),
+        liveEquity: poorEquity,
+        liveTrades: [] as TradeRecord[],
+        liveSignals: [] as TradingSignal[],
+      },
+    ];
+
+    const config = { ...DEFAULT_SCHEDULED_DRIFT_CONFIG, alertThreshold: 10 };
+    const result = runScheduledDriftCheck(strategies, config);
+    expect(result.alertedStrategies.length).toBeGreaterThan(0);
+    expect(["warning", "critical"]).toContain(result.portfolioHealth);
+  });
+
+  it("uses DEFAULT_SCHEDULED_DRIFT_CONFIG defaults", () => {
+    expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.frequency).toBe("daily");
+    expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.windowDays).toBe(30);
+    expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.alertThreshold).toBe(35);
   });
 });

@@ -18,6 +18,12 @@
  *   cancel_all_orders    — cancel all open orders
  *   get_risk_snapshot    — risk metrics on current live portfolio
  *   list_confirmations   — list pending human confirmation requests
+ *   list_accounts        — list all configured accounts
+ *   switch_account       — switch active account
+ *   account_summary      — cross-account summary
+ *   add_account          — add a new trading account at runtime
+ *   remove_account       — remove a trading account
+ *   update_account       — update an existing account's configuration
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OrderRequest } from "../broker/adapter.js";
@@ -25,7 +31,7 @@ import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { AccountManager } from "../services/account-manager.js";
 import type { EquityHistory } from "../services/equity-history.js";
-import type { QuantTradingConfig } from "../types.js";
+import type { NamedTradingAccount, QuantTradingConfig } from "../types.js";
 
 export function createLiveTradingTool(
   api: OpenClawPluginApi,
@@ -47,7 +53,9 @@ export function createLiveTradingTool(
       "action=cancel_order 撤单, action=cancel_all_orders 全撤, " +
       "action=get_risk_snapshot 风控快照, action=list_confirmations 待确认列表, " +
       "action=list_accounts 查看账户列表, action=switch_account 切换账户, " +
-      "action=account_summary 多账户汇总。",
+      "action=account_summary 多账户汇总, " +
+      "action=add_account 添加账户, action=remove_account 删除账户, " +
+      "action=update_account 更新账户配置。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -73,6 +81,9 @@ export function createLiveTradingTool(
             "list_accounts",
             "switch_account",
             "account_summary",
+            "add_account",
+            "remove_account",
+            "update_account",
           ],
           description: "操作类型",
         },
@@ -166,9 +177,22 @@ export function createLiveTradingTool(
         },
         // For cancel_order
         order_id: { type: "string", description: "订单ID" },
-        // For switch_account / account queries
-        account_name: { type: "string", description: "账户名称 (用于 switch_account 或指定账户查询)" },
+        // For switch_account / account queries / account CRUD
+        account_name: { type: "string", description: "账户名称 (用于 switch_account/add_account/remove_account/update_account)" },
         auto_start: { type: "boolean", description: "切换账户后是否自动启动引擎 (默认 false)" },
+        // For add_account / update_account
+        account_mode: { type: "string", enum: ["paper", "live"], description: "账户模式 (paper=模拟, live=实盘)" },
+        account_broker: { type: "string", enum: ["paper", "qmt", "remote-qmt", "futu", "ib"], description: "券商类型" },
+        account_label: { type: "string", description: "账户显示名称 (如 'A股实盘-QMT', '模拟盘')" },
+        account_id: { type: "string", description: "券商账户ID" },
+        risk_limits: {
+          type: "object",
+          description: "风控限制 (如 {maxOrderValue: 500000, maxPositionPct: 0.3, maxDailyLoss: 50000})",
+        },
+        position_sizing: {
+          type: "object",
+          description: "仓位管理配置 (如 {type: 'fixed_amount', amount: 10000})",
+        },
       },
       required: ["action"],
     },
@@ -554,31 +578,38 @@ export function createLiveTradingTool(
                 broker: config.tradingAccount?.broker ?? "paper",
                 active: true,
               }],
-              message: "单账户模式。配置 tradingAccounts 数组以启用多账户管理。",
+              message: "单账户模式。配置 tradingAccounts 数组或使用 add_account 添加账户。",
             };
           }
-          const accounts = accountManager.listAccounts();
-          const activeName = accountManager.getActiveAccountName();
+          const summaries = accountManager.getAccountsSummary();
           const engine = getEngine();
           return {
-            total: accounts.length,
-            activeAccount: activeName,
+            total: summaries.length,
+            activeAccount: accountManager.getActiveAccountName(),
             engineStatus: engine?.getStatus() ?? "stopped",
-            accounts: accounts.map((a) => ({
+            accounts: summaries.map((a) => ({
               name: a.name,
-              label: a.label ?? a.name,
+              label: a.label,
               mode: a.mode,
-              broker: a.broker ?? "paper",
+              broker: a.broker,
               accountId: a.accountId,
-              active: a.name === activeName,
-              autoStart: a.autoStart ?? false,
+              active: a.isActive,
+              isFromConfig: a.isFromConfig,
+              riskLimits: a.riskLimits
+                ? {
+                    maxOrderValue: a.riskLimits.maxOrderValue,
+                    maxPositionPct: a.riskLimits.maxPositionPct,
+                    maxDailyLoss: a.riskLimits.maxDailyLoss,
+                  }
+                : "使用全局默认",
+              positionSizing: a.positionSizing ?? "使用全局默认",
             })),
           };
         }
 
         case "switch_account": {
           if (!accountManager) {
-            return { error: "未配置多账户。请在配置中添加 tradingAccounts 数组。" };
+            return { error: "未配置多账户。请在配置中添加 tradingAccounts 数组或使用 add_account。" };
           }
           const targetName = args.account_name as string;
           if (!targetName) return { error: "请提供 account_name" };
@@ -643,45 +674,159 @@ export function createLiveTradingTool(
             };
           }
 
-          const accounts = accountManager.listAccounts();
+          const summaries = accountManager.getAccountsSummary();
           const activeName = accountManager.getActiveAccountName();
           const engine = getEngine();
           const activeAccount = engine?.getAccount();
 
           // For active account, we have live data
-          const summaries = accounts.map((a) => {
-            if (a.name === activeName && activeAccount) {
+          const accountDetails = summaries.map((a) => {
+            if (a.isActive && activeAccount) {
               return {
                 name: a.name,
-                label: a.label ?? a.name,
+                label: a.label,
                 mode: a.mode,
-                broker: a.broker ?? "paper",
+                broker: a.broker,
                 active: true,
                 engineStatus: engine?.getStatus() ?? "stopped",
                 cash: `¥${activeAccount.cash.toFixed(2)}`,
                 totalAssets: `¥${activeAccount.totalAssets.toFixed(2)}`,
                 profit: `¥${activeAccount.profit.toFixed(2)}`,
                 profitPct: `${(activeAccount.profitPct * 100).toFixed(2)}%`,
+                riskLimits: a.riskLimits ?? "全局默认",
               };
             }
             return {
               name: a.name,
-              label: a.label ?? a.name,
+              label: a.label,
               mode: a.mode,
-              broker: a.broker ?? "paper",
+              broker: a.broker,
               active: false,
               engineStatus: "stopped" as const,
               cash: "N/A (需切换到该账户查看)",
               totalAssets: "N/A",
               profit: "N/A",
               profitPct: "N/A",
+              riskLimits: a.riskLimits ?? "全局默认",
             };
           });
 
+          // Compute aggregate for accounts with live data
+          const totalAssets = activeAccount ? activeAccount.totalAssets : 0;
+          const totalProfit = activeAccount ? activeAccount.profit : 0;
+
           return {
-            totalAccounts: accounts.length,
+            totalAccounts: summaries.length,
             activeAccount: activeName,
-            accounts: summaries,
+            aggregate: {
+              note: "仅包含当前活跃账户的实时数据，切换账户后可查看其他账户",
+              totalAssets: totalAssets > 0 ? `¥${totalAssets.toFixed(2)}` : "N/A",
+              totalProfit: totalProfit !== 0 ? `¥${totalProfit.toFixed(2)}` : "N/A",
+            },
+            accounts: accountDetails,
+          };
+        }
+
+        case "add_account": {
+          if (!accountManager) {
+            return { error: "AccountManager 未初始化" };
+          }
+          const name = args.account_name as string;
+          if (!name) return { error: "请提供 account_name" };
+          const mode = args.account_mode as "paper" | "live" | undefined;
+          if (!mode) return { error: "请提供 account_mode (paper 或 live)" };
+
+          const newAccount: NamedTradingAccount = {
+            name,
+            mode,
+            label: (args.account_label as string) ?? name,
+            broker: (args.account_broker as NamedTradingAccount["broker"]) ?? undefined,
+            accountId: (args.account_id as string) ?? undefined,
+            riskLimits: (args.risk_limits as NamedTradingAccount["riskLimits"]) ?? undefined,
+            positionSizing: (args.position_sizing as NamedTradingAccount["positionSizing"]) ?? undefined,
+          };
+
+          const result = await accountManager.addAccount(newAccount);
+          if (!result.ok) return { error: result.reason };
+          return {
+            message: `账户 "${name}" 已添加`,
+            account: {
+              name,
+              label: newAccount.label,
+              mode: newAccount.mode,
+              broker: newAccount.broker ?? "paper",
+            },
+            hint: `使用 switch_account 切换到新账户`,
+          };
+        }
+
+        case "remove_account": {
+          if (!accountManager) {
+            return { error: "AccountManager 未初始化" };
+          }
+          const name = args.account_name as string;
+          if (!name) return { error: "请提供 account_name" };
+
+          const result = await accountManager.removeAccount(name);
+          if (!result.ok) return { error: result.reason };
+          return {
+            message: `账户 "${name}" 已删除`,
+            remainingAccounts: accountManager.listAccounts().map((a) => a.name),
+          };
+        }
+
+        case "update_account": {
+          if (!accountManager) {
+            return { error: "AccountManager 未初始化" };
+          }
+          const name = args.account_name as string;
+          if (!name) return { error: "请提供 account_name" };
+
+          // Build updates from provided fields
+          const updates: Partial<Omit<NamedTradingAccount, "name">> = {};
+          if (args.account_mode) updates.mode = args.account_mode as "paper" | "live";
+          if (args.account_broker) updates.broker = args.account_broker as NamedTradingAccount["broker"];
+          if (args.account_label) updates.label = args.account_label as string;
+          if (args.account_id) updates.accountId = args.account_id as string;
+          if (args.risk_limits) updates.riskLimits = args.risk_limits as NamedTradingAccount["riskLimits"];
+          if (args.position_sizing) updates.positionSizing = args.position_sizing as NamedTradingAccount["positionSizing"];
+
+          if (Object.keys(updates).length === 0) {
+            return { error: "未提供任何更新字段。可更新: account_mode, account_broker, account_label, account_id, risk_limits, position_sizing" };
+          }
+
+          // Warn if updating active account
+          const isActive = name === accountManager.getActiveAccountName();
+          if (isActive) {
+            const engine = getEngine();
+            if (engine && engine.getStatus() !== "stopped") {
+              return { error: "不能在引擎运行时更新活跃账户配置。请先 stop_engine。" };
+            }
+          }
+
+          const result = await accountManager.updateAccount(name, updates);
+          if (!result.ok) return { error: result.reason };
+
+          // If active account was updated, refresh engine config
+          if (isActive) {
+            const engine = getEngine();
+            if (engine) {
+              const newConfig = accountManager.resolveConfig(config);
+              engine.updateConfig(newConfig, name);
+            }
+          }
+
+          const updated = accountManager.getAccountByName(name);
+          return {
+            message: `账户 "${name}" 配置已更新`,
+            account: updated
+              ? {
+                  name: updated.name,
+                  label: updated.label,
+                  mode: updated.mode,
+                  broker: updated.broker ?? "paper",
+                }
+              : null,
           };
         }
 

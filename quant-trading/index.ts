@@ -1255,6 +1255,7 @@ const quantTradingPlugin = {
     registerQuantRoutes({
       api,
       config,
+      accountManager,
       alertStore,
       backtestStore,
       eventBus,

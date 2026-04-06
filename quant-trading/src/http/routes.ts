@@ -9,6 +9,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
+import type { AccountManager } from "../services/account-manager.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { BenchmarkService } from "../services/benchmark.js";
@@ -49,6 +50,7 @@ function urlParams(req: { url?: string }): URLSearchParams {
 export interface RouteDeps {
   api: OpenClawPluginApi;
   config: QuantTradingConfig;
+  accountManager?: AccountManager;
   alertStore: AlertStore;
   backtestStore: BacktestStore;
   eventBus: EventBus;
@@ -75,6 +77,7 @@ export function registerQuantRoutes(deps: RouteDeps): void {
   const {
     api,
     config,
+    accountManager,
     alertStore,
     backtestStore,
     eventBus,
@@ -538,6 +541,146 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Account Management API ────────────────────────────────────────
+  if (accountManager) {
+    api.registerHttpRoute({
+      auth: "plugin",
+      path: "/quant/api/accounts",
+      handler: secure(async (req, res) => {
+        // GET — list all accounts
+        if (req.method === "GET") {
+          const summaries = accountManager.getAccountsSummary();
+          const engine = getEngine();
+          json(res, {
+            status: "ok",
+            activeAccount: accountManager.getActiveAccountName(),
+            engineStatus: engine?.getStatus() ?? "stopped",
+            accounts: summaries,
+          });
+          return;
+        }
+
+        // POST — add a new account
+        if (req.method === "POST") {
+          const body = await parseJsonBody(req);
+          if (!body || !body.name || !body.mode) {
+            json(res, { status: "error", message: "请提供 name 和 mode" }, 400);
+            return;
+          }
+          const result = await accountManager.addAccount({
+            name: body.name as string,
+            mode: body.mode as "paper" | "live",
+            label: body.label as string | undefined,
+            broker: body.broker as import("../types.js").BrokerType | undefined,
+            accountId: body.accountId as string | undefined,
+            riskLimits: body.riskLimits as import("../types.js").RiskLimitsConfig | undefined,
+            positionSizing: body.positionSizing as import("../types.js").PositionSizingConfig | undefined,
+          });
+          if (!result.ok) {
+            json(res, { status: "error", message: result.reason }, 400);
+            return;
+          }
+          json(res, { status: "ok", message: `账户 "${body.name}" 已添加` });
+          return;
+        }
+
+        methodNotAllowed(res);
+      }),
+    });
+
+    api.registerHttpRoute({
+      auth: "plugin",
+      path: "/quant/api/accounts/active",
+      handler: secure(async (req, res) => {
+        // GET — get active account
+        if (req.method === "GET") {
+          const active = accountManager.getActiveAccount();
+          json(res, { status: "ok", account: active });
+          return;
+        }
+
+        // PUT — switch active account
+        if (req.method === "PUT") {
+          const body = await parseJsonBody(req);
+          if (!body?.name) {
+            json(res, { status: "error", message: "请提供 name" }, 400);
+            return;
+          }
+
+          const engine = getEngine();
+          if (engine && engine.getStatus() !== "stopped") {
+            await engine.stop();
+          }
+
+          const switched = await accountManager.setActiveAccount(body.name as string);
+          if (!switched) {
+            json(res, { status: "error", message: `账户 "${body.name}" 不存在` }, 404);
+            return;
+          }
+
+          const newConfig = accountManager.resolveConfig(config);
+          if (engine) {
+            engine.updateConfig(newConfig, body.name as string);
+          }
+
+          json(res, { status: "ok", activeAccount: body.name });
+          return;
+        }
+
+        methodNotAllowed(res);
+      }),
+    });
+
+    api.registerHttpRoute({
+      auth: "plugin",
+      path: "/quant/api/accounts/update",
+      handler: secure(async (req, res) => {
+        // PUT — update account config
+        if (req.method === "PUT") {
+          const body = await parseJsonBody(req);
+          if (!body?.name) {
+            json(res, { status: "error", message: "请提供 name" }, 400);
+            return;
+          }
+          const { name, ...updates } = body as Record<string, unknown>;
+          const result = await accountManager.updateAccount(name as string, updates);
+          if (!result.ok) {
+            json(res, { status: "error", message: result.reason }, 400);
+            return;
+          }
+          json(res, { status: "ok", message: `账户 "${name}" 已更新` });
+          return;
+        }
+
+        methodNotAllowed(res);
+      }),
+    });
+
+    api.registerHttpRoute({
+      auth: "plugin",
+      path: "/quant/api/accounts/remove",
+      handler: secure(async (req, res) => {
+        // POST — remove account
+        if (req.method === "POST") {
+          const body = await parseJsonBody(req);
+          if (!body?.name) {
+            json(res, { status: "error", message: "请提供 name" }, 400);
+            return;
+          }
+          const result = await accountManager.removeAccount(body.name as string);
+          if (!result.ok) {
+            json(res, { status: "error", message: result.reason }, 400);
+            return;
+          }
+          json(res, { status: "ok", message: `账户 "${body.name}" 已删除` });
+          return;
+        }
+
+        methodNotAllowed(res);
+      }),
+    });
+  }
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────

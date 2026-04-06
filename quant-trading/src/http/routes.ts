@@ -1706,9 +1706,151 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "batch"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
+        return;
+      }
+
+      // Batch export: export multiple dataset types in one request
+      if (action === "batch") {
+        const batchTypes = (body.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
+        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
+        const invalidTypes = batchTypes.filter((t: string) => !validBatchTypes.includes(t));
+        if (invalidTypes.length > 0) {
+          json(res, { status: "error", message: `不支持的批量导出类型: ${invalidTypes.join(", ")}` }, 400);
+          return;
+        }
+        // Re-use the single-export endpoint by calling the tool logic for each type
+        const results: Array<{ dataset: string; rows: number; filename: string }> = [];
+        for (const batchAction of batchTypes) {
+          const batchBody: Record<string, unknown> = { ...body, action: batchAction };
+          try {
+            // Inline single-export logic for each batch type
+            const batchReq = new Promise<{ dataset: string; rows: number; filename: string }>((resolve, reject) => {
+              void (async () => {
+                try {
+                  const fsMod = await import("node:fs");
+                  const pathMod = await import("node:path");
+                  const { homedir } = await import("node:os");
+                  const base2 = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+                  const dir2 = pathMod.join(base2, "exports");
+                  fsMod.mkdirSync(dir2, { recursive: true });
+
+                  let bRows: Record<string, unknown>[] = [];
+                  let bHeaders: string[] = [];
+                  let bDataset = batchAction;
+
+                  switch (batchAction) {
+                    case "portfolio": {
+                      bHeaders = ["source", "symbol", "name", "quantity", "avgCost", "currentPrice", "marketValue", "unrealizedPnl", "unrealizedPnlPct", "weight"];
+                      const portfolioDir = config.dataDir ?? pathMod.join(homedir(), ".openclaw", "quant-trading");
+                      for (const name of ["portfolio-paper.json", "portfolio.json"]) {
+                        try {
+                          const raw = fsMod.readFileSync(pathMod.join(portfolioDir, name), "utf-8");
+                          const paper = JSON.parse(raw) as { totalValue?: number; positions: Array<Record<string, unknown>> };
+                          for (const pos of paper.positions) {
+                            const qty = (pos.quantity as number) ?? 0;
+                            const cost = (pos.avgCost as number) ?? 0;
+                            const cur = (pos.currentPrice as number) ?? cost;
+                            const mv = cur * qty;
+                            const pnl = (cur - cost) * qty;
+                            const pnlPct = cost > 0 ? (pnl / (cost * qty)) * 100 : 0;
+                            bRows.push({ source: "paper", symbol: pos.symbol ?? "", name: pos.name ?? "", quantity: qty, avgCost: cost, currentPrice: cur, marketValue: mv, unrealizedPnl: pnl, unrealizedPnlPct: Number(pnlPct.toFixed(2)), weight: (paper.totalValue ?? 0) > 0 ? Number(((mv / (paper.totalValue ?? 1)) * 100).toFixed(2)) : 0 });
+                          }
+                          break;
+                        } catch { continue; }
+                      }
+                      break;
+                    }
+                    case "trades":
+                      bRows = (await quantStorage.getTrades({ symbol, limit })).map((r) => ({ ...r }));
+                      bHeaders = ["symbol", "side", "entryPrice", "exitPrice", "quantity", "entryTime", "exitTime", "netPnl", "pnlPct", "commission", "strategyId"];
+                      break;
+                    case "signals":
+                      bRows = (await quantStorage.getSignals({ symbol, limit })).map((r) => ({ ...r }));
+                      bHeaders = ["date", "timestamp", "symbol", "direction", "price", "quantity", "reason", "confidence", "strategyId"];
+                      break;
+                    case "orders":
+                      bRows = (await quantStorage.getOrders({ symbol, limit })).map((r) => ({ ...r }));
+                      bHeaders = ["orderId", "symbol", "market", "side", "orderType", "quantity", "price", "status", "filledQty", "filledPrice", "strategyId", "createdAt", "updatedAt"];
+                      break;
+                    case "equity":
+                      bRows = (await quantStorage.getEquitySnapshots({ start: startDate, end: endDate, limit })).map((r) => ({ ...r }));
+                      bHeaders = ["date", "equity", "cash", "marketValue", "dailyPnl", "positionCount", "benchmark"];
+                      break;
+                    case "journal": {
+                      bHeaders = ["id", "date", "symbol", "direction", "entryPrice", "exitPrice", "pnl", "rating", "tags", "content", "lesson", "strategyId", "createdAt"];
+                      const allNotes = (tradeJournal as unknown as { notes: Array<Record<string, unknown>> }).notes ?? [];
+                      let filtered = allNotes;
+                      if (symbol) filtered = filtered.filter((n) => n.symbol === symbol);
+                      if (startDate) filtered = filtered.filter((n) => (n.date as string) >= startDate);
+                      if (endDate) filtered = filtered.filter((n) => (n.date as string) <= endDate);
+                      bRows = filtered.slice(0, limit).map((n) => ({ id: n.id, date: n.date, symbol: n.symbol, direction: n.direction ?? "", entryPrice: n.entryPrice ?? "", exitPrice: n.exitPrice ?? "", pnl: n.pnl ?? "", rating: n.rating ?? "", tags: Array.isArray(n.tags) ? (n.tags as string[]).join(";") : "", content: n.content ?? "", lesson: n.lesson ?? "", strategyId: n.strategyId ?? "", createdAt: n.createdAt ?? "" }));
+                      break;
+                    }
+                    case "klines": {
+                      if (!symbol) { resolve({ dataset: "klines", rows: 0, filename: "(跳过: 未指定 symbol)" }); return; }
+                      const interval = (batchBody.interval as string) ?? "1d";
+                      const start = startDate ?? "2000-01-01";
+                      const end = endDate ?? new Date().toISOString().slice(0, 10);
+                      bRows = (await quantStorage.getKlines(symbol, interval, start, end)).slice(0, limit).map((r) => ({ ...r }));
+                      bHeaders = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
+                      bDataset = `klines_${symbol}`;
+                      break;
+                    }
+                    case "backtest": {
+                      if (!backtestStore) { resolve({ dataset: "backtest", rows: 0, filename: "(回测存储不可用)" }); return; }
+                      bHeaders = ["id", "createdAt", "strategyId", "symbols", "startDate", "endDate", "engine", "initialCash", "finalValue", "totalReturn", "annualizedReturn", "maxDrawdown", "sharpeRatio", "winRate", "totalTrades", "tags", "notes"];
+                      bRows = backtestStore.query().map((e: Record<string, unknown>) => ({ ...e, symbols: Array.isArray(e.symbols) ? (e.symbols as string[]).join(",") : e.symbols, tags: Array.isArray(e.tags) ? (e.tags as string[]).join(";") : e.tags }));
+                      break;
+                    }
+                    case "screen": {
+                      if (!scanHistoryStore) { resolve({ dataset: "screen", rows: 0, filename: "(选股历史不可用)" }); return; }
+                      bHeaders = ["rank", "code", "name", "score", "screenerId", "universe", "market", "date", "signals"];
+                      const index = scanHistoryStore.query({ limit: 1, sortBy: "createdAt", sortDir: "desc" });
+                      if (index.length > 0) {
+                        const latest = scanHistoryStore.getFullResult(index[0].id);
+                        if (latest) {
+                          bRows = latest.results.map((entry: Record<string, unknown>, i: number) => ({ rank: entry.rank ?? i + 1, code: entry.code, name: entry.name ?? "", score: entry.score ?? "", screenerId: latest.screenerId, universe: latest.universe, market: latest.market, date: latest.date, signals: Array.isArray(entry.signals) ? (entry.signals as string[]).join(";") : "" }));
+                        }
+                      }
+                      break;
+                    }
+                    case "watchlist": {
+                      bHeaders = ["code", "name", "category", "priority", "priceTarget", "convictionScore", "tags", "notes", "addedAt", "updatedAt"];
+                      if (favoritesStore) {
+                        const category = batchBody.category as string | undefined;
+                        const stocks = favoritesStore.listFavorites(category ? { category } : undefined);
+                        bRows = stocks.map((s) => ({ code: s.code, name: s.name ?? "", category: s.category ?? "", priority: s.priority ?? "", priceTarget: s.priceTarget ?? "", convictionScore: s.convictionScore ?? "", tags: s.tags?.join(";") ?? "", notes: s.notes ?? "", addedAt: s.addedAt, updatedAt: s.updatedAt }));
+                      }
+                      break;
+                    }
+                  }
+
+                  const ts2 = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                  const fn = `${bDataset}_${ts2}.${format}`;
+                  const fp = pathMod.join(dir2, fn);
+                  if (format === "json") {
+                    fsMod.writeFileSync(fp, JSON.stringify(bRows, null, 2), "utf-8");
+                  } else {
+                    const csvHeader = bHeaders.map(escapeCsvField).join(",");
+                    const csvRows = bRows.map((row) => bHeaders.map((h) => escapeCsvField(row[h])).join(","));
+                    fsMod.writeFileSync(fp, "\uFEFF" + csvHeader + "\n" + csvRows.join("\n") + "\n", "utf-8");
+                  }
+                  resolve({ dataset: batchAction, rows: bRows.length, filename: fn });
+                } catch (err) {
+                  reject(err);
+                }
+              })();
+            });
+            results.push(await batchReq);
+          } catch (err) {
+            results.push({ dataset: batchAction, rows: 0, filename: `(错误: ${(err as Error).message})` });
+          }
+        }
+        const totalRows = results.reduce((sum, r) => sum + r.rows, 0);
+        json(res, { status: "ok", batchTypes, format, results, totalFiles: results.length, totalRows, message: `批量导出完成: ${results.length} 个文件, 共 ${totalRows} 条记录` });
         return;
       }
 

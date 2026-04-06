@@ -55,6 +55,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-datahub::before{background:linear-gradient(90deg,var(--green),var(--accent))}
 .nav-card.card-lab::before{background:linear-gradient(90deg,var(--accent),var(--yellow))}
 .nav-card.card-routing::before{background:linear-gradient(90deg,var(--purple),var(--accent))}
+.nav-card.card-export::before{background:linear-gradient(90deg,var(--green),var(--yellow))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -225,6 +226,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">股票画像</span><span class="tag">自适应路由</span><span class="tag">组合匹配</span>
       <span class="tag">数据驱动</span><span class="tag">规则路由</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/data-export" class="nav-card card-export" style="color:inherit;text-decoration:none">
+    <div class="icon">📤</div>
+    <h3>数据导出</h3>
+    <p>将持仓、交易、信号、K线等数据导出为 CSV / JSON，方便在 Excel 或外部工具中使用</p>
+    <div class="tags">
+      <span class="tag">CSV/JSON</span><span class="tag">批量导出</span><span class="tag">持仓</span>
+      <span class="tag">交易记录</span><span class="tag">信号/笔记</span>
     </div>
   </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">

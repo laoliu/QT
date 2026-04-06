@@ -510,6 +510,18 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Data Export (数据导出中心) Page (FR-7) ────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/data-export",
+    handler: securePublic(async (_req, res) => {
+      const { getDataExportPageHtml } = await import("./pages/data-export-page.js");
+      const html = getDataExportPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
   // ── Financial Data Hub (金融数据中心) Page ─────────────────────
   api.registerHttpRoute({
     auth: "plugin",

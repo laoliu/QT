@@ -747,6 +747,63 @@ export type PendingConfirmation = {
   respondedBy?: string;
 };
 
+// ── Basket Trading ──────────────────────────────────────────────
+
+/** A single item within a basket order */
+export type BasketItem = {
+  symbol: string;
+  name?: string;
+  /** Side: buy or sell (default: buy) */
+  side: "buy" | "sell";
+  /** Target quantity in shares (mutually exclusive with amount) */
+  quantity?: number;
+  /** Target amount in CNY — will be converted to shares using current price (mutually exclusive with quantity) */
+  amount?: number;
+  /** Limit price override; omit for market order */
+  price?: number;
+  /** Weight within the basket (0-1), used for amount-based allocation */
+  weight?: number;
+};
+
+/** Execution status of a single basket item */
+export type BasketItemResult = {
+  symbol: string;
+  side: "buy" | "sell";
+  requestedQty: number;
+  orderId?: string;
+  status: "pending" | "submitted" | "failed" | "skipped";
+  reason?: string;
+  price?: number;
+};
+
+/** Overall basket execution status */
+export type BasketExecutionStatus = "pending" | "executing" | "completed" | "partial" | "cancelled";
+
+/** A basket order (template + execution state) */
+export type BasketOrder = {
+  basketId: string;
+  name: string;
+  items: BasketItem[];
+  /** Total amount to allocate across items (used when items have weights) */
+  totalAmount?: number;
+  /** Execution results (populated after execute) */
+  results?: BasketItemResult[];
+  executionStatus: BasketExecutionStatus;
+  createdAt: string;
+  executedAt?: string;
+  cancelledAt?: string;
+};
+
+/** Saved basket template (reusable) */
+export type BasketTemplate = {
+  templateId: string;
+  name: string;
+  description?: string;
+  items: BasketItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 // ── Plugin Config ────────────────────────────────────────────────
 
 export type DataProviderConfig = {

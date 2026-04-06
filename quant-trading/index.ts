@@ -85,6 +85,7 @@ import {
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
+import { BasketOrderService } from "./src/services/basket-order.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
 import { ComposedStrategyStore } from "./src/services/composed-strategy-store.js";
@@ -118,6 +119,7 @@ import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
+import { createBasketTradingTool } from "./src/tools/basket-trading.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
@@ -334,6 +336,9 @@ const quantTradingPlugin = {
       maxNotes: 2000,
       dataDir: config.dataDir ?? null,
     });
+
+    // ── Basket Order Service (篮子交易) ────────────────────────────
+    const basketOrderService = new BasketOrderService(config);
 
     // ── Favorites Store (股票收藏) ──────────────────────────────
     const favoritesStore = new FavoritesStore({
@@ -654,6 +659,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      basket_trading: createBasketTradingTool(api, config, basketOrderService, getEngine),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +710,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      basket_trading: "篮子交易",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

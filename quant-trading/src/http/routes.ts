@@ -2015,6 +2015,332 @@ function registerLiveBacktestCompareRoutes({
     }),
   });
 
+  // GET /quant/api/live-backtest-compare/regime-compare?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/regime-compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { compareRegimeAware } = await import("../services/live-backtest-compare.js");
+        const result = compareRegimeAware(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/position-weighted?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/position-weighted",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { comparePositionWeighted } = await import("../services/live-backtest-compare.js");
+        const result = comparePositionWeighted(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/scheduled-check?[mode=paper|live&window_days=30&alert_threshold=35]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/scheduled-check",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      try {
+        const { runScheduledDriftCheck, DEFAULT_DECAY_ALERT_CONFIG, DEFAULT_SCHEDULED_DRIFT_CONFIG } = await import("../services/live-backtest-compare.js");
+        const fsP = await import("node:fs/promises");
+        const osM = await import("node:os");
+        const pathM = await import("node:path");
+        const p = urlParams(req);
+        const mode = p.get("mode") ?? "paper";
+        const windowDays = Number(p.get("window_days")) || 30;
+        const alertThreshold = Number(p.get("alert_threshold")) || 35;
+
+        const entries = backtestStore.query({ sortBy: "createdAt", sortDir: "desc", limit: 50 });
+        const latestByStrategy = new Map<string, typeof entries[0]>();
+        for (const e of entries) {
+          if (!latestByStrategy.has(e.strategyId)) latestByStrategy.set(e.strategyId, e);
+        }
+
+        const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+        const now = new Date();
+        const windowEnd = now.toISOString().slice(0, 10);
+        const windowStart = new Date(now.getTime() - windowDays * 86_400_000).toISOString().slice(0, 10);
+
+        const dir = config.dataDir ?? pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+        let allTrades: TradeRecord[] = [];
+        let allSignals: TradingSignal[] = [];
+        try { allTrades = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8")); } catch { /* empty */ }
+        try { allSignals = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "signals.json"), "utf-8")); } catch { /* empty */ }
+
+        const strategiesData: Parameters<typeof runScheduledDriftCheck>[0] = [];
+        for (const [sid, entry] of latestByStrategy) {
+          const btRecord = backtestStore.getFullResult(entry.id);
+          if (!btRecord) continue;
+          const liveEq = eh.getRange(windowStart, windowEnd);
+          if (liveEq.length < 2) continue;
+          strategiesData.push({
+            strategyId: sid,
+            backtestResult: btRecord.result,
+            liveEquity: liveEq,
+            liveTrades: allTrades.filter((t) => t.strategyId === sid),
+            liveSignals: allSignals.filter((s) => s.strategyId === sid),
+          });
+        }
+
+        if (strategiesData.length === 0) {
+          json(res, { status: "ok", message: "未找到可监控的策略", data: null });
+          return;
+        }
+
+        const schedConfig = {
+          ...DEFAULT_SCHEDULED_DRIFT_CONFIG,
+          windowDays,
+          alertThreshold,
+          mode: mode as "paper" | "live",
+          strategyIds: [...latestByStrategy.keys()],
+        };
+        const result = runScheduledDriftCheck(strategiesData, schedConfig, DEFAULT_DECAY_ALERT_CONFIG);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/portfolio-compare?[mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/portfolio-compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      try {
+        const { comparePortfolio } = await import("../services/live-backtest-compare.js");
+        const fsP = await import("node:fs/promises");
+        const osM = await import("node:os");
+        const pathM = await import("node:path");
+        const p = urlParams(req);
+        const mode = p.get("mode") ?? "paper";
+        const startDate = p.get("start") ?? undefined;
+        const endDate = p.get("end") ?? undefined;
+
+        const entries = backtestStore.query({ sortBy: "createdAt", sortDir: "desc", limit: 50 });
+        const latestByStrategy = new Map<string, typeof entries[0]>();
+        for (const e of entries) {
+          if (!latestByStrategy.has(e.strategyId)) latestByStrategy.set(e.strategyId, e);
+        }
+
+        if (latestByStrategy.size < 2) {
+          json(res, { status: "error", message: "需要至少2个策略的回测记录" }, 400);
+          return;
+        }
+
+        const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+        const dir = config.dataDir ?? pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+        let allTrades: TradeRecord[] = [];
+        let allSignals: TradingSignal[] = [];
+        try { allTrades = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8")); } catch { /* empty */ }
+        try { allSignals = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "signals.json"), "utf-8")); } catch { /* empty */ }
+
+        let minStart = "9999-12-31";
+        let maxEnd = "0000-01-01";
+        for (const [, entry] of latestByStrategy) {
+          if (entry.startDate < minStart) minStart = entry.startDate;
+          if (entry.endDate > maxEnd) maxEnd = entry.endDate;
+        }
+        const start = startDate ?? minStart;
+        const end = endDate ?? maxEnd;
+
+        const portfolioEquity = eh.getRange(start, end);
+        if (portfolioEquity.length === 0) {
+          json(res, { status: "error", message: `${mode === "live" ? "实盘" : "模拟盘"}无权益数据` }, 404);
+          return;
+        }
+
+        const strategiesForPortfolio: Parameters<typeof comparePortfolio>[0] = [];
+        for (const [sid, entry] of latestByStrategy) {
+          const btRecord = backtestStore.getFullResult(entry.id);
+          if (!btRecord) continue;
+          const liveEq = eh.getRange(start, end);
+          const trades = allTrades.filter((t) => t.strategyId === sid && t.entryTime >= start && t.entryTime <= end + "T23:59:59");
+          const signals = allSignals.filter((s) => s.strategyId === sid && new Date(s.timestamp).toISOString().slice(0, 10) >= start && new Date(s.timestamp).toISOString().slice(0, 10) <= end);
+          const capital = trades.reduce((a, t) => a + t.entryPrice * t.quantity, 0) || btRecord.result.initialCash;
+          strategiesForPortfolio.push({
+            strategyId: sid,
+            backtestResult: btRecord.result,
+            liveEquity: liveEq,
+            liveTrades: trades,
+            liveSignals: signals,
+            capitalAllocation: capital,
+          });
+        }
+
+        const result = comparePortfolio(strategiesForPortfolio, portfolioEquity, start, end);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/reoptimize-check?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/reoptimize-check",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { checkReoptimizeNeed, DEFAULT_DECAY_ALERT_CONFIG } = await import("../services/live-backtest-compare.js");
+        const fsP = await import("node:fs/promises");
+        const osM = await import("node:os");
+        const pathM = await import("node:path");
+        const p = urlParams(req);
+        const mode = p.get("mode") ?? "paper";
+
+        const eh = mode === "live" ? (equityHistoryLive ?? equityHistory) : (equityHistoryPaper ?? equityHistory);
+        const postBtEquity = eh.getRange(resolved.req.backtestResult.endDate, "9999-12-31");
+        const dir = config.dataDir ?? pathM.default.join(osM.default.homedir(), ".openclaw", "quant-trading");
+        let allTrades: TradeRecord[] = [];
+        try { allTrades = JSON.parse(await fsP.default.readFile(pathM.default.join(dir, "trades.json"), "utf-8")); } catch { /* empty */ }
+        const postBtTrades = allTrades.filter(
+          (t) => t.strategyId === resolved.req.strategyId && t.entryTime > resolved.req.backtestResult.endDate,
+        );
+
+        const result = checkReoptimizeNeed(resolved.req, postBtEquity, postBtTrades, DEFAULT_DECAY_ALERT_CONFIG);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/custom-benchmark?strategy_id=xxx&benchmark_symbol=000300[&benchmark_market=cn_stock&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/custom-benchmark",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const p = urlParams(req);
+      const benchmarkSymbol = p.get("benchmark_symbol");
+      if (!benchmarkSymbol) {
+        json(res, { status: "error", message: "需要 benchmark_symbol 参数（如 '000300' 表示沪深300）" }, 400);
+        return;
+      }
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { compareWithCustomBenchmark } = await import("../services/live-backtest-compare.js");
+        const benchmarkMarket = (p.get("benchmark_market") ?? "cn_stock") as import("../types.js").MarketType;
+
+        const provider = createDataProvider(config);
+        const klines = await provider.getKlines(benchmarkSymbol, "1d", resolved.req.startDate, resolved.req.endDate, benchmarkMarket);
+        if (klines.length === 0) {
+          json(res, { status: "error", message: `无法获取 ${benchmarkSymbol} 的行情数据` }, 404);
+          return;
+        }
+        const benchmarkKlines = klines.map((k: { timestamp: number; close: number }) => ({
+          date: new Date(k.timestamp).toISOString().slice(0, 10),
+          close: k.close,
+        }));
+
+        const result = compareWithCustomBenchmark(resolved.req, benchmarkSymbol, benchmarkKlines);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/intraday-analysis?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/intraday-analysis",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { analyzeIntradayExecution } = await import("../services/live-backtest-compare.js");
+        const result = analyzeIntradayExecution(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/whatif-replay?strategy_id=xxx[&mode=paper|live&start=&end=]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/whatif-replay",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { replayWhatIf } = await import("../services/live-backtest-compare.js");
+        const result = replayWhatIf(resolved.req);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
+  // GET /quant/api/live-backtest-compare/drawdown-episodes?strategy_id=xxx[&mode=paper|live&start=&end=&min_drawdown_pct=2]
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/live-backtest-compare/drawdown-episodes",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") return methodNotAllowed(res);
+      const resolved = await resolveLiveBacktestData(req, config, backtestStore, equityHistory, equityHistoryPaper, equityHistoryLive);
+      if ("error" in resolved) {
+        json(res, { status: "error", message: resolved.error }, resolved.code ?? 400);
+        return;
+      }
+      try {
+        const { compareDrawdownEpisodes } = await import("../services/live-backtest-compare.js");
+        const p = urlParams(req);
+        const minDrawdownPct = Number(p.get("min_drawdown_pct")) || 2;
+        const result = compareDrawdownEpisodes(resolved.req, minDrawdownPct);
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 500);
+      }
+    }),
+  });
+
   // GET /quant/api/live-backtest-compare/decay-alerts — list strategy decay alerts
   api.registerHttpRoute({
     auth: "plugin",

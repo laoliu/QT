@@ -2116,3 +2116,582 @@ export function runScheduledDriftCheck(
     portfolioHealth,
   };
 }
+
+// ── Portfolio-level comparison ─────────────────────────────────
+
+export interface PortfolioCompareResult {
+  /** Comparison period */
+  period: { start: string; end: string };
+  /** Blended backtest return (weighted by each strategy's capital allocation) */
+  blendedBacktestReturn: number;
+  /** Actual live portfolio return */
+  livePortfolioReturn: number;
+  /** Return difference: live - blended backtest */
+  returnDiff: number;
+  /** Portfolio drift score (0-100) */
+  portfolioDriftScore: number;
+  portfolioDriftSeverity: DriftSeverity;
+  /** Per-strategy contribution to overall drift */
+  strategyContributions: Array<{
+    strategyId: string;
+    /** Capital weight of this strategy in the portfolio (0-1) */
+    capitalWeight: number;
+    backtestReturn: number;
+    liveReturn: number;
+    returnDiff: number;
+    driftScore: number;
+    /** Weighted contribution to portfolio drift */
+    weightedDriftContribution: number;
+  }>;
+  /** Correlation between blended backtest equity and live equity */
+  curveCorrelation: number;
+  /** Diversification benefit: is the combined portfolio drift lower than average individual drift? */
+  diversificationBenefit: number;
+  observations: string[];
+}
+
+/**
+ * Compare a multi-strategy live portfolio against the blended backtest of all active strategies.
+ * Each strategy is weighted by its capital allocation to produce a portfolio-level comparison.
+ */
+export function comparePortfolio(
+  strategies: Array<{
+    strategyId: string;
+    backtestResult: BacktestResult;
+    liveEquity: EquitySnapshot[];
+    liveTrades: TradeRecord[];
+    liveSignals: TradingSignal[];
+    /** Capital allocated to this strategy (absolute value, e.g. 100000) */
+    capitalAllocation: number;
+  }>,
+  portfolioLiveEquity: EquitySnapshot[],
+  startDate: string,
+  endDate: string,
+): PortfolioCompareResult {
+  const totalCapital = strategies.reduce((a, s) => a + s.capitalAllocation, 0);
+
+  // Per-strategy comparison + capital weighting
+  const strategyContributions: PortfolioCompareResult["strategyContributions"] = [];
+  let blendedBtReturn = 0;
+  let totalWeightedDrift = 0;
+  let sumIndividualDrift = 0;
+
+  for (const entry of strategies) {
+    const weight = totalCapital > 0 ? entry.capitalAllocation / totalCapital : 1 / strategies.length;
+
+    const req: LiveBacktestCompareRequest = {
+      strategyId: entry.strategyId,
+      startDate,
+      endDate,
+      backtestResult: entry.backtestResult,
+      liveEquity: entry.liveEquity,
+      liveTrades: entry.liveTrades,
+      liveSignals: entry.liveSignals,
+    };
+
+    const result = compareLiveVsBacktest(req);
+    const btReturn = result.returnComparison.backtestReturn;
+    const liveReturn = result.returnComparison.liveReturn;
+    const returnDiff = liveReturn - btReturn;
+    const driftScore = result.drift.score;
+
+    blendedBtReturn += btReturn * weight;
+    totalWeightedDrift += driftScore * weight;
+    sumIndividualDrift += driftScore;
+
+    strategyContributions.push({
+      strategyId: entry.strategyId,
+      capitalWeight: Math.round(weight * 10000) / 10000,
+      backtestReturn: Math.round(btReturn * 100) / 100,
+      liveReturn: Math.round(liveReturn * 100) / 100,
+      returnDiff: Math.round(returnDiff * 100) / 100,
+      driftScore,
+      weightedDriftContribution: Math.round(driftScore * weight * 100) / 100,
+    });
+  }
+
+  // Sort by weighted drift contribution descending
+  strategyContributions.sort((a, b) => b.weightedDriftContribution - a.weightedDriftContribution);
+
+  // Live portfolio return from actual portfolio equity
+  const sortedPortfolio = [...portfolioLiveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  let livePortfolioReturn = 0;
+  if (sortedPortfolio.length >= 2) {
+    const first = sortedPortfolio[0]!;
+    const last = sortedPortfolio[sortedPortfolio.length - 1]!;
+    if (first.equity > 0) {
+      livePortfolioReturn = ((last.equity - first.equity) / first.equity) * 100;
+    }
+  }
+
+  const returnDiff = livePortfolioReturn - blendedBtReturn;
+  const portfolioDriftScore = Math.round(totalWeightedDrift);
+
+  let portfolioDriftSeverity: DriftSeverity;
+  if (portfolioDriftScore <= 15) portfolioDriftSeverity = "low";
+  else if (portfolioDriftScore <= 35) portfolioDriftSeverity = "moderate";
+  else if (portfolioDriftScore <= 60) portfolioDriftSeverity = "high";
+  else portfolioDriftSeverity = "critical";
+
+  // Correlation between blended backtest equity and live equity
+  // Build blended backtest equity curve from per-strategy curves
+  const blendedDates = new Map<string, { bt: number; live: number }>();
+  for (const entry of strategies) {
+    const weight = totalCapital > 0 ? entry.capitalAllocation / totalCapital : 1 / strategies.length;
+    for (const pt of entry.backtestResult.equityCurve) {
+      const existing = blendedDates.get(pt.date) ?? { bt: 0, live: 0 };
+      const normalizedBt = entry.backtestResult.initialCash > 0
+        ? (pt.value / entry.backtestResult.initialCash) * 100
+        : 100;
+      existing.bt += normalizedBt * weight;
+      blendedDates.set(pt.date, existing);
+    }
+  }
+  for (const snap of sortedPortfolio) {
+    const existing = blendedDates.get(snap.date);
+    if (existing) {
+      const liveInitial = sortedPortfolio[0]!.equity;
+      existing.live = liveInitial > 0 ? (snap.equity / liveInitial) * 100 : 100;
+    }
+  }
+
+  const overlapping = [...blendedDates.values()].filter((v) => v.bt > 0 && v.live > 0);
+  let curveCorrelation = 0;
+  if (overlapping.length >= 2) {
+    const n = overlapping.length;
+    const meanBt = overlapping.reduce((a, v) => a + v.bt, 0) / n;
+    const meanLive = overlapping.reduce((a, v) => a + v.live, 0) / n;
+    let covSum = 0;
+    let varBt = 0;
+    let varLive = 0;
+    for (const v of overlapping) {
+      const dBt = v.bt - meanBt;
+      const dLive = v.live - meanLive;
+      covSum += dBt * dLive;
+      varBt += dBt * dBt;
+      varLive += dLive * dLive;
+    }
+    const denom = Math.sqrt(varBt * varLive);
+    curveCorrelation = denom > 0 ? covSum / denom : 0;
+  }
+
+  // Diversification benefit: compare portfolio drift to average individual drift
+  const avgIndividualDrift = strategies.length > 0 ? sumIndividualDrift / strategies.length : 0;
+  const diversificationBenefit = avgIndividualDrift > 0
+    ? Math.round((1 - portfolioDriftScore / avgIndividualDrift) * 100)
+    : 0;
+
+  const observations: string[] = [];
+  if (portfolioDriftSeverity === "low") {
+    observations.push("组合整体漂移较低，各策略实盘表现与回测基本一致");
+  } else if (portfolioDriftSeverity === "critical") {
+    observations.push("组合漂移严重，建议全面审查各策略运行状态");
+  }
+
+  if (strategyContributions.length > 0) {
+    const worst = strategyContributions[0]!;
+    if (worst.weightedDriftContribution > portfolioDriftScore * 0.5) {
+      observations.push(
+        `策略 ${worst.strategyId} 贡献了超过50%的组合漂移 (资金占比 ${(worst.capitalWeight * 100).toFixed(1)}%)`,
+      );
+    }
+  }
+
+  if (diversificationBenefit > 10) {
+    observations.push(`多策略分散化降低了约 ${diversificationBenefit}% 的漂移风险`);
+  } else if (diversificationBenefit < -10) {
+    observations.push("多策略组合未能有效分散漂移风险，各策略漂移方向一致");
+  }
+
+  return {
+    period: { start: startDate, end: endDate },
+    blendedBacktestReturn: Math.round(blendedBtReturn * 100) / 100,
+    livePortfolioReturn: Math.round(livePortfolioReturn * 100) / 100,
+    returnDiff: Math.round(returnDiff * 100) / 100,
+    portfolioDriftScore,
+    portfolioDriftSeverity,
+    strategyContributions,
+    curveCorrelation: Math.round(curveCorrelation * 10000) / 10000,
+    diversificationBenefit,
+    observations,
+  };
+}
+
+// ── Re-optimization recommendation ───────────────────────────
+
+export type ReoptimizeUrgency = "none" | "monitor" | "recommended" | "urgent";
+
+export interface ReoptimizeCheckResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Overall urgency for re-optimization */
+  urgency: ReoptimizeUrgency;
+  /** Score 0-100 indicating how strongly re-optimization is recommended */
+  reoptimizeScore: number;
+  /** Individual signals contributing to the recommendation */
+  signals: Array<{
+    signal: string;
+    severity: "info" | "warning" | "critical";
+    description: string;
+  }>;
+  /** Suggested actions */
+  recommendations: string[];
+  /** Key metrics that triggered the recommendation */
+  metrics: {
+    driftScore: number;
+    driftTrend: DriftHistory["trend"];
+    returnDecay: number;
+    sharpeDecay: number;
+    oosVerdict: OutOfSampleResult["verdict"] | null;
+    regimeChanged: boolean;
+  };
+}
+
+/**
+ * Analyze whether a strategy needs re-optimization based on multiple degradation signals.
+ * Combines drift history, out-of-sample performance, and regime analysis.
+ */
+export function checkReoptimizeNeed(
+  req: LiveBacktestCompareRequest,
+  /** Additional live equity data that extends beyond the backtest period */
+  postBacktestEquity: EquitySnapshot[],
+  postBacktestTrades: TradeRecord[],
+  decayConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
+): ReoptimizeCheckResult {
+  const { strategyId, startDate, endDate } = req;
+
+  const signals: ReoptimizeCheckResult["signals"] = [];
+  const recommendations: string[] = [];
+  let reoptimizeScore = 0;
+
+  // 1. Current drift analysis
+  const comparison = compareLiveVsBacktest(req, decayConfig);
+  const driftScore = comparison.drift.score;
+
+  if (driftScore > 60) {
+    signals.push({ signal: "critical_drift", severity: "critical", description: `当前漂移得分 ${driftScore}/100，策略严重偏离回测预期` });
+    reoptimizeScore += 30;
+  } else if (driftScore > 35) {
+    signals.push({ signal: "high_drift", severity: "warning", description: `当前漂移得分 ${driftScore}/100，策略偏离回测预期` });
+    reoptimizeScore += 15;
+  }
+
+  // 2. Drift trend analysis
+  const history = computeDriftHistory(req, 30, 7);
+  const driftTrend = history.trend;
+
+  if (driftTrend === "worsening") {
+    signals.push({ signal: "worsening_trend", severity: "warning", description: "漂移趋势持续恶化，策略可能正在失效" });
+    reoptimizeScore += 20;
+  }
+
+  if (history.alertCount >= 3) {
+    signals.push({ signal: "repeated_alerts", severity: "warning", description: `近期累计 ${history.alertCount} 次高风险告警` });
+    reoptimizeScore += 10;
+  }
+
+  // 3. Out-of-sample check (if post-backtest data available)
+  let oosVerdict: OutOfSampleResult["verdict"] | null = null;
+  let returnDecay = 0;
+  let sharpeDecay = 0;
+
+  if (postBacktestEquity.length >= 2) {
+    const oos = compareOutOfSample(req.backtestResult, postBacktestEquity, postBacktestTrades);
+    oosVerdict = oos.verdict;
+    returnDecay = oos.returnDecay;
+    sharpeDecay = oos.sharpeDecay;
+
+    if (oos.verdict === "failed") {
+      signals.push({ signal: "oos_failed", severity: "critical", description: `样本外验证失败，年化收益衰减 ${returnDecay.toFixed(1)}%` });
+      reoptimizeScore += 25;
+    } else if (oos.verdict === "degrading") {
+      signals.push({ signal: "oos_degrading", severity: "warning", description: `样本外表现衰减，年化收益下降 ${returnDecay.toFixed(1)}%` });
+      reoptimizeScore += 15;
+    }
+  }
+
+  // 4. Regime change detection
+  const regimeResult = compareRegimeAware(req, decayConfig);
+  const regimeChanged = regimeResult.regimeAttribution.strategySpecificPct > 60;
+
+  if (regimeChanged && driftScore > 20) {
+    signals.push({
+      signal: "strategy_specific_drift",
+      severity: "warning",
+      description: `漂移主要来自策略自身 (${regimeResult.regimeAttribution.strategySpecificPct}%)，非市场环境变化`,
+    });
+    reoptimizeScore += 10;
+  } else if (!regimeChanged && regimeResult.regime !== "sideways") {
+    signals.push({
+      signal: "regime_shift",
+      severity: "info",
+      description: `市场环境变化 (${regimeResult.regime}) 解释了大部分偏差，策略参数可能仍然有效`,
+    });
+    reoptimizeScore = Math.max(0, reoptimizeScore - 10);
+  }
+
+  // 5. Execution quality degradation
+  if (comparison.executionQuality.fillRate < 0.6) {
+    signals.push({ signal: "poor_fill_rate", severity: "warning", description: `信号执行率仅 ${(comparison.executionQuality.fillRate * 100).toFixed(0)}%，执行环节可能需要调整` });
+    reoptimizeScore += 5;
+  }
+
+  // Cap score
+  reoptimizeScore = Math.min(100, Math.max(0, reoptimizeScore));
+
+  // Determine urgency
+  let urgency: ReoptimizeUrgency;
+  if (reoptimizeScore >= 60) urgency = "urgent";
+  else if (reoptimizeScore >= 35) urgency = "recommended";
+  else if (reoptimizeScore >= 15) urgency = "monitor";
+  else urgency = "none";
+
+  // Generate recommendations
+  if (urgency === "urgent") {
+    recommendations.push("建议立即暂停实盘，重新优化策略参数");
+    if (oosVerdict === "failed") {
+      recommendations.push("样本外验证失败，策略在当前市场条件下可能已完全失效，建议重新设计策略逻辑");
+    }
+  }
+  if (urgency === "recommended") {
+    recommendations.push("建议在下一个非交易日重新运行参数优化");
+    if (driftTrend === "worsening") {
+      recommendations.push("漂移趋势恶化，可考虑缩小仓位直至优化完成");
+    }
+  }
+  if (urgency === "monitor") {
+    recommendations.push("当前偏差在可控范围内，建议持续监控");
+    if (comparison.executionQuality.fillRate < 0.7) {
+      recommendations.push("执行率偏低，建议先检查下单通道和流动性");
+    }
+  }
+  if (urgency === "none") {
+    recommendations.push("策略运行正常，无需重新优化");
+  }
+
+  if (regimeChanged && urgency !== "none") {
+    recommendations.push(`策略参数可能需要针对当前 ${regimeResult.regime} 环境进行调整`);
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    urgency,
+    reoptimizeScore,
+    signals,
+    recommendations,
+    metrics: {
+      driftScore,
+      driftTrend,
+      returnDecay,
+      sharpeDecay,
+      oosVerdict,
+      regimeChanged,
+    },
+  };
+}
+
+// ── Custom benchmark comparison ───────────────────────────────
+
+export interface CustomBenchmarkResult {
+  strategyId: string;
+  period: { start: string; end: string };
+  /** Benchmark symbol used */
+  benchmarkSymbol: string;
+  /** Benchmark total return (%) */
+  benchmarkReturn: number;
+  /** Live alpha: live return - benchmark return */
+  liveAlpha: number;
+  /** Backtest alpha: backtest return - benchmark return */
+  backtestAlpha: number;
+  /** Alpha decay: backtest alpha - live alpha */
+  alphaDecay: number;
+  /** Information ratio (live excess return / tracking error) */
+  informationRatio: number;
+  /** Tracking error (annualized std of return difference) */
+  trackingError: number;
+  /** Beta: sensitivity of live returns to benchmark returns */
+  beta: number;
+  /** Attribution */
+  attribution: "outperforming" | "alpha_decay" | "market_decline" | "strategy_underperform";
+  /** Equity curve overlay: normalized to 100 base */
+  curves: {
+    dates: string[];
+    benchmarkValues: number[];
+    liveValues: number[];
+    backtestValues: number[];
+  };
+  observations: string[];
+}
+
+/**
+ * Compare live and backtest performance against a user-specified benchmark.
+ * Accepts pre-fetched benchmark kline data (daily closes).
+ */
+export function compareWithCustomBenchmark(
+  req: LiveBacktestCompareRequest,
+  benchmarkSymbol: string,
+  benchmarkKlines: Array<{ date: string; close: number }>,
+): CustomBenchmarkResult {
+  const { strategyId, startDate, endDate, backtestResult, liveEquity } = req;
+
+  // Filter benchmark data to comparison period
+  const benchData = benchmarkKlines
+    .filter((k) => k.date >= startDate && k.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Benchmark return
+  let benchmarkReturn = 0;
+  if (benchData.length >= 2) {
+    const first = benchData[0]!.close;
+    const last = benchData[benchData.length - 1]!.close;
+    benchmarkReturn = first > 0 ? ((last - first) / first) * 100 : 0;
+  }
+
+  // Live return
+  const sortedLive = [...liveEquity].sort((a, b) => a.date.localeCompare(b.date));
+  let liveReturn = 0;
+  if (sortedLive.length >= 2) {
+    const first = sortedLive[0]!.equity;
+    const last = sortedLive[sortedLive.length - 1]!.equity;
+    liveReturn = first > 0 ? ((last - first) / first) * 100 : 0;
+  }
+
+  const liveAlpha = liveReturn - benchmarkReturn;
+  const backtestAlpha = backtestResult.totalReturn - benchmarkReturn;
+  const alphaDecay = backtestAlpha - liveAlpha;
+
+  // Daily returns for tracking error, beta, information ratio
+  const benchByDate = new Map(benchData.map((k) => [k.date, k.close]));
+  const liveByDate = new Map(sortedLive.map((s) => [s.date, s.equity]));
+
+  // Find overlapping dates
+  const commonDates = [...benchByDate.keys()]
+    .filter((d) => liveByDate.has(d))
+    .sort();
+
+  let trackingError = 0;
+  let informationRatio = 0;
+  let beta = 0;
+
+  if (commonDates.length >= 5) {
+    const benchReturns: number[] = [];
+    const liveReturns: number[] = [];
+    const excessReturns: number[] = [];
+
+    for (let i = 1; i < commonDates.length; i++) {
+      const prevDate = commonDates[i - 1]!;
+      const currDate = commonDates[i]!;
+      const prevBench = benchByDate.get(prevDate)!;
+      const currBench = benchByDate.get(currDate)!;
+      const prevLive = liveByDate.get(prevDate)!;
+      const currLive = liveByDate.get(currDate)!;
+
+      if (prevBench > 0 && prevLive > 0) {
+        const br = (currBench - prevBench) / prevBench;
+        const lr = (currLive - prevLive) / prevLive;
+        benchReturns.push(br);
+        liveReturns.push(lr);
+        excessReturns.push(lr - br);
+      }
+    }
+
+    if (excessReturns.length > 1) {
+      // Tracking error
+      const meanExcess = excessReturns.reduce((a, b) => a + b, 0) / excessReturns.length;
+      const teVariance = excessReturns.reduce((a, r) => a + (r - meanExcess) ** 2, 0) / (excessReturns.length - 1);
+      trackingError = Math.sqrt(teVariance) * Math.sqrt(252) * 100;
+
+      // Information ratio
+      informationRatio = trackingError > 0 ? (meanExcess * Math.sqrt(252) * 100) / trackingError : 0;
+
+      // Beta: Cov(live, bench) / Var(bench)
+      const meanBench = benchReturns.reduce((a, b) => a + b, 0) / benchReturns.length;
+      const meanLive = liveReturns.reduce((a, b) => a + b, 0) / liveReturns.length;
+      let covSum = 0;
+      let varBench = 0;
+      for (let i = 0; i < benchReturns.length; i++) {
+        covSum += (liveReturns[i]! - meanLive) * (benchReturns[i]! - meanBench);
+        varBench += (benchReturns[i]! - meanBench) ** 2;
+      }
+      beta = varBench > 0 ? covSum / varBench : 1;
+    }
+  }
+
+  // Attribution
+  let attribution: CustomBenchmarkResult["attribution"];
+  if (liveAlpha >= 0) {
+    attribution = "outperforming";
+  } else if (alphaDecay > 3 && benchmarkReturn >= -2) {
+    attribution = "alpha_decay";
+  } else if (benchmarkReturn < -5) {
+    attribution = "market_decline";
+  } else {
+    attribution = "strategy_underperform";
+  }
+
+  // Build equity curve overlay
+  const dates: string[] = [];
+  const benchmarkValues: number[] = [];
+  const liveValues: number[] = [];
+  const backtestValues: number[] = [];
+
+  const benchInitial = benchData.length > 0 ? benchData[0]!.close : 1;
+  const liveInitial = sortedLive.length > 0 ? sortedLive[0]!.equity : 1;
+  const btInitial = backtestResult.initialCash;
+  const btByDate = new Map(backtestResult.equityCurve.map((p) => [p.date, p.value]));
+
+  const allDates = new Set([
+    ...benchData.map((k) => k.date),
+    ...sortedLive.map((s) => s.date),
+    ...backtestResult.equityCurve.map((p) => p.date),
+  ]);
+
+  for (const date of [...allDates].sort()) {
+    dates.push(date);
+    const bv = benchByDate.get(date);
+    benchmarkValues.push(bv != null && benchInitial > 0 ? (bv / benchInitial) * 100 : 0);
+    const lv = liveByDate.get(date);
+    liveValues.push(lv != null && liveInitial > 0 ? (lv / liveInitial) * 100 : 0);
+    const btv = btByDate.get(date);
+    backtestValues.push(btv != null && btInitial > 0 ? (btv / btInitial) * 100 : 0);
+  }
+
+  // Observations
+  const observations: string[] = [];
+  if (liveAlpha > 0) {
+    observations.push(`实盘跑赢 ${benchmarkSymbol} 基准 ${liveAlpha.toFixed(2)}%`);
+  } else {
+    observations.push(`实盘跑输 ${benchmarkSymbol} 基准 ${Math.abs(liveAlpha).toFixed(2)}%`);
+  }
+
+  if (alphaDecay > 5) {
+    observations.push(`Alpha衰减 ${alphaDecay.toFixed(2)}%：回测时跑赢基准 ${backtestAlpha.toFixed(2)}%，实盘仅 ${liveAlpha.toFixed(2)}%`);
+  }
+
+  if (Math.abs(beta) > 1.3) {
+    observations.push(`Beta ${beta.toFixed(2)} 偏高，策略对市场波动敏感度超出预期`);
+  } else if (Math.abs(beta) < 0.5) {
+    observations.push(`Beta ${beta.toFixed(2)} 偏低，策略与基准走势相关性较弱`);
+  }
+
+  if (trackingError > 20) {
+    observations.push(`跟踪误差 ${trackingError.toFixed(2)}% 较大，策略偏离基准幅度显著`);
+  }
+
+  return {
+    strategyId,
+    period: { start: startDate, end: endDate },
+    benchmarkSymbol,
+    benchmarkReturn: Math.round(benchmarkReturn * 100) / 100,
+    liveAlpha: Math.round(liveAlpha * 100) / 100,
+    backtestAlpha: Math.round(backtestAlpha * 100) / 100,
+    alphaDecay: Math.round(alphaDecay * 100) / 100,
+    informationRatio: Math.round(informationRatio * 100) / 100,
+    trackingError: Math.round(trackingError * 100) / 100,
+    beta: Math.round(beta * 100) / 100,
+    attribution,
+    curves: { dates, benchmarkValues, liveValues, backtestValues },
+    observations,
+  };
+}

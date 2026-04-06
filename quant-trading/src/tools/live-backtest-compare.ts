@@ -36,6 +36,9 @@ import {
   compareRegimeAware,
   comparePositionWeighted,
   runScheduledDriftCheck,
+  comparePortfolio,
+  checkReoptimizeNeed,
+  compareWithCustomBenchmark,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareResult,
@@ -48,6 +51,7 @@ import {
   type ScheduledDriftCheckConfig,
 } from "../services/live-backtest-compare.js";
 import type { AlertStore } from "../services/alert-store.js";
+import type { MarketDataProvider } from "../data/market-data-provider.js";
 import type { QuantTradingConfig, TradeRecord, TradingSignal } from "../types.js";
 
 function fmt(v: unknown, digits: number): string {
@@ -173,6 +177,7 @@ export function createLiveBacktestCompareTool(
   equityHistoryLive: EquityHistory,
   alertStore?: AlertStore,
   decayAlertConfig: DecayAlertConfig = DEFAULT_DECAY_ALERT_CONFIG,
+  dataProvider?: MarketDataProvider,
 ) {
   return {
     name: "live_backtest_compare",
@@ -192,13 +197,16 @@ export function createLiveBacktestCompareTool(
       "action=decay_alerts 查看衰减告警列表。" +
       "action=regime_compare 市场环境感知对比（根据牛熊/波动率调整漂移评分）。" +
       "action=position_weighted 仓位加权对比（按实际持仓大小加权漂移贡献）。" +
-      "action=scheduled_check 批量策略漂移巡检（定时监控多策略健康状态）。",
+      "action=scheduled_check 批量策略漂移巡检（定时监控多策略健康状态）。" +
+      "action=portfolio_compare 多策略组合级对比（将多策略实盘组合与混合回测对比）。" +
+      "action=reoptimize_check 重新优化建议（综合分析策略是否需要重新优化参数）。" +
+      "action=custom_benchmark 自定义基准对比（指定基准标的进行Alpha/Beta/跟踪误差分析）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check"],
+          enum: ["compare", "drift_check", "list_backtests", "period_compare", "trade_match", "drift_history", "symbol_breakdown", "report", "out_of_sample", "closest_backtest", "export", "decay_alerts", "regime_compare", "position_weighted", "scheduled_check", "portfolio_compare", "reoptimize_check", "custom_benchmark"],
           description: "操作类型",
         },
         backtest_id: {
@@ -228,6 +236,15 @@ export function createLiveBacktestCompareTool(
         alert_threshold: {
           type: "number",
           description: "漂移告警阈值 (scheduled_check使用，0-100，默认35)",
+        },
+        benchmark_symbol: {
+          type: "string",
+          description: "基准标的代码 (custom_benchmark使用，如 '000300' 表示沪深300)",
+        },
+        benchmark_market: {
+          type: "string",
+          enum: ["cn_stock", "us_stock", "hk_stock"],
+          description: "基准标的市场 (custom_benchmark使用，默认cn_stock)",
         },
       },
       required: ["action"],
@@ -773,6 +790,209 @@ export function createLiveBacktestCompareTool(
               触发告警: r.alertTriggered ? "是" : "否",
               观察: r.observations,
             })),
+          };
+        }
+
+        case "portfolio_compare": {
+          const mode5 = (args.mode as string) ?? "paper";
+          const startDate5 = args.start_date as string | undefined;
+          const endDate5 = args.end_date as string | undefined;
+
+          // Gather all strategies with backtest records
+          const entries5 = backtestStore.query({
+            sortBy: "createdAt",
+            sortDir: "desc",
+            limit: 50,
+          });
+
+          // Group by strategyId and take the latest backtest per strategy
+          const latestByStrategy5 = new Map<string, typeof entries5[0]>();
+          for (const e of entries5) {
+            if (!latestByStrategy5.has(e.strategyId)) {
+              latestByStrategy5.set(e.strategyId, e);
+            }
+          }
+
+          if (latestByStrategy5.size < 2) {
+            return { error: "需要至少2个策略的回测记录才能进行组合级对比" };
+          }
+
+          const eh5 = mode5 === "live" ? equityHistoryLive : equityHistoryPaper;
+          const allTrades5 = await loadTrades(config);
+          const allSignals5 = await loadSignals(config);
+
+          // Determine date range from all backtests
+          let minStart = "9999-12-31";
+          let maxEnd = "0000-01-01";
+          for (const [, entry] of latestByStrategy5) {
+            if (entry.startDate < minStart) minStart = entry.startDate;
+            if (entry.endDate > maxEnd) maxEnd = entry.endDate;
+          }
+          const start5 = startDate5 ?? minStart;
+          const end5 = endDate5 ?? maxEnd;
+
+          const portfolioEquity = eh5.getRange(start5, end5);
+          if (portfolioEquity.length === 0) {
+            return { error: `${mode5 === "live" ? "实盘" : "模拟盘"}在 ${start5} ~ ${end5} 期间无权益数据` };
+          }
+
+          const strategiesForPortfolio: Parameters<typeof comparePortfolio>[0] = [];
+          for (const [sid, entry] of latestByStrategy5) {
+            const btRecord = backtestStore.getFullResult(entry.id);
+            if (!btRecord) continue;
+
+            const liveEq = eh5.getRange(start5, end5);
+            const trades = allTrades5.filter((t) => t.strategyId === sid && t.entryTime >= start5 && t.entryTime <= end5 + "T23:59:59");
+            const signals = allSignals5.filter((s) => s.strategyId === sid && new Date(s.timestamp).toISOString().slice(0, 10) >= start5 && new Date(s.timestamp).toISOString().slice(0, 10) <= end5);
+
+            // Estimate capital allocation from trade volume
+            const capital = trades.reduce((a, t) => a + t.entryPrice * t.quantity, 0) || btRecord.result.initialCash;
+
+            strategiesForPortfolio.push({
+              strategyId: sid,
+              backtestResult: btRecord.result,
+              liveEquity: liveEq,
+              liveTrades: trades,
+              liveSignals: signals,
+              capitalAllocation: capital,
+            });
+          }
+
+          const portfolioResult = comparePortfolio(strategiesForPortfolio, portfolioEquity, start5, end5);
+
+          const severityLabels: Record<string, string> = {
+            low: "低", moderate: "中等", high: "高", critical: "严重",
+          };
+
+          return {
+            期间: `${portfolioResult.period.start} ~ ${portfolioResult.period.end}`,
+            混合回测收益: `${fmt(portfolioResult.blendedBacktestReturn, 2)}%`,
+            实盘组合收益: `${fmt(portfolioResult.livePortfolioReturn, 2)}%`,
+            收益偏差: `${fmt(portfolioResult.returnDiff, 2)}%`,
+            组合漂移得分: `${portfolioResult.portfolioDriftScore}/100`,
+            组合漂移严重程度: severityLabels[portfolioResult.portfolioDriftSeverity] ?? portfolioResult.portfolioDriftSeverity,
+            曲线相关系数: fmt(portfolioResult.curveCorrelation, 4),
+            分散化收益: `${portfolioResult.diversificationBenefit}%`,
+            策略贡献: portfolioResult.strategyContributions.map((s) => ({
+              策略: s.strategyId,
+              资金占比: `${(s.capitalWeight * 100).toFixed(1)}%`,
+              回测收益: `${fmt(s.backtestReturn, 2)}%`,
+              实盘收益: `${fmt(s.liveReturn, 2)}%`,
+              收益偏差: `${fmt(s.returnDiff, 2)}%`,
+              漂移得分: s.driftScore,
+              加权漂移贡献: fmt(s.weightedDriftContribution, 2),
+            })),
+            观察: portfolioResult.observations,
+          };
+        }
+
+        case "reoptimize_check": {
+          const resolved3 = await resolveCompareData(args);
+          if ("error" in resolved3) return resolved3;
+          const { req: req3 } = resolved3;
+
+          // Get post-backtest equity for out-of-sample analysis
+          const mode6 = (args.mode as string) ?? "paper";
+          const eh6 = mode6 === "live" ? equityHistoryLive : equityHistoryPaper;
+          const postBtEquity = eh6.getRange(req3.backtestResult.endDate, "9999-12-31");
+          const allTrades6 = await loadTrades(config);
+          const postBtTrades = allTrades6.filter(
+            (t) => t.strategyId === req3.strategyId && t.entryTime > req3.backtestResult.endDate,
+          );
+
+          const reoptResult = checkReoptimizeNeed(req3, postBtEquity, postBtTrades, decayAlertConfig);
+
+          const urgencyLabels: Record<string, string> = {
+            none: "无需优化",
+            monitor: "持续监控",
+            recommended: "建议优化",
+            urgent: "紧急优化",
+          };
+          const trendLabels: Record<string, string> = {
+            improving: "改善中",
+            stable: "稳定",
+            worsening: "恶化中",
+          };
+
+          return {
+            策略: reoptResult.strategyId,
+            期间: `${reoptResult.period.start} ~ ${reoptResult.period.end}`,
+            优化紧迫度: urgencyLabels[reoptResult.urgency] ?? reoptResult.urgency,
+            优化建议得分: `${reoptResult.reoptimizeScore}/100`,
+            关键指标: {
+              漂移得分: `${reoptResult.metrics.driftScore}/100`,
+              漂移趋势: trendLabels[reoptResult.metrics.driftTrend] ?? reoptResult.metrics.driftTrend,
+              收益衰减: `${fmt(reoptResult.metrics.returnDecay, 2)}%`,
+              Sharpe衰减: fmt(reoptResult.metrics.sharpeDecay, 2),
+              样本外判定: reoptResult.metrics.oosVerdict === "on_track" ? "正常" :
+                reoptResult.metrics.oosVerdict === "degrading" ? "衰减" :
+                reoptResult.metrics.oosVerdict === "failed" ? "失效" : "无数据",
+              策略自身漂移: reoptResult.metrics.regimeChanged ? "是" : "否",
+            },
+            触发信号: reoptResult.signals.map((s) => ({
+              信号: s.signal,
+              严重程度: s.severity,
+              描述: s.description,
+            })),
+            建议: reoptResult.recommendations,
+          };
+        }
+
+        case "custom_benchmark": {
+          const benchmarkSymbol = args.benchmark_symbol as string | undefined;
+          if (!benchmarkSymbol) {
+            return { error: "请指定 benchmark_symbol 参数（如 '000300' 表示沪深300）" };
+          }
+          if (!dataProvider) {
+            return { error: "数据提供商未配置，无法获取基准行情数据" };
+          }
+
+          const resolved4 = await resolveCompareData(args);
+          if ("error" in resolved4) return resolved4;
+          const { req: req4 } = resolved4;
+
+          const benchmarkMarket = (args.benchmark_market as string) ?? "cn_stock";
+          // Fetch daily klines for the benchmark
+          const klines = await dataProvider.getKlines(
+            benchmarkSymbol,
+            "1d",
+            req4.startDate,
+            req4.endDate,
+            benchmarkMarket as import("../types.js").MarketType,
+          );
+
+          if (klines.length === 0) {
+            return { error: `无法获取 ${benchmarkSymbol} 在 ${req4.startDate} ~ ${req4.endDate} 的行情数据` };
+          }
+
+          const benchmarkKlines = klines.map((k) => ({
+            date: new Date(k.timestamp).toISOString().slice(0, 10),
+            close: k.close,
+          }));
+
+          const benchResult = compareWithCustomBenchmark(req4, benchmarkSymbol, benchmarkKlines);
+
+          const attrLabels: Record<string, string> = {
+            outperforming: "跑赢基准",
+            alpha_decay: "Alpha衰减",
+            market_decline: "市场下跌",
+            strategy_underperform: "策略跑输",
+          };
+
+          return {
+            策略: benchResult.strategyId,
+            期间: `${benchResult.period.start} ~ ${benchResult.period.end}`,
+            基准标的: benchResult.benchmarkSymbol,
+            基准收益: `${fmt(benchResult.benchmarkReturn, 2)}%`,
+            实盘Alpha: `${fmt(benchResult.liveAlpha, 2)}%`,
+            回测Alpha: `${fmt(benchResult.backtestAlpha, 2)}%`,
+            Alpha衰减: `${fmt(benchResult.alphaDecay, 2)}%`,
+            信息比率: fmt(benchResult.informationRatio, 2),
+            跟踪误差: `${fmt(benchResult.trackingError, 2)}%`,
+            Beta: fmt(benchResult.beta, 2),
+            归因: attrLabels[benchResult.attribution] ?? benchResult.attribution,
+            权益曲线数据点: benchResult.curves.dates.length,
+            观察: benchResult.observations,
           };
         }
 

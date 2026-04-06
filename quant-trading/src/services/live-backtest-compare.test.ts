@@ -12,6 +12,9 @@ import {
   compareRegimeAware,
   comparePositionWeighted,
   runScheduledDriftCheck,
+  comparePortfolio,
+  checkReoptimizeNeed,
+  compareWithCustomBenchmark,
   DEFAULT_DECAY_ALERT_CONFIG,
   DEFAULT_SCHEDULED_DRIFT_CONFIG,
   type LiveBacktestCompareRequest,
@@ -679,5 +682,262 @@ describe("runScheduledDriftCheck", () => {
     expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.frequency).toBe("daily");
     expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.windowDays).toBe(30);
     expect(DEFAULT_SCHEDULED_DRIFT_CONFIG.alertThreshold).toBe(35);
+  });
+});
+
+describe("comparePortfolio", () => {
+  it("returns portfolio-level comparison with blended backtest return", () => {
+    const req1 = makeReq();
+    const req2 = makeReq({
+      strategyId: "rsi_strategy",
+      backtestResult: makeBacktest({ strategyId: "rsi_strategy", totalReturn: 20 }),
+    });
+
+    const strategies = [
+      {
+        strategyId: "ma_cross",
+        backtestResult: req1.backtestResult,
+        liveEquity: req1.liveEquity,
+        liveTrades: req1.liveTrades,
+        liveSignals: req1.liveSignals,
+        capitalAllocation: 100000,
+      },
+      {
+        strategyId: "rsi_strategy",
+        backtestResult: req2.backtestResult,
+        liveEquity: req2.liveEquity,
+        liveTrades: req2.liveTrades,
+        liveSignals: req2.liveSignals,
+        capitalAllocation: 50000,
+      },
+    ];
+
+    const portfolioEquity = makeLiveEquity();
+    const result = comparePortfolio(strategies, portfolioEquity, "2024-01-01", "2024-06-30");
+
+    expect(result.period).toEqual({ start: "2024-01-01", end: "2024-06-30" });
+    expect(typeof result.blendedBacktestReturn).toBe("number");
+    expect(typeof result.livePortfolioReturn).toBe("number");
+    expect(typeof result.portfolioDriftScore).toBe("number");
+    expect(["low", "moderate", "high", "critical"]).toContain(result.portfolioDriftSeverity);
+    expect(result.strategyContributions.length).toBe(2);
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+
+  it("weights strategies by capital allocation", () => {
+    const bt1 = makeBacktest({ strategyId: "strat_a", totalReturn: 10 });
+    const bt2 = makeBacktest({ strategyId: "strat_b", totalReturn: 30 });
+
+    const strategies = [
+      {
+        strategyId: "strat_a",
+        backtestResult: bt1,
+        liveEquity: makeLiveEquity(),
+        liveTrades: makeReq().liveTrades,
+        liveSignals: makeReq().liveSignals,
+        capitalAllocation: 200000,
+      },
+      {
+        strategyId: "strat_b",
+        backtestResult: bt2,
+        liveEquity: makeLiveEquity(),
+        liveTrades: makeReq().liveTrades,
+        liveSignals: makeReq().liveSignals,
+        capitalAllocation: 100000,
+      },
+    ];
+
+    const result = comparePortfolio(strategies, makeLiveEquity(), "2024-01-01", "2024-06-30");
+
+    // strat_a has 2/3 weight, strat_b has 1/3 weight
+    const stratA = result.strategyContributions.find((s) => s.strategyId === "strat_a");
+    const stratB = result.strategyContributions.find((s) => s.strategyId === "strat_b");
+    expect(stratA).toBeDefined();
+    expect(stratB).toBeDefined();
+    expect(stratA!.capitalWeight).toBeCloseTo(2 / 3, 2);
+    expect(stratB!.capitalWeight).toBeCloseTo(1 / 3, 2);
+  });
+
+  it("computes diversification benefit", () => {
+    const strategies = [
+      {
+        strategyId: "strat_a",
+        backtestResult: makeBacktest({ strategyId: "strat_a" }),
+        liveEquity: makeLiveEquity(),
+        liveTrades: makeReq().liveTrades,
+        liveSignals: makeReq().liveSignals,
+        capitalAllocation: 100000,
+      },
+      {
+        strategyId: "strat_b",
+        backtestResult: makeBacktest({ strategyId: "strat_b" }),
+        liveEquity: makeLiveEquity(),
+        liveTrades: makeReq().liveTrades,
+        liveSignals: makeReq().liveSignals,
+        capitalAllocation: 100000,
+      },
+    ];
+
+    const result = comparePortfolio(strategies, makeLiveEquity(), "2024-01-01", "2024-06-30");
+    expect(typeof result.diversificationBenefit).toBe("number");
+  });
+});
+
+describe("checkReoptimizeNeed", () => {
+  it("returns reoptimize recommendation with all fields", () => {
+    const req = makeReq();
+    const postBtEquity = [
+      makeEquitySnap("2024-07-01", 100000),
+      makeEquitySnap("2024-07-15", 101000),
+      makeEquitySnap("2024-08-01", 103000),
+      makeEquitySnap("2024-08-15", 102000),
+      makeEquitySnap("2024-09-01", 105000),
+      makeEquitySnap("2024-09-15", 107000),
+    ];
+    const result = checkReoptimizeNeed(req, postBtEquity, []);
+
+    expect(result.strategyId).toBe("ma_cross");
+    expect(["none", "monitor", "recommended", "urgent"]).toContain(result.urgency);
+    expect(result.reoptimizeScore).toBeGreaterThanOrEqual(0);
+    expect(result.reoptimizeScore).toBeLessThanOrEqual(100);
+    expect(result.recommendations.length).toBeGreaterThan(0);
+    expect(result.metrics.driftScore).toBeGreaterThanOrEqual(0);
+    expect(["improving", "stable", "worsening"]).toContain(result.metrics.driftTrend);
+  });
+
+  it("recommends urgent re-optimization for severely degraded strategies", () => {
+    // Strategy with huge backtest return but very poor live performance
+    const bt = makeBacktest({ totalReturn: 60, annualizedReturn: 80, sharpeRatio: 3.0 });
+    const poorEquity = [
+      makeEquitySnap("2024-01-01", 100000),
+      makeEquitySnap("2024-02-01", 95000),
+      makeEquitySnap("2024-03-01", 90000),
+      makeEquitySnap("2024-04-01", 85000),
+      makeEquitySnap("2024-05-01", 80000),
+      makeEquitySnap("2024-06-01", 78000),
+      makeEquitySnap("2024-06-30", 75000),
+    ];
+    const req = makeReq({ backtestResult: bt, liveEquity: poorEquity });
+
+    // Post-backtest data also very poor
+    const postBtEquity = [
+      makeEquitySnap("2024-07-01", 75000),
+      makeEquitySnap("2024-07-15", 72000),
+      makeEquitySnap("2024-08-01", 70000),
+      makeEquitySnap("2024-08-15", 68000),
+      makeEquitySnap("2024-09-01", 65000),
+      makeEquitySnap("2024-12-31", 60000),
+    ];
+
+    const result = checkReoptimizeNeed(req, postBtEquity, []);
+    expect(result.urgency).toBe("urgent");
+    expect(result.reoptimizeScore).toBeGreaterThanOrEqual(60);
+    expect(result.signals.some((s) => s.severity === "critical")).toBe(true);
+  });
+
+  it("returns none urgency for well-performing strategies", () => {
+    const req = makeReq();
+    // Good post-backtest performance
+    const postBtEquity = [
+      makeEquitySnap("2024-07-01", 112000),
+      makeEquitySnap("2024-07-15", 114000),
+      makeEquitySnap("2024-08-01", 116000),
+      makeEquitySnap("2024-08-15", 118000),
+      makeEquitySnap("2024-09-01", 120000),
+      makeEquitySnap("2024-09-15", 122000),
+    ];
+    const result = checkReoptimizeNeed(req, postBtEquity, []);
+    expect(["none", "monitor"]).toContain(result.urgency);
+  });
+
+  it("handles empty post-backtest data gracefully", () => {
+    const req = makeReq();
+    const result = checkReoptimizeNeed(req, [], []);
+    expect(result.metrics.oosVerdict).toBeNull();
+    expect(result.recommendations.length).toBeGreaterThan(0);
+  });
+});
+
+describe("compareWithCustomBenchmark", () => {
+  it("returns benchmark comparison with alpha, beta, tracking error", () => {
+    const req = makeReq();
+    const benchmarkKlines = [
+      { date: "2024-01-01", close: 4000 },
+      { date: "2024-02-01", close: 4050 },
+      { date: "2024-03-01", close: 4100 },
+      { date: "2024-04-01", close: 4080 },
+      { date: "2024-05-01", close: 4150 },
+      { date: "2024-06-01", close: 4200 },
+      { date: "2024-06-30", close: 4250 },
+    ];
+
+    const result = compareWithCustomBenchmark(req, "000300", benchmarkKlines);
+
+    expect(result.strategyId).toBe("ma_cross");
+    expect(result.benchmarkSymbol).toBe("000300");
+    expect(typeof result.benchmarkReturn).toBe("number");
+    expect(typeof result.liveAlpha).toBe("number");
+    expect(typeof result.backtestAlpha).toBe("number");
+    expect(typeof result.alphaDecay).toBe("number");
+    expect(typeof result.informationRatio).toBe("number");
+    expect(typeof result.trackingError).toBe("number");
+    expect(typeof result.beta).toBe("number");
+    expect(["outperforming", "alpha_decay", "market_decline", "strategy_underperform"]).toContain(result.attribution);
+    expect(result.curves.dates.length).toBeGreaterThan(0);
+    expect(result.observations.length).toBeGreaterThan(0);
+  });
+
+  it("computes correct benchmark return", () => {
+    const req = makeReq();
+    const benchmarkKlines = [
+      { date: "2024-01-01", close: 1000 },
+      { date: "2024-06-30", close: 1100 },
+    ];
+
+    const result = compareWithCustomBenchmark(req, "000001", benchmarkKlines);
+    // 1000 -> 1100 = 10%
+    expect(result.benchmarkReturn).toBeCloseTo(10, 0);
+  });
+
+  it("detects alpha decay when backtest outperformed but live does not", () => {
+    const bt = makeBacktest({ totalReturn: 30 }); // Backtest: 30% return
+    // Live: ~12%, Benchmark: ~15%
+    // Backtest alpha: 30 - 15 = 15%
+    // Live alpha: 12 - 15 = -3%
+    // Alpha decay: 15 - (-3) = 18%
+    const req = makeReq({ backtestResult: bt });
+    const benchmarkKlines = [
+      { date: "2024-01-01", close: 4000 },
+      { date: "2024-02-01", close: 4100 },
+      { date: "2024-03-01", close: 4200 },
+      { date: "2024-04-01", close: 4300 },
+      { date: "2024-05-01", close: 4400 },
+      { date: "2024-06-01", close: 4500 },
+      { date: "2024-06-30", close: 4600 },
+    ];
+
+    const result = compareWithCustomBenchmark(req, "000300", benchmarkKlines);
+    expect(result.alphaDecay).toBeGreaterThan(5);
+    expect(result.attribution).toBe("alpha_decay");
+  });
+
+  it("handles empty benchmark data gracefully", () => {
+    const req = makeReq();
+    const result = compareWithCustomBenchmark(req, "000300", []);
+    expect(result.benchmarkReturn).toBe(0);
+    expect(result.beta).toBe(0);
+    expect(result.trackingError).toBe(0);
+  });
+
+  it("handles non-overlapping dates", () => {
+    const req = makeReq();
+    const benchmarkKlines = [
+      { date: "2025-01-01", close: 4000 },
+      { date: "2025-06-30", close: 4200 },
+    ];
+    const result = compareWithCustomBenchmark(req, "000300", benchmarkKlines);
+    // No overlap, so metrics should be zero/default
+    expect(result.beta).toBe(0);
+    expect(result.informationRatio).toBe(0);
   });
 });

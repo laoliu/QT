@@ -666,6 +666,7 @@ const quantTradingPlugin = {
           returnDeviationThreshold: config.decayAlert.returnDeviationThreshold ?? 0.20,
           perStrategyOverrides: config.decayAlert.perStrategyOverrides,
         } : undefined,
+        createDataProvider(config),
       ),
     };
 

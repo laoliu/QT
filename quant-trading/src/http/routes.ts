@@ -120,6 +120,49 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     }),
   });
 
+  // ── Performance Report ────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/report/performance",
+    handler: securePublic(async (req, res) => {
+      const params = urlParams(req);
+      const { generatePerformanceReport } = await import("../services/performance-report.js");
+      const report = await generatePerformanceReport(config, {
+        from: params.get("from") ?? undefined,
+        to: params.get("to") ?? undefined,
+        mode: (params.get("mode") as "paper" | "live") ?? undefined,
+        topN: params.get("top_n") ? Number(params.get("top_n")) : undefined,
+      });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(report.html);
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/report/performance",
+    handler: secure(async (req, res) => {
+      const params = urlParams(req);
+      const format = params.get("format") ?? "json";
+      const { generatePerformanceReport } = await import("../services/performance-report.js");
+      const report = await generatePerformanceReport(config, {
+        from: params.get("from") ?? undefined,
+        to: params.get("to") ?? undefined,
+        mode: (params.get("mode") as "paper" | "live") ?? undefined,
+        topN: params.get("top_n") ? Number(params.get("top_n")) : undefined,
+      });
+      if (format === "text") {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end(report.text);
+      } else if (format === "html") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(report.html);
+      } else {
+        json(res, { summary: report.summary, charts: report.charts, text: report.text });
+      }
+    }),
+  });
+
   // ── SSE Event Stream ──────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

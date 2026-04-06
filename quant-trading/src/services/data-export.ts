@@ -24,7 +24,10 @@ export type ExportTarget =
   | { type: "watchlist"; category?: string }
   | { type: "alerts"; severity?: string; source?: string; dateFrom?: string; dateTo?: string; limit?: number }
   | { type: "hitrate"; strategyId?: string; limit?: number }
-  | { type: "performance"; accountId?: string; dateFrom?: string; dateTo?: string };
+  | { type: "performance"; accountId?: string; dateFrom?: string; dateTo?: string }
+  | { type: "fund_flow"; flowType?: string; symbol?: string; limit?: number }
+  | { type: "sector"; sectorAction?: string; sector?: string; limit?: number }
+  | { type: "institutional"; instType?: string; symbol?: string; dateFrom?: string; dateTo?: string; limit?: number };
 
 export type ExportFormat = "csv" | "json";
 
@@ -63,6 +66,9 @@ export interface DataSource {
   getAlerts(opts?: { severity?: string; source?: string; dateFrom?: string; dateTo?: string; limit?: number }): Promise<ExportableRow[]>;
   getHitRateRecords(opts?: { strategyId?: string; limit?: number }): Promise<ExportableRow[]>;
   getPerformanceSummary(accountId?: string, dateFrom?: string, dateTo?: string): Promise<ExportableRow[]>;
+  getFundFlow(flowType?: string, symbol?: string, limit?: number): Promise<ExportableRow[]>;
+  getSectorAnalysis(sectorAction?: string, sector?: string, limit?: number): Promise<ExportableRow[]>;
+  getInstitutionalFlow(instType?: string, symbol?: string, dateFrom?: string, dateTo?: string, limit?: number): Promise<ExportableRow[]>;
 }
 
 // ── CSV helpers ─────────────────────────────────────────────
@@ -101,6 +107,9 @@ export const WATCHLIST_COLUMNS = ["code", "name", "category", "priority", "price
 export const ALERT_COLUMNS = ["id", "timestamp", "severity", "source", "message", "acknowledged"];
 export const HITRATE_COLUMNS = ["signalTimestamp", "symbol", "direction", "signalPrice", "strategyId", "reason", "confidence", "T+1_result", "T+1_price", "T+3_result", "T+3_price", "T+5_result", "T+5_price", "T+10_result", "T+10_price"];
 export const PERFORMANCE_COLUMNS = ["metric", "value"];
+export const FUND_FLOW_COLUMNS = ["symbol", "name", "changePct", "mainNetInflow", "superLargeInflow", "largeInflow", "mediumInflow", "smallInflow", "date"];
+export const SECTOR_COLUMNS = ["rank", "sector", "changePct", "turnover", "amount", "leadingStock", "leadingChangePct", "stockCount", "upCount", "downCount"];
+export const INSTITUTIONAL_COLUMNS = ["symbol", "name", "instType", "holdShares", "holdRatio", "changeShares", "changeRatio", "reportDate"];
 
 // ── Service ─────────────────────────────────────────────────
 
@@ -181,6 +190,21 @@ export class DataExportService {
         rows = await this.dataSource.getPerformanceSummary(target.accountId, target.dateFrom, target.dateTo);
         columns = PERFORMANCE_COLUMNS;
         prefix = "performance";
+        break;
+      case "fund_flow":
+        rows = await this.dataSource.getFundFlow(target.flowType, target.symbol, target.limit);
+        columns = FUND_FLOW_COLUMNS;
+        prefix = "fund_flow";
+        break;
+      case "sector":
+        rows = await this.dataSource.getSectorAnalysis(target.sectorAction, target.sector, target.limit);
+        columns = SECTOR_COLUMNS;
+        prefix = "sector";
+        break;
+      case "institutional":
+        rows = await this.dataSource.getInstitutionalFlow(target.instType, target.symbol, target.dateFrom, target.dateTo, target.limit);
+        columns = INSTITUTIONAL_COLUMNS;
+        prefix = "institutional";
         break;
     }
 

@@ -37,6 +37,9 @@ import {
   ALERT_COLUMNS,
   HITRATE_COLUMNS,
   PERFORMANCE_COLUMNS,
+  FUND_FLOW_COLUMNS,
+  SECTOR_COLUMNS,
+  INSTITUTIONAL_COLUMNS,
   type DataSource,
   type ExportableRow,
 } from "./data-export.js";
@@ -109,6 +112,18 @@ function mockDataSource(overrides?: Partial<DataSource>): DataSource {
       { metric: "最大单笔亏损", value: "-3000.00" },
       { metric: "累计收益率", value: "25.00%" },
       { metric: "最大回撤", value: "8.50%" },
+    ],
+    getFundFlow: async () => [
+      { symbol: "600519", name: "贵州茅台", changePct: 2.5, mainNetInflow: 150000000, superLargeInflow: 80000000, largeInflow: 70000000, mediumInflow: -20000000, smallInflow: -30000000, date: "2026-03-15" },
+      { symbol: "000858", name: "五粮液", changePct: 1.8, mainNetInflow: 80000000, superLargeInflow: 50000000, largeInflow: 30000000, mediumInflow: -10000000, smallInflow: -15000000, date: "2026-03-15" },
+    ],
+    getSectorAnalysis: async () => [
+      { rank: 1, sector: "半导体", changePct: 3.5, turnover: 8.2, amount: 5200000000, leadingStock: "中芯国际", leadingChangePct: 7.8, stockCount: 120, upCount: 95, downCount: 25 },
+      { rank: 2, sector: "白酒", changePct: 2.1, turnover: 3.5, amount: 3800000000, leadingStock: "贵州茅台", leadingChangePct: 2.5, stockCount: 35, upCount: 30, downCount: 5 },
+    ],
+    getInstitutionalFlow: async () => [
+      { symbol: "600519", name: "贵州茅台", instType: "fund", holdShares: 85000000, holdRatio: 6.77, changeShares: 2000000, changeRatio: 2.41, reportDate: "2025-12-31" },
+      { symbol: "000858", name: "五粮液", instType: "fund", holdShares: 120000000, holdRatio: 3.09, changeShares: -5000000, changeRatio: -4.00, reportDate: "2025-12-31" },
     ],
     ...overrides,
   };
@@ -537,5 +552,113 @@ describe("DataExportService", () => {
     expect(results[0].filename).toMatch(/^alerts-/);
     expect(results[1].filename).toMatch(/^hitrate-/);
     expect(results[2].filename).toMatch(/^performance-/);
+  });
+
+  it("exports fund flow data to CSV (FR-7.14)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "fund_flow" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^fund_flow-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of FUND_FLOW_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("贵州茅台");
+    expect(content).toContain("600519");
+    expect(content).toContain("150000000");
+  });
+
+  it("exports fund flow to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "fund_flow" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].symbol).toBe("600519");
+  });
+
+  it("exports sector analysis data to CSV (FR-7.15)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "sector" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^sector-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of SECTOR_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("半导体");
+    expect(content).toContain("白酒");
+    expect(content).toContain("中芯国际");
+  });
+
+  it("exports sector analysis to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "sector" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].sector).toBe("半导体");
+  });
+
+  it("exports institutional flow data to CSV (FR-7.16)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "institutional" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^institutional-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of INSTITUTIONAL_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("贵州茅台");
+    expect(content).toContain("600519");
+    expect(content).toContain("fund");
+    expect(content).toContain("2025-12-31");
+  });
+
+  it("exports institutional flow to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "institutional" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].instType).toBe("fund");
+  });
+
+  it("batch exports include market data types (fund_flow, sector, institutional)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const results = await svc.exportBatch([
+      { type: "fund_flow" },
+      { type: "sector" },
+      { type: "institutional" },
+    ]);
+
+    expect(results).toHaveLength(3);
+    expect(results[0].filename).toMatch(/^fund_flow-/);
+    expect(results[1].filename).toMatch(/^sector-/);
+    expect(results[2].filename).toMatch(/^institutional-/);
+    expect(results[0].rowCount).toBe(2);
+    expect(results[1].rowCount).toBe(2);
+    expect(results[2].rowCount).toBe(2);
   });
 });

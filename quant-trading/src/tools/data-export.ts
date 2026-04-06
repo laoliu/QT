@@ -18,6 +18,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { runPythonScript } from "../bridge/python-bridge.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
@@ -110,6 +111,9 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
       "• action=alerts — 导出告警/预警历史记录\n" +
       "• action=hitrate — 导出信号命中率追踪记录\n" +
       "• action=performance — 导出绩效报告（核心指标汇总）\n" +
+      "• action=fund_flow — 导出资金流向数据（个股/板块/北向资金）\n" +
+      "• action=sector — 导出板块分析数据（排名/成分股）\n" +
+      "• action=institutional — 导出机构持仓数据（基金/QFII/社保等）\n" +
       "• action=batch — 批量导出多种数据（盘后复盘一键导出）\n" +
       "• action=list — 列出已导出的文件\n" +
       "• action=delete — 删除指定的导出文件\n" +
@@ -133,6 +137,9 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
             "alerts",
             "hitrate",
             "performance",
+            "fund_flow",
+            "sector",
+            "institutional",
             "batch",
             "list",
             "delete",
@@ -199,6 +206,25 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
         alertSource: {
           type: "string",
           description: "告警来源过滤（action=alerts 时使用，如 pnl_monitor/risk_gate/price_alert/signal）",
+        },
+        flowType: {
+          type: "string",
+          enum: ["rank", "stock", "sector", "northbound"],
+          description: "资金流向类型（action=fund_flow 时使用）: rank=个股排名, stock=个股历史, sector=行业, northbound=北向资金",
+        },
+        sectorName: {
+          type: "string",
+          description: "板块名称（action=sector 时使用，如 '半导体', '白酒', '新能源'）",
+        },
+        sectorAction: {
+          type: "string",
+          enum: ["ranking", "detail"],
+          description: "板块分析类型（action=sector 时使用）: ranking=板块排名, detail=成分股详情",
+        },
+        instType: {
+          type: "string",
+          enum: ["fund", "qfii", "insurance", "social_security", "trust", "broker"],
+          description: "机构类型（action=institutional 时使用）: fund=基金, qfii=QFII, insurance=保险, social_security=社保, trust=信托, broker=券商",
         },
       },
       required: ["action"],
@@ -356,6 +382,27 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           dataset = "performance";
           break;
         }
+        case "fund_flow": {
+          const result = await exportFundFlow(config, args.flowType as string | undefined, symbol, limit);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "fund_flow";
+          break;
+        }
+        case "sector": {
+          const result = await exportSector(config, args.sectorAction as string | undefined, args.sectorName as string | undefined, limit);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "sector";
+          break;
+        }
+        case "institutional": {
+          const result = await exportInstitutional(config, args.instType as string | undefined, symbol, limit);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "institutional";
+          break;
+        }
         default:
           return { status: "error", message: `未知的 action: ${action}` };
       }
@@ -402,6 +449,9 @@ function datasetLabel(action: string): string {
     alerts: "告警",
     hitrate: "信号命中率",
     performance: "绩效报告",
+    fund_flow: "资金流向",
+    sector: "板块分析",
+    institutional: "机构持仓",
   };
   return labels[action] ?? action;
 }
@@ -883,7 +933,7 @@ async function batchExport(
   const limit = (args.limit as number) ?? 10000;
 
   const batchTypes = (args.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance"];
+  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional"];
 
   const invalidTypes = batchTypes.filter((t) => !validBatchTypes.includes(t));
   if (invalidTypes.length > 0) {
@@ -979,6 +1029,24 @@ async function batchExport(
         headers = result.headers;
         break;
       }
+      case "fund_flow": {
+        const result = await exportFundFlow(config, args.flowType as string | undefined, symbol, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "sector": {
+        const result = await exportSector(config, args.sectorAction as string | undefined, args.sectorName as string | undefined, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "institutional": {
+        const result = await exportInstitutional(config, args.instType as string | undefined, symbol, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
       default:
         continue;
     }
@@ -1006,4 +1074,172 @@ async function batchExport(
     totalRows,
     message: `批量导出完成: ${results.length} 个文件, 共 ${totalRows} 条记录`,
   };
+}
+
+// ── Fund flow export helper ─────────────────────────────────────
+
+async function exportFundFlow(
+  config: QuantTradingConfig,
+  flowType?: string,
+  symbol?: string,
+  limit = 50,
+): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  const action = flowType ?? "rank";
+
+  const pyResult = await runPythonScript<{
+    stocks?: Array<Record<string, unknown>>;
+    sectors?: Array<Record<string, unknown>>;
+    flows?: Array<Record<string, unknown>>;
+    error?: string;
+  }>("engines/fund_flow.py", { action, symbol, limit }, config);
+
+  if (!pyResult.ok || !pyResult.data || pyResult.data.error) {
+    return {
+      headers: ["message"],
+      rows: [{ message: pyResult.data?.error ?? pyResult.error ?? "资金流向数据获取失败" }],
+    };
+  }
+
+  const data = pyResult.data;
+
+  if (action === "sector" && data.sectors) {
+    const headers = ["sector", "changePct", "mainNetInflow", "superLargeInflow", "largeInflow", "mediumInflow", "smallInflow"];
+    const rows = data.sectors.slice(0, limit).map((s) => ({
+      sector: s.name ?? s.sector ?? "",
+      changePct: s.changePct ?? s.change_pct ?? "",
+      mainNetInflow: s.mainNetInflow ?? s.main_net_inflow ?? "",
+      superLargeInflow: s.superLargeInflow ?? s.super_large_inflow ?? "",
+      largeInflow: s.largeInflow ?? s.large_inflow ?? "",
+      mediumInflow: s.mediumInflow ?? s.medium_inflow ?? "",
+      smallInflow: s.smallInflow ?? s.small_inflow ?? "",
+    }));
+    return { headers, rows };
+  }
+
+  if (action === "northbound" && data.flows) {
+    const headers = ["date", "shConnect", "szConnect", "total", "cumulative"];
+    const rows = data.flows.slice(0, limit).map((f) => ({
+      date: f.date ?? "",
+      shConnect: f.shConnect ?? f.sh_connect ?? "",
+      szConnect: f.szConnect ?? f.sz_connect ?? "",
+      total: f.total ?? "",
+      cumulative: f.cumulative ?? "",
+    }));
+    return { headers, rows };
+  }
+
+  // Default: stock flow ranking or individual stock flow
+  const items = data.stocks ?? data.flows ?? [];
+  const headers = ["symbol", "name", "changePct", "mainNetInflow", "superLargeInflow", "largeInflow", "mediumInflow", "smallInflow", "date"];
+  const rows = items.slice(0, limit).map((s) => ({
+    symbol: s.symbol ?? s.code ?? "",
+    name: s.name ?? "",
+    changePct: s.changePct ?? s.change_pct ?? "",
+    mainNetInflow: s.mainNetInflow ?? s.main_net_inflow ?? "",
+    superLargeInflow: s.superLargeInflow ?? s.super_large_inflow ?? "",
+    largeInflow: s.largeInflow ?? s.large_inflow ?? "",
+    mediumInflow: s.mediumInflow ?? s.medium_inflow ?? "",
+    smallInflow: s.smallInflow ?? s.small_inflow ?? "",
+    date: s.date ?? "",
+  }));
+  return { headers, rows };
+}
+
+// ── Sector analysis export helper ───────────────────────────────
+
+async function exportSector(
+  config: QuantTradingConfig,
+  sectorAction?: string,
+  sector?: string,
+  limit = 50,
+): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  const action = sectorAction ?? "ranking";
+
+  const pyResult = await runPythonScript<{
+    sectors?: Array<Record<string, unknown>>;
+    stocks?: Array<Record<string, unknown>>;
+    error?: string;
+  }>("engines/sector_analysis.py", { action, sector, limit }, config);
+
+  if (!pyResult.ok || !pyResult.data || pyResult.data.error) {
+    return {
+      headers: ["message"],
+      rows: [{ message: pyResult.data?.error ?? pyResult.error ?? "板块分析数据获取失败" }],
+    };
+  }
+
+  const data = pyResult.data;
+
+  if (action === "detail" && data.stocks) {
+    const headers = ["rank", "code", "name", "changePct", "price", "turnover", "amount", "pe", "sector"];
+    const rows = data.stocks.slice(0, limit).map((s, i) => ({
+      rank: s.rank ?? i + 1,
+      code: s.code ?? s.symbol ?? "",
+      name: s.name ?? "",
+      changePct: s.changePct ?? s.change_pct ?? "",
+      price: s.price ?? s.close ?? "",
+      turnover: s.turnover ?? "",
+      amount: s.amount ?? "",
+      pe: s.pe ?? "",
+      sector: sector ?? "",
+    }));
+    return { headers, rows };
+  }
+
+  // Default: sector ranking
+  const headers = ["rank", "sector", "changePct", "turnover", "amount", "leadingStock", "leadingChangePct", "stockCount", "upCount", "downCount"];
+  const sectors = data.sectors ?? [];
+  const rows = sectors.slice(0, limit).map((s, i) => ({
+    rank: s.rank ?? i + 1,
+    sector: s.name ?? s.sector ?? "",
+    changePct: s.changePct ?? s.change_pct ?? "",
+    turnover: s.turnover ?? "",
+    amount: s.amount ?? "",
+    leadingStock: s.leadingStock ?? s.leading_stock ?? "",
+    leadingChangePct: s.leadingChangePct ?? s.leading_change_pct ?? "",
+    stockCount: s.stockCount ?? s.stock_count ?? "",
+    upCount: s.upCount ?? s.up_count ?? "",
+    downCount: s.downCount ?? s.down_count ?? "",
+  }));
+  return { headers, rows };
+}
+
+// ── Institutional flow export helper ────────────────────────────
+
+async function exportInstitutional(
+  config: QuantTradingConfig,
+  instType?: string,
+  symbol?: string,
+  limit = 50,
+): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  const action = symbol ? "stock" : "ranking";
+
+  const pyResult = await runPythonScript<{
+    holdings?: Array<Record<string, unknown>>;
+    trades?: Array<Record<string, unknown>>;
+    error?: string;
+  }>("engines/institutional_flow.py", { action, instType: instType ?? "fund", symbol, limit }, config);
+
+  if (!pyResult.ok || !pyResult.data || pyResult.data.error) {
+    return {
+      headers: ["message"],
+      rows: [{ message: pyResult.data?.error ?? pyResult.error ?? "机构持仓数据获取失败" }],
+    };
+  }
+
+  const data = pyResult.data;
+  const items = data.holdings ?? data.trades ?? [];
+
+  const headers = ["symbol", "name", "instType", "holdShares", "holdRatio", "changeShares", "changeRatio", "reportDate"];
+  const rows = items.slice(0, limit).map((h) => ({
+    symbol: h.symbol ?? h.code ?? "",
+    name: h.name ?? "",
+    instType: h.instType ?? h.inst_type ?? instType ?? "",
+    holdShares: h.holdShares ?? h.hold_shares ?? "",
+    holdRatio: h.holdRatio ?? h.hold_ratio ?? "",
+    changeShares: h.changeShares ?? h.change_shares ?? "",
+    changeRatio: h.changeRatio ?? h.change_ratio ?? "",
+    reportDate: h.reportDate ?? h.report_date ?? "",
+  }));
+  return { headers, rows };
 }

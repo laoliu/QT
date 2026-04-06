@@ -1706,7 +1706,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "batch"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional", "batch"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
         return;
@@ -1715,7 +1715,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
       // Batch export: export multiple dataset types in one request
       if (action === "batch") {
         const batchTypes = (body.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance"];
+        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "fund_flow", "sector", "institutional"];
         const invalidTypes = batchTypes.filter((t: string) => !validBatchTypes.includes(t));
         if (invalidTypes.length > 0) {
           json(res, { status: "error", message: `不支持的批量导出类型: ${invalidTypes.join(", ")}` }, 400);
@@ -1855,6 +1855,13 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
                         { metric: "胜率", value: `${(pWinRate * 100).toFixed(1)}%` },
                         { metric: "总净盈亏", value: pNetPnl.toFixed(2) },
                       ];
+                      break;
+                    }
+                    case "fund_flow":
+                    case "sector":
+                    case "institutional": {
+                      bHeaders = ["message"];
+                      bRows = [{ message: `${batchAction} 批量导出请通过AI工具 data_export 使用` }];
                       break;
                     }
                   }
@@ -2183,6 +2190,16 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
               { metric: "最大回撤", value: `${(maxDrawdown * 100).toFixed(2)}%` },
             ];
             dataset = "performance";
+            break;
+          }
+          case "fund_flow":
+          case "sector":
+          case "institutional": {
+            // These export types require Python bridge calls — delegate to the AI tool.
+            // For the HTTP API, we return a placeholder indicating the user should use the AI tool.
+            headers = ["message"];
+            rows = [{ message: `${action} 导出需要实时数据获取，请通过AI助手使用 data_export action=${action} 命令导出` }];
+            dataset = action;
             break;
           }
         }

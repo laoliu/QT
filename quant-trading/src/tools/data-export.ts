@@ -19,10 +19,12 @@ import os from "node:os";
 import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
+import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { EquityHistory } from "../services/equity-history.js";
 import type { FavoritesStore } from "../services/favorites-store.js";
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
+import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { TradeJournal } from "../services/trade-journal.js";
 import type { Portfolio, QuantTradingConfig } from "../types.js";
@@ -83,11 +85,13 @@ export interface DataExportDeps {
   backtestStore?: BacktestStore;
   scanHistoryStore?: ScanHistoryStore;
   favoritesStore?: FavoritesStore;
+  alertStore?: AlertStore;
+  signalHitRateTracker?: SignalHitRateTracker;
   getEngine?: () => LiveEngine | null;
 }
 
 export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDeps) {
-  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, getEngine } = deps;
+  const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine } = deps;
 
   return {
     name: "data_export",
@@ -103,6 +107,9 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
       "• action=screen — 导出选股/筛选结果\n" +
       "• action=klines — 导出指定标的的K线缓存数据\n" +
       "• action=watchlist — 导出自选股/收藏列表\n" +
+      "• action=alerts — 导出告警/预警历史记录\n" +
+      "• action=hitrate — 导出信号命中率追踪记录\n" +
+      "• action=performance — 导出绩效报告（核心指标汇总）\n" +
       "• action=batch — 批量导出多种数据（盘后复盘一键导出）\n" +
       "• action=list — 列出已导出的文件\n" +
       "• action=delete — 删除指定的导出文件\n" +
@@ -123,6 +130,9 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
             "screen",
             "klines",
             "watchlist",
+            "alerts",
+            "hitrate",
+            "performance",
             "batch",
             "list",
             "delete",
@@ -180,6 +190,15 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
         filename: {
           type: "string",
           description: "要删除的导出文件名（action=delete 时使用）",
+        },
+        alertSeverity: {
+          type: "string",
+          enum: ["info", "warning", "critical"],
+          description: "告警级别过滤（action=alerts 时使用）",
+        },
+        alertSource: {
+          type: "string",
+          description: "告警来源过滤（action=alerts 时使用，如 pnl_monitor/risk_gate/price_alert/signal）",
         },
       },
       required: ["action"],
@@ -316,6 +335,27 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           dataset = "watchlist";
           break;
         }
+        case "alerts": {
+          const result = exportAlerts(alertStore, args.alertSeverity as string | undefined, args.alertSource as string | undefined, startDate, endDate, limit);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "alerts";
+          break;
+        }
+        case "hitrate": {
+          const result = exportHitRate(signalHitRateTracker, symbol, limit);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "hitrate";
+          break;
+        }
+        case "performance": {
+          const result = await exportPerformance(quantStorage, startDate, endDate);
+          headers = result.headers;
+          data = result.rows;
+          dataset = "performance";
+          break;
+        }
         default:
           return { status: "error", message: `未知的 action: ${action}` };
       }
@@ -359,6 +399,9 @@ function datasetLabel(action: string): string {
     screen: "选股",
     klines: "K线",
     watchlist: "自选股",
+    alerts: "告警",
+    hitrate: "信号命中率",
+    performance: "绩效报告",
   };
   return labels[action] ?? action;
 }
@@ -681,12 +724,158 @@ async function cleanExports(config: QuantTradingConfig) {
   }
 }
 
+function exportAlerts(
+  alertStore?: AlertStore,
+  severity?: string,
+  source?: string,
+  startDate?: string,
+  endDate?: string,
+  limit = 10000,
+): { headers: string[]; rows: Record<string, unknown>[] } {
+  if (!alertStore) {
+    return { headers: ["message"], rows: [{ message: "告警存储不可用" }] };
+  }
+
+  const headers = ["id", "timestamp", "severity", "source", "message", "acknowledged"];
+
+  const query: Record<string, unknown> = { limit };
+  if (severity) query.severity = severity;
+  if (source) query.source = source;
+  if (startDate) query.after = startDate;
+  if (endDate) query.before = endDate;
+
+  const alerts = alertStore.query(query as Parameters<AlertStore["query"]>[0]);
+  const rows = alerts.map((a) => ({
+    id: a.id,
+    timestamp: a.timestamp,
+    severity: a.severity,
+    source: a.source,
+    message: a.message,
+    acknowledged: a.acknowledged ? "是" : "否",
+  }));
+
+  return { headers, rows };
+}
+
+function exportHitRate(
+  signalHitRateTracker?: SignalHitRateTracker,
+  strategyFilter?: string,
+  limit = 10000,
+): { headers: string[]; rows: Record<string, unknown>[] } {
+  if (!signalHitRateTracker) {
+    return { headers: ["message"], rows: [{ message: "信号命中率追踪器不可用" }] };
+  }
+
+  const headers = [
+    "signalTimestamp", "symbol", "direction", "signalPrice", "strategyId",
+    "reason", "confidence",
+    "T+1_result", "T+1_price",
+    "T+3_result", "T+3_price",
+    "T+5_result", "T+5_price",
+    "T+10_result", "T+10_price",
+  ];
+
+  let records = signalHitRateTracker.getRecent(limit);
+  if (strategyFilter) {
+    records = records.filter((r) => r.strategyId === strategyFilter);
+  }
+
+  const rows = records.map((r) => ({
+    signalTimestamp: new Date(r.signalTimestamp).toISOString(),
+    symbol: r.symbol,
+    direction: r.direction,
+    signalPrice: r.signalPrice,
+    strategyId: r.strategyId,
+    reason: r.reason ?? "",
+    confidence: r.confidence ?? "",
+    "T+1_result": r.checkpoints["T+1"]?.result ?? "",
+    "T+1_price": r.checkpoints["T+1"]?.price ?? "",
+    "T+3_result": r.checkpoints["T+3"]?.result ?? "",
+    "T+3_price": r.checkpoints["T+3"]?.price ?? "",
+    "T+5_result": r.checkpoints["T+5"]?.result ?? "",
+    "T+5_price": r.checkpoints["T+5"]?.price ?? "",
+    "T+10_result": r.checkpoints["T+10"]?.result ?? "",
+    "T+10_price": r.checkpoints["T+10"]?.price ?? "",
+  }));
+
+  return { headers, rows };
+}
+
+async function exportPerformance(
+  quantStorage: QuantStorage,
+  startDate?: string,
+  endDate?: string,
+): Promise<{ headers: string[]; rows: Record<string, unknown>[] }> {
+  const headers = ["metric", "value"];
+
+  const dateFrom = startDate ?? "2000-01-01";
+  const dateTo = endDate ?? new Date().toISOString().slice(0, 10);
+
+  const trades = await quantStorage.getTrades({ limit: 100000 });
+  const closedTrades = trades.filter((t) => {
+    const exit = t.exitTime;
+    if (!exit) return false;
+    return exit >= dateFrom && exit <= dateTo;
+  });
+
+  const equitySnaps = await quantStorage.getEquitySnapshots({ start: dateFrom, end: dateTo, limit: 100000 });
+
+  const totalTrades = closedTrades.length;
+  const wins = closedTrades.filter((t) => t.netPnl > 0);
+  const losses = closedTrades.filter((t) => t.netPnl <= 0);
+  const totalNetPnl = closedTrades.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
+  const totalGrossWin = wins.reduce((sum, t) => sum + (t.netPnl ?? 0), 0);
+  const totalGrossLoss = Math.abs(losses.reduce((sum, t) => sum + (t.netPnl ?? 0), 0));
+  const totalCommission = closedTrades.reduce((sum, t) => sum + (t.commission ?? 0), 0);
+  const winRate = totalTrades > 0 ? wins.length / totalTrades : 0;
+  const profitFactor = totalGrossLoss > 0 ? totalGrossWin / totalGrossLoss : totalGrossWin > 0 ? Infinity : 0;
+
+  // Calculate max single profit/loss
+  const pnls = closedTrades.map((t) => t.netPnl ?? 0);
+  const maxSingleProfit = pnls.length > 0 ? Math.max(...pnls) : 0;
+  const maxSingleLoss = pnls.length > 0 ? Math.min(...pnls) : 0;
+
+  // Equity-based metrics
+  let totalReturn = 0;
+  let maxDrawdown = 0;
+  if (equitySnaps.length > 1) {
+    const firstEquity = equitySnaps[0].equity;
+    const lastEquity = equitySnaps[equitySnaps.length - 1].equity;
+    if (firstEquity > 0) totalReturn = (lastEquity - firstEquity) / firstEquity;
+
+    let peak = firstEquity;
+    for (const snap of equitySnaps) {
+      const eq = snap.equity;
+      if (eq > peak) peak = eq;
+      const dd = peak > 0 ? (peak - eq) / peak : 0;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+    }
+  }
+
+  const rows: Record<string, unknown>[] = [
+    { metric: "统计区间", value: `${dateFrom} ~ ${dateTo}` },
+    { metric: "总交易笔数", value: totalTrades },
+    { metric: "盈利笔数", value: wins.length },
+    { metric: "亏损笔数", value: losses.length },
+    { metric: "胜率", value: `${(winRate * 100).toFixed(1)}%` },
+    { metric: "盈亏比 (Profit Factor)", value: profitFactor === Infinity ? "∞" : profitFactor.toFixed(2) },
+    { metric: "总净盈亏", value: totalNetPnl.toFixed(2) },
+    { metric: "总佣金", value: totalCommission.toFixed(2) },
+    { metric: "最大单笔盈利", value: maxSingleProfit.toFixed(2) },
+    { metric: "最大单笔亏损", value: maxSingleLoss.toFixed(2) },
+    { metric: "累计收益率", value: `${(totalReturn * 100).toFixed(2)}%` },
+    { metric: "最大回撤", value: `${(maxDrawdown * 100).toFixed(2)}%` },
+  ];
+
+  return { headers, rows };
+}
+
 async function batchExport(
   config: QuantTradingConfig,
   args: Record<string, unknown>,
   deps: DataExportDeps,
 ) {
-  const { quantStorage, journal, backtestStore, scanHistoryStore, favoritesStore, getEngine } = deps;
+  const { quantStorage, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine } = deps;
   const format = (args.format as string) ?? "csv";
   const symbol = args.symbol as string | undefined;
   const startDate = args.startDate as string | undefined;
@@ -694,7 +883,7 @@ async function batchExport(
   const limit = (args.limit as number) ?? 10000;
 
   const batchTypes = (args.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
+  const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance"];
 
   const invalidTypes = batchTypes.filter((t) => !validBatchTypes.includes(t));
   if (invalidTypes.length > 0) {
@@ -768,6 +957,24 @@ async function batchExport(
       }
       case "watchlist": {
         const result = exportWatchlist(favoritesStore, args.category as string | undefined);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "alerts": {
+        const result = exportAlerts(alertStore, args.alertSeverity as string | undefined, args.alertSource as string | undefined, startDate, endDate, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "hitrate": {
+        const result = exportHitRate(signalHitRateTracker, symbol, limit);
+        data = result.rows;
+        headers = result.headers;
+        break;
+      }
+      case "performance": {
+        const result = await exportPerformance(quantStorage, startDate, endDate);
         data = result.rows;
         headers = result.headers;
         break;

@@ -21,7 +21,10 @@ export type ExportTarget =
   | { type: "backtest"; backtestId: string }
   | { type: "screen"; screenId: string }
   | { type: "equity"; accountId?: string; dateFrom?: string; dateTo?: string }
-  | { type: "watchlist"; category?: string };
+  | { type: "watchlist"; category?: string }
+  | { type: "alerts"; severity?: string; source?: string; dateFrom?: string; dateTo?: string; limit?: number }
+  | { type: "hitrate"; strategyId?: string; limit?: number }
+  | { type: "performance"; accountId?: string; dateFrom?: string; dateTo?: string };
 
 export type ExportFormat = "csv" | "json";
 
@@ -57,6 +60,9 @@ export interface DataSource {
   getScreenResult(screenId: string): Promise<ExportableRow[]>;
   getEquityHistory(accountId?: string, dateFrom?: string, dateTo?: string): Promise<ExportableRow[]>;
   getWatchlist(category?: string): Promise<ExportableRow[]>;
+  getAlerts(opts?: { severity?: string; source?: string; dateFrom?: string; dateTo?: string; limit?: number }): Promise<ExportableRow[]>;
+  getHitRateRecords(opts?: { strategyId?: string; limit?: number }): Promise<ExportableRow[]>;
+  getPerformanceSummary(accountId?: string, dateFrom?: string, dateTo?: string): Promise<ExportableRow[]>;
 }
 
 // ── CSV helpers ─────────────────────────────────────────────
@@ -92,6 +98,9 @@ export const JOURNAL_COLUMNS = ["id", "date", "symbol", "direction", "entryPrice
 export const KLINE_COLUMNS = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
 export const EQUITY_COLUMNS = ["date", "equity", "cash", "marketValue", "dailyPnl", "positionCount", "benchmark"];
 export const WATCHLIST_COLUMNS = ["code", "name", "category", "priority", "priceTarget", "convictionScore", "tags", "notes", "addedAt", "updatedAt"];
+export const ALERT_COLUMNS = ["id", "timestamp", "severity", "source", "message", "acknowledged"];
+export const HITRATE_COLUMNS = ["signalTimestamp", "symbol", "direction", "signalPrice", "strategyId", "reason", "confidence", "T+1_result", "T+1_price", "T+3_result", "T+3_price", "T+5_result", "T+5_price", "T+10_result", "T+10_price"];
+export const PERFORMANCE_COLUMNS = ["metric", "value"];
 
 // ── Service ─────────────────────────────────────────────────
 
@@ -157,6 +166,21 @@ export class DataExportService {
         rows = await this.dataSource.getWatchlist(target.category);
         columns = WATCHLIST_COLUMNS;
         prefix = "watchlist";
+        break;
+      case "alerts":
+        rows = await this.dataSource.getAlerts({ severity: target.severity, source: target.source, dateFrom: target.dateFrom, dateTo: target.dateTo, limit: target.limit });
+        columns = ALERT_COLUMNS;
+        prefix = "alerts";
+        break;
+      case "hitrate":
+        rows = await this.dataSource.getHitRateRecords({ strategyId: target.strategyId, limit: target.limit });
+        columns = HITRATE_COLUMNS;
+        prefix = "hitrate";
+        break;
+      case "performance":
+        rows = await this.dataSource.getPerformanceSummary(target.accountId, target.dateFrom, target.dateTo);
+        columns = PERFORMANCE_COLUMNS;
+        prefix = "performance";
         break;
     }
 

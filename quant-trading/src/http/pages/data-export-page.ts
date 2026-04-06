@@ -111,6 +111,9 @@ tr:hover td{background:var(--bg3)}
       <option value="screen">选股结果 (screen)</option>
       <option value="klines">K线数据 (klines)</option>
       <option value="watchlist">自选股 (watchlist)</option>
+      <option value="alerts">告警记录 (alerts)</option>
+      <option value="hitrate">信号命中率 (hitrate)</option>
+      <option value="performance">绩效报告 (performance)</option>
     </select>
   </div>
   <div class="form-row">
@@ -172,6 +175,9 @@ tr:hover td{background:var(--bg3)}
     <label><input type="checkbox" value="backtest"> 回测结果</label>
     <label><input type="checkbox" value="screen"> 选股结果</label>
     <label><input type="checkbox" value="watchlist"> 自选股</label>
+    <label><input type="checkbox" value="alerts"> 告警记录</label>
+    <label><input type="checkbox" value="hitrate"> 信号命中率</label>
+    <label><input type="checkbox" value="performance"> 绩效报告</label>
   </div>
   <div class="form-row">
     <label>导出格式</label>

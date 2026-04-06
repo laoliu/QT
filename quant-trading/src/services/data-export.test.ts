@@ -34,6 +34,9 @@ import {
   KLINE_COLUMNS,
   EQUITY_COLUMNS,
   WATCHLIST_COLUMNS,
+  ALERT_COLUMNS,
+  HITRATE_COLUMNS,
+  PERFORMANCE_COLUMNS,
   type DataSource,
   type ExportableRow,
 } from "./data-export.js";
@@ -85,6 +88,27 @@ function mockDataSource(overrides?: Partial<DataSource>): DataSource {
     getWatchlist: async () => [
       { code: "600519", name: "贵州茅台", category: "watchlist", priority: 5, priceTarget: 2000, convictionScore: 9, tags: "白酒;消费", notes: "龙头", addedAt: "2026-01-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" },
       { code: "000858", name: "五粮液", category: "watchlist", priority: 3, priceTarget: 160, convictionScore: 7, tags: "白酒", notes: "", addedAt: "2026-02-01T00:00:00Z", updatedAt: "2026-03-01T00:00:00Z" },
+    ],
+    getAlerts: async () => [
+      { id: "alert_abc1", timestamp: "2026-03-15T10:00:00Z", severity: "warning", source: "pnl_monitor", message: "日内亏损超过2%", acknowledged: "否" },
+      { id: "alert_abc2", timestamp: "2026-03-15T14:30:00Z", severity: "critical", source: "risk_gate", message: "持仓集中度超限", acknowledged: "是" },
+    ],
+    getHitRateRecords: async () => [
+      { signalTimestamp: "2026-03-01T09:31:00Z", symbol: "600519", direction: "buy", signalPrice: 1800, strategyId: "macd", reason: "MACD金叉", confidence: 0.85, "T+1_result": "hit", "T+1_price": 1820, "T+3_result": "hit", "T+3_price": 1850, "T+5_result": "miss", "T+5_price": 1790, "T+10_result": "pending", "T+10_price": "" },
+    ],
+    getPerformanceSummary: async () => [
+      { metric: "统计区间", value: "2026-01-01 ~ 2026-03-31" },
+      { metric: "总交易笔数", value: 15 },
+      { metric: "盈利笔数", value: 10 },
+      { metric: "亏损笔数", value: 5 },
+      { metric: "胜率", value: "66.7%" },
+      { metric: "盈亏比 (Profit Factor)", value: "2.50" },
+      { metric: "总净盈亏", value: "25000.00" },
+      { metric: "总佣金", value: "750.00" },
+      { metric: "最大单笔盈利", value: "8000.00" },
+      { metric: "最大单笔亏损", value: "-3000.00" },
+      { metric: "累计收益率", value: "25.00%" },
+      { metric: "最大回撤", value: "8.50%" },
     ],
     ...overrides,
   };
@@ -422,5 +446,96 @@ describe("DataExportService", () => {
       expect(r.format).toBe("json");
       expect(r.filename).toMatch(/\.json$/);
     }
+  });
+
+  it("exports alerts history to CSV", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "alerts" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(2);
+    expect(result.filename).toMatch(/^alerts-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of ALERT_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("pnl_monitor");
+    expect(content).toContain("risk_gate");
+    expect(content).toContain("日内亏损超过2%");
+  });
+
+  it("exports alerts to JSON format", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "alerts" }, "json");
+
+    expect(result.format).toBe("json");
+    expect(result.rowCount).toBe(2);
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].severity).toBe("warning");
+  });
+
+  it("exports signal hit-rate records to CSV", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "hitrate" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(1);
+    expect(result.filename).toMatch(/^hitrate-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    expect(header).toContain("signalTimestamp");
+    expect(header).toContain("T+1_result");
+    expect(header).toContain("T+10_price");
+    expect(content).toContain("600519");
+    expect(content).toContain("macd");
+    expect(content).toContain("hit");
+  });
+
+  it("exports performance summary to CSV", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "performance" });
+
+    expect(result.format).toBe("csv");
+    expect(result.rowCount).toBe(12);
+    expect(result.filename).toMatch(/^performance-/);
+
+    const content = await fs.readFile(result.path, "utf-8");
+    const header = content.split("\n")[0].replace("\uFEFF", "");
+    for (const col of PERFORMANCE_COLUMNS) {
+      expect(header).toContain(col);
+    }
+    expect(content).toContain("胜率");
+    expect(content).toContain("最大回撤");
+    expect(content).toContain("66.7%");
+  });
+
+  it("exports performance summary to JSON", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const result = await svc.export({ type: "performance" }, "json");
+
+    expect(result.format).toBe("json");
+    const content = await fs.readFile(result.path, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed).toHaveLength(12);
+    expect(parsed[0].metric).toBe("统计区间");
+  });
+
+  it("batch exports include new types (alerts, performance)", async () => {
+    const svc = new DataExportService({ dataSource: mockDataSource(), exportDir: tmpDir });
+    const results = await svc.exportBatch([
+      { type: "alerts" },
+      { type: "hitrate" },
+      { type: "performance" },
+    ]);
+
+    expect(results).toHaveLength(3);
+    expect(results[0].filename).toMatch(/^alerts-/);
+    expect(results[1].filename).toMatch(/^hitrate-/);
+    expect(results[2].filename).toMatch(/^performance-/);
   });
 });

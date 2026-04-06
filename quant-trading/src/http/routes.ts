@@ -1554,7 +1554,7 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
 
 // ── Data Export sub-routes (FR-7) ───────────────────────────────
 
-function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, favoritesStore, getEngine }: RouteDeps): void {
+function registerDataExportRoutes({ api, config, secure, quantStorage, equityHistory, backtestStore, tradeJournal, scanHistoryStore, favoritesStore, alertStore, getEngine }: RouteDeps): void {
   // GET /quant/api/data-export/list — list exported files
   api.registerHttpRoute({
     auth: "plugin",
@@ -1706,7 +1706,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
         return;
       }
 
-      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "batch"];
+      const validActions = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance", "batch"];
       if (!validActions.includes(action)) {
         json(res, { status: "error", message: `不支持的 action: ${action}，可用: ${validActions.join(", ")}` }, 400);
         return;
@@ -1715,7 +1715,7 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
       // Batch export: export multiple dataset types in one request
       if (action === "batch") {
         const batchTypes = (body.batchTypes as string[] | undefined) ?? ["portfolio", "trades", "signals"];
-        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist"];
+        const validBatchTypes = ["portfolio", "trades", "signals", "orders", "equity", "journal", "klines", "backtest", "screen", "watchlist", "alerts", "hitrate", "performance"];
         const invalidTypes = batchTypes.filter((t: string) => !validBatchTypes.includes(t));
         if (invalidTypes.length > 0) {
           json(res, { status: "error", message: `不支持的批量导出类型: ${invalidTypes.join(", ")}` }, 400);
@@ -1824,6 +1824,37 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
                         const stocks = favoritesStore.listFavorites(category ? { category } : undefined);
                         bRows = stocks.map((s) => ({ code: s.code, name: s.name ?? "", category: s.category ?? "", priority: s.priority ?? "", priceTarget: s.priceTarget ?? "", convictionScore: s.convictionScore ?? "", tags: s.tags?.join(";") ?? "", notes: s.notes ?? "", addedAt: s.addedAt, updatedAt: s.updatedAt }));
                       }
+                      break;
+                    }
+                    case "alerts": {
+                      bHeaders = ["id", "timestamp", "severity", "source", "message", "acknowledged"];
+                      const bAlerts = alertStore.query({ limit });
+                      bRows = bAlerts.map((a) => ({ id: a.id, timestamp: a.timestamp, severity: a.severity, source: a.source, message: a.message, acknowledged: a.acknowledged ? "是" : "否" }));
+                      break;
+                    }
+                    case "hitrate": {
+                      bHeaders = ["metric", "value"];
+                      bRows = [{ metric: "提示", value: "信号命中率导出请通过AI工具 data_export action=hitrate 使用" }];
+                      break;
+                    }
+                    case "performance": {
+                      bHeaders = ["metric", "value"];
+                      const pd1 = startDate ?? "2000-01-01";
+                      const pd2 = endDate ?? new Date().toISOString().slice(0, 10);
+                      const pt = await quantStorage.getTrades({ limit: 100000 });
+                      const pClosed = pt.filter((t) => { const ex = t.exitTime; return ex && ex >= pd1 && ex <= pd2; });
+                      const pWins = pClosed.filter((t) => t.netPnl > 0);
+                      const pLosses = pClosed.filter((t) => t.netPnl <= 0);
+                      const pNetPnl = pClosed.reduce((s, t) => s + (t.netPnl ?? 0), 0);
+                      const pWinRate = pClosed.length > 0 ? pWins.length / pClosed.length : 0;
+                      bRows = [
+                        { metric: "统计区间", value: `${pd1} ~ ${pd2}` },
+                        { metric: "总交易笔数", value: pClosed.length },
+                        { metric: "盈利笔数", value: pWins.length },
+                        { metric: "亏损笔数", value: pLosses.length },
+                        { metric: "胜率", value: `${(pWinRate * 100).toFixed(1)}%` },
+                        { metric: "总净盈亏", value: pNetPnl.toFixed(2) },
+                      ];
                       break;
                     }
                   }
@@ -2071,6 +2102,87 @@ function registerDataExportRoutes({ api, config, secure, quantStorage, equityHis
               }));
             }
             dataset = "watchlist";
+            break;
+          }
+          case "alerts": {
+            headers = ["id", "timestamp", "severity", "source", "message", "acknowledged"];
+            const alertSeverity = body.alertSeverity as string | undefined;
+            const alertSource = body.alertSource as string | undefined;
+            const alertQuery: Record<string, unknown> = { limit };
+            if (alertSeverity) alertQuery.severity = alertSeverity;
+            if (alertSource) alertQuery.source = alertSource;
+            if (startDate) alertQuery.after = startDate;
+            if (endDate) alertQuery.before = endDate;
+            const alerts = alertStore.query(alertQuery as Parameters<typeof alertStore.query>[0]);
+            rows = alerts.map((a) => ({
+              id: a.id,
+              timestamp: a.timestamp,
+              severity: a.severity,
+              source: a.source,
+              message: a.message,
+              acknowledged: a.acknowledged ? "是" : "否",
+            }));
+            dataset = "alerts";
+            break;
+          }
+          case "hitrate": {
+            headers = ["metric", "value"];
+            rows = [{ metric: "提示", value: "信号命中率导出请通过AI工具 data_export action=hitrate 使用" }];
+            dataset = "hitrate";
+            break;
+          }
+          case "performance": {
+            headers = ["metric", "value"];
+            const dateFrom = startDate ?? "2000-01-01";
+            const dateTo = endDate ?? new Date().toISOString().slice(0, 10);
+            const allTrades = await quantStorage.getTrades({ limit: 100000 });
+            const closedTrades = allTrades.filter((t) => {
+              const exit = t.exitTime;
+              if (!exit) return false;
+              return exit >= dateFrom && exit <= dateTo;
+            });
+            const equitySnaps = await quantStorage.getEquitySnapshots({ start: dateFrom, end: dateTo, limit: 100000 });
+            const totalTrades = closedTrades.length;
+            const wins = closedTrades.filter((t) => t.netPnl > 0);
+            const losses = closedTrades.filter((t) => t.netPnl <= 0);
+            const totalNetPnl = closedTrades.reduce((s, t) => s + (t.netPnl ?? 0), 0);
+            const totalGrossWin = wins.reduce((s, t) => s + (t.netPnl ?? 0), 0);
+            const totalGrossLoss = Math.abs(losses.reduce((s, t) => s + (t.netPnl ?? 0), 0));
+            const totalCommission = closedTrades.reduce((s, t) => s + (t.commission ?? 0), 0);
+            const winRate = totalTrades > 0 ? wins.length / totalTrades : 0;
+            const profitFactor = totalGrossLoss > 0 ? totalGrossWin / totalGrossLoss : totalGrossWin > 0 ? Infinity : 0;
+            const pnls = closedTrades.map((t) => t.netPnl ?? 0);
+            const maxSingleProfit = pnls.length > 0 ? Math.max(...pnls) : 0;
+            const maxSingleLoss = pnls.length > 0 ? Math.min(...pnls) : 0;
+            let totalReturn = 0;
+            let maxDrawdown = 0;
+            if (equitySnaps.length > 1) {
+              const firstEq = equitySnaps[0].equity;
+              const lastEq = equitySnaps[equitySnaps.length - 1].equity;
+              if (firstEq > 0) totalReturn = (lastEq - firstEq) / firstEq;
+              let peak = firstEq;
+              for (const snap of equitySnaps) {
+                const eq = snap.equity;
+                if (eq > peak) peak = eq;
+                const dd = peak > 0 ? (peak - eq) / peak : 0;
+                if (dd > maxDrawdown) maxDrawdown = dd;
+              }
+            }
+            rows = [
+              { metric: "统计区间", value: `${dateFrom} ~ ${dateTo}` },
+              { metric: "总交易笔数", value: totalTrades },
+              { metric: "盈利笔数", value: wins.length },
+              { metric: "亏损笔数", value: losses.length },
+              { metric: "胜率", value: `${(winRate * 100).toFixed(1)}%` },
+              { metric: "盈亏比 (Profit Factor)", value: profitFactor === Infinity ? "∞" : profitFactor.toFixed(2) },
+              { metric: "总净盈亏", value: totalNetPnl.toFixed(2) },
+              { metric: "总佣金", value: totalCommission.toFixed(2) },
+              { metric: "最大单笔盈利", value: maxSingleProfit.toFixed(2) },
+              { metric: "最大单笔亏损", value: maxSingleLoss.toFixed(2) },
+              { metric: "累计收益率", value: `${(totalReturn * 100).toFixed(2)}%` },
+              { metric: "最大回撤", value: `${(maxDrawdown * 100).toFixed(2)}%` },
+            ];
+            dataset = "performance";
             break;
           }
         }

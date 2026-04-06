@@ -663,6 +663,8 @@ const quantTradingPlugin = {
         backtestStore,
         scanHistoryStore,
         favoritesStore,
+        alertStore,
+        signalHitRateTracker,
         getEngine: () => liveEngine,
       }),
     };

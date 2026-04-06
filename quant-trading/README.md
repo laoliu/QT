@@ -29,7 +29,8 @@
 │  │  • strategy_router                          /quant/dashboard      │  │
 │  │  • chip_accumulation     Broker:            /quant/api/portfolio  │  │
 │  │  • institutional_flow    QMT (real)         /quant/admin/*        │  │
-│  │  • + 29 more...          Paper (sim)        /quant/data-bridge    │  │
+│  │  • + 29 more...          Futu (港美A)       /quant/data-bridge    │  │
+│  │                          Paper (sim)                              │  │
 │  │                                                                   │  │
 │  │  Engine Layer:                                                    │  │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │  │
@@ -88,7 +89,7 @@
 
 | Tool                     | Description                                     |
 | ------------------------ | ----------------------------------------------- |
-| `live_trading`           | 实盘交易（QMT/Paper broker）                    |
+| `live_trading`           | 实盘交易（QMT/Futu/Paper broker）               |
 | `conditional_order`      | 条件单（触价/追踪止损）                         |
 | `dca_schedule`           | 定投计划管理                                    |
 | `breakout_monitor`       | 突破形态监控                                    |
@@ -488,6 +489,7 @@ quant-trading/
 │   │   ├── adapter.ts              # Broker adapter interface
 │   │   ├── paper-broker.ts         # Paper trading broker
 │   │   ├── qmt-broker.ts           # QMT real broker
+│   │   ├── futu-broker.ts          # Futu OpenD broker (HK/US/A-share)
 │   │   └── remote-qmt-broker.ts    # Remote QMT via HTTP
 │   ├── commands/
 │   │   ├── commands.ts             # Chat commands (/quote, /期权链, etc.)
@@ -547,7 +549,8 @@ quant-trading/
     │   ├── pair_trading_strategy.py # 配对交易
     │   └── ... (19 more strategies)
     ├── brokers/
-    │   └── qmt_broker.py           # QMT broker bridge
+    │   ├── qmt_broker.py           # QMT broker bridge
+    │   └── futu_broker.py          # Futu OpenD broker bridge
     ├── data_providers/
     │   ├── akshare_provider.py     # AKShare (A股/期货/基金)
     │   ├── tushare_provider.py     # Tushare (A股)

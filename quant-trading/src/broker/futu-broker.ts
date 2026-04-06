@@ -214,6 +214,21 @@ function detectMarketFromFutu(futuSymbol: string): MarketType {
 
 // ── FutuBroker ────────────────────────────────────────────────────
 
+export type OrderBookEntry = {
+  price: number;
+  volume: number;
+  orderNum: number;
+};
+
+export type OrderBookSnapshot = {
+  symbol: string;
+  bids: OrderBookEntry[];
+  asks: OrderBookEntry[];
+  timestamp: number;
+};
+
+export type OrderBookCallback = (snapshot: OrderBookSnapshot) => void;
+
 export class FutuBroker implements IBrokerAdapter {
   readonly brokerType: BrokerType = "futu";
   connected = false;
@@ -224,6 +239,7 @@ export class FutuBroker implements IBrokerAdapter {
   private fillCbs: FillCallback[] = [];
   private statusCbs: OrderStatusCallback[] = [];
   private quoteSubs: Map<string, QuoteCallback[]> = new Map();
+  private orderbookCbs: Map<string, OrderBookCallback[]> = new Map();
 
   // local cache of orders created in this session
   private orderCache: Map<string, Order> = new Map();
@@ -260,6 +276,7 @@ export class FutuBroker implements IBrokerAdapter {
     } finally {
       this.proc.stop();
       this.connected = false;
+      this.orderbookCbs.clear();
     }
   }
 
@@ -561,6 +578,34 @@ export class FutuBroker implements IBrokerAdapter {
   async subscribeOrderbook(symbols: string[]): Promise<{ subscribed_orderbook: string[] }> {
     const futuSymbols = symbols.map(toFutuSymbol);
     return this.proc.call("subscribe_orderbook", { stock_codes: futuSymbols });
+  }
+
+  /**
+   * Subscribe to real-time order book push events.
+   * Returns an unsubscribe function.
+   */
+  subscribeOrderbookPush(symbols: string[], cb: OrderBookCallback): () => void {
+    const futuSymbols = symbols.map(toFutuSymbol);
+    void this.proc.call("subscribe_orderbook", { stock_codes: futuSymbols }).catch((err) => {
+      console.warn(`[FutuBroker] subscribe_orderbook failed: ${(err as Error).message ?? err}`);
+    });
+    for (const sym of symbols) {
+      if (!this.orderbookCbs.has(sym)) this.orderbookCbs.set(sym, []);
+      this.orderbookCbs.get(sym)!.push(cb);
+    }
+    return () => {
+      for (const sym of symbols) {
+        const arr = this.orderbookCbs.get(sym);
+        if (arr) {
+          const filtered = arr.filter((fn) => fn !== cb);
+          if (filtered.length === 0) {
+            this.orderbookCbs.delete(sym);
+          } else {
+            this.orderbookCbs.set(sym, filtered);
+          }
+        }
+      }
+    };
   }
 
   /**
@@ -916,8 +961,19 @@ export class FutuBroker implements IBrokerAdapter {
       const raw = data as RawQuote;
       const sym = fromFutuSymbol(raw.stock_code);
       const snapshot = this.mapRawQuote(raw, sym);
-      const cbs = this.quoteSubs.get(sym);
-      if (cbs) for (const cb of cbs) cb(snapshot);
+      const quoteCbs = this.quoteSubs.get(sym);
+      if (quoteCbs) for (const cb of quoteCbs) cb(snapshot);
+    } else if (event === "orderbook") {
+      const raw = data as RawOrderBook;
+      const sym = fromFutuSymbol(raw.stock_code);
+      const snapshot: OrderBookSnapshot = {
+        symbol: sym,
+        bids: raw.bids.map((b) => ({ price: b.price, volume: b.volume, orderNum: b.order_num })),
+        asks: raw.asks.map((a) => ({ price: a.price, volume: a.volume, orderNum: a.order_num })),
+        timestamp: Date.now(),
+      };
+      const obCbs = this.orderbookCbs.get(sym);
+      if (obCbs) for (const cb of obCbs) cb(snapshot);
     }
   }
 

@@ -50,7 +50,7 @@ export function createBrokerAdapter(config: QuantTradingConfig): IBrokerAdapter 
 
     default:
       throw new Error(
-        `Unknown broker type: ${broker as string}. Supported: paper, qmt, remote-qmt`,
+        `Unknown broker type: ${broker as string}. Supported: paper, qmt, remote-qmt, futu`,
       );
   }
 }

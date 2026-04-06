@@ -1036,3 +1036,190 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Basket Order (篮子交易) ─────────────────────────────────────
+
+/**
+ * Split strategy for basket orders — controls how a basket is decomposed
+ * into individual child orders for execution.
+ */
+export type BasketSplitStrategy =
+  /** Submit all child orders simultaneously */
+  | "all_at_once"
+  /** Submit child orders one by one, waiting for each to fill before the next */
+  | "sequential"
+  /** Submit in fixed-size tranches (see trancheSize on BasketOrder) */
+  | "tranche"
+  /** Split each child order by time intervals (TWAP-like) */
+  | "twap"
+  /** Split each child order by volume participation rate (VWAP-like) */
+  | "vwap";
+
+/**
+ * Execution status of a basket order as a whole.
+ */
+export type BasketOrderStatus =
+  | "draft" // configured but not yet submitted
+  | "pending" // submitted, waiting to start execution
+  | "executing" // child orders are being placed / filled
+  | "paused" // execution suspended by user or risk gate
+  | "completed" // all child orders filled
+  | "partial_done" // some child orders filled, rest cancelled/failed
+  | "cancelled" // entire basket cancelled
+  | "failed"; // unrecoverable error during execution
+
+/**
+ * A single item (stock) within a basket, defining what and how much to trade.
+ */
+export type BasketItem = {
+  /** Stock / instrument code, e.g. "600519" */
+  symbol: string;
+  /** Human-readable name (optional, for display) */
+  name?: string;
+  /** Market type (defaults to cn_stock if omitted) */
+  market?: MarketType;
+  /** Buy or sell direction */
+  side: OrderSide;
+  /** Target quantity (number of shares/lots) */
+  quantity: number;
+  /** Order type: limit or market (default: limit) */
+  orderType?: OrderType;
+  /** Limit price — required when orderType is "limit" */
+  price?: number;
+  /**
+   * Weight within the basket (0-1). Used when basket is defined by
+   * target allocation rather than explicit quantities.
+   * Mutually exclusive with explicit `quantity` in allocation mode.
+   */
+  weight?: number;
+};
+
+/**
+ * Execution state of a single child order spawned from a BasketItem.
+ */
+export type BasketChildOrder = {
+  /** References the BasketItem index in the parent basket's items[] */
+  itemIndex: number;
+  /** The actual Order.orderId created by OrderManager */
+  orderId: string;
+  /** Current status mirrored from the child Order */
+  status: OrderStatus;
+  /** Filled quantity so far */
+  filledQty: number;
+  /** Average fill price */
+  avgFillPrice?: number;
+  /** Tranche sequence number (for tranche / twap / vwap strategies) */
+  trancheSeq?: number;
+  /** When this child order was created */
+  createdAt: string;
+  /** When this child order last changed status */
+  updatedAt: string;
+  /** Error message if rejected or failed */
+  errorMsg?: string;
+};
+
+/**
+ * A basket order — a collection of stock trades executed as a group.
+ *
+ * Use cases:
+ *   - One-click portfolio rebalancing (buy basket + sell basket)
+ *   - Sector / thematic batch buying (e.g. buy 10 semiconductor stocks)
+ *   - Index tracking / ETF arbitrage (basket of constituents)
+ *   - Strategy signal batch execution (screener outputs → basket)
+ */
+export type BasketOrder = {
+  /** Unique basket order ID */
+  basketId: string;
+  /** Human-readable name, e.g. "半导体板块建仓" */
+  name: string;
+  /** Optional description / notes */
+  description?: string;
+  /** The items (stocks) in this basket */
+  items: BasketItem[];
+  /** How to split / schedule the child orders */
+  splitStrategy: BasketSplitStrategy;
+  /** Overall basket status */
+  status: BasketOrderStatus;
+
+  // ── Split strategy parameters ───────────────────────────────
+
+  /**
+   * For "tranche" strategy: number of items per tranche batch.
+   * Default: 5
+   */
+  trancheSize?: number;
+  /**
+   * For "twap" strategy: total execution duration in minutes.
+   * The engine divides time evenly across slices.
+   * Default: 30
+   */
+  twapDurationMinutes?: number;
+  /**
+   * For "twap" / "tranche": interval between tranches in seconds.
+   * Default: 60
+   */
+  trancheIntervalSecs?: number;
+  /**
+   * For "vwap" strategy: target volume participation rate (0-1).
+   * E.g. 0.05 means aim for 5% of market volume.
+   * Default: 0.05
+   */
+  vwapParticipationRate?: number;
+
+  // ── Allocation mode ─────────────────────────────────────────
+
+  /**
+   * When true, interpret BasketItem.weight as target portfolio allocation.
+   * The service calculates quantities based on totalAmount and current prices.
+   */
+  allocationMode?: boolean;
+  /**
+   * Total CNY amount to allocate across the basket (used with allocationMode).
+   */
+  totalAmount?: number;
+
+  // ── Risk / execution controls ───────────────────────────────
+
+  /**
+   * Max price deviation from reference price allowed (0-1).
+   * Child orders whose price drifts beyond this are skipped or re-priced.
+   * Default: 0.02 (2%)
+   */
+  maxPriceDeviationPct?: number;
+  /**
+   * Whether to skip risk gate checks for individual child orders.
+   * Default: false (each child order goes through the risk gate).
+   */
+  skipRiskCheck?: boolean;
+  /**
+   * Strategy ID to tag on all child orders (for tracking / attribution).
+   */
+  strategyId?: string;
+
+  // ── Child order tracking ────────────────────────────────────
+
+  /** Spawned child orders (populated during execution) */
+  childOrders: BasketChildOrder[];
+
+  // ── Execution summary ───────────────────────────────────────
+
+  /** Total number of items in the basket */
+  totalItems: number;
+  /** Number of items fully filled */
+  filledItems: number;
+  /** Number of items that failed or were rejected */
+  failedItems: number;
+  /** Total notional value of fills so far (CNY) */
+  filledNotional: number;
+  /** Total commission paid across all child fills */
+  totalCommission: number;
+
+  // ── Timestamps ──────────────────────────────────────────────
+
+  createdAt: string;
+  updatedAt: string;
+  /** When execution started (first child order placed) */
+  startedAt?: string;
+  /** When execution completed or was cancelled */
+  finishedAt?: string;
+};

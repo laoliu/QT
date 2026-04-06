@@ -55,6 +55,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-datahub::before{background:linear-gradient(90deg,var(--green),var(--accent))}
 .nav-card.card-lab::before{background:linear-gradient(90deg,var(--accent),var(--yellow))}
 .nav-card.card-routing::before{background:linear-gradient(90deg,var(--purple),var(--accent))}
+.nav-card.card-compare::before{background:linear-gradient(90deg,var(--accent),var(--green))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -227,6 +228,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">数据驱动</span><span class="tag">规则路由</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/live-backtest" class="nav-card card-compare" style="color:inherit;text-decoration:none">
+    <div class="icon">📊</div>
+    <h3>实盘 vs 回测对比</h3>
+    <p>实盘权益曲线叠加回测曲线 — 指标差异高亮、偏差分析、跟踪误差评估、摘要报告</p>
+    <div class="tags">
+      <span class="tag">曲线叠加</span><span class="tag">差异高亮</span><span class="tag">跟踪误差</span>
+      <span class="tag">报告生成</span><span class="tag">相关性分析</span>
+    </div>
+  </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">
     <div class="icon">📈</div>
     <h3>个股详情</h3>
@@ -263,6 +273,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/lianban</span><span class="api-desc">连板分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/event-catalyst</span><span class="api-desc">事件催化分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/datahub</span><span class="api-desc">金融数据中心</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/live-backtest</span><span class="api-desc">实盘 vs 回测对比</span></div>
     </div>
 
     <div class="api-group">

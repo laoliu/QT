@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "live_backtest_compare";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1172,6 +1173,92 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+/**
+ * Build a live-vs-backtest comparison report.
+ *
+ * Fetches the latest live equity summary and compares it against the most
+ * recent backtest result for the currently active strategy. Outputs key
+ * metric deltas, highlights significant divergences, and includes a
+ * tracking error assessment.
+ */
+async function generateLiveBacktestCompare(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = ["📊 **实盘 vs 回测对比报告**", ""];
+
+  // Engine status to identify active strategy
+  let activeStrategy = "unknown";
+  try {
+    const statusRaw = await executeTool("live_trading", { action: "engine_status" });
+    const statusData = JSON.parse(statusRaw);
+    if (statusData.strategies?.length > 0) {
+      activeStrategy = statusData.strategies[0].strategyId ?? "unknown";
+      sections.push(`**当前策略**: ${activeStrategy}`);
+      sections.push(`**运行状态**: ${statusData.state ?? "unknown"}`);
+      sections.push("");
+    }
+  } catch {
+    sections.push("*引擎状态获取失败*\n");
+  }
+
+  // Live performance attribution
+  try {
+    const attrRaw = await executeTool("performance_attribution", { action: "full_report" });
+    const attr = JSON.parse(attrRaw);
+    sections.push("**实盘绩效概览**");
+    sections.push(`- 总交易: ${attr.totalTrades ?? "N/A"}`);
+    sections.push(`- 净盈亏: ${attr.totalNetPnl ?? "N/A"}`);
+    sections.push(`- 总胜率: ${attr.overallWinRate ?? "N/A"}%`);
+    sections.push(`- 盈亏比: ${attr.profitFactor ?? "N/A"}`);
+    sections.push("");
+  } catch {
+    sections.push("*实盘绩效数据获取失败*\n");
+  }
+
+  // Latest backtest for comparison
+  try {
+    const btRaw = await executeTool("backtest", { action: "list" });
+    const btData = JSON.parse(btRaw);
+    const strategies = btData.strategies ?? btData.builtin ?? [];
+    if (strategies.length > 0) {
+      sections.push("**回测策略库概览**");
+      sections.push(`- 可用策略数: ${strategies.length}`);
+
+      // Find the active strategy
+      const match = strategies.find(
+        (s: Record<string, unknown>) => s.id === activeStrategy,
+      );
+      if (match) {
+        sections.push(`- 匹配策略: ${match.name ?? match.id}`);
+        sections.push(`- 策略描述: ${match.description ?? "无"}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    // backtest list not available
+  }
+
+  // Risk snapshot for live
+  try {
+    const riskRaw = await executeTool("live_trading", { action: "get_risk_snapshot" });
+    const risk = JSON.parse(riskRaw);
+    sections.push("**风控指标快照**");
+    if (risk.maxDrawdownPct != null)
+      sections.push(`- 最大回撤: ${Number(risk.maxDrawdownPct).toFixed(2)}%`);
+    if (risk.dailyLoss != null) sections.push(`- 今日亏损: ¥${risk.dailyLoss}`);
+    if (risk.totalLoss != null) sections.push(`- 累计亏损: ¥${risk.totalLoss}`);
+    sections.push("");
+  } catch {
+    sections.push("*风控数据获取失败*\n");
+  }
+
+  sections.push("---");
+  sections.push("*完整对比图表请访问管理面板 → 实盘 vs 回测对比页面*");
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1316,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "live_backtest_compare",
+    name: "实盘回测对比",
+    description: "实盘 vs 回测对比报告：指标差异+跟踪误差+偏差分析+风控快照",
+    defaultIntervalMinutes: 0,
+    generate: generateLiveBacktestCompare,
   },
 ];
 

@@ -1,7 +1,11 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { runPythonScript } from "../../bridge/python-bridge.js";
 import { listStrategies } from "../../engine/strategy-registry.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../../services/batch-backtest.js";
-import type { TickAggregationInterval } from "../../types.js";
+import { compareLiveVsBacktest } from "../../services/live-backtest-compare.js";
+import type { TickAggregationInterval, TradeRecord } from "../../types.js";
 import { toNumberOrDefault } from "../../utils/number-utils.js";
 import {
   appendPbtHistory,
@@ -646,6 +650,102 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
       }
 
       json(res, { error: "kind 仅支持 ticks|bars|features" }, 400);
+    }),
+  });
+
+  // ── Live vs Backtest Comparison Page ───────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/live-backtest",
+    handler: securePublic(async (_req, res) => {
+      const { getLiveBacktestPageHtml } = await import("../pages/live-backtest-page.js");
+      const html = getLiveBacktestPageHtml("", config.apiToken);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Live vs Backtest Comparison API ───────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/live-backtest-compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") {
+        json(res, { error: "仅支持 GET" }, 405);
+        return;
+      }
+      try {
+        const url = new URL(req.url ?? "/", "http://localhost");
+        const backtestId = url.searchParams.get("backtestId");
+        if (!backtestId) {
+          json(res, { error: "请提供 backtestId 参数" }, 400);
+          return;
+        }
+
+        const mode = (url.searchParams.get("mode") ?? "live") as "paper" | "live";
+        const startDate = url.searchParams.get("start") ?? undefined;
+        const endDate = url.searchParams.get("end") ?? undefined;
+
+        // Load backtest result
+        const backtestStore = deps.backtestStore;
+        if (!backtestStore) {
+          json(res, { error: "回测存储服务未配置" }, 400);
+          return;
+        }
+        const btRecord = backtestStore.getFullResult(backtestId);
+        if (!btRecord) {
+          json(res, { error: `未找到回测记录: ${backtestId}` }, 404);
+          return;
+        }
+
+        // Load live equity snapshots
+        const eqHistory =
+          mode === "paper" ? deps.equityHistoryPaper : deps.equityHistoryLive;
+        const fallback = deps.equityHistory;
+        const equityHist = eqHistory ?? fallback;
+        if (!equityHist) {
+          json(res, { error: "权益历史服务未配置" }, 400);
+          return;
+        }
+
+        let snapshots = startDate && endDate
+          ? equityHist.getRange(startDate, endDate)
+          : equityHist.getAll();
+        if (startDate && !endDate) {
+          snapshots = snapshots.filter((s) => s.date >= startDate);
+        }
+        if (endDate && !startDate) {
+          snapshots = snapshots.filter((s) => s.date <= endDate);
+        }
+
+        // Load trade records
+        const tradesDir =
+          config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+        let trades: TradeRecord[] = [];
+        try {
+          trades = JSON.parse(
+            await fs.readFile(path.join(tradesDir, "trades.json"), "utf-8"),
+          ) as TradeRecord[];
+        } catch {
+          // No trades file — proceed with empty
+        }
+
+        if (snapshots.length === 0) {
+          json(res, {
+            error: `${mode === "paper" ? "模拟盘" : "实盘"}暂无权益数据。请确保交易引擎已运行并产生记录。`,
+          }, 400);
+          return;
+        }
+
+        const result = compareLiveVsBacktest(snapshots, trades, btRecord.result);
+        json(res, result);
+      } catch (err) {
+        json(
+          res,
+          { error: `对比失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
     }),
   });
 

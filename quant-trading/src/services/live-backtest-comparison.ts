@@ -192,6 +192,70 @@ export interface BatchComparisonResult {
   }>;
 }
 
+// ── Symbol-level breakdown types ────────────────────────────
+
+export interface SymbolBreakdown {
+  symbol: string;
+  liveTrades: number;
+  backtestTrades: number;
+  liveReturn: number;
+  backtestReturn: number;
+  returnDelta: number;
+  liveWinRate: number;
+  backtestWinRate: number;
+  winRateDelta: number;
+  avgHoldingDaysLive: number;
+  avgHoldingDaysBacktest: number;
+  verdict: LiveVsBacktestResult["verdict"];
+}
+
+export interface SymbolBreakdownResult {
+  strategyId: string;
+  period: string;
+  symbols: SymbolBreakdown[];
+  /** Symbol contributing the most to drift. */
+  worstSymbol: string | null;
+  /** Symbol with best live-vs-backtest consistency. */
+  bestSymbol: string | null;
+}
+
+// ── Execution quality types ─────────────────────────────────
+
+export interface ExecutionQualityResult {
+  strategyId: string;
+  period: string;
+  /** Average delay from signal timestamp to actual fill (in minutes). */
+  avgSignalToFillMinutes: number;
+  /** Percentage of signals that resulted in actual trades. */
+  signalFillRate: number;
+  /** Average slippage from signal price to fill price (%). */
+  avgSlippagePct: number;
+  /** Median slippage (%). */
+  medianSlippagePct: number;
+  /** Worst single slippage (%). */
+  maxSlippagePct: number;
+  /** Average holding period in days (live). */
+  avgHoldingDaysLive: number;
+  /** Average holding period in days (backtest). */
+  avgHoldingDaysBacktest: number;
+  /** Holding period delta (live - backtest). */
+  holdingDaysDelta: number;
+  /** Profit factor (live): gross profit / gross loss. */
+  liveProfitFactor: number;
+  /** Profit factor (backtest). */
+  backtestProfitFactor: number;
+  /** Sharpe ratio comparison (if available). */
+  liveSharpe: number | null;
+  backtestSharpe: number | null;
+  /** Sortino ratio comparison (if available). */
+  liveSortino: number | null;
+  backtestSortino: number | null;
+  /** Per-symbol breakdown. */
+  symbolBreakdowns: SymbolBreakdown[];
+  /** Actionable diagnostics. */
+  diagnostics: string[];
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 function pct(a: number, b: number): number {
@@ -452,6 +516,106 @@ function determineTrend(
     return { trend: "deteriorating", trendDescription: "实盘与回测的偏离呈加剧趋势，需关注" };
   }
   return { trend: "stable", trendDescription: "实盘与回测的一致性保持稳定" };
+}
+
+function computeProfitFactor(trades: TradeRecord[]): number {
+  const closed = trades.filter((t) => t.exitPrice != null);
+  let grossProfit = 0;
+  let grossLoss = 0;
+  for (const t of closed) {
+    if (t.netPnl > 0) grossProfit += t.netPnl;
+    else grossLoss += Math.abs(t.netPnl);
+  }
+  return grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+}
+
+function computeAvgHoldingDays(trades: TradeRecord[]): number {
+  const closed = trades.filter((t) => t.exitTime != null);
+  if (closed.length === 0) return 0;
+  const msPerDay = 86_400_000;
+  const total = closed.reduce((sum, t) => {
+    if (t.holdingDays != null) return sum + t.holdingDays;
+    const entry = new Date(t.entryTime).getTime();
+    const exit = new Date(t.exitTime!).getTime();
+    return sum + Math.max(1, Math.round((exit - entry) / msPerDay));
+  }, 0);
+  return total / closed.length;
+}
+
+function median(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+}
+
+function computeSymbolBreakdown(
+  symbol: string,
+  liveTrades: TradeRecord[],
+  backtestSignals: TradingSignal[],
+  backtestResult: BacktestResult | null,
+): SymbolBreakdown {
+  const closedLive = liveTrades.filter((t) => t.exitPrice != null);
+  const liveWins = closedLive.filter((t) => t.netPnl > 0).length;
+  const liveReturn = closedLive.reduce((s, t) => s + t.netPnl, 0);
+  const liveCost = closedLive.reduce((s, t) => s + t.entryPrice * t.quantity, 0);
+  const liveReturnPct = liveCost > 0 ? (liveReturn / liveCost) * 100 : 0;
+  const liveWinRate = closedLive.length > 0 ? (liveWins / closedLive.length) * 100 : 0;
+  const avgHoldingLive = computeAvgHoldingDays(liveTrades);
+
+  // Estimate backtest per-symbol stats from overall ratio
+  const btTotalTrades = backtestResult?.totalTrades ?? 0;
+  const totalSymbols = backtestResult?.symbols?.length ?? 1;
+  const btEstTrades = totalSymbols > 0 ? Math.round(btTotalTrades / totalSymbols) : 0;
+  const btSignalCount = backtestSignals.length;
+  const btWinRate = backtestResult?.winRate ?? 0;
+  const btReturn = backtestResult?.totalReturn ?? 0;
+  const btReturnPerSymbol = totalSymbols > 0 ? btReturn / totalSymbols : 0;
+
+  // Estimate avg holding days from backtest signals
+  let btAvgHolding = 0;
+  if (btSignalCount >= 2) {
+    const sorted = [...backtestSignals].sort((a, b) => a.timestamp - b.timestamp);
+    const buys = sorted.filter((s) => s.direction === "buy");
+    const sells = sorted.filter((s) => s.direction === "sell");
+    if (buys.length > 0 && sells.length > 0) {
+      const msPerDay = 86_400_000;
+      const pairs = Math.min(buys.length, sells.length);
+      let totalDays = 0;
+      for (let i = 0; i < pairs; i++) {
+        totalDays += Math.max(1, Math.round((sells[i]!.timestamp - buys[i]!.timestamp) / msPerDay));
+      }
+      btAvgHolding = totalDays / pairs;
+    }
+  }
+
+  const returnDelta = liveReturnPct - btReturnPerSymbol;
+  const winRateDelta = liveWinRate - btWinRate;
+
+  // Determine per-symbol verdict
+  let verdict: LiveVsBacktestResult["verdict"] = "consistent";
+  if (Math.abs(returnDelta) > 20 || Math.abs(winRateDelta) > 15) {
+    verdict = "critical_divergence";
+  } else if (Math.abs(returnDelta) > 10 || Math.abs(winRateDelta) > 10) {
+    verdict = "significant_drift";
+  } else if (Math.abs(returnDelta) > 5 || Math.abs(winRateDelta) > 5) {
+    verdict = "minor_drift";
+  }
+
+  return {
+    symbol,
+    liveTrades: closedLive.length,
+    backtestTrades: btEstTrades > 0 ? btEstTrades : btSignalCount,
+    liveReturn: liveReturnPct,
+    backtestReturn: btReturnPerSymbol,
+    returnDelta,
+    liveWinRate,
+    backtestWinRate: btWinRate,
+    winRateDelta,
+    avgHoldingDaysLive: avgHoldingLive,
+    avgHoldingDaysBacktest: btAvgHolding,
+    verdict,
+  };
 }
 
 export class LiveBacktestComparison {
@@ -835,6 +999,249 @@ export class LiveBacktestComparison {
       .sort((a, b) => a.score - b.score);
 
     return { entries, ranking };
+  }
+
+  /**
+   * Break down the live-vs-backtest comparison by individual symbol.
+   * Helps the trader identify which specific stocks are causing drift.
+   */
+  symbolBreakdown(
+    req: LiveVsBacktestRequest,
+    liveTrades: TradeRecord[],
+    backtestResult?: BacktestResult,
+  ): SymbolBreakdownResult {
+    const signals = backtestResult?.signals ?? [];
+
+    const symbolResults: SymbolBreakdown[] = [];
+
+    for (const symbol of req.symbols) {
+      const symTrades = liveTrades.filter(
+        (t) =>
+          t.symbol === symbol &&
+          t.entryTime.slice(0, 10) >= req.startDate &&
+          t.entryTime.slice(0, 10) <= req.endDate,
+      );
+      const symSignals = signals.filter((s) => s.symbol === symbol);
+
+      symbolResults.push(
+        computeSymbolBreakdown(symbol, symTrades, symSignals, backtestResult ?? null),
+      );
+    }
+
+    // Sort by absolute return delta descending (worst first)
+    symbolResults.sort((a, b) => Math.abs(b.returnDelta) - Math.abs(a.returnDelta));
+
+    const worst = symbolResults.find((s) => s.verdict !== "consistent") ?? null;
+    const best =
+      [...symbolResults]
+        .sort((a, b) => Math.abs(a.returnDelta) - Math.abs(b.returnDelta))
+        .find((s) => s.liveTrades > 0) ?? null;
+
+    return {
+      strategyId: req.strategyId,
+      period: `${req.startDate} ~ ${req.endDate}`,
+      symbols: symbolResults,
+      worstSymbol: worst?.symbol ?? null,
+      bestSymbol: best?.symbol ?? null,
+    };
+  }
+
+  /**
+   * Analyze execution quality: slippage distribution, signal-to-fill delay,
+   * holding period comparison, profit factor, and risk-adjusted metrics.
+   */
+  executionQuality(
+    req: LiveVsBacktestRequest,
+    liveTrades: TradeRecord[],
+    backtestResult?: BacktestResult,
+  ): ExecutionQualityResult {
+    const signals = backtestResult?.signals ?? [];
+
+    // Filter trades to period and strategy
+    const periodTrades = liveTrades.filter((t) => {
+      const tDate = t.entryTime.slice(0, 10);
+      return (
+        tDate >= req.startDate &&
+        tDate <= req.endDate &&
+        (!req.strategyId || t.strategyId === req.strategyId)
+      );
+    });
+
+    // Match trades to signals for timing analysis
+    const periodSignals = signals.filter((s) => {
+      const sDate = signalDate(s);
+      return sDate >= req.startDate && sDate <= req.endDate && req.symbols.includes(s.symbol);
+    });
+
+    // Signal-to-fill timing
+    const timingDelays: number[] = [];
+    const slippages: number[] = [];
+    const matchedSignalSet = new Set<number>();
+
+    for (const trade of periodTrades) {
+      const tradeTs = new Date(trade.entryTime).getTime();
+      let bestIdx = -1;
+      let bestDelta = Infinity;
+
+      for (let i = 0; i < periodSignals.length; i++) {
+        if (matchedSignalSet.has(i)) continue;
+        const sig = periodSignals[i]!;
+        if (sig.symbol !== trade.symbol) continue;
+        const delta = Math.abs(tradeTs - sig.timestamp);
+        if (delta < bestDelta && delta < 5 * 86_400_000) {
+          bestDelta = delta;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx >= 0) {
+        matchedSignalSet.add(bestIdx);
+        const sig = periodSignals[bestIdx]!;
+        timingDelays.push((tradeTs - sig.timestamp) / 60_000); // minutes
+        if (sig.price > 0) {
+          slippages.push(
+            ((trade.entryPrice - sig.price) / sig.price) * 100,
+          );
+        }
+      }
+    }
+
+    const avgSignalToFillMinutes =
+      timingDelays.length > 0
+        ? timingDelays.reduce((a, b) => a + b, 0) / timingDelays.length
+        : 0;
+
+    const signalFillRate =
+      periodSignals.length > 0
+        ? (matchedSignalSet.size / periodSignals.length) * 100
+        : 0;
+
+    const absSlippages = slippages.map(Math.abs);
+    const avgSlippagePct =
+      absSlippages.length > 0
+        ? absSlippages.reduce((a, b) => a + b, 0) / absSlippages.length
+        : 0;
+    const medianSlippagePct = median(absSlippages);
+    const maxSlippagePct =
+      absSlippages.length > 0 ? Math.max(...absSlippages) : 0;
+
+    // Holding period
+    const avgHoldingDaysLive = computeAvgHoldingDays(periodTrades);
+    // Estimate backtest holding days from signals
+    let avgHoldingDaysBacktest = 0;
+    const buySignals = periodSignals.filter((s) => s.direction === "buy").sort((a, b) => a.timestamp - b.timestamp);
+    const sellSignals = periodSignals.filter((s) => s.direction === "sell").sort((a, b) => a.timestamp - b.timestamp);
+    if (buySignals.length > 0 && sellSignals.length > 0) {
+      const pairs = Math.min(buySignals.length, sellSignals.length);
+      let totalDays = 0;
+      for (let i = 0; i < pairs; i++) {
+        totalDays += Math.max(1, Math.round((sellSignals[i]!.timestamp - buySignals[i]!.timestamp) / 86_400_000));
+      }
+      avgHoldingDaysBacktest = totalDays / pairs;
+    }
+
+    // Profit factor
+    const liveProfitFactor = computeProfitFactor(periodTrades);
+    const backtestProfitFactor = backtestResult?.profitFactor ?? 0;
+
+    // Risk-adjusted metrics
+    const liveSharpe = null; // Would need daily returns series — compute from equity snapshots
+    const backtestSharpe = backtestResult?.sharpeRatio ?? null;
+    const liveSortino = null;
+    const backtestSortino = backtestResult?.sortinoRatio ?? null;
+
+    // Compute Sharpe from equity snapshots if available
+    const liveSnapshots = this.equityHistory.getRange(req.startDate, req.endDate);
+    let computedLiveSharpe: number | null = null;
+    let computedLiveSortino: number | null = null;
+    if (liveSnapshots.length >= 5) {
+      const dailyReturns: number[] = [];
+      for (let i = 1; i < liveSnapshots.length; i++) {
+        const prev = liveSnapshots[i - 1]!.equity;
+        const curr = liveSnapshots[i]!.equity;
+        if (prev > 0) dailyReturns.push((curr - prev) / prev);
+      }
+      if (dailyReturns.length > 1) {
+        const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
+        const variance = dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / (dailyReturns.length - 1);
+        const std = Math.sqrt(variance);
+        if (std > 0) {
+          computedLiveSharpe = (mean / std) * Math.sqrt(252);
+        }
+        const downside = dailyReturns.filter((r) => r < 0);
+        if (downside.length > 0) {
+          const downsideVariance = downside.reduce((a, r) => a + r ** 2, 0) / downside.length;
+          const downsideStd = Math.sqrt(downsideVariance);
+          if (downsideStd > 0) {
+            computedLiveSortino = (mean / downsideStd) * Math.sqrt(252);
+          }
+        }
+      }
+    }
+
+    // Symbol breakdowns
+    const symbolBreakdowns: SymbolBreakdown[] = [];
+    for (const symbol of req.symbols) {
+      const symTrades = periodTrades.filter((t) => t.symbol === symbol);
+      const symSignals = signals.filter((s) => s.symbol === symbol);
+      symbolBreakdowns.push(
+        computeSymbolBreakdown(symbol, symTrades, symSignals, backtestResult ?? null),
+      );
+    }
+
+    // Diagnostics
+    const diagnostics: string[] = [];
+    if (avgSlippagePct > 0.3) {
+      diagnostics.push(`平均滑点${avgSlippagePct.toFixed(2)}%偏高，建议使用限价单或优化执行时机`);
+    }
+    if (signalFillRate < 70 && periodSignals.length > 0) {
+      diagnostics.push(`信号成交率仅${signalFillRate.toFixed(0)}%，${100 - signalFillRate > 30 ? "大量" : "部分"}信号未能执行，检查风控限制或市场流动性`);
+    }
+    if (avgSignalToFillMinutes > 60) {
+      diagnostics.push(`信号到成交平均延迟${avgSignalToFillMinutes.toFixed(0)}分钟，执行速度需改善`);
+    }
+    const holdingDelta = avgHoldingDaysLive - avgHoldingDaysBacktest;
+    if (avgHoldingDaysBacktest > 0 && Math.abs(holdingDelta) > avgHoldingDaysBacktest * 0.5) {
+      diagnostics.push(
+        holdingDelta > 0
+          ? `实盘平均持仓${avgHoldingDaysLive.toFixed(1)}天，比回测(${avgHoldingDaysBacktest.toFixed(1)}天)长${holdingDelta.toFixed(1)}天，可能存在出场迟疑`
+          : `实盘平均持仓${avgHoldingDaysLive.toFixed(1)}天，比回测(${avgHoldingDaysBacktest.toFixed(1)}天)短${Math.abs(holdingDelta).toFixed(1)}天，可能过早止损`,
+      );
+    }
+    if (liveProfitFactor < 1 && backtestProfitFactor > 1) {
+      diagnostics.push(`实盘盈亏比${liveProfitFactor.toFixed(2)}不足1，而回测为${backtestProfitFactor.toFixed(2)}，策略执行可能存在问题`);
+    }
+    if (maxSlippagePct > 1) {
+      diagnostics.push(`最大单笔滑点达${maxSlippagePct.toFixed(2)}%，需关注极端成交偏离`);
+    }
+    const driftSymbols = symbolBreakdowns.filter((s) => s.verdict === "critical_divergence" || s.verdict === "significant_drift");
+    if (driftSymbols.length > 0) {
+      diagnostics.push(`以下标的偏离严重: ${driftSymbols.map((s) => s.symbol).join(", ")}，建议单独检查`);
+    }
+    if (diagnostics.length === 0) {
+      diagnostics.push("执行质量良好，各项指标在合理范围内");
+    }
+
+    return {
+      strategyId: req.strategyId,
+      period: `${req.startDate} ~ ${req.endDate}`,
+      avgSignalToFillMinutes,
+      signalFillRate,
+      avgSlippagePct,
+      medianSlippagePct,
+      maxSlippagePct,
+      avgHoldingDaysLive,
+      avgHoldingDaysBacktest,
+      holdingDaysDelta: holdingDelta,
+      liveProfitFactor,
+      backtestProfitFactor,
+      liveSharpe: computedLiveSharpe ?? liveSharpe,
+      backtestSharpe,
+      liveSortino: computedLiveSortino ?? liveSortino,
+      backtestSortino,
+      symbolBreakdowns,
+      diagnostics,
+    };
   }
 
   /**

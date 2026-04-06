@@ -552,3 +552,217 @@ describe("LiveBacktestComparison.generateReport", () => {
     expect(report).toContain("回测统计");
   });
 });
+
+// ── Symbol breakdown tests ──────────────────────────────────
+
+describe("LiveBacktestComparison.symbolBreakdown", () => {
+  it("breaks down comparison by individual symbol", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const trades = [
+      fakeTrade({ tradeId: "t-1", symbol: "600519", netPnl: 5000, entryTime: "2025-01-15T10:00:00Z" }),
+      fakeTrade({ tradeId: "t-2", symbol: "600519", netPnl: 3000, entryTime: "2025-02-10T10:00:00Z" }),
+      fakeTrade({ tradeId: "t-3", symbol: "000858", netPnl: -4000, exitPrice: 1600, entryTime: "2025-01-20T10:00:00Z" }),
+      fakeTrade({ tradeId: "t-4", symbol: "000858", netPnl: -2000, exitPrice: 1700, entryTime: "2025-02-15T10:00:00Z" }),
+    ];
+
+    const result = service.symbolBreakdown(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519", "000858"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      trades,
+      fakeBacktestResult({ symbols: ["600519", "000858"], totalTrades: 20, winRate: 60, totalReturn: 15 }),
+    );
+
+    expect(result.strategyId).toBe("dual-ma-crossover");
+    expect(result.symbols.length).toBe(2);
+    // 600519 should have positive trades, 000858 negative
+    const sym600519 = result.symbols.find((s) => s.symbol === "600519");
+    const sym000858 = result.symbols.find((s) => s.symbol === "000858");
+    expect(sym600519).toBeDefined();
+    expect(sym000858).toBeDefined();
+    expect(sym600519!.liveWinRate).toBe(100); // 2 wins out of 2
+    expect(sym000858!.liveWinRate).toBe(0); // 0 wins out of 2
+    expect(result.worstSymbol).toBeTruthy();
+    expect(result.bestSymbol).toBeTruthy();
+  });
+
+  it("handles single symbol gracefully", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.symbolBreakdown(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      [fakeTrade()],
+      fakeBacktestResult(),
+    );
+
+    expect(result.symbols.length).toBe(1);
+    expect(result.symbols[0]!.symbol).toBe("600519");
+  });
+});
+
+// ── Execution quality tests ─────────────────────────────────
+
+describe("LiveBacktestComparison.executionQuality", () => {
+  it("calculates slippage and timing metrics", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const trades = [
+      fakeTrade({
+        tradeId: "t-1",
+        entryTime: "2025-01-15T10:00:00Z",
+        exitTime: "2025-01-25T14:00:00Z",
+        entryPrice: 1800,
+        netPnl: 5000,
+      }),
+      fakeTrade({
+        tradeId: "t-2",
+        entryTime: "2025-02-10T10:00:00Z",
+        exitTime: "2025-02-20T14:00:00Z",
+        entryPrice: 1850,
+        netPnl: -2000,
+        exitPrice: 1750,
+      }),
+    ];
+
+    const btResult = fakeBacktestResult({
+      signals: [
+        fakeSignal({ timestamp: new Date("2025-01-15T09:30:00Z").getTime(), price: 1795 }),
+        fakeSignal({ timestamp: new Date("2025-01-25T09:30:00Z").getTime(), price: 1900, direction: "sell" }),
+        fakeSignal({ timestamp: new Date("2025-02-10T09:30:00Z").getTime(), price: 1840 }),
+        fakeSignal({ timestamp: new Date("2025-02-20T09:30:00Z").getTime(), price: 1760, direction: "sell" }),
+      ],
+      profitFactor: 2.5,
+      sharpeRatio: 1.8,
+      sortinoRatio: 2.2,
+    });
+
+    const result = service.executionQuality(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      trades,
+      btResult,
+    );
+
+    expect(result.strategyId).toBe("dual-ma-crossover");
+    expect(typeof result.avgSlippagePct).toBe("number");
+    expect(typeof result.medianSlippagePct).toBe("number");
+    expect(typeof result.maxSlippagePct).toBe("number");
+    expect(typeof result.avgSignalToFillMinutes).toBe("number");
+    expect(typeof result.signalFillRate).toBe("number");
+    expect(typeof result.avgHoldingDaysLive).toBe("number");
+    expect(typeof result.liveProfitFactor).toBe("number");
+    expect(result.backtestProfitFactor).toBe(2.5);
+    expect(result.backtestSharpe).toBe(1.8);
+    expect(result.backtestSortino).toBe(2.2);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.symbolBreakdowns.length).toBe(1);
+  });
+
+  it("computes Sharpe and Sortino from equity snapshots", () => {
+    const snapshots: EquitySnapshot[] = [
+      { date: "2025-01-01", equity: 100_000, cash: 100_000, marketValue: 0, dailyPnl: 0, positionCount: 0 },
+      { date: "2025-01-02", equity: 100_500, cash: 500, marketValue: 100_000, dailyPnl: 500, positionCount: 1 },
+      { date: "2025-01-03", equity: 101_000, cash: 1_000, marketValue: 100_000, dailyPnl: 500, positionCount: 1 },
+      { date: "2025-01-06", equity: 100_200, cash: 200, marketValue: 100_000, dailyPnl: -800, positionCount: 1 },
+      { date: "2025-01-07", equity: 101_500, cash: 1_500, marketValue: 100_000, dailyPnl: 1_300, positionCount: 1 },
+      { date: "2025-01-08", equity: 102_000, cash: 2_000, marketValue: 100_000, dailyPnl: 500, positionCount: 1 },
+    ];
+    const equityHistory = fakeEquityHistory(snapshots);
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.executionQuality(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-01-08",
+      },
+      [fakeTrade({ entryTime: "2025-01-01T10:00:00Z", exitTime: "2025-01-08T14:00:00Z" })],
+      fakeBacktestResult({ sharpeRatio: 2.0 }),
+    );
+
+    // Should have computed live Sharpe from equity snapshots
+    expect(result.liveSharpe).not.toBeNull();
+    expect(typeof result.liveSharpe).toBe("number");
+    expect(result.liveSortino).not.toBeNull();
+    expect(typeof result.liveSortino).toBe("number");
+  });
+
+  it("provides diagnostics for poor execution", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    // Trades with high slippage
+    const trades = [
+      fakeTrade({
+        tradeId: "t-1",
+        entryTime: "2025-01-20T10:00:00Z", // 5 days after signal
+        entryPrice: 1900, // much higher than signal price of 1795
+        netPnl: -3000,
+        exitPrice: 1700,
+      }),
+    ];
+
+    const btResult = fakeBacktestResult({
+      signals: [
+        fakeSignal({ timestamp: new Date("2025-01-15T09:30:00Z").getTime(), price: 1795 }),
+        fakeSignal({ timestamp: new Date("2025-02-01T09:30:00Z").getTime(), price: 1800 }),
+        fakeSignal({ timestamp: new Date("2025-03-01T09:30:00Z").getTime(), price: 1850 }),
+      ],
+      profitFactor: 2.0,
+    });
+
+    const result = service.executionQuality(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      trades,
+      btResult,
+    );
+
+    // Should detect low signal fill rate and provide diagnostics
+    expect(result.signalFillRate).toBeLessThan(100);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    // liveProfitFactor should be 0 (all losses)
+    expect(result.liveProfitFactor).toBe(0);
+  });
+
+  it("handles empty trades", () => {
+    const equityHistory = fakeEquityHistory(fakeSnapshots());
+    const service = new LiveBacktestComparison(equityHistory, undefined);
+
+    const result = service.executionQuality(
+      {
+        strategyId: "dual-ma-crossover",
+        symbols: ["600519"],
+        startDate: "2025-01-01",
+        endDate: "2025-03-31",
+      },
+      [],
+      fakeBacktestResult(),
+    );
+
+    expect(result.avgSlippagePct).toBe(0);
+    expect(result.avgHoldingDaysLive).toBe(0);
+    expect(result.liveProfitFactor).toBe(0);
+  });
+});

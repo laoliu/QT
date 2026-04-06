@@ -9,6 +9,8 @@
  *   rolling          — rolling window comparison over time
  *   batch_compare    — compare multiple strategies simultaneously
  *   export_report    — generate a Markdown comparison report
+ *   symbol_breakdown — per-symbol breakdown of live vs backtest differences
+ *   execution_quality — execution quality analysis (slippage, timing, holding, profit factor)
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { BacktestResult, QuantTradingConfig, TradeRecord } from "../types.js";
@@ -40,14 +42,16 @@ export function createLiveBacktestComparisonTool(
       "比较实盘交易表现与回测预期的差异。检测策略漂移、验证回测假设（滑点/成交率）、量化回测-实盘差距。" +
       "action=compare 运行对比分析, action=list_comparable 列出可对比的策略, " +
       "action=match_trades 逐笔交易匹配, action=rolling 滚动窗口对比, " +
-      "action=batch_compare 多策略批量对比, action=export_report 导出Markdown报告。" +
+      "action=batch_compare 多策略批量对比, action=export_report 导出Markdown报告, " +
+      "action=symbol_breakdown 按标的拆分对比（定位哪只股票偏离最大）, " +
+      "action=execution_quality 执行质量分析（滑点分布/信号成交率/持仓周期/盈亏比/夏普比率）。" +
       "返回指标对比表、权益曲线叠加、差异诊断和健康评估。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "list_comparable", "match_trades", "rolling", "batch_compare", "export_report"],
+          enum: ["compare", "list_comparable", "match_trades", "rolling", "batch_compare", "export_report", "symbol_breakdown", "execution_quality"],
           description: "操作类型",
         },
         strategy_id: {
@@ -385,6 +389,168 @@ export function createLiveBacktestComparisonTool(
             format: "markdown",
             report,
             hint: "可以将此报告保存为 .md 文件或通过消息渠道分享",
+          };
+        }
+
+        case "symbol_breakdown": {
+          const strategyId = args.strategy_id as string;
+          if (!strategyId) return { error: "请提供 strategy_id" };
+
+          const symbols = parseSymbols(args.symbols as string | undefined);
+          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
+          const backtestId = args.backtest_id as string | undefined;
+          const rerunBacktest = args.rerun_backtest as boolean | undefined;
+
+          const engine = getEngine();
+          const allTrades = engine?.orderManager
+            ? await engine.orderManager.getTrades()
+            : [];
+
+          const stratTrades = allTrades.filter(
+            (t) =>
+              t.strategyId === strategyId &&
+              t.entryTime.slice(0, 10) >= startDate &&
+              t.entryTime.slice(0, 10) <= endDate,
+          );
+
+          const compareSymbols =
+            symbols.length > 0
+              ? symbols
+              : [...new Set(stratTrades.map((t) => t.symbol))];
+
+          if (compareSymbols.length === 0) {
+            return { error: `策略 ${strategyId} 在 ${startDate} ~ ${endDate} 期间无交易记录` };
+          }
+
+          let btResult = await getBacktestResult(
+            backtestStore, backtestId, strategyId, compareSymbols, startDate, endDate, rerunBacktest, config, api,
+          );
+
+          const result = comparison.symbolBreakdown(
+            { strategyId, symbols: compareSymbols, startDate, endDate },
+            stratTrades,
+            btResult ?? undefined,
+          );
+
+          const verdictLabels: Record<string, string> = {
+            consistent: "🟢 一致",
+            minor_drift: "🟡 轻微偏离",
+            significant_drift: "🟠 显著偏离",
+            critical_divergence: "🔴 严重偏离",
+          };
+
+          return {
+            strategyId: result.strategyId,
+            period: result.period,
+            worstSymbol: result.worstSymbol,
+            bestSymbol: result.bestSymbol,
+            symbols: result.symbols.map((s) => ({
+              标的: s.symbol,
+              实盘交易: s.liveTrades,
+              回测交易: s.backtestTrades,
+              实盘收益: `${fmt(s.liveReturn, 2)}%`,
+              回测收益: `${fmt(s.backtestReturn, 2)}%`,
+              收益偏差: `${s.returnDelta > 0 ? "+" : ""}${fmt(s.returnDelta, 2)}%`,
+              实盘胜率: `${fmt(s.liveWinRate, 1)}%`,
+              回测胜率: `${fmt(s.backtestWinRate, 1)}%`,
+              胜率偏差: `${s.winRateDelta > 0 ? "+" : ""}${fmt(s.winRateDelta, 1)}%`,
+              实盘持仓天数: fmt(s.avgHoldingDaysLive, 1),
+              回测持仓天数: fmt(s.avgHoldingDaysBacktest, 1),
+              评估: verdictLabels[s.verdict] ?? s.verdict,
+            })),
+            hint: result.worstSymbol
+              ? `标的 ${result.worstSymbol} 偏离最大，建议重点检查该标的的执行情况`
+              : "各标的表现与回测基本一致",
+          };
+        }
+
+        case "execution_quality": {
+          const strategyId = args.strategy_id as string;
+          if (!strategyId) return { error: "请提供 strategy_id" };
+
+          const symbols = parseSymbols(args.symbols as string | undefined);
+          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
+          const backtestId = args.backtest_id as string | undefined;
+          const rerunBacktest = args.rerun_backtest as boolean | undefined;
+
+          const engine = getEngine();
+          const allTrades = engine?.orderManager
+            ? await engine.orderManager.getTrades()
+            : [];
+
+          const stratTrades = allTrades.filter(
+            (t) =>
+              t.strategyId === strategyId &&
+              t.entryTime.slice(0, 10) >= startDate &&
+              t.entryTime.slice(0, 10) <= endDate,
+          );
+
+          const compareSymbols =
+            symbols.length > 0
+              ? symbols
+              : [...new Set(stratTrades.map((t) => t.symbol))];
+
+          if (compareSymbols.length === 0) {
+            return { error: `策略 ${strategyId} 在 ${startDate} ~ ${endDate} 期间无交易记录` };
+          }
+
+          let btResult = await getBacktestResult(
+            backtestStore, backtestId, strategyId, compareSymbols, startDate, endDate, rerunBacktest, config, api,
+          );
+
+          const result = comparison.executionQuality(
+            { strategyId, symbols: compareSymbols, startDate, endDate },
+            stratTrades,
+            btResult ?? undefined,
+          );
+
+          const verdictLabels: Record<string, string> = {
+            consistent: "🟢 一致",
+            minor_drift: "🟡 轻微偏离",
+            significant_drift: "🟠 显著偏离",
+            critical_divergence: "🔴 严重偏离",
+          };
+
+          return {
+            strategyId: result.strategyId,
+            period: result.period,
+
+            执行效率: {
+              信号成交率: `${fmt(result.signalFillRate, 1)}%`,
+              平均信号到成交延迟: `${fmt(result.avgSignalToFillMinutes, 0)}分钟`,
+            },
+
+            滑点分析: {
+              平均滑点: `${fmt(result.avgSlippagePct, 3)}%`,
+              中位数滑点: `${fmt(result.medianSlippagePct, 3)}%`,
+              最大单笔滑点: `${fmt(result.maxSlippagePct, 3)}%`,
+            },
+
+            持仓周期: {
+              实盘平均持仓天数: fmt(result.avgHoldingDaysLive, 1),
+              回测平均持仓天数: fmt(result.avgHoldingDaysBacktest, 1),
+              持仓偏差天数: `${result.holdingDaysDelta > 0 ? "+" : ""}${fmt(result.holdingDaysDelta, 1)}`,
+            },
+
+            风险调整指标: {
+              实盘盈亏比: fmt(result.liveProfitFactor, 2),
+              回测盈亏比: fmt(result.backtestProfitFactor, 2),
+              实盘夏普比率: fmt(result.liveSharpe, 2),
+              回测夏普比率: fmt(result.backtestSharpe, 2),
+              实盘索提诺比率: fmt(result.liveSortino, 2),
+              回测索提诺比率: fmt(result.backtestSortino, 2),
+            },
+
+            标的明细: result.symbolBreakdowns.map((s) => ({
+              标的: s.symbol,
+              实盘交易: s.liveTrades,
+              收益偏差: `${s.returnDelta > 0 ? "+" : ""}${fmt(s.returnDelta, 2)}%`,
+              评估: verdictLabels[s.verdict] ?? s.verdict,
+            })),
+
+            诊断建议: result.diagnostics,
           };
         }
 

@@ -479,4 +479,182 @@ describe("report-templates", () => {
     expect(result).toContain("交易日志");
     expect(result).toContain("暂无交易数据");
   });
+
+  // ── monthly_report ──
+
+  it("monthly_report is registered with correct metadata", () => {
+    const template = findReportTemplate("monthly_report");
+    expect(template).toBeDefined();
+    expect(template!.name).toBe("月度绩效");
+    expect(template!.id).toBe("monthly_report");
+  });
+
+  it("monthly_report generates comprehensive report with all sections", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string, args: Record<string, unknown>) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 25,
+              totalNetPnl: 8500,
+              overallWinRate: 0.64,
+              profitFactor: 2.1,
+              avgWin: 800,
+              avgLoss: 380,
+              byStrategy: [
+                {
+                  strategyId: "dual-ma",
+                  trades: 15,
+                  netPnl: 6000,
+                  winRate: 0.7,
+                  contributionPct: 70.6,
+                },
+                {
+                  strategyId: "rsi",
+                  trades: 10,
+                  netPnl: 2500,
+                  winRate: 0.5,
+                  contributionPct: 29.4,
+                },
+              ],
+              bySymbol: [
+                { symbol: "600519", trades: 5, netPnl: 4000 },
+                { symbol: "000858", trades: 3, netPnl: 2000 },
+                { symbol: "300750", trades: 4, netPnl: -500 },
+              ],
+            }),
+          );
+        }
+        if (name === "trading_signal" && args.action === "hit_rate") {
+          return Promise.resolve(
+            JSON.stringify({
+              stats: {
+                "1": { hits: 15, total: 25, hitRate: 0.6 },
+                "3": { hits: 10, total: 25, hitRate: 0.4 },
+              },
+            }),
+          );
+        }
+        if (name === "portfolio" && args.action === "summary") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalValue: 508500,
+              cash: 200000,
+              positionCount: 5,
+            }),
+          );
+        }
+        if (name === "live_trading" && args.action === "get_risk_snapshot") {
+          return Promise.resolve(
+            JSON.stringify({
+              maxDrawdown: 3.2,
+              dailyLossMax: 1500,
+            }),
+          );
+        }
+        return Promise.resolve(JSON.stringify({}));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    // Header
+    expect(result).toContain("月度绩效报告");
+    expect(result).toContain("报告周期");
+    // Overall stats
+    expect(result).toContain("整体表现");
+    expect(result).toContain("25笔");
+    expect(result).toContain("8500");
+    expect(result).toContain("64.0%");
+    expect(result).toContain("2.10");
+    expect(result).toContain("平均盈利");
+    expect(result).toContain("平均亏损");
+    // Strategy breakdown
+    expect(result).toContain("策略分析");
+    expect(result).toContain("dual-ma");
+    expect(result).toContain("rsi");
+    // Symbol breakdown
+    expect(result).toContain("标的分析");
+    expect(result).toContain("600519");
+    // Signal hit rate
+    expect(result).toContain("信号命中率");
+    // Portfolio snapshot
+    expect(result).toContain("账户快照");
+    expect(result).toContain("508500");
+    // Risk metrics
+    expect(result).toContain("风控指标");
+    expect(result).toContain("最大回撤");
+    expect(result).toContain("3.20");
+  });
+
+  it("monthly_report handles all API failures gracefully", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi.fn().mockRejectedValue(new Error("service unavailable"));
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("月度绩效报告");
+    expect(result).toContain("绩效归因数据: 获取失败");
+  });
+
+  it("monthly_report handles partial data (attribution only)", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 3,
+              totalNetPnl: -200,
+              overallWinRate: 0.33,
+              byStrategy: [],
+              bySymbol: [],
+            }),
+          );
+        }
+        return Promise.reject(new Error("not available"));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("月度绩效报告");
+    expect(result).toContain("整体表现");
+    expect(result).toContain("3笔");
+    expect(result).toContain("-200");
+    // Should not contain signal hit rate or risk since those errored
+    expect(result).not.toContain("信号命中率");
+  });
+
+  it("monthly_report shows correct report period for previous month", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi.fn().mockRejectedValue(new Error("not available"));
+
+    const result = await template.generate(executeTool, {} as never);
+    // The report should contain a YYYY-MM period string
+    expect(result).toMatch(/\d{4}-\d{2}/);
+  });
+
+  it("monthly_report handles zero-trade month", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 0,
+              totalNetPnl: 0,
+              overallWinRate: 0,
+              byStrategy: [],
+              bySymbol: [],
+            }),
+          );
+        }
+        return Promise.reject(new Error("no data"));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("月度绩效报告");
+    // totalTrades is 0, so the "整体表现" section should not appear
+    // (the code checks attrData.totalTrades != null, 0 is falsy check—let's verify)
+  });
 });

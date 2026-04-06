@@ -192,14 +192,45 @@ export interface PerformanceExportRow {
   contributionPct: number;
 }
 
+export interface LivePositionExportRow {
+  symbol: string;
+  name: string;
+  market: MarketType;
+  quantity: number;
+  availableQty: number;
+  frozenQty: number;
+  avgCost: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPct: number;
+}
+
+export interface BacktestExportRow {
+  strategyId: string;
+  symbols: string;
+  startDate: string;
+  endDate: string;
+  initialCash: number;
+  finalValue: number;
+  totalReturn: number;
+  annualizedReturn: number;
+  maxDrawdown: number;
+  sharpeRatio: number;
+  winRate: number;
+  totalTrades: number;
+}
+
 // ── Union of all exportable row types ──────────────────────────
 
 export type ExportRow =
   | TradeExportRow
   | OrderExportRow
   | PositionExportRow
+  | LivePositionExportRow
   | EquityExportRow
-  | PerformanceExportRow;
+  | PerformanceExportRow
+  | BacktestExportRow;
 
 // ── Default Column Definitions per Source ──────────────────────
 
@@ -388,6 +419,41 @@ export function toPerformanceExportRow(
     avgLoss: s.avgLoss,
     profitFactor: s.profitFactor,
     contributionPct: s.contributionPct,
+  };
+}
+
+/** Map a LivePosition to a flat export row. */
+export function toLivePositionExportRow(p: LivePosition): LivePositionExportRow {
+  return {
+    symbol: p.symbol,
+    name: p.name ?? "",
+    market: p.market,
+    quantity: p.quantity,
+    availableQty: p.availableQty,
+    frozenQty: p.frozenQty,
+    avgCost: p.avgCost,
+    currentPrice: p.currentPrice ?? 0,
+    marketValue: p.marketValue ?? 0,
+    unrealizedPnl: p.unrealizedPnl ?? 0,
+    unrealizedPnlPct: p.unrealizedPnlPct ?? 0,
+  };
+}
+
+/** Map a BacktestResult to a flat export row. */
+export function toBacktestExportRow(b: BacktestResult): BacktestExportRow {
+  return {
+    strategyId: b.strategyId,
+    symbols: b.symbols.join(", "),
+    startDate: b.startDate,
+    endDate: b.endDate,
+    initialCash: b.initialCash,
+    finalValue: b.finalValue,
+    totalReturn: b.totalReturn,
+    annualizedReturn: b.annualizedReturn,
+    maxDrawdown: b.maxDrawdown,
+    sharpeRatio: b.sharpeRatio,
+    winRate: b.winRate,
+    totalTrades: b.totalTrades,
   };
 }
 

@@ -1036,3 +1036,77 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Live vs Backtest Trade Alignment ────────────────────────────
+
+/** How a trade was matched between live and backtest records. */
+export type AlignmentMatchType =
+  | "exact" // same symbol, overlapping time, same direction
+  | "time_shifted" // same symbol + direction but entry/exit times differ beyond tolerance
+  | "live_only" // trade exists only in live records
+  | "backtest_only"; // trade exists only in backtest signals
+
+/** A single aligned pair of live trade and backtest signal/trade. */
+export type AlignedTradePair = {
+  id: string;
+  matchType: AlignmentMatchType;
+  symbol: string;
+  /** Live trade record (undefined when backtest_only). */
+  liveTrade?: TradeRecord;
+  /** Backtest signal that corresponds to this trade (undefined when live_only). */
+  backtestSignal?: TradingSignal;
+  /** Backtest-derived trade metrics (from equity curve / signals), undefined when live_only. */
+  backtestPrice?: number;
+  backtestTimestamp?: number;
+  /** Time difference in milliseconds between live entry and backtest signal (negative = live was earlier). */
+  timeDeltaMs?: number;
+  /** Price slippage: (liveEntryPrice - backtestPrice) / backtestPrice. */
+  priceSlippage?: number;
+  /** PnL difference: liveTrade.netPnl - backtestEstimatedPnl. */
+  pnlDelta?: number;
+};
+
+/** Configuration for the alignment engine. */
+export type AlignmentConfig = {
+  /** Max time tolerance in milliseconds for matching trades (default: 86400000 = 1 day). */
+  timeToleranceMs?: number;
+  /** Max price deviation ratio for considering a match (default: 0.05 = 5%). */
+  priceToleranceRatio?: number;
+  /** Whether to include backtest_only signals that had no live execution (default: true). */
+  includeUnexecuted?: boolean;
+};
+
+/** Summary statistics for a set of aligned trade pairs. */
+export type AlignmentSummary = {
+  totalPairs: number;
+  exactMatches: number;
+  timeShiftedMatches: number;
+  liveOnlyTrades: number;
+  backtestOnlySignals: number;
+  /** Average absolute time delta across matched pairs (ms). */
+  avgTimeDeltaMs: number;
+  /** Average price slippage across matched pairs. */
+  avgPriceSlippage: number;
+  /** Average PnL delta across matched pairs. */
+  avgPnlDelta: number;
+  /** Execution rate: matched / (matched + backtestOnly). */
+  executionRate: number;
+  /** Correlation of PnL between live and backtest (Pearson r, -1 to 1). */
+  pnlCorrelation: number;
+};
+
+/** Full alignment result returned by the engine. */
+export type AlignmentResult = {
+  /** Strategy that was compared. */
+  strategyId: string;
+  /** Symbols involved. */
+  symbols: string[];
+  /** Date range of the alignment. */
+  dateRange: { from: string; to: string };
+  /** All aligned pairs. */
+  pairs: AlignedTradePair[];
+  /** Aggregate statistics. */
+  summary: AlignmentSummary;
+  /** Configuration used for this alignment. */
+  config: Required<AlignmentConfig>;
+};

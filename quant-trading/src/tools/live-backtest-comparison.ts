@@ -20,6 +20,7 @@ import type { BacktestStore } from "../services/backtest-store.js";
 import type { AlertStore } from "../services/alert-store.js";
 import { LiveBacktestComparison } from "../services/live-backtest-comparison.js";
 import { runBacktest } from "../engine/strategy-registry.js";
+import { runPythonScript } from "../bridge/python-bridge.js";
 
 /** Safe toFixed — returns "N/A" when the value is nullish or not a finite number. */
 function fmt(v: unknown, digits: number): string {
@@ -44,14 +45,16 @@ export function createLiveBacktestComparisonTool(
       "action=match_trades 逐笔交易匹配, action=rolling 滚动窗口对比, " +
       "action=batch_compare 多策略批量对比, action=export_report 导出Markdown报告, " +
       "action=symbol_breakdown 按标的拆分对比（定位哪只股票偏离最大）, " +
-      "action=execution_quality 执行质量分析（滑点分布/信号成交率/持仓周期/盈亏比/夏普比率）。" +
+      "action=execution_quality 执行质量分析（滑点分布/信号成交率/持仓周期/盈亏比/夏普比率）, " +
+      "action=regime_comparison 按市场环境分段对比（牛市/熊市/震荡各阶段的实盘vs回测偏离）, " +
+      "action=summary_dashboard 全策略健康总览（一览所有策略的实盘vs回测状态）。" +
       "返回指标对比表、权益曲线叠加、差异诊断和健康评估。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["compare", "list_comparable", "match_trades", "rolling", "batch_compare", "export_report", "symbol_breakdown", "execution_quality"],
+          enum: ["compare", "list_comparable", "match_trades", "rolling", "batch_compare", "export_report", "symbol_breakdown", "execution_quality", "regime_comparison", "summary_dashboard"],
           description: "操作类型",
         },
         strategy_id: {
@@ -551,6 +554,176 @@ export function createLiveBacktestComparisonTool(
             })),
 
             诊断建议: result.diagnostics,
+          };
+        }
+
+        case "regime_comparison": {
+          const strategyId = args.strategy_id as string;
+          if (!strategyId) return { error: "请提供 strategy_id" };
+
+          const symbols = parseSymbols(args.symbols as string | undefined);
+          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
+          const backtestId = args.backtest_id as string | undefined;
+          const rerunBacktest = args.rerun_backtest as boolean | undefined;
+
+          const engine = getEngine();
+          const allTrades = engine?.orderManager
+            ? await engine.orderManager.getTrades()
+            : [];
+
+          const stratTrades = allTrades.filter(
+            (t) =>
+              t.strategyId === strategyId &&
+              t.entryTime.slice(0, 10) >= startDate &&
+              t.entryTime.slice(0, 10) <= endDate,
+          );
+
+          const compareSymbols =
+            symbols.length > 0
+              ? symbols
+              : [...new Set(stratTrades.map((t) => t.symbol))];
+
+          if (compareSymbols.length === 0) {
+            return { error: `策略 ${strategyId} 在 ${startDate} ~ ${endDate} 期间无交易记录` };
+          }
+
+          let btResult = await getBacktestResult(
+            backtestStore, backtestId, strategyId, compareSymbols, startDate, endDate, rerunBacktest, config, api,
+          );
+
+          // Fetch regime timeline from Python strategy_router
+          let regimeTimeline: Array<{ regime: string; startDate: string; endDate: string }> = [];
+          try {
+            const result = await runPythonScript<{
+              regimes?: Array<{ regime: string; start_date: string; end_date: string }>;
+            }>(
+              "engines/strategy_router.py",
+              { action: "get_regime_timeline", start_date: startDate, end_date: endDate },
+              config,
+            );
+            if (result.ok && result.data?.regimes) {
+              regimeTimeline = result.data.regimes.map((r) => ({
+                regime: r.regime,
+                startDate: r.start_date,
+                endDate: r.end_date,
+              }));
+            }
+          } catch {
+            // Fallback: treat entire period as single "unknown" regime
+          }
+
+          // If no regime data, create a simple fallback based on market performance
+          if (regimeTimeline.length === 0) {
+            regimeTimeline = [{ regime: "unknown", startDate, endDate }];
+          }
+
+          const result = comparison.regimeComparison(
+            { strategyId, symbols: compareSymbols, startDate, endDate },
+            stratTrades,
+            regimeTimeline,
+            btResult ?? undefined,
+          );
+
+          const verdictLabels: Record<string, string> = {
+            consistent: "🟢 一致",
+            minor_drift: "🟡 轻微偏离",
+            significant_drift: "🟠 显著偏离",
+            critical_divergence: "🔴 严重偏离",
+          };
+
+          return {
+            strategyId: result.strategyId,
+            period: result.period,
+            bestRegime: result.bestRegime,
+            worstRegime: result.worstRegime,
+            segments: result.segments.map((s) => ({
+              市场环境: s.regime,
+              期间: `${s.startDate} ~ ${s.endDate}`,
+              交易日: s.tradingDays,
+              实盘交易: s.liveTrades,
+              回测交易: s.backtestTrades,
+              实盘收益: `${fmt(s.liveReturn, 2)}%`,
+              回测收益: `${fmt(s.backtestReturn, 2)}%`,
+              收益偏差: `${s.returnDelta > 0 ? "+" : ""}${fmt(s.returnDelta, 2)}%`,
+              实盘胜率: `${fmt(s.liveWinRate, 1)}%`,
+              回测胜率: `${fmt(s.backtestWinRate, 1)}%`,
+              评估: verdictLabels[s.verdict] ?? s.verdict,
+            })),
+            diagnostics: result.diagnostics,
+            hint: result.worstRegime && result.worstRegime !== result.bestRegime
+              ? `策略在"${result.worstRegime}"环境下偏离最大，在"${result.bestRegime}"环境下最一致。建议在不利行情下降低仓位或暂停策略。`
+              : "各市场环境下策略表现一致",
+          };
+        }
+
+        case "summary_dashboard": {
+          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
+
+          const engine = getEngine();
+          const allTrades = engine?.orderManager
+            ? await engine.orderManager.getTrades()
+            : [];
+
+          // Group trades by strategy
+          const strategyTrades = new Map<string, TradeRecord[]>();
+          for (const t of allTrades) {
+            const sid = t.strategyId ?? "manual";
+            if (!strategyTrades.has(sid)) strategyTrades.set(sid, []);
+            strategyTrades.get(sid)!.push(t);
+          }
+
+          // Also include strategies from the live engine that may have no trades yet
+          try {
+            const registry = engine?.strategyRegistry;
+            const liveStrategies = registry?.list?.() ?? [];
+            for (const ls of liveStrategies) {
+              const sid = ls.strategyId;
+              if (sid && !strategyTrades.has(sid)) {
+                strategyTrades.set(sid, []);
+              }
+            }
+          } catch {
+            // registry not available
+          }
+
+          const strategies = [...strategyTrades.entries()].map(([sid, trades]) => {
+            const symbols = [...new Set(trades.map((t) => t.symbol))];
+            return { strategyId: sid, symbols, trades };
+          });
+
+          const result = comparison.summaryDashboard(strategies, startDate, endDate);
+
+          const verdictLabels: Record<string, string> = {
+            consistent: "🟢 一致",
+            minor_drift: "🟡 轻微偏离",
+            significant_drift: "🟠 显著偏离",
+            critical_divergence: "🔴 严重偏离",
+          };
+
+          return {
+            period: `${startDate} ~ ${endDate}`,
+            totalStrategies: result.totalStrategies,
+            healthDistribution: {
+              "🟢 一致": result.healthDistribution.consistent,
+              "🟡 轻微偏离": result.healthDistribution.minor_drift,
+              "🟠 显著偏离": result.healthDistribution.significant_drift,
+              "🔴 严重偏离": result.healthDistribution.critical_divergence,
+              "⚪ 无数据": result.healthDistribution.no_data,
+            },
+            strategies: result.strategies.map((s) => ({
+              策略: s.strategyId,
+              实盘交易: s.liveTradeCount,
+              实盘期间: s.livePeriod,
+              评估: s.score < 0 ? "⚪ 无数据" : (verdictLabels[s.verdict] ?? s.verdict),
+              收益偏差: s.score < 0 ? "N/A" : `${s.returnDelta > 0 ? "+" : ""}${fmt(s.returnDelta, 2)}%`,
+              回撤偏差: s.score < 0 ? "N/A" : `${s.drawdownDelta > 0 ? "+" : ""}${fmt(s.drawdownDelta, 2)}%`,
+              胜率偏差: s.score < 0 ? "N/A" : `${s.winRateDelta > 0 ? "+" : ""}${fmt(s.winRateDelta, 1)}%`,
+              有回测数据: s.hasBacktest ? "是" : "否",
+            })),
+            alerts: result.alerts,
+            hint: "使用 action=compare 并指定 strategy_id 可查看单策略详细对比",
           };
         }
 

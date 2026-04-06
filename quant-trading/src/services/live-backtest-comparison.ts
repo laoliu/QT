@@ -256,6 +256,71 @@ export interface ExecutionQualityResult {
   diagnostics: string[];
 }
 
+// ── Regime comparison types ─────────────────────────────────
+
+export interface RegimeSegment {
+  /** Market regime label (e.g. "bull", "bear", "sideways", "volatile"). */
+  regime: string;
+  /** Start date (YYYY-MM-DD). */
+  startDate: string;
+  /** End date (YYYY-MM-DD). */
+  endDate: string;
+  /** Number of trading days in this segment. */
+  tradingDays: number;
+  /** Live trading stats for this regime segment. */
+  liveReturn: number;
+  liveWinRate: number;
+  liveTrades: number;
+  /** Backtest stats for this regime segment. */
+  backtestReturn: number;
+  backtestWinRate: number;
+  backtestTrades: number;
+  /** Deltas. */
+  returnDelta: number;
+  winRateDelta: number;
+  /** Verdict for this regime segment. */
+  verdict: LiveVsBacktestResult["verdict"];
+}
+
+export interface RegimeComparisonResult {
+  strategyId: string;
+  period: string;
+  segments: RegimeSegment[];
+  /** Regime where the strategy performs best (smallest drift). */
+  bestRegime: string | null;
+  /** Regime where the strategy diverges most. */
+  worstRegime: string | null;
+  diagnostics: string[];
+}
+
+// ── Summary dashboard types ─────────────────────────────────
+
+export interface StrategySummaryEntry {
+  strategyId: string;
+  liveTradeCount: number;
+  livePeriod: string;
+  verdict: LiveVsBacktestResult["verdict"];
+  returnDelta: number;
+  drawdownDelta: number;
+  winRateDelta: number;
+  score: number;
+  hasBacktest: boolean;
+}
+
+export interface SummaryDashboardResult {
+  timestamp: string;
+  totalStrategies: number;
+  healthDistribution: {
+    consistent: number;
+    minor_drift: number;
+    significant_drift: number;
+    critical_divergence: number;
+    no_data: number;
+  };
+  strategies: StrategySummaryEntry[];
+  alerts: string[];
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 function pct(a: number, b: number): number {
@@ -1308,5 +1373,260 @@ export class LiveBacktestComparison {
     lines.push(`- 建模滑点: ${result.backtestStats.modeledSlippage.toFixed(3)}%`);
 
     return lines.join("\n");
+  }
+
+  /**
+   * Compare live vs backtest performance segmented by market regime.
+   * Helps the trader understand in which market conditions the strategy
+   * drifts the most (e.g. strategy works well in bull but fails in sideways).
+   */
+  regimeComparison(
+    req: LiveVsBacktestRequest,
+    liveTrades: TradeRecord[],
+    regimeTimeline: Array<{ regime: string; startDate: string; endDate: string }>,
+    backtestResult?: BacktestResult,
+  ): RegimeComparisonResult {
+    const segments: RegimeSegment[] = [];
+
+    for (const seg of regimeTimeline) {
+      // Clip segment to the comparison window
+      const segStart = seg.startDate > req.startDate ? seg.startDate : req.startDate;
+      const segEnd = seg.endDate < req.endDate ? seg.endDate : req.endDate;
+      if (segStart > segEnd) continue;
+
+      // Live trades in this regime segment
+      const segTrades = liveTrades.filter((t) => {
+        const tDate = t.entryTime.slice(0, 10);
+        return (
+          tDate >= segStart &&
+          tDate <= segEnd &&
+          (!req.strategyId || t.strategyId === req.strategyId)
+        );
+      });
+
+      const closedLive = segTrades.filter((t) => t.exitPrice != null);
+      const liveWins = closedLive.filter((t) => t.netPnl > 0).length;
+      const liveWinRate = closedLive.length > 0 ? (liveWins / closedLive.length) * 100 : 0;
+      const livePnl = closedLive.reduce((s, t) => s + t.netPnl, 0);
+      const liveCost = closedLive.reduce((s, t) => s + t.entryPrice * t.quantity, 0);
+      const liveReturn = liveCost > 0 ? (livePnl / liveCost) * 100 : 0;
+
+      // Estimate backtest stats for this segment proportionally
+      const btSignals = (backtestResult?.signals ?? []).filter((s) => {
+        const sDate = new Date(s.timestamp).toISOString().slice(0, 10);
+        return sDate >= segStart && sDate <= segEnd && req.symbols.includes(s.symbol);
+      });
+      const totalBtDays = daysBetween(req.endDate, req.startDate) || 1;
+      const segDays = daysBetween(segEnd, segStart) || 1;
+      const btRatio = segDays / totalBtDays;
+      const btTrades = btSignals.length > 0
+        ? Math.round(btSignals.filter((s) => s.direction === "buy").length)
+        : Math.round((backtestResult?.totalTrades ?? 0) * btRatio);
+      const btReturn = (backtestResult?.totalReturn ?? 0) * btRatio;
+      const btWinRate = backtestResult?.winRate ?? 0;
+
+      const returnDelta = liveReturn - btReturn;
+      const winRateDelta = liveWinRate - btWinRate;
+
+      let verdict: LiveVsBacktestResult["verdict"] = "consistent";
+      if (Math.abs(returnDelta) > 20 || Math.abs(winRateDelta) > 15) {
+        verdict = "critical_divergence";
+      } else if (Math.abs(returnDelta) > 10 || Math.abs(winRateDelta) > 10) {
+        verdict = "significant_drift";
+      } else if (Math.abs(returnDelta) > 5 || Math.abs(winRateDelta) > 5) {
+        verdict = "minor_drift";
+      }
+
+      segments.push({
+        regime: seg.regime,
+        startDate: segStart,
+        endDate: segEnd,
+        tradingDays: segDays,
+        liveReturn,
+        liveWinRate,
+        liveTrades: closedLive.length,
+        backtestReturn: btReturn,
+        backtestWinRate: btWinRate,
+        backtestTrades: btTrades,
+        returnDelta,
+        winRateDelta,
+        verdict,
+      });
+    }
+
+    // Find best/worst regimes
+    const ranked = [...segments].sort(
+      (a, b) => Math.abs(a.returnDelta) - Math.abs(b.returnDelta),
+    );
+    const bestRegime = ranked.length > 0 ? ranked[0]!.regime : null;
+    const worstRegime = ranked.length > 0 ? ranked[ranked.length - 1]!.regime : null;
+
+    // Diagnostics
+    const diagnostics: string[] = [];
+    const critical = segments.filter((s) => s.verdict === "critical_divergence" || s.verdict === "significant_drift");
+    if (critical.length > 0) {
+      diagnostics.push(
+        `策略在以下市场环境下偏离严重: ${critical.map((s) => s.regime).join(", ")}，建议检查策略参数是否适配该行情`,
+      );
+    }
+    const regimeGroups = new Map<string, RegimeSegment[]>();
+    for (const s of segments) {
+      if (!regimeGroups.has(s.regime)) regimeGroups.set(s.regime, []);
+      regimeGroups.get(s.regime)!.push(s);
+    }
+    for (const [regime, segs] of regimeGroups) {
+      const avgDelta = segs.reduce((a, s) => a + s.returnDelta, 0) / segs.length;
+      if (avgDelta < -10) {
+        diagnostics.push(
+          `${regime}行情下实盘平均落后回测${Math.abs(avgDelta).toFixed(1)}%，策略可能不适合该市场环境`,
+        );
+      }
+    }
+    if (diagnostics.length === 0) {
+      diagnostics.push("策略在各市场环境下表现与回测基本一致");
+    }
+
+    return {
+      strategyId: req.strategyId,
+      period: `${req.startDate} ~ ${req.endDate}`,
+      segments,
+      bestRegime,
+      worstRegime,
+      diagnostics,
+    };
+  }
+
+  /**
+   * Generate a summary dashboard of all active strategies' live vs backtest health.
+   * Gives the trader a quick at-a-glance view of which strategies are drifting.
+   */
+  summaryDashboard(
+    strategies: Array<{
+      strategyId: string;
+      symbols: string[];
+      trades: TradeRecord[];
+      backtestResult?: BacktestResult;
+    }>,
+    startDate: string,
+    endDate: string,
+  ): SummaryDashboardResult {
+    const verdictScores: Record<LiveVsBacktestResult["verdict"], number> = {
+      consistent: 0,
+      minor_drift: 1,
+      significant_drift: 2,
+      critical_divergence: 3,
+    };
+
+    const entries: StrategySummaryEntry[] = [];
+
+    for (const s of strategies) {
+      const periodTrades = s.trades.filter((t) => {
+        const tDate = t.entryTime.slice(0, 10);
+        return tDate >= startDate && tDate <= endDate;
+      });
+      const dates = periodTrades.map((t) => t.entryTime.slice(0, 10)).sort();
+      const livePeriod = dates.length > 0
+        ? `${dates[0]} ~ ${dates[dates.length - 1]}`
+        : "无数据";
+
+      const hasBacktest = !!s.backtestResult || (this.backtestStore
+        ? this.backtestStore.query({ strategyId: s.strategyId, limit: 1 }).length > 0
+        : false);
+
+      if (periodTrades.length === 0 && !hasBacktest) {
+        entries.push({
+          strategyId: s.strategyId,
+          liveTradeCount: 0,
+          livePeriod,
+          verdict: "consistent",
+          returnDelta: 0,
+          drawdownDelta: 0,
+          winRateDelta: 0,
+          score: -1, // no data sentinel
+          hasBacktest: false,
+        });
+        continue;
+      }
+
+      const result = this.compare(
+        { strategyId: s.strategyId, symbols: s.symbols, startDate, endDate },
+        s.trades,
+        s.backtestResult,
+      );
+
+      const returnMetric = result.metrics.find((m) => m.label === "总收益率");
+      const ddMetric = result.metrics.find((m) => m.label === "最大回撤");
+      const wrMetric = result.metrics.find((m) => m.label === "胜率");
+      const verdictScore = verdictScores[result.verdict];
+      const returnPenalty = Math.max(0, -(returnMetric?.delta ?? 0)) / 10;
+      const ddPenalty = Math.max(0, ddMetric?.delta ?? 0) / 10;
+
+      entries.push({
+        strategyId: s.strategyId,
+        liveTradeCount: result.liveStats.totalTrades,
+        livePeriod,
+        verdict: result.verdict,
+        returnDelta: returnMetric?.delta ?? 0,
+        drawdownDelta: ddMetric?.delta ?? 0,
+        winRateDelta: wrMetric?.delta ?? 0,
+        score: verdictScore + returnPenalty + ddPenalty,
+        hasBacktest,
+      });
+    }
+
+    // Sort by score (worst first, no-data at end)
+    entries.sort((a, b) => {
+      if (a.score < 0 && b.score >= 0) return 1;
+      if (b.score < 0 && a.score >= 0) return -1;
+      return b.score - a.score;
+    });
+
+    // Health distribution
+    const healthDistribution = {
+      consistent: 0,
+      minor_drift: 0,
+      significant_drift: 0,
+      critical_divergence: 0,
+      no_data: 0,
+    };
+    for (const e of entries) {
+      if (e.score < 0) {
+        healthDistribution.no_data++;
+      } else {
+        healthDistribution[e.verdict]++;
+      }
+    }
+
+    // Generate alerts
+    const alerts: string[] = [];
+    const criticalEntries = entries.filter((e) => e.verdict === "critical_divergence" && e.score >= 0);
+    if (criticalEntries.length > 0) {
+      alerts.push(
+        `⚠️ ${criticalEntries.length}个策略出现严重偏离: ${criticalEntries.map((e) => e.strategyId).join(", ")}`,
+      );
+    }
+    const driftEntries = entries.filter((e) => e.verdict === "significant_drift" && e.score >= 0);
+    if (driftEntries.length > 0) {
+      alerts.push(
+        `${driftEntries.length}个策略存在显著偏离: ${driftEntries.map((e) => e.strategyId).join(", ")}`,
+      );
+    }
+    const noDataEntries = entries.filter((e) => e.score < 0);
+    if (noDataEntries.length > 0) {
+      alerts.push(
+        `${noDataEntries.length}个策略缺少对比数据: ${noDataEntries.map((e) => e.strategyId).join(", ")}`,
+      );
+    }
+    if (alerts.length === 0) {
+      alerts.push("所有策略运行健康，实盘与回测一致性良好");
+    }
+
+    return {
+      timestamp: new Date().toISOString(),
+      totalStrategies: entries.length,
+      healthDistribution,
+      strategies: entries,
+      alerts,
+    };
   }
 }

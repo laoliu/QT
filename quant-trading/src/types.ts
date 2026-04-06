@@ -1107,6 +1107,42 @@ export type AlignmentResult = {
   pairs: AlignedTradePair[];
   /** Aggregate statistics. */
   summary: AlignmentSummary;
+  /** Per-symbol breakdown. */
+  symbolBreakdown?: Record<string, AlignmentSummary>;
   /** Configuration used for this alignment. */
+  config: Required<AlignmentConfig>;
+};
+
+/** A paired record when aligning TradeRecord vs TradeRecord (complete trades). */
+export type AlignedTradeRecordPair = {
+  id: string;
+  matchType: AlignmentMatchType;
+  symbol: string;
+  /** Live trade record (undefined when backtest_only). */
+  liveTrade?: TradeRecord;
+  /** Backtest trade record (undefined when live_only). */
+  backtestTrade?: TradeRecord;
+  /** Time delta: live entryTime - backtest entryTime (ms). */
+  entryTimeDeltaMs?: number;
+  /** Time delta: live exitTime - backtest exitTime (ms). */
+  exitTimeDeltaMs?: number;
+  /** Entry price slippage: (liveEntry - btEntry) / btEntry. */
+  entryPriceSlippage?: number;
+  /** Exit price slippage: (liveExit - btExit) / btExit. */
+  exitPriceSlippage?: number;
+  /** PnL difference: liveTrade.netPnl - backtestTrade.netPnl. */
+  pnlDelta?: number;
+  /** Holding period difference in days. */
+  holdingDaysDelta?: number;
+};
+
+/** Full result for TradeRecord-vs-TradeRecord alignment. */
+export type TradeRecordAlignmentResult = {
+  strategyId: string;
+  symbols: string[];
+  dateRange: { from: string; to: string };
+  pairs: AlignedTradeRecordPair[];
+  summary: AlignmentSummary;
+  symbolBreakdown?: Record<string, AlignmentSummary>;
   config: Required<AlignmentConfig>;
 };

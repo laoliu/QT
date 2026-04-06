@@ -3,8 +3,10 @@ import type { BacktestResult, TradeRecord, TradingSignal } from "../types.js";
 import {
   alignTrades,
   alignTradesRaw,
+  alignTradeRecords,
   filterPairs,
   formatAlignmentReport,
+  formatTradeRecordAlignmentReport,
 } from "./trade-alignment.js";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -280,5 +282,139 @@ describe("formatAlignmentReport", () => {
     expect(report).toContain("600519");
     expect(report).toContain("执行率");
     expect(report).toContain("精确匹配");
+  });
+});
+
+// ── alignTradeRecords ──────────────────────────────────────
+
+function fakeBtTrade(overrides: Partial<TradeRecord> = {}): TradeRecord {
+  return {
+    tradeId: "bt-001",
+    symbol: "600519",
+    market: "cn_stock",
+    side: "buy",
+    entryTime: "2024-06-15T09:30:00.000Z",
+    exitTime: "2024-06-18T14:30:00.000Z",
+    entryPrice: 1798,
+    exitPrice: 1850,
+    quantity: 100,
+    grossPnl: 5200,
+    commission: 0,
+    netPnl: 5200,
+    holdingDays: 3,
+    strategyId: "dual-ma",
+    entryOrderId: "bt-o-001",
+    exitOrderId: "bt-o-002",
+    ...overrides,
+  };
+}
+
+describe("alignTradeRecords", () => {
+  it("matches trade records with close entry times as exact", () => {
+    const live = [
+      fakeLiveTrade({
+        exitTime: "2024-06-18T14:35:00.000Z",
+        exitPrice: 1845,
+        holdingDays: 3,
+      }),
+    ];
+    const bt = [fakeBtTrade()];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    expect(result.pairs).toHaveLength(1);
+    expect(result.pairs[0]!.matchType).toBe("exact");
+    expect(result.pairs[0]!.liveTrade).toBeDefined();
+    expect(result.pairs[0]!.backtestTrade).toBeDefined();
+    expect(result.summary.exactMatches).toBe(1);
+  });
+
+  it("computes entry/exit slippage and pnl delta", () => {
+    const live = [
+      fakeLiveTrade({
+        entryPrice: 1810,
+        exitTime: "2024-06-18T14:30:00.000Z",
+        exitPrice: 1845,
+        netPnl: 3400,
+        holdingDays: 3,
+      }),
+    ];
+    const bt = [fakeBtTrade({ entryPrice: 1798, exitPrice: 1850, netPnl: 5200 })];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    const p = result.pairs[0]!;
+    expect(p.entryPriceSlippage).toBeCloseTo(12 / 1798, 5);
+    expect(p.exitPriceSlippage).toBeCloseTo(-5 / 1850, 5);
+    expect(p.pnlDelta).toBeCloseTo(3400 - 5200, 2);
+  });
+
+  it("marks unmatched as live_only and backtest_only", () => {
+    const live = [fakeLiveTrade({ symbol: "000001" })];
+    const bt = [fakeBtTrade({ symbol: "600519" })];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    expect(result.pairs.filter((p) => p.matchType === "live_only")).toHaveLength(1);
+    expect(result.pairs.filter((p) => p.matchType === "backtest_only")).toHaveLength(1);
+  });
+
+  it("provides per-symbol breakdown", () => {
+    const live = [
+      fakeLiveTrade({ tradeId: "t-1", symbol: "600519" }),
+      fakeLiveTrade({ tradeId: "t-2", symbol: "000001", entryPrice: 15 }),
+    ];
+    const bt = [
+      fakeBtTrade({ tradeId: "bt-1", symbol: "600519" }),
+      fakeBtTrade({ tradeId: "bt-2", symbol: "000001", entryPrice: 14.8 }),
+    ];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    expect(result.symbolBreakdown).toBeDefined();
+    expect(result.symbolBreakdown!["600519"]).toBeDefined();
+    expect(result.symbolBreakdown!["000001"]).toBeDefined();
+    expect(result.symbolBreakdown!["600519"]!.totalPairs).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles empty inputs", () => {
+    const result = alignTradeRecords([], [], { strategyId: "dual-ma" });
+
+    expect(result.pairs).toHaveLength(0);
+    expect(result.summary.totalPairs).toBe(0);
+  });
+
+  it("computes pnl correlation for matched trades", () => {
+    const live = [
+      fakeLiveTrade({ tradeId: "t-1", netPnl: 500 }),
+      fakeLiveTrade({ tradeId: "t-2", netPnl: -200, entryTime: "2024-06-16T09:35:00.000Z" }),
+    ];
+    const bt = [
+      fakeBtTrade({ tradeId: "bt-1", netPnl: 520 }),
+      fakeBtTrade({ tradeId: "bt-2", netPnl: -180, entryTime: "2024-06-16T09:30:00.000Z" }),
+    ];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    // Both have positive/negative PnL patterns, should correlate strongly
+    expect(result.summary.pnlCorrelation).toBeGreaterThan(0.9);
+  });
+});
+
+// ── formatTradeRecordAlignmentReport ───────────────────────
+
+describe("formatTradeRecordAlignmentReport", () => {
+  it("formats a readable trade-level report", () => {
+    const live = [fakeLiveTrade({ exitTime: "2024-06-18T14:35:00.000Z", holdingDays: 3 })];
+    const bt = [fakeBtTrade()];
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    const report = formatTradeRecordAlignmentReport(result);
+
+    expect(report).toContain("实盘 vs 回测 交易记录对齐报告");
+    expect(report).toContain("dual-ma");
+    expect(report).toContain("600519");
+    expect(report).toContain("执行率");
+    expect(report).toContain("入场时间偏移");
   });
 });

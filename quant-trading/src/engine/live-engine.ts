@@ -201,6 +201,12 @@ export class LiveEngine implements OpenClawPluginService {
       const proc = new PersistentPythonProcess("engines.live_engine", this.cfg);
       this.proc = proc;
       proc.onEvent((event, data) => void this.handlePythonEvent(event, data));
+      // Listen for "ready" events after auto-restarts to re-register strategies
+      proc.onEvent((event) => {
+        if (event === "ready" && this.status === "running") {
+          void this.reRegisterAllStrategies();
+        }
+      });
       await proc.start();
 
       // Register all enabled strategies with the Python engine
@@ -389,6 +395,29 @@ export class LiveEngine implements OpenClawPluginService {
   }
 
   // ── Private ──────────────────────────────────────────────────
+
+  /**
+   * Re-register all active strategies after the Python process restarts.
+   * Called automatically when the persistent Python process emits "ready"
+   * after an auto-restart (crash recovery with exponential backoff).
+   */
+  private async reRegisterAllStrategies(): Promise<void> {
+    if (!this.proc) return;
+    const active = this.registry.list(true);
+    if (active.length === 0) return;
+    this.log(`Python process restarted — re-registering ${active.length} strategies…`);
+    for (const ls of active) {
+      try {
+        await this.registerStrategyInPython(ls, this.proc);
+      } catch (err) {
+        this.log(
+          `Failed to re-register strategy ${ls.strategyId} [${ls.id}]: ${(err as Error).message}`,
+          "error",
+        );
+      }
+    }
+    this.log(`Re-registered ${active.length} strategies after Python restart`);
+  }
 
   private async registerStrategyInPython(
     ls: ActiveLiveStrategy,

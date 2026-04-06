@@ -8,6 +8,9 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { AsyncMutex, atomicWriteFile } from "../utils/async-mutex.js";
+
+const portfolioMutex = new AsyncMutex();
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -42,10 +45,8 @@ async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
 }
 
 async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): Promise<void> {
-  const filePath = getPortfolioPath(config);
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
   portfolio.updatedAt = new Date().toISOString();
-  await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
+  await atomicWriteFile(getPortfolioPath(config), JSON.stringify(portfolio, null, 2));
 }
 
 export function createPortfolioTool(
@@ -150,84 +151,106 @@ export function createPortfolioTool(
         }
 
         case "buy": {
-          const portfolio = await loadPortfolio(config);
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
           if (!symbol || !quantity || !price) {
             return { error: "请提供 symbol, quantity, price" };
           }
-          const cost = quantity * price;
-          if (cost > portfolio.cash) {
-            return {
-              error: `资金不足。需要 ¥${cost.toFixed(2)}，可用 ¥${portfolio.cash.toFixed(2)}`,
-            };
-          }
+          const release = await portfolioMutex.acquire();
+          try {
+            const portfolio = await loadPortfolio(config);
+            const cost = quantity * price;
+            if (cost > portfolio.cash) {
+              return {
+                error: `资金不足。需要 ¥${cost.toFixed(2)}，可用 ¥${portfolio.cash.toFixed(2)}`,
+              };
+            }
 
-          portfolio.cash -= cost;
-          const existing = portfolio.positions.find((p) => p.symbol === symbol);
-          if (existing) {
-            const totalQty = existing.quantity + quantity;
-            existing.avgCost = (existing.avgCost * existing.quantity + price * quantity) / totalQty;
-            existing.quantity = totalQty;
-          } else {
-            portfolio.positions.push({
-              symbol,
-              name: (args.name as string) ?? symbol,
-              market: "cn_stock",
-              quantity,
-              avgCost: price,
-            });
+            portfolio.cash -= cost;
+            const existing = portfolio.positions.find((p) => p.symbol === symbol);
+            if (existing) {
+              const totalQty = existing.quantity + quantity;
+              existing.avgCost =
+                (existing.avgCost * existing.quantity + price * quantity) / totalQty;
+              existing.quantity = totalQty;
+            } else {
+              portfolio.positions.push({
+                symbol,
+                name: (args.name as string) ?? symbol,
+                market: "cn_stock",
+                quantity,
+                avgCost: price,
+              });
+            }
+            portfolio.totalValue =
+              portfolio.cash +
+              portfolio.positions.reduce(
+                (s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost),
+                0,
+              );
+            await savePortfolio(portfolio, config);
+            return {
+              success: true,
+              message: `买入 ${symbol} ${quantity}股 @ ¥${price}`,
+              cash: `¥${portfolio.cash.toFixed(2)}`,
+            };
+          } finally {
+            release();
           }
-          portfolio.totalValue =
-            portfolio.cash +
-            portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
-          return {
-            success: true,
-            message: `买入 ${symbol} ${quantity}股 @ ¥${price}`,
-            cash: `¥${portfolio.cash.toFixed(2)}`,
-          };
         }
 
         case "sell": {
-          const portfolio = await loadPortfolio(config);
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
           if (!symbol || !quantity || !price) {
             return { error: "请提供 symbol, quantity, price" };
           }
-          const pos = portfolio.positions.find((p) => p.symbol === symbol);
-          if (!pos || pos.quantity < quantity) {
-            return { error: `持仓不足: ${symbol} 当前持有 ${pos?.quantity ?? 0}股` };
-          }
+          const release = await portfolioMutex.acquire();
+          try {
+            const portfolio = await loadPortfolio(config);
+            const pos = portfolio.positions.find((p) => p.symbol === symbol);
+            if (!pos || pos.quantity < quantity) {
+              return { error: `持仓不足: ${symbol} 当前持有 ${pos?.quantity ?? 0}股` };
+            }
 
-          const proceeds = quantity * price;
-          portfolio.cash += proceeds;
-          pos.quantity -= quantity;
-          if (pos.quantity === 0) {
-            portfolio.positions = portfolio.positions.filter((p) => p.symbol !== symbol);
+            const proceeds = quantity * price;
+            portfolio.cash += proceeds;
+            pos.quantity -= quantity;
+            if (pos.quantity === 0) {
+              portfolio.positions = portfolio.positions.filter((p) => p.symbol !== symbol);
+            }
+            portfolio.totalValue =
+              portfolio.cash +
+              portfolio.positions.reduce(
+                (s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost),
+                0,
+              );
+            await savePortfolio(portfolio, config);
+            return {
+              success: true,
+              message: `卖出 ${symbol} ${quantity}股 @ ¥${price}`,
+              cash: `¥${portfolio.cash.toFixed(2)}`,
+            };
+          } finally {
+            release();
           }
-          portfolio.totalValue =
-            portfolio.cash +
-            portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
-          return {
-            success: true,
-            message: `卖出 ${symbol} ${quantity}股 @ ¥${price}`,
-            cash: `¥${portfolio.cash.toFixed(2)}`,
-          };
         }
 
         case "add_cash": {
-          const portfolio = await loadPortfolio(config);
           const amount = args.amount as number;
           if (!amount || amount <= 0) return { error: "请提供正数金额" };
-          portfolio.cash += amount;
-          portfolio.totalValue += amount;
-          await savePortfolio(portfolio, config);
-          return { success: true, cash: `¥${portfolio.cash.toFixed(2)}` };
+          const release = await portfolioMutex.acquire();
+          try {
+            const portfolio = await loadPortfolio(config);
+            portfolio.cash += amount;
+            portfolio.totalValue += amount;
+            await savePortfolio(portfolio, config);
+            return { success: true, cash: `¥${portfolio.cash.toFixed(2)}` };
+          } finally {
+            release();
+          }
         }
 
         case "summary": {

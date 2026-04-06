@@ -12,6 +12,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { QuantTradingConfig, BrokerAccount, LivePosition } from "../types.js";
+import { atomicWriteFile } from "../utils/async-mutex.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -89,8 +90,7 @@ export class EquityHistory {
 
   /** Persist current history to disk. */
   async save(): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, JSON.stringify(this.snapshots, null, 2));
+    await atomicWriteFile(this.filePath, JSON.stringify(this.snapshots, null, 2));
     this.dirty = false;
   }
 

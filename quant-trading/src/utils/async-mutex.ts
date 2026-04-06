@@ -1,3 +1,18 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
+/**
+ * Atomic file write — writes to a .tmp file first, then renames.
+ * `fs.rename()` is atomic on POSIX, preventing data corruption
+ * if the process crashes mid-write.
+ */
+export async function atomicWriteFile(filePath: string, data: string): Promise<void> {
+  const tmpPath = filePath + ".tmp";
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(tmpPath, data);
+  await fs.rename(tmpPath, filePath);
+}
+
 /**
  * Simple async mutex for serializing concurrent operations.
  *

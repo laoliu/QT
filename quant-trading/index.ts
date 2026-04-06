@@ -203,24 +203,32 @@ function resolveAllValidCommandNames(cmd: { name: string; aliases?: string[] }):
     .filter((s) => /^[a-z][a-z0-9_-]*$/.test(s));
 }
 
+import { AsyncMutex, atomicWriteFile } from "./src/utils/async-mutex.js";
+
+const signalPersistMutex = new AsyncMutex();
+
 /** Append a signal to signals.json for the trading_signal tool. */
 async function persistSignal(signal: TradingSignal, config: QuantTradingConfig): Promise<void> {
   const { default: fs } = await import("node:fs/promises");
   const { default: path } = await import("node:path");
   const { default: os } = await import("node:os");
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
-  const filePath = path.join(dir, "signals.json");
-  let signals: TradingSignal[] = [];
+  const release = await signalPersistMutex.acquire();
   try {
-    signals = JSON.parse(await fs.readFile(filePath, "utf-8")) as TradingSignal[];
-  } catch {
-    // file doesn't exist yet — start fresh
+    const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const filePath = path.join(dir, "signals.json");
+    let signals: TradingSignal[] = [];
+    try {
+      signals = JSON.parse(await fs.readFile(filePath, "utf-8")) as TradingSignal[];
+    } catch {
+      // file doesn't exist yet — start fresh
+    }
+    signals.push(signal);
+    // Keep the last 2000 signals to avoid unbounded growth
+    if (signals.length > 2000) signals = signals.slice(-2000);
+    await atomicWriteFile(filePath, JSON.stringify(signals, null, 2));
+  } finally {
+    release();
   }
-  signals.push(signal);
-  // Keep the last 2000 signals to avoid unbounded growth
-  if (signals.length > 2000) signals = signals.slice(-2000);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(signals, null, 2));
 }
 
 /** Permissive config schema — accepts any object so all QuantTradingConfig fields are allowed. */

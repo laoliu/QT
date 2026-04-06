@@ -26,7 +26,7 @@ import type {
   TradeRecord,
   TradingSignal,
 } from "../types.js";
-import { AsyncMutex } from "../utils/async-mutex.js";
+import { AsyncMutex, atomicWriteFile } from "../utils/async-mutex.js";
 import { ConfirmationManager } from "./confirmation-manager.js";
 import { computePositionSize } from "./position-sizer.js";
 import { RiskGate } from "./risk-gate.js";
@@ -83,7 +83,7 @@ async function appendOrder(order: Order, cfg: QuantTradingConfig): Promise<void>
     // Skip if broker already persisted this order (e.g. PaperBroker writes in placeOrder)
     if (orders.some((o) => o.orderId === order.orderId)) return;
     orders.push(order);
-    await fs.writeFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
+    await atomicWriteFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
   } finally {
     release();
   }
@@ -100,7 +100,7 @@ async function updateOrder(
     const idx = orders.findIndex((o) => o.orderId === orderId);
     if (idx < 0) return null;
     Object.assign(orders[idx], patch, { updatedAt: new Date().toISOString() });
-    await fs.writeFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
+    await atomicWriteFile(ordersPath(cfg), JSON.stringify(orders, null, 2));
     return orders[idx];
   } finally {
     release();
@@ -121,7 +121,7 @@ async function appendTrade(trade: TradeRecord, cfg: QuantTradingConfig): Promise
     await ensureDir(cfg);
     const trades = await loadTrades(cfg);
     trades.push(trade);
-    await fs.writeFile(tradesPath(cfg), JSON.stringify(trades, null, 2));
+    await atomicWriteFile(tradesPath(cfg), JSON.stringify(trades, null, 2));
   } finally {
     release();
   }
@@ -515,7 +515,7 @@ export class OrderManager {
           filledAt: newStatus === "filled" ? now : undefined,
           updatedAt: now,
         });
-        await fs.writeFile(ordersPath(this.cfg), JSON.stringify(allOrders, null, 2));
+        await atomicWriteFile(ordersPath(this.cfg), JSON.stringify(allOrders, null, 2));
       }
     } finally {
       release();

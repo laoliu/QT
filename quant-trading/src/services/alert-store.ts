@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
  *   - Configurable retention (max entries, max age)
  *   - Query by severity, source, time range, and read status
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 // ── Alert types ──────────────────────────────────────────────────
@@ -277,7 +277,9 @@ export class AlertStore {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
       }
-      writeFileSync(this.config.persistPath, JSON.stringify(this.alerts, null, 2), "utf-8");
+      const tmpPath = this.config.persistPath + ".tmp";
+      writeFileSync(tmpPath, JSON.stringify(this.alerts, null, 2), "utf-8");
+      renameSync(tmpPath, this.config.persistPath);
       this.dirty = false;
     } catch {
       // Best-effort — will retry on next auto-save

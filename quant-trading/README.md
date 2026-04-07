@@ -9,7 +9,7 @@
 │  OpenClaw Gateway (Node.js / TypeScript)                                │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │  quant-trading extension (46 AI Tools · 60+ Services · 52 策略)   │  │
+│  │  quant-trading extension (50 AI Tools · 60+ Services · 52 策略)   │  │
 │  │                                                                   │  │
 │  │  AI Tools:               Commands:         Services:              │  │
 │  │  • market_data           /quote             DataSyncService       │  │
@@ -55,7 +55,7 @@
 
 ## Features
 
-### AI Tools (通过对话调用，共 46 个)
+### AI Tools (通过对话调用，共 50 个)
 
 #### 核心分析
 
@@ -90,6 +90,7 @@
 | ------------------------ | ----------------------------------------------- |
 | `live_trading`           | 实盘交易（QMT/Paper broker）                    |
 | `conditional_order`      | 条件单（触价/追踪止损）                         |
+| `batch_order`            | 批量下单（一次买卖多只股票、等权配置）          |
 | `dca_schedule`           | 定投计划管理                                    |
 | `breakout_monitor`       | 突破形态监控                                    |
 | `position_sizing`        | 仓位管理与计算                                  |
@@ -140,6 +141,9 @@
 | `watchlist`              | 自选股管理                                      |
 | `favorites`              | 股票收藏                                        |
 | `trade_journal`          | 交易笔记                                        |
+| `trade_history`          | 交易历史分析（胜率、盈亏、月度汇总、策略表现）  |
+| `market_overview`        | 市场总览/每日早报（指数、持仓、预警、板块）      |
+| `trading_dashboard`      | 交易仪表盘（持仓、挂单、条件单、风控一站式查看）|
 
 ### Chat Commands (快捷命令)
 
@@ -329,6 +333,18 @@ AI:   [调用 options_trading tool] 已提交买入开仓 10005646 x1 ...
 
 User: 查看期权持仓风险摘要
 AI:   [调用 options_trading tool] Delta ±5.5, Gamma 0.12, Vega 0.45 ...
+
+User: 今天市场怎么样？帮我看看早报
+AI:   [调用 market_overview tool] 上证指数 3,250 +0.8%, 沪深300 3,800 +1.2% ...
+
+User: 看看我的交易历史统计
+AI:   [调用 trade_history tool] 总交易数: 45, 胜率: 62%, 盈亏比: 2.1 ...
+
+User: 帮我一次买入5只股票，每只2万元
+AI:   [调用 batch_order tool] 等权配置，总金额 ¥100,000，每只 ¥20,000 ...
+
+User: 看看当前交易状态
+AI:   [调用 trading_dashboard tool] 持仓3只, 挂单1个, 条件单2个 ...
 ```
 
 ### Via CLI
@@ -436,7 +452,7 @@ pnpm install && pnpm build
 
 ```
 quant-trading/
-├── index.ts                        # Plugin entry point (46 tools registered)
+├── index.ts                        # Plugin entry point (50 tools registered)
 ├── package.json
 ├── openclaw.plugin.json            # Plugin metadata & config schema
 ├── README.md

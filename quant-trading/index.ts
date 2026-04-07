@@ -118,6 +118,7 @@ import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
+import { createBatchOrderTool } from "./src/tools/batch-order.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
@@ -138,6 +139,7 @@ import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
+import { createMarketOverviewTool } from "./src/tools/market-overview.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
@@ -163,7 +165,9 @@ import { createStrategyHealthTool } from "./src/tools/strategy-health.js";
 import { createStrategyOptimizerTool } from "./src/tools/strategy-optimizer.js";
 import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
+import { createTradeHistoryTool } from "./src/tools/trade-history.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
+import { createTradingDashboardTool } from "./src/tools/trading-dashboard.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
@@ -580,6 +584,28 @@ const quantTradingPlugin = {
     );
     void explorationHistoryStore.load();
 
+    // ── Forward-declared services (used by tools via lazy closures, created later) ──
+    let priceAlertServiceRef: PriceAlertService | null = null;
+    let taskSchedulerRef: TaskScheduler | null = null;
+
+    // ── Portfolio loader (shared by overview/dashboard tools) ─────
+    const loadPortfolioFn = async (): Promise<import("./src/types.js").Portfolio> => {
+      const { default: fs } = await import("node:fs/promises");
+      const { default: path } = await import("node:path");
+      const { default: os } = await import("node:os");
+      const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+      for (const name of ["portfolio-paper.json", "portfolio.json"]) {
+        try {
+          const raw = await fs.readFile(path.join(dir, name), "utf-8");
+          return JSON.parse(raw);
+        } catch { continue; }
+      }
+      return {
+        id: "default", name: "默认组合", cash: 100000, totalValue: 100000,
+        positions: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+    };
+
     // ── Tools (AI-callable) ──────────────────────────────────
     // Create tool instances once and share between registration and scheduled-task replay
     const toolInstances = {
@@ -654,6 +680,19 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      trade_history: createTradeHistoryTool(api, config, getEngine),
+      batch_order: createBatchOrderTool(api, config, getEngine),
+      market_overview: createMarketOverviewTool(api, config, getEngine, {
+        loadPortfolio: loadPortfolioFn,
+        getAlertCount: async () => priceAlertServiceRef?.listAlerts?.()?.length ?? 0,
+        getCondOrderCount: async () => conditionalOrderService?.listOrders?.()?.length ?? 0,
+        getTaskCount: async () => taskSchedulerRef?.list?.()?.length ?? 0,
+      }),
+      trading_dashboard: createTradingDashboardTool(api, config, getEngine, {
+        loadPortfolio: loadPortfolioFn,
+        condOrderService: conditionalOrderService,
+        get priceAlertService() { return priceAlertServiceRef!; },
+      } as any),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +743,10 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      trade_history: "交易历史",
+      batch_order: "批量下单",
+      market_overview: "市场总览",
+      trading_dashboard: "交易仪表盘",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -715,6 +758,7 @@ const quantTradingPlugin = {
       maxTasks: 50,
       dataDir: config.dataDir ?? null,
     });
+    taskSchedulerRef = taskScheduler;
     // Wire notify callback — delivers task results to the user's chat
     taskScheduler.setNotify((m: string) => tryNotify(api, m));
 
@@ -771,6 +815,7 @@ const quantTradingPlugin = {
       maxAlerts: 50,
       dataDir: config.dataDir ?? null,
     });
+    priceAlertServiceRef = priceAlertService;
     // Wire notify callback
     priceAlertService.setNotify((m: string) => tryNotify(api, m));
     // Wire quote function

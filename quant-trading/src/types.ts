@@ -1036,3 +1036,83 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Basket Order Types ──────────────────────────────────────────
+
+export type BasketOrderStatus =
+  | "pending"
+  | "executing"
+  | "partial"
+  | "completed"
+  | "rolling_back"
+  | "rolled_back"
+  | "failed";
+
+export type BasketLegStatus =
+  | "pending"
+  | "submitted"
+  | "filled"
+  | "failed"
+  | "cancelled"
+  | "retrying"
+  | "timeout";
+
+export type BasketLeg = {
+  legId: string;
+  symbol: string;
+  side: OrderSide;
+  quantity: number;
+  orderType: OrderType;
+  price?: number;
+  market?: MarketType;
+  status: BasketLegStatus;
+  orderId?: string;
+  retryCount: number;
+  errorMsg?: string;
+  filledQty: number;
+  avgFillPrice?: number;
+  submittedAt?: string;
+  completedAt?: string;
+};
+
+export type BasketOrder = {
+  basketId: string;
+  name?: string;
+  status: BasketOrderStatus;
+  legs: BasketLeg[];
+  /** Max retries per leg (default: 3) */
+  maxRetries: number;
+  /** Timeout per leg in milliseconds (default: 30000) */
+  legTimeoutMs: number;
+  /** Whether to rollback (cancel all) on any leg failure (default: true) */
+  rollbackOnFailure: boolean;
+  strategyId?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type BasketExecutionReport = {
+  basketId: string;
+  name?: string;
+  status: BasketOrderStatus;
+  totalLegs: number;
+  filledLegs: number;
+  failedLegs: number;
+  cancelledLegs: number;
+  totalValue: number;
+  legs: Array<{
+    legId: string;
+    symbol: string;
+    side: OrderSide;
+    requestedQty: number;
+    filledQty: number;
+    avgFillPrice?: number;
+    status: BasketLegStatus;
+    retryCount: number;
+    errorMsg?: string;
+  }>;
+  startTime: string;
+  endTime: string;
+  durationMs: number;
+};

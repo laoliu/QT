@@ -126,6 +126,7 @@ import { createCorrelationTool } from "./src/tools/correlation.js";
 import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
+import { createDataExportTool } from "./src/tools/data-export.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
@@ -593,6 +594,12 @@ const quantTradingPlugin = {
       risk_analysis: createRiskAnalysisTool(api, config),
       futures_straddle: createFuturesStraddleTool(api, config),
       data_cache: createDataCacheTool(api, config),
+      data_export: createDataExportTool(api, config, {
+        tradeJournal,
+        backtestStore,
+        equityHistory,
+        getEngine,
+      }),
       live_trading: createLiveTradingTool(api, config, getEngine, equityHistory),
       strategy_optimizer: createStrategyOptimizerTool(api, config, composedStrategyStore),
       strategy_composer: createStrategyComposerTool(api, config, composedStrategyStore),
@@ -666,6 +673,7 @@ const quantTradingPlugin = {
       risk_analysis: "风险分析",
       futures_straddle: "期货套利",
       data_cache: "数据缓存",
+      data_export: "数据导出",
       live_trading: "实盘交易",
       strategy_optimizer: "策略优化",
       strategy_composer: "策略组合",

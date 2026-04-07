@@ -324,15 +324,28 @@ describe("computeRollingSharpe (extended)", () => {
   });
 
   it("positive Sharpe for consistently positive returns", () => {
-    const series = generateLongSeries(65, 100000, 0.005);
+    // Use a series with small variation (not constant) to avoid zero variance
+    const equities: number[] = [100000];
+    for (let i = 1; i < 65; i++) {
+      // Positive returns with slight variation: 0.3% to 0.7%
+      const dailyReturn = 0.003 + 0.004 * ((i % 3) / 2);
+      equities.push(equities[i - 1]! * (1 + dailyReturn));
+    }
+    const series = generateSeries("2024-01-02", equities);
     const returns = computeDailyReturns(series);
     const rolling = computeRollingSharpe(returns, 5);
-    // All Sharpe values should be very high (infinite if zero variance, but floating point gives finite)
+    // All Sharpe values should be positive since all returns are positive
     expect(rolling.every((p) => p.sharpe > 0)).toBe(true);
   });
 
   it("respects risk-free rate parameter", () => {
-    const series = generateLongSeries(15, 100000, 0.001);
+    // Use a series with variation to ensure non-zero Sharpe
+    const equities: number[] = [100000];
+    for (let i = 1; i < 15; i++) {
+      const dailyReturn = 0.002 + 0.003 * ((i % 3) / 2);
+      equities.push(equities[i - 1]! * (1 + dailyReturn));
+    }
+    const series = generateSeries("2024-01-02", equities);
     const returns = computeDailyReturns(series);
     const sharpe0 = computeRollingSharpe(returns, 5, 0);
     const sharpeRf = computeRollingSharpe(returns, 5, 0.10); // 10% risk-free

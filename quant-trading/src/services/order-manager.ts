@@ -133,6 +133,31 @@ export type SubmitResult =
   | { ok: true; order: Order }
   | { ok: false; reason: string; ruleId?: string };
 
+export type BasketOrderItem = {
+  symbol: string;
+  side: import("../types.js").OrderSide;
+  quantity?: number;
+  amount?: number; // 金额下单（与 quantity 二选一，按金额自动计算数量）
+  price?: number; // 限价（可选，不填则市价）
+  orderType?: import("../types.js").OrderType;
+};
+
+export type BasketSubmitResult = {
+  total: number;
+  succeeded: number;
+  failed: number;
+  results: Array<{
+    symbol: string;
+    side: string;
+    ok: boolean;
+    orderId?: string;
+    reason?: string;
+    ruleId?: string;
+  }>;
+  /** 批量风控校验失败时填充（在逐笔下单前拦截） */
+  basketRiskError?: string;
+};
+
 // ── OrderManager ─────────────────────────────────────────────────
 
 // ── Market type detection ───────────────────────────────────────
@@ -382,6 +407,208 @@ export class OrderManager {
       `下单成功: ${order.side} ${order.symbol} ${order.quantity} @ ${order.price ?? "市价"} [${order.orderId.slice(0, 8)}]`,
     );
     return { ok: true, order };
+  }
+
+  /**
+   * Submit a basket of orders with batch-level risk validation.
+   * Validates total basket value and per-symbol concentration before
+   * delegating each item to the single-order submit() flow.
+   */
+  async submitBasket(
+    items: BasketOrderItem[],
+    riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; skipMarketHours?: boolean },
+  ): Promise<BasketSubmitResult> {
+    const result: BasketSubmitResult = {
+      total: items.length,
+      succeeded: 0,
+      failed: 0,
+      results: [],
+    };
+
+    if (items.length === 0) {
+      result.basketRiskError = "篮子订单列表为空";
+      return result;
+    }
+
+    // ── Pre-flight: fetch account & positions once for batch risk checks ──
+    let account: BrokerAccount;
+    let positions: LivePosition[];
+    try {
+      [account, positions] = await Promise.all([
+        this.broker.queryAccount(),
+        this.broker.queryPositions(),
+      ]);
+    } catch (err) {
+      result.basketRiskError = `无法获取账户信息: ${(err as Error).message}`;
+      result.failed = items.length;
+      result.results = items.map((item) => ({
+        symbol: item.symbol,
+        side: item.side,
+        ok: false,
+        reason: result.basketRiskError!,
+      }));
+      return result;
+    }
+
+    const limits = this.cfg.tradingAccount?.riskLimits ?? {};
+    const maxPositionPct = riskOverrides?.maxPositionPct ?? limits.maxPositionPct ?? 0.3;
+
+    // ── Batch risk check 1: total basket value vs available cash ──
+    let totalBasketValue = 0;
+    const itemValues: number[] = [];
+    for (const item of items) {
+      const isBuy =
+        item.side === "buy" ||
+        item.side === "cover" ||
+        item.side === "buy_open" ||
+        item.side === "buy_close";
+      if (isBuy) {
+        if (item.amount && item.amount > 0) {
+          itemValues.push(item.amount);
+          totalBasketValue += item.amount;
+        } else if (item.price && item.quantity) {
+          const v = item.price * item.quantity;
+          itemValues.push(v);
+          totalBasketValue += v;
+        } else if (item.quantity) {
+          // Market order without price — estimate from positions
+          const pos = positions.find((p) => p.symbol === item.symbol);
+          const estPrice = pos?.currentPrice ?? pos?.avgCost ?? 0;
+          const v = estPrice * item.quantity;
+          itemValues.push(v);
+          totalBasketValue += v;
+        } else {
+          itemValues.push(0);
+        }
+      } else {
+        itemValues.push(0);
+      }
+    }
+
+    if (totalBasketValue > 0 && totalBasketValue > account.cash) {
+      result.basketRiskError =
+        `篮子总买入金额 ¥${totalBasketValue.toFixed(2)} 超过可用现金 ¥${account.cash.toFixed(2)}`;
+      result.failed = items.length;
+      result.results = items.map((item) => ({
+        symbol: item.symbol,
+        side: item.side,
+        ok: false,
+        reason: result.basketRiskError!,
+      }));
+      return result;
+    }
+
+    // ── Batch risk check 2: single symbol concentration in the basket ──
+    if (account.totalAssets > 0) {
+      const symbolValueMap = new Map<string, number>();
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const isBuy =
+          item.side === "buy" ||
+          item.side === "cover" ||
+          item.side === "buy_open" ||
+          item.side === "buy_close";
+        if (isBuy) {
+          const prev = symbolValueMap.get(item.symbol) ?? 0;
+          symbolValueMap.set(item.symbol, prev + itemValues[i]);
+        }
+      }
+      for (const [symbol, basketValue] of symbolValueMap) {
+        const existingPos = positions.find((p) => p.symbol === symbol);
+        const existingValue = Math.abs(existingPos?.marketValue ?? 0);
+        const totalValue = existingValue + basketValue;
+        const pct = totalValue / account.totalAssets;
+        if (pct > maxPositionPct) {
+          result.basketRiskError =
+            `标的 ${symbol} 篮子下单后持仓占比将达 ${(pct * 100).toFixed(1)}%，` +
+            `超过上限 ${(maxPositionPct * 100).toFixed(0)}%`;
+          result.failed = items.length;
+          result.results = items.map((item) => ({
+            symbol: item.symbol,
+            side: item.side,
+            ok: false,
+            reason: result.basketRiskError!,
+          }));
+          return result;
+        }
+      }
+    }
+
+    // ── Execute each order sequentially ──
+    for (const item of items) {
+      // Resolve quantity from amount if needed
+      let quantity = item.quantity ?? 0;
+      if (!quantity && item.amount && item.amount > 0) {
+        const price = item.price ?? 0;
+        if (price > 0) {
+          // Round down to lot size (100 shares for A-shares)
+          quantity = Math.floor(item.amount / price / 100) * 100;
+        } else {
+          // No price — try to estimate from position data
+          const pos = positions.find((p) => p.symbol === item.symbol);
+          const estPrice = pos?.currentPrice ?? pos?.avgCost ?? 0;
+          if (estPrice > 0) {
+            quantity = Math.floor(item.amount / estPrice / 100) * 100;
+          }
+        }
+        if (quantity <= 0) {
+          result.failed++;
+          result.results.push({
+            symbol: item.symbol,
+            side: item.side,
+            ok: false,
+            reason: "无法根据金额计算出有效数量（可能需要提供价格）",
+          });
+          continue;
+        }
+      }
+
+      if (quantity <= 0) {
+        result.failed++;
+        result.results.push({
+          symbol: item.symbol,
+          side: item.side,
+          ok: false,
+          reason: "数量或金额无效",
+        });
+        continue;
+      }
+
+      const orderType: import("../types.js").OrderType =
+        item.orderType ?? (item.price ? "limit" : "market");
+
+      const req: OrderRequest = {
+        symbol: item.symbol,
+        market: detectMarketType(item.symbol),
+        side: item.side,
+        orderType,
+        quantity,
+        price: item.price,
+        strategyId: "basket",
+      };
+
+      const submitRes = await this.submit(req, riskOverrides);
+      if (submitRes.ok) {
+        result.succeeded++;
+        result.results.push({
+          symbol: item.symbol,
+          side: item.side,
+          ok: true,
+          orderId: submitRes.order.orderId,
+        });
+      } else {
+        result.failed++;
+        result.results.push({
+          symbol: item.symbol,
+          side: item.side,
+          ok: false,
+          reason: submitRes.reason,
+          ruleId: submitRes.ruleId,
+        });
+      }
+    }
+
+    return result;
   }
 
   /** Cancel an open order. */

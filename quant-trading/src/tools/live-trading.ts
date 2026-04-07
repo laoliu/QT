@@ -14,6 +14,7 @@
  *   remove_strategy      — remove a live strategy
  *   list_strategies      — list all active live strategies
  *   force_order          — manually place an order (full risk check)
+ *   basket_order         — batch submit multiple buy/sell orders (basket trading)
  *   cancel_order         — cancel a specific open order
  *   cancel_all_orders    — cancel all open orders
  *   get_risk_snapshot    — risk metrics on current live portfolio
@@ -24,6 +25,7 @@ import type { OrderRequest } from "../broker/adapter.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { EquityHistory } from "../services/equity-history.js";
+import type { BasketOrderItem } from "../services/order-manager.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createLiveTradingTool(
@@ -35,11 +37,12 @@ export function createLiveTradingTool(
   return {
     name: "live_trading",
     description:
-      "控制实盘交易引擎。启动/停止引擎、管理实盘策略、手动下单、查看风控快照。" +
+      "控制实盘交易引擎。启动/停止引擎、管理实盘策略、手动下单、篮子交易、查看风控快照。" +
       "action=engine_status 查看状态, action=start_engine 启动引擎, " +
       "action=stop_engine 停止引擎, action=pause_engine 暂停, action=resume_engine 恢复, " +
       "action=add_strategy 添加策略, action=remove_strategy 移除策略, " +
       "action=list_strategies 列出策略, action=force_order 强制下单, " +
+      "action=basket_order 批量下单/篮子交易, " +
       "action=cancel_order 撤单, action=cancel_all_orders 全撤, " +
       "action=get_risk_snapshot 风控快照, action=list_confirmations 待确认列表。",
     parameters: {
@@ -57,6 +60,7 @@ export function createLiveTradingTool(
             "remove_strategy",
             "list_strategies",
             "force_order",
+            "basket_order",
             "cancel_order",
             "cancel_all_orders",
             "get_risk_snapshot",
@@ -128,6 +132,26 @@ export function createLiveTradingTool(
         },
         // For cancel_order
         order_id: { type: "string", description: "订单ID" },
+        // For basket_order
+        orders: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              symbol: { type: "string", description: "标的代码" },
+              side: {
+                type: "string",
+                enum: ["buy", "sell", "short", "cover", "buy_open", "sell_close", "buy_close", "sell_open"],
+                description: "买卖方向",
+              },
+              quantity: { type: "number", description: "数量（股），与 amount 二选一" },
+              amount: { type: "number", description: "金额（元），与 quantity 二选一，按金额自动计算数量" },
+              price: { type: "number", description: "限价（可选，不填则市价）" },
+            },
+            required: ["symbol", "side"],
+          },
+          description: "批量下单列表，每项包含：symbol, side, quantity/amount, price(可选)",
+        },
       },
       required: ["action"],
     },
@@ -291,6 +315,45 @@ export function createLiveTradingTool(
           return result.ok
             ? { message: "下单成功", orderId: result.order.orderId, status: result.order.status }
             : { error: result.reason, ruleId: result.ruleId };
+        }
+
+        case "basket_order": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化，请先启动引擎" };
+
+          const orderItems = args.orders as Array<Record<string, unknown>> | undefined;
+          if (!orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
+            return { error: "请提供 orders 列表（至少包含一个订单项）" };
+          }
+
+          const basketItems: BasketOrderItem[] = orderItems.map((item) => ({
+            symbol: item.symbol as string,
+            side: item.side as BasketOrderItem["side"],
+            quantity: item.quantity as number | undefined,
+            amount: item.amount as number | undefined,
+            price: item.price as number | undefined,
+          }));
+
+          // Validate each item has symbol and side
+          for (let i = 0; i < basketItems.length; i++) {
+            const item = basketItems[i];
+            if (!item.symbol || !item.side) {
+              return { error: `第 ${i + 1} 项订单缺少 symbol 或 side` };
+            }
+            if (!item.quantity && !item.amount) {
+              return { error: `第 ${i + 1} 项订单 (${item.symbol}) 需要提供 quantity 或 amount` };
+            }
+          }
+
+          const basketResult = await mgr.submitBasket(basketItems);
+          return {
+            message: basketResult.basketRiskError
+              ? `批量风控拦截: ${basketResult.basketRiskError}`
+              : `篮子交易完成: ${basketResult.succeeded}/${basketResult.total} 成功`,
+            ...basketResult,
+          };
         }
 
         case "cancel_order": {

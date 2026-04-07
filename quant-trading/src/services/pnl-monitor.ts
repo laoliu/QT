@@ -13,9 +13,101 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
 import { isMarketOpen } from "../broker/paper-broker.js";
-import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
+import type { BrokerAccount, LivePosition, QuantTradingConfig, TradeRecord } from "../types.js";
 import { tryNotify } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
+
+// ── Daily Settlement types ───────────────────────────────────────
+
+export type DailySettlement = {
+  /** ISO date string (YYYY-MM-DD) */
+  date: string;
+  /** Today's realized PnL from closed trades */
+  realizedPnl: number;
+  /** Change in unrealized PnL compared to previous close (estimated from positions) */
+  unrealizedPnlChange: number;
+  /** Win rate of today's closed trades (0-1) */
+  winRate: number;
+  /** Number of winning trades today */
+  wins: number;
+  /** Number of losing trades today */
+  losses: number;
+  /** Profit factor: gross wins / gross losses (Infinity if no losses) */
+  profitFactor: number;
+  /** Total commission + tax paid today */
+  totalFees: number;
+  /** Net P&L = realizedPnl - totalFees + unrealizedPnlChange */
+  netPnl: number;
+  /** Number of closed (round-trip) trades today */
+  closedTrades: number;
+  /** Total assets at settlement time */
+  totalAssets: number;
+  /** Net P&L as percentage of total assets */
+  netPnlPct: number;
+};
+
+/**
+ * Compute a structured daily settlement summary.
+ *
+ * Data sources:
+ *   - BrokerAccount: todayProfit, totalAssets
+ *   - LivePosition[]: unrealizedPnl per position
+ *   - TradeRecord[]: today's closed trades for winRate / profitFactor / fees
+ */
+export function computeDailySettlement(
+  account: BrokerAccount,
+  positions: LivePosition[],
+  todayTrades: TradeRecord[],
+): DailySettlement {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Realized PnL from closed trades
+  let grossWins = 0;
+  let grossLosses = 0;
+  let totalFees = 0;
+  let wins = 0;
+  let losses = 0;
+
+  for (const t of todayTrades) {
+    totalFees += t.commission;
+    if (t.netPnl > 0) {
+      grossWins += t.grossPnl;
+      wins++;
+    } else if (t.netPnl < 0) {
+      grossLosses += Math.abs(t.grossPnl);
+      losses++;
+    }
+  }
+
+  const realizedPnl = todayTrades.reduce((sum, t) => sum + t.grossPnl, 0);
+  const closedTrades = todayTrades.length;
+  const winRate = closedTrades > 0 ? wins / closedTrades : 0;
+  const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? Infinity : 0;
+
+  // Unrealized PnL change: sum of current unrealized PnL across positions
+  // (This approximates change since positions may have been opened/closed today;
+  //  for a precise delta, a previous-close snapshot would be needed.)
+  const unrealizedPnlChange = positions.reduce((sum, p) => sum + (p.unrealizedPnl ?? 0), 0);
+
+  const netPnl = realizedPnl - totalFees + unrealizedPnlChange;
+  const totalAssets = account.totalAssets;
+  const netPnlPct = totalAssets > 0 ? netPnl / totalAssets : 0;
+
+  return {
+    date: today,
+    realizedPnl,
+    unrealizedPnlChange,
+    winRate,
+    wins,
+    losses,
+    profitFactor,
+    totalFees,
+    netPnl,
+    closedTrades,
+    totalAssets,
+    netPnlPct,
+  };
+}
 
 // ── Alert types ──────────────────────────────────────────────────
 

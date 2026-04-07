@@ -24,6 +24,7 @@ describe("report-templates", () => {
     expect(ids).toContain("daily_scan");
     expect(ids).toContain("institutional_top3");
     expect(ids).toContain("daily_journal");
+    expect(ids).toContain("daily_settlement");
   });
 
   it("findReportTemplate returns correct template", () => {
@@ -478,5 +479,83 @@ describe("report-templates", () => {
     const result = await template.generate(executeTool, {} as never);
     expect(result).toContain("交易日志");
     expect(result).toContain("暂无交易数据");
+  });
+
+  it("daily_settlement generates structured settlement report", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const template = findReportTemplate("daily_settlement")!;
+    expect(template).toBeDefined();
+    expect(template.name).toBe("每日结算");
+
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string, args: Record<string, unknown>) => {
+        if (name === "live_trading" && args.action === "status") {
+          return Promise.resolve(
+            JSON.stringify({
+              account: { totalAssets: 500000, cash: 200000, todayProfit: 3000 },
+            }),
+          );
+        }
+        if (name === "portfolio" && args.action === "live_trades") {
+          return Promise.resolve(
+            JSON.stringify({
+              trades: [
+                {
+                  symbol: "600519",
+                  entryPrice: 1800,
+                  exitPrice: 1850,
+                  quantity: 100,
+                  grossPnl: 5000,
+                  netPnl: 4950,
+                  commission: 50,
+                  exitTime: `${today}T14:30:00Z`,
+                },
+                {
+                  symbol: "000858",
+                  entryPrice: 160,
+                  exitPrice: 155,
+                  quantity: 200,
+                  grossPnl: -1000,
+                  netPnl: -1040,
+                  commission: 40,
+                  exitTime: `${today}T14:45:00Z`,
+                },
+              ],
+            }),
+          );
+        }
+        if (name === "portfolio" && args.action === "view") {
+          return Promise.resolve(
+            JSON.stringify({
+              positions: [
+                { name: "宁德时代", symbol: "300750", unrealizedPnl: 2000 },
+              ],
+            }),
+          );
+        }
+        return Promise.resolve(JSON.stringify({}));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("每日结算汇总");
+    expect(result).toContain("已实现盈亏");
+    expect(result).toContain("未实现盈亏变动");
+    expect(result).toContain("胜率");
+    expect(result).toContain("盈亏比");
+    expect(result).toContain("手续费合计");
+    expect(result).toContain("净收益");
+    expect(result).toContain("600519");
+    expect(result).toContain("000858");
+    expect(result).toContain("50.0%"); // 1/2 win rate
+  });
+
+  it("daily_settlement handles no trades gracefully", async () => {
+    const template = findReportTemplate("daily_settlement")!;
+    const executeTool = vi.fn().mockRejectedValue(new Error("not available"));
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("每日结算汇总");
+    expect(result).toContain("今日无平仓交易");
   });
 });

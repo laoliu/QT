@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "daily_settlement";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1172,6 +1173,179 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+/**
+ * Build a daily settlement summary — structured P&L breakdown at market close.
+ *
+ * Combines portfolio, live trades, and account data to produce:
+ *   - Realized P&L (from today's closed trades)
+ *   - Unrealized P&L change (from open positions)
+ *   - Win rate & profit factor (today's closed trades)
+ *   - Total fees (commission + tax)
+ *   - Net P&L
+ */
+async function generateDailySettlement(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = ["💰 **每日结算汇总**", ""];
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ── 1. Account snapshot ──
+  let totalAssets = 0;
+  let cash = 0;
+  let todayProfit = 0;
+  let hasAccount = false;
+
+  try {
+    const accountRaw = await executeTool("live_trading", { action: "status" });
+    const accountData = JSON.parse(accountRaw);
+    if (accountData.account) {
+      totalAssets = Number(accountData.account.totalAssets ?? 0);
+      cash = Number(accountData.account.cash ?? 0);
+      todayProfit = Number(accountData.account.todayProfit ?? 0);
+      hasAccount = true;
+    }
+  } catch {
+    // Engine not running — try portfolio fallback
+  }
+
+  if (!hasAccount) {
+    try {
+      const sumRaw = await executeTool("portfolio", { action: "summary" });
+      const sumData = JSON.parse(sumRaw);
+      totalAssets = Number(sumData.totalValue ?? 0);
+      cash = Number(sumData.cash ?? 0);
+    } catch {
+      // skip
+    }
+  }
+
+  // ── 2. Today's closed trades — for realized PnL, win rate, profit factor, fees ──
+  let closedTrades: Array<Record<string, unknown>> = [];
+  try {
+    const tradesRaw = await executeTool("portfolio", { action: "live_trades" });
+    const tradesData = JSON.parse(tradesRaw);
+    closedTrades = (tradesData.trades ?? []).filter((t: Record<string, unknown>) =>
+      String(t.exitTime ?? "").startsWith(today),
+    );
+  } catch {
+    // no trades data
+  }
+
+  let realizedPnl = 0;
+  let grossWins = 0;
+  let grossLosses = 0;
+  let totalFees = 0;
+  let wins = 0;
+  let losses = 0;
+
+  for (const t of closedTrades) {
+    const netPnl = Number(t.netPnl ?? 0);
+    const grossPnl = Number(t.grossPnl ?? netPnl);
+    const commission = Number(t.commission ?? 0);
+    realizedPnl += grossPnl;
+    totalFees += commission;
+    if (netPnl > 0) {
+      grossWins += grossPnl;
+      wins++;
+    } else if (netPnl < 0) {
+      grossLosses += Math.abs(grossPnl);
+      losses++;
+    }
+  }
+
+  const winRate = closedTrades.length > 0 ? wins / closedTrades.length : 0;
+  const profitFactor =
+    grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? Infinity : 0;
+
+  // ── 3. Unrealized PnL from current positions ──
+  let unrealizedPnl = 0;
+  let positionCount = 0;
+  try {
+    const portfolioRaw = await executeTool("portfolio", { action: "view" });
+    const portfolio = JSON.parse(portfolioRaw);
+    const positions = portfolio.positions ?? [];
+    positionCount = positions.length;
+    for (const p of positions) {
+      unrealizedPnl += Number(p.unrealizedPnl ?? p.pnl ?? p.profit ?? 0);
+    }
+  } catch {
+    // skip
+  }
+
+  // ── 4. Net P&L ──
+  const netPnl = realizedPnl - totalFees + unrealizedPnl;
+  const netPnlPct = totalAssets > 0 ? (netPnl / totalAssets) * 100 : 0;
+  const icon = netPnl >= 0 ? "📈" : "📉";
+
+  // ── Format output ──
+  sections.push(`**日期**: ${today}`);
+  sections.push("");
+
+  sections.push(`**账户概况** ${icon}`);
+  if (totalAssets > 0) {
+    sections.push(`  总资产: ¥${totalAssets.toFixed(2)}`);
+    sections.push(`  可用现金: ¥${cash.toFixed(2)}`);
+    sections.push(`  持仓数量: ${String(positionCount)} 只`);
+  }
+  if (hasAccount && todayProfit !== 0) {
+    sections.push(
+      `  券商当日盈亏: ${todayProfit >= 0 ? "+" : ""}¥${todayProfit.toFixed(2)}`,
+    );
+  }
+  sections.push("");
+
+  sections.push("**已实现盈亏** (当日平仓)");
+  sections.push(
+    `  已实现盈亏: ${realizedPnl >= 0 ? "+" : ""}¥${realizedPnl.toFixed(2)}`,
+  );
+  sections.push(`  平仓笔数: ${String(closedTrades.length)}`);
+  if (closedTrades.length > 0) {
+    sections.push(`  盈利: ${String(wins)} 笔  |  亏损: ${String(losses)} 笔`);
+    sections.push(`  胜率: ${(winRate * 100).toFixed(1)}%`);
+    if (profitFactor === Infinity) {
+      sections.push("  盈亏比: ∞ (无亏损交易)");
+    } else if (profitFactor > 0) {
+      sections.push(`  盈亏比: ${profitFactor.toFixed(2)}`);
+    }
+    // Per-trade details
+    for (const t of closedTrades.slice(0, 10)) {
+      const tNetPnl = Number(t.netPnl ?? 0);
+      const tIcon = tNetPnl >= 0 ? "✅" : "❌";
+      const sym = String(t.symbol ?? t.name ?? "");
+      const entry = t.entryPrice != null ? `买¥${String(t.entryPrice)}` : "";
+      const exit = t.exitPrice != null ? `→卖¥${String(t.exitPrice)}` : "";
+      sections.push(
+        `  ${tIcon} ${sym} ${entry}${exit} ${tNetPnl >= 0 ? "+" : ""}¥${tNetPnl.toFixed(2)}`,
+      );
+    }
+    if (closedTrades.length > 10) {
+      sections.push(`  ... 还有 ${String(closedTrades.length - 10)} 笔`);
+    }
+  } else {
+    sections.push("  (今日无平仓交易)");
+  }
+  sections.push("");
+
+  sections.push("**未实现盈亏变动**");
+  sections.push(
+    `  持仓浮盈/浮亏合计: ${unrealizedPnl >= 0 ? "+" : ""}¥${unrealizedPnl.toFixed(2)}`,
+  );
+  sections.push("");
+
+  sections.push("**手续费合计**");
+  sections.push(`  佣金+税费: ¥${totalFees.toFixed(2)}`);
+  sections.push("");
+
+  sections.push("**净收益**");
+  sections.push(
+    `  ${icon} 净收益: ${netPnl >= 0 ? "+" : ""}¥${netPnl.toFixed(2)} (${netPnlPct >= 0 ? "+" : ""}${netPnlPct.toFixed(2)}%)`,
+  );
+  sections.push("  计算公式: 已实现盈亏 - 手续费 + 未实现盈亏变动");
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1403,14 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "daily_settlement",
+    name: "每日结算",
+    description:
+      "收盘结算汇总：已实现盈亏、未实现盈亏变动、胜率、盈亏比、手续费合计、净收益",
+    defaultIntervalMinutes: 0,
+    generate: generateDailySettlement,
   },
 ];
 

@@ -4,7 +4,7 @@ import type { OpenClawPluginServiceContext } from "openclaw/plugin-sdk/core";
  * Unit tests for PnlMonitor — background PnL monitoring + alert severity.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
+import type { BrokerAccount, LivePosition, QuantTradingConfig, TradeRecord } from "../types.js";
 import { OrderManager } from "./order-manager.js";
 
 // Mock isMarketOpen
@@ -13,7 +13,7 @@ vi.mock("../broker/paper-broker.js", () => ({
 }));
 
 import { isMarketOpen } from "../broker/paper-broker.js";
-import { createPnlMonitorService } from "./pnl-monitor.js";
+import { computeDailySettlement, createPnlMonitorService } from "./pnl-monitor.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -231,5 +231,86 @@ describe("PnlMonitor", () => {
     expect(api.notify).toHaveBeenCalledTimes(1);
 
     await svc.stop?.(dummyCtx);
+  });
+});
+
+// ── computeDailySettlement tests ────────────────────────────────────────
+
+describe("computeDailySettlement", () => {
+  function makeTradeRecord(overrides: Partial<TradeRecord>): TradeRecord {
+    return {
+      tradeId: "t-001",
+      symbol: "600519",
+      market: "cn_stock",
+      side: "sell",
+      entryTime: "2026-04-07T09:30:00Z",
+      entryPrice: 1800,
+      exitPrice: 1850,
+      quantity: 100,
+      grossPnl: 5000,
+      commission: 50,
+      netPnl: 4950,
+      entryOrderId: "o-001",
+      exitOrderId: "o-002",
+      ...overrides,
+    };
+  }
+
+  it("computes settlement with winning and losing trades", () => {
+    const account = makeAccount({ totalAssets: 500000, todayProfit: 3000 });
+    const positions = [
+      makePosition("300750", { unrealizedPnl: 2000 }),
+    ];
+    const trades = [
+      makeTradeRecord({ grossPnl: 5000, netPnl: 4950, commission: 50 }),
+      makeTradeRecord({
+        tradeId: "t-002",
+        symbol: "000858",
+        grossPnl: -1000,
+        netPnl: -1040,
+        commission: 40,
+      }),
+    ];
+
+    const result = computeDailySettlement(account, positions, trades);
+
+    expect(result.realizedPnl).toBe(4000); // 5000 + (-1000)
+    expect(result.unrealizedPnlChange).toBe(2000);
+    expect(result.wins).toBe(1);
+    expect(result.losses).toBe(1);
+    expect(result.winRate).toBe(0.5);
+    expect(result.profitFactor).toBe(5); // 5000 / 1000
+    expect(result.totalFees).toBe(90); // 50 + 40
+    expect(result.netPnl).toBe(4000 - 90 + 2000); // 5910
+    expect(result.closedTrades).toBe(2);
+    expect(result.totalAssets).toBe(500000);
+  });
+
+  it("handles no trades gracefully", () => {
+    const account = makeAccount({ totalAssets: 100000 });
+    const positions = [makePosition("600519", { unrealizedPnl: -500 })];
+
+    const result = computeDailySettlement(account, positions, []);
+
+    expect(result.realizedPnl).toBe(0);
+    expect(result.closedTrades).toBe(0);
+    expect(result.winRate).toBe(0);
+    expect(result.profitFactor).toBe(0);
+    expect(result.totalFees).toBe(0);
+    expect(result.unrealizedPnlChange).toBe(-500);
+    expect(result.netPnl).toBe(-500);
+  });
+
+  it("handles all-winning trades (Infinity profit factor)", () => {
+    const account = makeAccount({ totalAssets: 200000 });
+    const trades = [
+      makeTradeRecord({ grossPnl: 3000, netPnl: 2970, commission: 30 }),
+    ];
+
+    const result = computeDailySettlement(account, [], trades);
+
+    expect(result.wins).toBe(1);
+    expect(result.losses).toBe(0);
+    expect(result.profitFactor).toBe(Infinity);
   });
 });

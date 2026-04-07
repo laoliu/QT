@@ -581,18 +581,36 @@ class FutuBrokerBridge:
     # ── Serialisers ──────────────────────────────────────────────
 
     @staticmethod
+    def _safe_float(val, default=0.0):
+        try:
+            f = float(val) if val is not None else default
+            return default if f != f else f  # NaN check
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_int(val, default=0):
+        try:
+            f = float(val) if val is not None else default
+            return default if f != f else int(f)  # NaN check
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
     def _serialize_order(row) -> dict:
         """Serialize a Futu order DataFrame row to our standard dict."""
         code = str(row.get("code", ""))
         order_status_raw = row.get("order_status", "")
+        sf = FutuBrokerBridge._safe_float
+        si = FutuBrokerBridge._safe_int
         return {
             "order_id": str(row.get("order_id", "")),
             "stock_code": code,
             "order_type": str(row.get("trd_side", "")),
-            "price": float(row.get("price", 0) or 0),
-            "order_volume": int(row.get("qty", 0) or 0),
-            "traded_volume": int(row.get("dealt_qty", 0) or 0),
-            "traded_price": float(row.get("dealt_avg_price", 0) or 0),
+            "price": sf(row.get("price", 0)),
+            "order_volume": si(row.get("qty", 0)),
+            "traded_volume": si(row.get("dealt_qty", 0)),
+            "traded_price": sf(row.get("dealt_avg_price", 0)),
             "order_status": str(order_status_raw),
             "order_status_mapped": map_futu_status(str(order_status_raw)),
             "order_time": str(row.get("create_time", "")),

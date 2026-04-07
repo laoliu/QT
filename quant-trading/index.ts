@@ -40,6 +40,7 @@
  * │  │    • institutional_flow— fund holdings, insider trades   │  │
  * │  │    • social_sentiment  — community hot stocks, sentiment │  │
  * │  │    • chip_accumulation — institutional accumulation scan │  │
+ * │  │    • report_export    — export reports to CSV/JSON       │  │
  * │  │                                                          │  │
  * │  │  Commands (chat shortcuts):                              │  │
  * │  │    /quote /screen /backtest /portfolio /signal           │  │
@@ -163,6 +164,7 @@ import { createStrategyHealthTool } from "./src/tools/strategy-health.js";
 import { createStrategyOptimizerTool } from "./src/tools/strategy-optimizer.js";
 import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
+import { createReportExportTool } from "./src/tools/report-export.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
@@ -654,6 +656,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      report_export: createReportExportTool(api, config, getEngine, backtestStore, equityHistory),
     };
 
     const toolLabels: Record<string, string> = {
@@ -689,6 +692,7 @@ const quantTradingPlugin = {
       strategy_health: "策略健康",
       correlation_analysis: "相关性分析",
       tech_moat: "技术壁垒分析",
+      report_export: "交易报表导出",
       value_investing: "价值投资",
       financial_calculator: "估值计算",
       news_summary: "新闻摘要",

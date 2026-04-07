@@ -47,6 +47,64 @@ async function generateMorningBrief(
 ): Promise<string> {
   const sections: string[] = ["📋 **早盘简报**", ""];
 
+  // --- Overnight news summary ---
+  try {
+    const newsRaw = await executeTool("news_summary", {
+      action: "market_news",
+      limit: 8,
+      days: 1,
+    });
+    const newsData = JSON.parse(newsRaw);
+    const articles = newsData.articles ?? newsData.news ?? [];
+    if (articles.length > 0) {
+      sections.push("**隔夜重大新闻**");
+      for (const a of articles.slice(0, 8)) {
+        const title = a.title ?? a.headline ?? "";
+        const src = a.source ? ` (${String(a.source)})` : "";
+        sections.push(`  • ${String(title)}${src}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    sections.push("隔夜新闻: 数据获取失败\n");
+  }
+
+  // --- Macro economic calendar & regime ---
+  try {
+    const calendarRaw = await executeTool("macro_data", { action: "calendar" });
+    const calendarData = JSON.parse(calendarRaw);
+    const events = calendarData.events ?? calendarData.calendar ?? [];
+    if (events.length > 0) {
+      sections.push("**今日经济日历**");
+      for (const e of events.slice(0, 6)) {
+        const time = e.time ? `${String(e.time)} ` : "";
+        const prev = e.previous != null ? ` 前值:${String(e.previous)}` : "";
+        const forecast = e.forecast != null ? ` 预期:${String(e.forecast)}` : "";
+        sections.push(`  • ${time}${String(e.name ?? e.event ?? "")}${prev}${forecast}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    // Economic calendar not available — skip
+  }
+
+  try {
+    const regimeRaw = await executeTool("macro_data", { action: "regime" });
+    const regimeData = JSON.parse(regimeRaw);
+    if (regimeData.regime ?? regimeData.phase) {
+      const phase = regimeData.regime ?? regimeData.phase ?? "";
+      const desc = regimeData.description ?? regimeData.summary ?? "";
+      const suggestion = regimeData.suggestion ?? regimeData.allocation ?? "";
+      sections.push("**宏观经济周期**");
+      sections.push(`  当前阶段: ${String(phase)}`);
+      if (desc) sections.push(`  判断依据: ${String(desc)}`);
+      if (suggestion) sections.push(`  配置建议: ${String(suggestion)}`);
+      sections.push("");
+    }
+  } catch {
+    // Regime data not available — skip
+  }
+
   // Sector ranking (top 10)
   try {
     const sectorRaw = await executeTool("sector_analysis", { action: "ranking", limit: 10 });
@@ -83,7 +141,7 @@ async function generateMorningBrief(
     sections.push("资金流向: 数据获取失败\n");
   }
 
-  // Northbound fund flow
+  // Northbound fund flow with trend
   try {
     const northRaw = await executeTool("fund_flow", { action: "northbound" });
     const northData = JSON.parse(northRaw);
@@ -94,10 +152,92 @@ async function generateMorningBrief(
       const sz = rt.hk2sz != null ? `${(Number(rt.hk2sz) / 1e8).toFixed(2)}亿` : "--";
       sections.push("**北向资金**");
       sections.push(`  净流入: ${total} (沪股通 ${sh} / 深股通 ${sz})`);
+      // Recent trend summary
+      if (northData.history?.length > 0) {
+        const history = northData.history.slice(0, 5);
+        let consecutive = 0;
+        let direction: "in" | "out" | null = null;
+        for (const h of history) {
+          const val = Number(h.northTotal ?? 0);
+          if (direction === null) {
+            direction = val >= 0 ? "in" : "out";
+            consecutive = 1;
+          } else if ((direction === "in" && val >= 0) || (direction === "out" && val < 0)) {
+            consecutive++;
+          } else {
+            break;
+          }
+        }
+        const totalRecent = history.reduce(
+          (sum: number, h: Record<string, unknown>) => sum + Number(h.northTotal ?? 0),
+          0,
+        );
+        const trendDesc =
+          direction === "in"
+            ? `连续${consecutive}日净流入`
+            : `连续${consecutive}日净流出`;
+        const totalRecentStr = `${(totalRecent / 1e8).toFixed(2)}亿`;
+        sections.push(`  趋势: ${trendDesc}，近${history.length}日累计 ${totalRecentStr}`);
+        sections.push("  近期明细:");
+        for (const h of history) {
+          const dayTotal =
+            h.northTotal != null ? `${(Number(h.northTotal) / 1e8).toFixed(2)}亿` : "--";
+          sections.push(`    ${String(h.date ?? "")} ${dayTotal}`);
+        }
+      }
       sections.push("");
     }
   } catch {
     // Northbound data not available — skip
+  }
+
+  // --- AI stock recommendations ---
+  try {
+    const classicRaw = await executeTool("stock_recommend", {
+      mode: "classic",
+      count: 3,
+      universe: "all",
+    });
+    const classicData = JSON.parse(classicRaw);
+    const classicStocks = classicData.recommendations ?? classicData.stocks ?? [];
+    if (classicStocks.length > 0) {
+      sections.push("**AI推荐 — 经典选股 (Top 3)**");
+      for (const s of classicStocks.slice(0, 3)) {
+        const score = s.score != null ? ` 评分:${String(s.score)}` : "";
+        const reason = s.reason ?? s.summary ?? "";
+        const reasonStr = reason ? ` — ${String(reason)}` : "";
+        sections.push(
+          `  ⭐ ${String(s.code ?? s.symbol ?? "")} ${String(s.name ?? "")}${score}${reasonStr}`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    sections.push("经典选股推荐: 数据获取失败\n");
+  }
+
+  try {
+    const predictiveRaw = await executeTool("stock_recommend", {
+      mode: "predictive",
+      count: 3,
+      universe: "all",
+    });
+    const predictiveData = JSON.parse(predictiveRaw);
+    const predictiveStocks = predictiveData.recommendations ?? predictiveData.stocks ?? [];
+    if (predictiveStocks.length > 0) {
+      sections.push("**AI推荐 — 前瞻选股 (Top 3)**");
+      for (const s of predictiveStocks.slice(0, 3)) {
+        const score = s.score != null ? ` 评分:${String(s.score)}` : "";
+        const reason = s.reason ?? s.summary ?? "";
+        const reasonStr = reason ? ` — ${String(reason)}` : "";
+        sections.push(
+          `  🔮 ${String(s.code ?? s.symbol ?? "")} ${String(s.name ?? "")}${score}${reasonStr}`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    sections.push("前瞻选股推荐: 数据获取失败\n");
   }
 
   // Yesterday's portfolio recap

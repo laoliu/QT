@@ -40,6 +40,10 @@
  * │  │    • institutional_flow— fund holdings, insider trades   │  │
  * │  │    • social_sentiment  — community hot stocks, sentiment │  │
  * │  │    • chip_accumulation — institutional accumulation scan │  │
+ * │  │    • market_breadth    — market breadth indicators      │  │
+ * │  │    • stock_compare     — multi-stock comparison         │  │
+ * │  │    • execution_analysis— trade execution quality        │  │
+ * │  │    • sector_rotation   — sector rotation strategy       │  │
  * │  │                                                          │  │
  * │  │  Commands (chat shortcuts):                              │  │
  * │  │    /quote /screen /backtest /portfolio /signal           │  │
@@ -129,6 +133,7 @@ import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
+import { createExecutionAnalysisTool } from "./src/tools/execution-analysis.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
 import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.js";
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
@@ -137,6 +142,7 @@ import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
+import { createMarketBreadthTool } from "./src/tools/market-breadth.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
@@ -152,10 +158,12 @@ import { createPriceAlertTool } from "./src/tools/price-alert.js";
 import { createRiskAnalysisTool } from "./src/tools/risk-analysis.js";
 import { createScheduledTaskTool } from "./src/tools/scheduled-task.js";
 import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
+import { createSectorRotationTool } from "./src/tools/sector-rotation.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
 import { createStrategyExplorerTool } from "./src/tools/strategy-explorer.js";
@@ -643,6 +651,7 @@ const quantTradingPlugin = {
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
       stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
+      stock_compare: createStockCompareTool(api, config),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
           const end = new Date().toISOString().slice(0, 10);
@@ -654,6 +663,9 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      market_breadth: createMarketBreadthTool(api, config),
+      sector_rotation: createSectorRotationTool(api, config),
+      execution_analysis: createExecutionAnalysisTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -701,9 +713,13 @@ const quantTradingPlugin = {
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",
       stock_recommend: "智能选股推荐",
+      stock_compare: "个股对比",
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      market_breadth: "市场宽度",
+      sector_rotation: "板块轮动",
+      execution_analysis: "成交分析",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -1358,6 +1374,22 @@ stock_recommend 是一个便捷的一键工具，自动完成 全市场选股→
 3. sector_synergy — 板块协同效应、联动分析
 4. lianban_analysis — 连板梯队，辨识市场主线
 5. dragon_tiger — 龙虎榜异动，游资动向
+6. sector_rotation(action=signals) — 板块轮动信号，资金轮入/轮出趋势
+
+### 市场大势判断流程（用户问"大盘怎么样/市场情绪"时）
+1. market_breadth(action=overview) — 全市场涨跌家数、涨停跌停、量比、情绪
+2. market_breadth(action=above_ma, period=20) — 站上20日均线的股票占比
+3. market_breadth(action=mcclellan) — McClellan指标，判断市场动能方向
+4. sector_rotation(action=history) — 近期板块轮动历史，判断资金流向
+
+### 个股对比流程（用户问"对比XX和YY"时）
+使用 stock_compare(action=compare, symbols=代码列表) 进行全方位横向对比。
+支持任意2-10只股票的收益率、波动率、PE/PB、技术指标等多维对比。
+
+### 成交质量分析流程（用户问"执行质量/滑点分析"时）
+1. execution_analysis(action=execution_summary) — 整体执行摘要
+2. execution_analysis(action=slippage_report) — 滑点汇总报告
+3. execution_analysis(action=vwap_compare) — 成交价vs VWAP对比
 
 ### 每日简报模板（用户说"简报/早报/收盘"时）
 用以下结构组织回答：

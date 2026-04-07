@@ -2234,5 +2234,96 @@ export function createQuantCommands(
         return [`🔥 今日社区热度排名 (共${String(d.count)}只)`, "", ...lines].join("\n");
       },
     },
+
+    // ── Market Breadth (市场宽度) ─────────────────────────────────────────
+    {
+      name: "/breadth",
+      aliases: ["/市场宽度", "/涨跌"],
+      description: "市场宽度概览（涨跌家数/涨停跌停/量比/情绪）",
+      async execute(_args: string) {
+        const pyResult = await runPythonScript<Record<string, unknown>>(
+          "engines/market_breadth.py",
+          { action: "overview" },
+          config,
+        );
+        if (!pyResult.ok) return `❌ 市场宽度数据获取失败: ${pyResult.error ?? "unknown"}`;
+        const d = pyResult.data!;
+        if (d.error) return `❌ ${String(d.error)}`;
+        const lines = [
+          `📊 市场宽度概览`,
+          `总计: ${String(d.total)} 只`,
+          `上涨: ${String(d.advancing)} | 下跌: ${String(d.declining)} | 平盘: ${String(d.unchanged)}`,
+          `涨跌比: ${String(d.adRatio)} | 量比: ${String(d.volumeRatio)}`,
+          `涨停: ${String(d.limitUp)} | 跌停: ${String(d.limitDown)}`,
+          `中位数涨跌: ${String(d.medianChange)}%`,
+          `情绪判断: ${String(d.marketSentiment)}`,
+        ];
+        return lines.join("\n");
+      },
+    },
+
+    // ── Sector Rotation (板块轮动) ───────────────────────────────────────
+    {
+      name: "/rotation",
+      aliases: ["/轮动", "/板块轮动"],
+      description: "板块轮动信号。用法: /轮动 [topN]\n综合动量+多因子的板块轮动推荐",
+      async execute(args: string) {
+        const topN = parseInt(args.trim()) || 3;
+        const pyResult = await runPythonScript<Record<string, unknown>>(
+          "engines/sector_rotation.py",
+          { action: "signals", topN },
+          config,
+        );
+        if (!pyResult.ok) return `❌ 板块轮动分析失败: ${pyResult.error ?? "unknown"}`;
+        const d = pyResult.data!;
+        if (d.error) return `❌ ${String(d.error)}`;
+        const recommended = (d.recommended as Array<Record<string, unknown>>) ?? [];
+        if (recommended.length === 0) return "暂无板块轮动信号";
+        const lines = [
+          `🔄 板块轮动信号 (${String(d.method)})`,
+          "",
+          ...recommended.map(
+            (s, i) =>
+              `${String(i + 1)}. ${String(s.name)} | 信号: ${String(s.signal)} | 权重: ${String(s.weight)}% | 评分: ${String(s.signalScore)}`,
+          ),
+        ];
+        if (d.rebalanceSuggestion) lines.push("", String(d.rebalanceSuggestion));
+        return lines.join("\n");
+      },
+    },
+
+    // ── Stock Compare (个股对比) ──────────────────────────────────────────
+    {
+      name: "/compare",
+      aliases: ["/对比", "/pk"],
+      description: "个股对比。用法: /对比 600519,000858,000333\n多维度横向对比任意股票",
+      async execute(args: string) {
+        const symbols = args.trim().split(/[,，\s]+/).filter(Boolean);
+        if (symbols.length < 2) return "请提供至少2个股票代码，如: /对比 600519,000858";
+        const pyResult = await runPythonScript<Record<string, unknown>>(
+          "engines/stock_compare.py",
+          { action: "compare", symbols, period: "3m" },
+          config,
+        );
+        if (!pyResult.ok) return `❌ 个股对比失败: ${pyResult.error ?? "unknown"}`;
+        const d = pyResult.data!;
+        if (d.error) return `❌ ${String(d.error)}`;
+        const stocks = (d.stocks as Array<Record<string, unknown>>) ?? [];
+        if (stocks.length === 0) return "无法获取股票数据";
+        const header = `📊 个股对比 (${String(d.period)})`;
+        const lines = stocks.map((s) => {
+          const parts = [
+            `${String(s.code)} ${String(s.name)}`,
+            `价格:${String(s.price)}`,
+            s.returnPct != null ? `涨跌:${String(s.returnPct)}%` : "",
+            s.pe != null ? `PE:${String(s.pe)}` : "",
+            s.pb != null ? `PB:${String(s.pb)}` : "",
+            s.rsi14 != null ? `RSI:${String(s.rsi14)}` : "",
+          ].filter(Boolean);
+          return parts.join(" | ");
+        });
+        return [header, "", ...lines].join("\n");
+      },
+    },
   ];
 }

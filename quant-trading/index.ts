@@ -155,6 +155,7 @@ import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
@@ -642,6 +643,7 @@ const quantTradingPlugin = {
       institutional_flow: createInstitutionalFlowTool(api, config),
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
       stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
@@ -700,6 +702,7 @@ const quantTradingPlugin = {
       institutional_flow: "机构持仓",
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",
+      stock_compare: "多股横向对比",
       stock_recommend: "智能选股推荐",
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",

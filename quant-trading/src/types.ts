@@ -844,6 +844,19 @@ export type QuantTradingConfig = {
    */
   signalWebhook?: SignalWebhookConfig;
 
+  /**
+   * Earnings & stock event alert configuration.
+   * Background service that monitors holdings and watchlist for upcoming
+   * earnings reports, restricted share lift-bans, dividends, etc.
+   */
+  earningsAlert?: {
+    enabled?: boolean;
+    checkIntervalMs?: number;
+    firstReminderDays?: number;
+    urgentReminderDays?: number;
+    lookaheadDays?: number;
+  };
+
   // ── HTTP API Security ──────────────────────────────────────────
 
   /**

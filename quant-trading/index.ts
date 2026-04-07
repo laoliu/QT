@@ -52,6 +52,7 @@
  * │  │    • SignalMonitor     — watch strategies, emit alerts   │  │
  * │  │    • LiveEngine        — real-time broker order loop     │  │
  * │  │    • OptionsMonitor    — option Greeks/expiry monitoring │  │
+ * │  │    • EarningsAlert    — holdings event & earnings watch │  │
  * │  │                                                          │  │
  * │  │  Python Bridge (child_process NDJSON):                   │  │
  * │  │    • backtrader engine for advanced backtesting           │  │
@@ -92,6 +93,7 @@ import { ConditionalOrderService } from "./src/services/conditional-order.js";
 import { CustomStrategyStore } from "./src/services/custom-strategy-store.js";
 import { DataQualityValidator } from "./src/services/data-quality.js";
 import { createDataSyncService } from "./src/services/data-sync.js";
+import { createEarningsAlertService } from "./src/services/earnings-alert.js";
 import { HistoricalDataWarehouse } from "./src/services/data-warehouse.js";
 import { DcaScheduleService } from "./src/services/dca-schedule.js";
 import { EquityHistory } from "./src/services/equity-history.js";
@@ -167,7 +169,7 @@ import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
-import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
+import type { Portfolio, QuantTradingConfig, TradingSignal } from "./src/types.js";
 
 /** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
 function wrapTool(
@@ -1089,6 +1091,29 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Earnings & Event Alert service for proactive holdings monitoring
+    {
+      const loadPortfolioForAlert = async (): Promise<Portfolio> => {
+        const { readFile } = await import("node:fs/promises");
+        const os = await import("node:os");
+        const path = await import("node:path");
+        const portfolioDir =
+          config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+        for (const fileName of ["portfolio-paper.json", "portfolio.json"]) {
+          try {
+            const raw = await readFile(path.join(portfolioDir, fileName), "utf-8");
+            return JSON.parse(raw) as Portfolio;
+          } catch {
+            continue;
+          }
+        }
+        return { id: "default", name: "默认组合", cash: 0, totalValue: 0, positions: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      };
+      api.registerService(
+        createEarningsAlertService(api, config, loadPortfolioForAlert, favoritesStore, taskScheduler),
+      );
+    }
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

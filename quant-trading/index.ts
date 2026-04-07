@@ -155,6 +155,7 @@ import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
@@ -654,6 +655,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +706,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      stock_compare: "个股横向对比",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

@@ -1052,6 +1052,21 @@ export type TradeSource = "live" | "backtest" | "paper";
  * backtest-specific metadata so the alignment engine can pair trades
  * from different sources.
  */
+/**
+ * Breakdown of trading fees for A-share and other markets where
+ * total cost comprises multiple distinct components.
+ */
+export type TradeFees = {
+  /** Broker commission */
+  commission: number;
+  /** Stamp duty (A-share sell-side: 0.05%) */
+  stampDuty?: number;
+  /** Transfer fee (A-share: 0.001%) */
+  transferFee?: number;
+  /** Other regulatory fees */
+  otherFees?: number;
+};
+
 export type UnifiedTradeRecord = {
   tradeId: string;
   source: TradeSource;
@@ -1069,6 +1084,12 @@ export type UnifiedTradeRecord = {
   netPnl: number;
   holdingDays?: number;
   strategyId?: string;
+
+  /**
+   * Detailed fee breakdown (A-share: stamp duty + transfer fee + commission).
+   * When provided, `commission` still holds the total cost for backward compat.
+   */
+  fees?: TradeFees;
 
   // ── Source-specific references ──
 
@@ -1172,6 +1193,31 @@ export type AlignmentConfig = {
    * Default: "Asia/Shanghai".
    */
   timezone?: string;
+
+  /**
+   * Date range filter — only include trades whose entry time falls within
+   * [startDate, endDate]. ISO date strings (e.g. "2025-01-01").
+   * When undefined, all dates are included.
+   */
+  dateRange?: {
+    startDate?: string;
+    endDate?: string;
+  };
+
+  /**
+   * Market type filter — only include trades for these market types.
+   * Useful for mixed-portfolio traders who want to compare A-share
+   * equity trades only while the portfolio also contains futures/options.
+   * When undefined or empty, all markets are included.
+   */
+  marketFilter?: MarketType[];
+
+  /**
+   * Minimum match quality threshold for accepting a pair.
+   * Pairs below this quality are treated as unmatched.
+   * Default: "loose" (accept all quality levels).
+   */
+  minMatchQuality?: MatchQuality;
 };
 
 /**
@@ -1254,6 +1300,14 @@ export type AlignmentSummary = {
   backtestTotalPnl: number;
   /** P&L difference (live − backtest) */
   pnlGap: number;
+  /** Match rate: pairedCount / max(totalLiveTrades, totalBacktestTrades) */
+  matchRate: number;
+  /** Average slippage (%) across paired trades that have slippage data */
+  avgSlippagePct?: number;
+  /** Total commission/fees from live trades */
+  liveTotalFees: number;
+  /** Total commission/fees from backtest trades */
+  backtestTotalFees: number;
 };
 
 /**
@@ -1261,6 +1315,8 @@ export type AlignmentSummary = {
  * unmatched trades, and summary statistics.
  */
 export type AlignmentResult = {
+  /** Unique identifier for this alignment run */
+  runId: string;
   /** Configuration used for this alignment */
   config: AlignmentConfig;
   /** All paired trades (including unmatched entries) */

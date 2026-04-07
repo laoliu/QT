@@ -45,6 +45,35 @@ class MatchQuality(str, Enum):
 
 
 @dataclass
+class TradeFees:
+    """Breakdown of trading fees for A-share and other markets."""
+
+    commission: float
+    stamp_duty: Optional[float] = None
+    transfer_fee: Optional[float] = None
+    other_fees: Optional[float] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"commission": self.commission}
+        if self.stamp_duty is not None:
+            d["stampDuty"] = self.stamp_duty
+        if self.transfer_fee is not None:
+            d["transferFee"] = self.transfer_fee
+        if self.other_fees is not None:
+            d["otherFees"] = self.other_fees
+        return d
+
+    @staticmethod
+    def from_dict(d: dict[str, Any]) -> TradeFees:
+        return TradeFees(
+            commission=d["commission"],
+            stamp_duty=d.get("stampDuty"),
+            transfer_fee=d.get("transferFee"),
+            other_fees=d.get("otherFees"),
+        )
+
+
+@dataclass
 class UnifiedTradeRecord:
     """A trade record in a common structure for alignment, regardless of source.
 
@@ -74,6 +103,7 @@ class UnifiedTradeRecord:
     exit_order_id: Optional[str] = None
     backtest_id: Optional[str] = None
     signal: Optional[dict[str, Any]] = None  # TradingSignal as dict
+    fees: Optional[TradeFees] = None  # Detailed fee breakdown
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-compatible dict for NDJSON bridge output."""
@@ -108,6 +138,8 @@ class UnifiedTradeRecord:
             d["backtestId"] = self.backtest_id
         if self.signal is not None:
             d["signal"] = self.signal
+        if self.fees is not None:
+            d["fees"] = self.fees.to_dict()
         return d
 
     @staticmethod
@@ -134,6 +166,7 @@ class UnifiedTradeRecord:
             exit_order_id=d.get("exitOrderId"),
             backtest_id=d.get("backtestId"),
             signal=d.get("signal"),
+            fees=TradeFees.from_dict(d["fees"]) if d.get("fees") else None,
         )
 
 
@@ -161,6 +194,16 @@ class AlignmentConfig:
     # Timezone for cross-source date interpretation
     timezone: str = "Asia/Shanghai"
 
+    # Date range filter
+    date_range_start: Optional[str] = None  # ISO date, e.g. "2025-01-01"
+    date_range_end: Optional[str] = None  # ISO date
+
+    # Market type filter
+    market_filter: list[str] = field(default_factory=list)  # MarketType values
+
+    # Minimum match quality threshold
+    min_match_quality: Optional[MatchQuality] = None
+
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "timeToleranceSec": self.time_tolerance_sec,
@@ -181,10 +224,23 @@ class AlignmentConfig:
             d["splitFillWindowSec"] = self.split_fill_window_sec
         if self.timezone != "Asia/Shanghai":
             d["timezone"] = self.timezone
+        if self.date_range_start is not None or self.date_range_end is not None:
+            date_range: dict[str, str] = {}
+            if self.date_range_start is not None:
+                date_range["startDate"] = self.date_range_start
+            if self.date_range_end is not None:
+                date_range["endDate"] = self.date_range_end
+            d["dateRange"] = date_range
+        if self.market_filter:
+            d["marketFilter"] = self.market_filter
+        if self.min_match_quality is not None:
+            d["minMatchQuality"] = self.min_match_quality.value
         return d
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> AlignmentConfig:
+        date_range = d.get("dateRange", {})
+        min_mq = d.get("minMatchQuality")
         return AlignmentConfig(
             time_tolerance_sec=d.get("timeToleranceSec", 86400),
             symbol_match_mode=SymbolMatchMode(d.get("symbolMatchMode", "normalized")),
@@ -197,6 +253,10 @@ class AlignmentConfig:
             group_split_fills=d.get("groupSplitFills", False),
             split_fill_window_sec=d.get("splitFillWindowSec", 60),
             timezone=d.get("timezone", "Asia/Shanghai"),
+            date_range_start=date_range.get("startDate") if date_range else None,
+            date_range_end=date_range.get("endDate") if date_range else None,
+            market_filter=d.get("marketFilter", []),
+            min_match_quality=MatchQuality(min_mq) if min_mq else None,
         )
 
 
@@ -309,9 +369,13 @@ class AlignmentSummary:
     live_total_pnl: float
     backtest_total_pnl: float
     pnl_gap: float
+    match_rate: float
+    live_total_fees: float
+    backtest_total_fees: float
+    avg_slippage_pct: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "totalLiveTrades": self.total_live_trades,
             "totalBacktestTrades": self.total_backtest_trades,
             "pairedCount": self.paired_count,
@@ -323,7 +387,13 @@ class AlignmentSummary:
             "liveTotalPnl": self.live_total_pnl,
             "backtestTotalPnl": self.backtest_total_pnl,
             "pnlGap": self.pnl_gap,
+            "matchRate": self.match_rate,
+            "liveTotalFees": self.live_total_fees,
+            "backtestTotalFees": self.backtest_total_fees,
         }
+        if self.avg_slippage_pct is not None:
+            d["avgSlippagePct"] = self.avg_slippage_pct
+        return d
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> AlignmentSummary:
@@ -339,6 +409,10 @@ class AlignmentSummary:
             live_total_pnl=d["liveTotalPnl"],
             backtest_total_pnl=d["backtestTotalPnl"],
             pnl_gap=d["pnlGap"],
+            match_rate=d["matchRate"],
+            live_total_fees=d["liveTotalFees"],
+            backtest_total_fees=d["backtestTotalFees"],
+            avg_slippage_pct=d.get("avgSlippagePct"),
         )
 
 
@@ -346,6 +420,7 @@ class AlignmentSummary:
 class AlignmentResult:
     """Complete result of an alignment run."""
 
+    run_id: str
     config: AlignmentConfig
     pairs: list[PairedTrade]
     summary: AlignmentSummary
@@ -354,6 +429,7 @@ class AlignmentResult:
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
+            "runId": self.run_id,
             "config": self.config.to_dict(),
             "pairs": [p.to_dict() for p in self.pairs],
             "summary": self.summary.to_dict(),
@@ -366,6 +442,7 @@ class AlignmentResult:
     @staticmethod
     def from_dict(d: dict[str, Any]) -> AlignmentResult:
         return AlignmentResult(
+            run_id=d["runId"],
             config=AlignmentConfig.from_dict(d["config"]),
             pairs=[PairedTrade.from_dict(p) for p in d["pairs"]],
             summary=AlignmentSummary.from_dict(d["summary"]),

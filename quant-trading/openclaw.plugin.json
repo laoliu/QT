@@ -215,10 +215,25 @@
             "type": "object",
             "description": "Futu OpenD broker configuration",
             "properties": {
-              "host": { "type": "string", "description": "OpenD host (default: 127.0.0.1)" },
-              "port": { "type": "number", "description": "OpenD port (default: 11111)" },
-              "tradePwd": { "type": "string", "description": "Trading password (MD5-hashed)" },
-              "accountId": { "type": "string", "description": "Futu account ID" }
+              "openDHost": { "type": "string", "description": "OpenD host (default: 127.0.0.1)" },
+              "openDPort": { "type": "number", "description": "OpenD port (default: 11111)" },
+              "tradeEnv": {
+                "type": "string",
+                "enum": ["REAL", "SIMULATE"],
+                "description": "Trading environment (default: SIMULATE)"
+              },
+              "pwdUnlock": { "type": "string", "description": "Trading password for real-env unlock" },
+              "marketQuoteType": { "type": "number", "description": "Quote type: 1=REALTIME, 2=DELAYED" },
+              "accountId": { "type": "string", "description": "Futu account ID (e.g. 281001234567)" },
+              "securityFirm": {
+                "type": "string",
+                "description": "Security firm for HK accounts (e.g. FUTUSECURITIES, FUTUINC)"
+              },
+              "trdMarket": {
+                "type": "string",
+                "enum": ["hk_stock", "us_stock", "cn_stock", "futures"],
+                "description": "Primary trade market filter (default: hk_stock)"
+              }
             }
           }
         }

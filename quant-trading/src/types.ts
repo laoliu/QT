@@ -761,8 +761,18 @@ export type FutuBrokerConfig = {
   openDHost?: string; // default "127.0.0.1"
   openDPort?: number; // default 11111
   tradeEnv?: "REAL" | "SIMULATE";
-  pwdUnlock?: string; // trading password
+  pwdUnlock?: string; // trading password for real-env unlock
   marketQuoteType?: number; // 1=REALTIME 2=DELAYED
+  /** Futu account ID (e.g. "281001234567") — used for multi-account selection */
+  accountId?: string;
+  /**
+   * Futu security firm, required for HK accounts.
+   * Common values: FUTUSECURITIES (富途证券 international), FUTUINC (富途牛牛).
+   * See futu-api SecurityFirm enum for the full list.
+   */
+  securityFirm?: string;
+  /** Primary trade market filter: hk_stock | us_stock | cn_stock | futures (default: hk_stock) */
+  trdMarket?: MarketType;
 };
 
 export type QMTBrokerConfig = {

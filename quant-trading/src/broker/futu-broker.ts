@@ -37,7 +37,7 @@ import type {
   OrderStatusCallback,
   ModifyOrderRequest,
 } from "./adapter.js";
-import { isHkMarketOpen, isCnMarketOpen } from "./paper-broker.js";
+import { isHkMarketOpen, isCnMarketOpen, isUsMarketOpen } from "./paper-broker.js";
 
 // ── Raw shapes returned by futu_broker.py ───────────────────────
 
@@ -203,7 +203,9 @@ export class FutuBroker implements IBrokerAdapter {
       opend_port: this.futuCfg.openDPort ?? 11111,
       trade_env: this.futuCfg.tradeEnv ?? "SIMULATE",
       pwd_unlock: this.futuCfg.pwdUnlock ?? "",
-      trd_market: cfg.defaultMarket ?? "hk_stock",
+      trd_market: this.futuCfg.trdMarket ?? cfg.defaultMarket ?? "hk_stock",
+      security_firm: this.futuCfg.securityFirm ?? "",
+      account_id: this.futuCfg.accountId ?? "",
     });
 
     this.proc.onEvent((event, data) => this.handleEvent(event, data));
@@ -340,7 +342,7 @@ export class FutuBroker implements IBrokerAdapter {
   async queryAccount(): Promise<BrokerAccount> {
     const raw = await this.proc.call<RawAccount>("query_account");
     return {
-      accountId: this.futuCfg.openDHost ?? "futu",
+      accountId: this.futuCfg.accountId ?? this.futuCfg.openDHost ?? "futu",
       brokerType: "futu",
       cash: raw.cash,
       frozenCash: raw.frozen_cash,
@@ -394,9 +396,19 @@ export class FutuBroker implements IBrokerAdapter {
   }
 
   async isMarketOpen(market?: MarketType): Promise<boolean> {
-    const m = market ?? this.cfg.defaultMarket ?? "hk_stock";
+    const m = market ?? this.futuCfg.trdMarket ?? this.cfg.defaultMarket ?? "hk_stock";
     if (m === "hk_stock") return isHkMarketOpen();
+    if (m === "us_stock") return isUsMarketOpen();
     return isCnMarketOpen(m);
+  }
+
+  async ping(): Promise<boolean> {
+    try {
+      await this.proc.call("ping");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // ── Private ──────────────────────────────────────────────────

@@ -251,6 +251,8 @@ class FutuBrokerBridge:
         self.trade_env_str: str = init_args.get("trade_env", "SIMULATE")
         self.pwd_unlock: str = init_args.get("pwd_unlock", "")
         self.trd_market_str: str = init_args.get("trd_market", "hk_stock")
+        self.security_firm_str: str = init_args.get("security_firm", "")
+        self.account_id: str = init_args.get("account_id", "")
 
         self.quote_ctx: Optional[Any] = None
         self.trade_ctx: Optional[Any] = None
@@ -263,13 +265,16 @@ class FutuBrokerBridge:
         # Quote context
         self.quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
 
-        # Trade context
+        # Trade context — with optional security firm for HK multi-broker accounts
         trd_env = _get_trd_env(self.trade_env_str)
-        self.trade_ctx = OpenSecTradeContext(
-            host=self.host,
-            port=self.port,
-            filter_trdmarket=_get_trd_market(self.trd_market_str),
-        )
+        trade_kwargs = {
+            "host": self.host,
+            "port": self.port,
+            "filter_trdmarket": _get_trd_market(self.trd_market_str),
+        }
+        if self.security_firm_str and hasattr(SecurityFirm, self.security_firm_str):
+            trade_kwargs["security_firm"] = getattr(SecurityFirm, self.security_firm_str)
+        self.trade_ctx = OpenSecTradeContext(**trade_kwargs)
 
         # Unlock trading if password provided (required for real trading)
         if self.pwd_unlock and trd_env == TrdEnv.REAL:
@@ -437,6 +442,17 @@ class FutuBrokerBridge:
                 self._subscribed_codes.discard(code)
         return {"subscribed": list(self._subscribed_codes)}
 
+    def ping(self) -> dict:
+        """Health check — verifies that both quote and trade contexts are alive."""
+        if not self.quote_ctx or not self.trade_ctx:
+            raise RuntimeError("Not connected")
+        # A lightweight call to verify connectivity
+        trd_env = _get_trd_env(self.trade_env_str)
+        ret, data = self.trade_ctx.accinfo_query(trd_env=trd_env)
+        if ret != RET_OK:
+            raise RuntimeError(f"Ping failed: {data}")
+        return {"status": "ok"}
+
     # ── Serialisers ────────────────────────────────────────────
 
     @staticmethod
@@ -494,6 +510,7 @@ METHODS = {
     "query_account": "query_account",
     "subscribe_quote": "subscribe_quote",
     "unsubscribe_quote": "unsubscribe_quote",
+    "ping": "ping",
 }
 
 def main():
@@ -531,7 +548,7 @@ def main():
 
         try:
             fn = getattr(bridge, METHODS[method])
-            if method in ("query_positions", "query_account", "disconnect", "connect"):
+            if method in ("query_positions", "query_account", "disconnect", "connect", "ping"):
                 result = fn()
             else:
                 result = fn(params)

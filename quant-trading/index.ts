@@ -134,15 +134,19 @@ import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
+import { createInvestmentPlannerTool } from "./src/tools/investment-planner.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
+import { createMarketRegimeTool } from "./src/tools/market-regime.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
+import { createPeerCompareTool } from "./src/tools/peer-compare.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
 import { createOptionsTradingTool } from "./src/tools/options-trading.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
+import { createPositionDiagnosisTool } from "./src/tools/position-diagnosis.js";
 import { createPolymarketOddsTool } from "./src/tools/polymarket-odds.js";
 import { createPortfolioBacktestTool } from "./src/tools/portfolio-backtest.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
@@ -165,6 +169,7 @@ import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
+import { createTransactionCostTool } from "./src/tools/transaction-cost.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
@@ -654,6 +659,11 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      market_regime: createMarketRegimeTool(api, config),
+      position_diagnosis: createPositionDiagnosisTool(api, config, getEngine),
+      transaction_cost: createTransactionCostTool(api, config, getEngine),
+      peer_compare: createPeerCompareTool(api, config),
+      investment_planner: createInvestmentPlannerTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +714,11 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      market_regime: "市场情绪温度计",
+      position_diagnosis: "持仓诊断",
+      transaction_cost: "交易成本分析",
+      peer_compare: "同业对比",
+      investment_planner: "投资计划",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

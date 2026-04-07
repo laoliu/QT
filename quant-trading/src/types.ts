@@ -1000,8 +1000,38 @@ export type OptionsConfig = {
     expiryWarningDays?: number[];
     /** IV deviation threshold for alerts (std devs from mean, default: 2.0) */
     ivAlertThreshold?: number;
+    /** Max absolute portfolio Delta (default: 50) */
+    maxDelta?: number;
+    /** Max absolute portfolio Gamma (default: 10) */
+    maxGamma?: number;
+    /** Max absolute portfolio Vega (default: 20) */
+    maxVega?: number;
     /** Max absolute portfolio Theta per day (default: 0 = no limit) */
     maxTheta?: number;
+  };
+
+  /**
+   * Portfolio-level risk control configuration.
+   * Background service for VaR monitoring, concentration risk, and critical Greeks alerts.
+   */
+  riskControl?: {
+    enabled?: boolean;
+    /** Check interval in seconds (default: 120) */
+    checkIntervalSecs?: number;
+    /** VaR confidence level (default: 0.95) */
+    varConfidence?: number;
+    /** VaR limit in CNY — alert when exceeded (default: 0 = disabled) */
+    varLimit?: number;
+    /** Max concentration per underlying as % of total delta (default: 60) */
+    maxConcentrationPct?: number;
+    /** Max positions expiring in same week (default: 0 = no limit) */
+    maxSameWeekExpiry?: number;
+    /** Critical delta threshold for immediate notification (default: 100) */
+    criticalDelta?: number;
+    /** Critical gamma threshold (default: 20) */
+    criticalGamma?: number;
+    /** Margin utilization warning threshold as % (default: 80) */
+    marginUtilWarningPct?: number;
   };
 };
 

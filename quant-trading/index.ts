@@ -29,6 +29,7 @@
  * │  │    • options_strategy — strategy recommend, payoff, greeks │  │
  * │  │    • options_trading  — option order placement & positions │  │
  * │  │    • stochastic_pricing — MC, binomial tree, hedge sim   │  │
+ * │  │    • options_greeks_dashboard — Greeks dashboard/VaR/stress│  │
  * │  │    • value_investing   — Graham/Buffett valuation        │  │
  * │  │    • financial_calculator — DCF/PE/PB/PEG estimator      │  │
  * │  │    • news_summary      — financial news & sentiment      │  │
@@ -52,6 +53,7 @@
  * │  │    • SignalMonitor     — watch strategies, emit alerts   │  │
  * │  │    • LiveEngine        — real-time broker order loop     │  │
  * │  │    • OptionsMonitor    — option Greeks/expiry monitoring │  │
+ * │  │    • OptionsRiskCtrl   — VaR/concentration/Greeks ctrl │  │
  * │  │                                                          │  │
  * │  │  Python Bridge (child_process NDJSON):                   │  │
  * │  │    • backtrader engine for advanced backtesting           │  │
@@ -102,6 +104,7 @@ import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
 import { tryNotify } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
+import { createOptionsRiskControlService } from "./src/services/options-risk-control.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
 import { PriceAlertService } from "./src/services/price-alert.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
@@ -141,6 +144,7 @@ import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsRiskAnalysisTool } from "./src/tools/options-risk-analysis.js";
+import { createOptionsGreeksDashboardTool } from "./src/tools/options-greeks-dashboard.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
 import { createOptionsTradingTool } from "./src/tools/options-trading.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
@@ -624,6 +628,7 @@ const quantTradingPlugin = {
       options_strategy: createOptionsStrategyTool(api, config),
       options_trading: createOptionsTradingTool(api, config, getEngine),
       options_risk_analysis: createOptionsRiskAnalysisTool(api, config),
+      options_greeks_dashboard: createOptionsGreeksDashboardTool(api, config, getEngine),
       stochastic_pricing: createStochasticPricingTool(api, config),
       watchlist: createWatchlistTool(api, config),
       favorites: createFavoritesTool(api, config),
@@ -1092,6 +1097,9 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Options Risk Control for portfolio-level VaR/Greeks/concentration monitoring
+    api.registerService(createOptionsRiskControlService(api, config, () => liveEngine.getPositions()));
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

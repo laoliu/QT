@@ -1139,8 +1139,10 @@ const quantTradingPlugin = {
         tickStrategyService.setActiveSymbols(symbols);
       });
 
-      // Wire regime auto-switch callback
+      // Wire regime auto-switch callback (Python macro regime → TS price-action fallback)
+      let priceRegimeDetect: (() => Promise<string | null>) | null = null;
       liveEngine.setRegimeCallback(async () => {
+        // Try Python macro regime first
         try {
           const { runPythonScript: runPython } = await import("./src/bridge/python-bridge.js");
           const result = await runPython<{ regime?: string }>(
@@ -1148,10 +1150,18 @@ const quantTradingPlugin = {
             { action: "get_regime" },
             config,
           );
-          return result.ok && result.data?.regime ? result.data.regime : null;
+          if (result.ok && result.data?.regime && result.data.regime !== "unknown") {
+            return result.data.regime;
+          }
         } catch {
-          return null;
+          // Python unavailable — fall through to TS detector
         }
+        // Fallback: TS-side price-action regime detection (MA + volatility based)
+        if (!priceRegimeDetect) {
+          const { createMarketRegimeDetector } = await import("./src/services/market-regime.js");
+          priceRegimeDetect = createMarketRegimeDetector(config);
+        }
+        return priceRegimeDetect();
       });
 
       api.registerService(tickIngressService);

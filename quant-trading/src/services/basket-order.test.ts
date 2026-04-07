@@ -987,4 +987,535 @@ describe("BasketOrderService", () => {
       expect(result.config.failureThreshold).toBe(0.5);
     });
   });
+
+  // ── 11. Concurrent abort behavior ────────────────────────────
+
+  describe("concurrent abort on failure threshold", () => {
+    it("stops submitting remaining orders when failure threshold reached mid-execution", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      let callCount = 0;
+
+      // All orders fail
+      vi.mocked(broker.placeOrder).mockImplementation(async () => {
+        callCount++;
+        throw new Error("Broker down");
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = Array.from({ length: 10 }, (_, i) =>
+        makeBasketItem(`60000${i}`, 100, 10),
+      );
+
+      const result = await svc.execute(items, {
+        failureThreshold: 0.3,
+        concurrency: 1, // Sequential for determinism
+      });
+
+      expect(result.status).toBe("rolled_back");
+      // Should stop early — not all 10 orders submitted
+      expect(callCount).toBeLessThan(10);
+      // Remaining should be cancelled
+      expect(result.stats.cancelled).toBeGreaterThan(0);
+      expect(result.stats.failed + result.stats.cancelled).toBe(10);
+    });
+
+    it("concurrent workers all stop when threshold is reached", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      let callCount = 0;
+
+      vi.mocked(broker.placeOrder).mockImplementation(async () => {
+        callCount++;
+        // Add delay so concurrent workers overlap
+        await new Promise((r) => setTimeout(r, 10));
+        throw new Error("All fail");
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = Array.from({ length: 20 }, (_, i) =>
+        makeBasketItem(`60000${i}`, 100, 10),
+      );
+
+      const result = await svc.execute(items, {
+        failureThreshold: 0.3,
+        concurrency: 5,
+      });
+
+      expect(result.status).toBe("rolled_back");
+      // With concurrency 5, not all 20 should have been submitted
+      expect(callCount).toBeLessThan(20);
+    }, 10000);
+  });
+
+  // ── 12. Rollback edge cases ──────────────────────────────────
+
+  describe("rollback edge cases", () => {
+    it("handles cancelOrder throwing during rollback (best-effort)", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      let callCount = 0;
+
+      // First 2 succeed, rest fail
+      vi.mocked(broker.placeOrder).mockImplementation(async (req: OrderRequest) => {
+        callCount++;
+        if (callCount > 2) throw new Error("模拟失败");
+        return {
+          orderId: `order-${callCount}`,
+          symbol: req.symbol,
+          market: req.market,
+          side: req.side,
+          orderType: req.orderType,
+          price: req.price,
+          quantity: req.quantity,
+          filledQty: 0,
+          status: "submitted" as OrderStatus,
+          brokerType: "paper" as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      });
+
+      // cancelOrder throws — rollback should still complete
+      vi.mocked(broker.cancelOrder).mockRejectedValue(new Error("Cancel failed"));
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = Array.from({ length: 4 }, (_, i) =>
+        makeBasketItem(`60000${i}`, 100, 10),
+      );
+
+      // Should not throw despite cancelOrder failures
+      const result = await svc.execute(items, {
+        failureThreshold: 0.5,
+        concurrency: 1,
+      });
+
+      expect(result.status).toBe("rolled_back");
+      // cancelOrder was attempted for the successfully submitted orders
+      expect(broker.cancelOrder).toHaveBeenCalled();
+    });
+
+    it("rollback does not cancel already filled orders", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      let callCount = 0;
+
+      vi.mocked(broker.placeOrder).mockImplementation(async (req: OrderRequest) => {
+        callCount++;
+        if (callCount > 1) throw new Error("模拟失败");
+        return {
+          orderId: `order-${callCount}`,
+          symbol: req.symbol,
+          market: req.market,
+          side: req.side,
+          orderType: req.orderType,
+          price: req.price,
+          quantity: req.quantity,
+          filledQty: req.quantity,
+          status: "filled" as OrderStatus, // Already filled
+          brokerType: "paper" as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = Array.from({ length: 2 }, (_, i) =>
+        makeBasketItem(`60000${i}`, 100, 10),
+      );
+
+      const result = await svc.execute(items, {
+        failureThreshold: 0.5,
+        concurrency: 1,
+      });
+
+      expect(result.status).toBe("rolled_back");
+      // Filled orders should not be cancelled (status is "filled", not "submitted"/"partial"/"pending")
+      expect(broker.cancelOrder).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── 13. Risk overrides passthrough ───────────────────────────
+
+  describe("riskOverrides", () => {
+    it("passes riskOverrides through to OrderManager.submit", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock(makeAccount({ cash: 100 })); // Very low cash
+      const mgr = new OrderManager(cfg, broker, null);
+
+      // Spy on submit to check riskOverrides are passed
+      const submitSpy = vi.spyOn(mgr, "submit");
+
+      const svc = new BasketOrderService(mgr);
+      const items: BasketItem[] = [makeBasketItem("600519", 100, 100)];
+
+      await svc.execute(items, {
+        riskOverrides: { maxOrderValue: 999_999, maxPositionPct: 1.0, skipMarketHours: true },
+        failureThreshold: 1.0,
+      });
+
+      expect(submitSpy).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({
+          maxOrderValue: 999_999,
+          maxPositionPct: 1.0,
+          skipMarketHours: true,
+        }),
+      );
+    });
+  });
+
+  // ── 14. Split edge cases ─────────────────────────────────────
+
+  describe("split edge cases", () => {
+    it("handles exactly maxChildQty (boundary condition)", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [makeBasketItem("600519", 300, 100)];
+      const policy: SplitPolicy = { maxChildQty: 300, lotSize: 100 };
+
+      const children = svc.splitItems(items, policy);
+      // Exactly at the boundary — no split
+      expect(children).toHaveLength(1);
+      expect(children[0].request.quantity).toBe(300);
+    });
+
+    it("handles maxChildQty = 1 (extreme split)", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [makeBasketItem("600519", 5, 100)];
+      const policy: SplitPolicy = { maxChildQty: 1, lotSize: 1 };
+
+      const children = svc.splitItems(items, policy);
+      expect(children).toHaveLength(5);
+      for (const child of children) {
+        expect(child.request.quantity).toBe(1);
+      }
+    });
+
+    it("handles Infinity maxChildQty (no split)", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [makeBasketItem("600519", 100000, 100)];
+      const policy: SplitPolicy = { maxChildQty: Infinity, lotSize: 100 };
+
+      const children = svc.splitItems(items, policy);
+      expect(children).toHaveLength(1);
+      expect(children[0].request.quantity).toBe(100000);
+    });
+
+    it("split with non-standard lot size (e.g. 10 for HK stocks)", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [makeBasketItem("0700.HK", 155, 100)];
+      const policy: SplitPolicy = { maxChildQty: 200, lotSize: 10 };
+
+      const children = svc.splitItems(items, policy);
+      expect(children).toHaveLength(1);
+      expect(children[0].request.quantity).toBe(150); // 155 → floor to 150
+    });
+
+    it("split produces children with correct parentItemIndex for many items", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [
+        makeBasketItem("600519", 500, 100), // split into 300 + 200
+        makeBasketItem("000858", 100, 50), // no split
+        makeBasketItem("300750", 600, 80), // split into 300 + 300
+      ];
+      const policy: SplitPolicy = { maxChildQty: 300, lotSize: 100 };
+
+      const children = svc.splitItems(items, policy);
+      // Item 0: 300 + 200 = 2 children
+      // Item 1: 100 = 1 child
+      // Item 2: 300 + 300 = 2 children
+      expect(children).toHaveLength(5);
+      expect(children.filter((c) => c.parentItemIndex === 0)).toHaveLength(2);
+      expect(children.filter((c) => c.parentItemIndex === 1)).toHaveLength(1);
+      expect(children.filter((c) => c.parentItemIndex === 2)).toHaveLength(2);
+    });
+
+    it("each child gets a unique childId", () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [makeBasketItem("600519", 1000, 100)];
+      const policy: SplitPolicy = { maxChildQty: 300, lotSize: 100 };
+
+      const children = svc.splitItems(items, policy);
+      const ids = children.map((c) => c.childId);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  // ── 15. Large basket / stress ────────────────────────────────
+
+  describe("stress test", () => {
+    it("handles large basket with many items and high concurrency", async () => {
+      const cfg = makeConfig({
+        initialCash: 100_000_000,
+        tradingAccount: {
+          mode: "paper",
+          broker: "paper",
+          riskLimits: {
+            maxOrderValue: 50_000_000,
+            maxPositionPct: 1.0,
+            maxDailyLoss: 50_000_000,
+            maxTotalLoss: 100_000_000,
+            confirmationThreshold: 100_000_000,
+            stopLossPct: 0,
+            priceLimitPct: 0,
+            maxOpenOrders: 999,
+            maxOrdersPerMinute: 999,
+            maxDailyTrades: 999,
+          },
+        },
+      });
+      const broker = makeBrokerMock(makeAccount({ cash: 100_000_000, totalAssets: 100_000_000 }));
+      let orderSeq = 0;
+
+      vi.mocked(broker.placeOrder).mockImplementation(async (req: OrderRequest) => {
+        orderSeq++;
+        return {
+          orderId: `order-${orderSeq}`,
+          symbol: req.symbol,
+          market: req.market,
+          side: req.side,
+          orderType: req.orderType,
+          price: req.price,
+          quantity: req.quantity,
+          filledQty: req.quantity,
+          status: "filled" as OrderStatus,
+          brokerType: "paper" as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      // 50 items, each split into ~3 children = ~150 child orders
+      const items: BasketItem[] = Array.from({ length: 50 }, (_, i) =>
+        makeBasketItem(`${600000 + i}`, 800, 10 + i),
+      );
+
+      const result = await svc.execute(items, {
+        splitPolicy: { maxChildQty: 300, lotSize: 100 },
+        concurrency: 10,
+        riskOverrides: { maxOrderValue: 999_999_999, maxPositionPct: 1.0, skipMarketHours: true },
+        failureThreshold: 1.0,
+      });
+
+      expect(result.stats.totalChildren).toBe(150);
+      expect(result.stats.filled).toBe(150);
+      expect(result.status).toBe("completed");
+      expect(orderSeq).toBe(150);
+    }, 30000);
+  });
+
+  // ── 16. Sell order basket scenarios ──────────────────────────
+
+  describe("sell-side basket", () => {
+    it("executes a basket of all sell orders", async () => {
+      const cfg = makeConfig();
+      const positions: LivePosition[] = [
+        {
+          symbol: "600519",
+          market: "cn_stock",
+          quantity: 500,
+          availableQty: 500,
+          frozenQty: 0,
+          todayBuyQty: 0,
+          avgCost: 100,
+          marketValue: 50_000,
+          source: "local",
+          lastSyncAt: new Date().toISOString(),
+        },
+        {
+          symbol: "000858",
+          market: "cn_stock",
+          quantity: 300,
+          availableQty: 300,
+          frozenQty: 0,
+          todayBuyQty: 0,
+          avgCost: 50,
+          marketValue: 15_000,
+          source: "local",
+          lastSyncAt: new Date().toISOString(),
+        },
+      ];
+      const broker = makeBrokerMock(makeAccount(), positions);
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [
+        { symbol: "600519", market: "cn_stock", side: "sell", orderType: "limit", quantity: 200, price: 110 },
+        { symbol: "000858", market: "cn_stock", side: "sell", orderType: "limit", quantity: 100, price: 55 },
+      ];
+
+      const result = await svc.execute(items);
+
+      expect(result.status).toBe("completed");
+      expect(result.stats.filled).toBe(2);
+      expect(broker.placeOrder).toHaveBeenCalledTimes(2);
+    });
+
+    it("partial failure in sell basket when insufficient position", async () => {
+      const cfg = makeConfig();
+      const positions: LivePosition[] = [
+        {
+          symbol: "600519",
+          market: "cn_stock",
+          quantity: 500,
+          availableQty: 500,
+          frozenQty: 0,
+          todayBuyQty: 0,
+          avgCost: 100,
+          marketValue: 50_000,
+          source: "local",
+          lastSyncAt: new Date().toISOString(),
+        },
+        // No position for 000858 → sell should fail risk check
+      ];
+      const broker = makeBrokerMock(makeAccount(), positions);
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [
+        { symbol: "600519", market: "cn_stock", side: "sell", orderType: "limit", quantity: 200, price: 110 },
+        { symbol: "000858", market: "cn_stock", side: "sell", orderType: "limit", quantity: 100, price: 55 },
+      ];
+
+      const result = await svc.execute(items, { failureThreshold: 0.8 });
+
+      expect(result.status).toBe("partial");
+      expect(result.stats.filled).toBe(1);
+      expect(result.stats.failed).toBe(1);
+    });
+  });
+
+  // ── 17. Split + concurrent + partial failure integration ─────
+
+  describe("integration: split + concurrent + partial failure", () => {
+    it("some children of a split order fail while others succeed", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      let callCount = 0;
+
+      // Make every 3rd call fail
+      vi.mocked(broker.placeOrder).mockImplementation(async (req: OrderRequest) => {
+        callCount++;
+        if (callCount % 3 === 0) throw new Error("Intermittent failure");
+        return {
+          orderId: `order-${callCount}`,
+          symbol: req.symbol,
+          market: req.market,
+          side: req.side,
+          orderType: req.orderType,
+          price: req.price,
+          quantity: req.quantity,
+          filledQty: 0,
+          status: "submitted" as OrderStatus,
+          brokerType: "paper" as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      // 900 → 300+300+300 = 3 children; 1 will fail (every 3rd)
+      const items: BasketItem[] = [makeBasketItem("600519", 900, 100)];
+
+      const result = await svc.execute(items, {
+        splitPolicy: { maxChildQty: 300, lotSize: 100 },
+        failureThreshold: 0.8, // High threshold so no rollback
+        concurrency: 1,
+      });
+
+      expect(result.stats.totalChildren).toBe(3);
+      expect(result.stats.filled).toBe(2);
+      expect(result.stats.failed).toBe(1);
+      expect(result.status).toBe("partial");
+    });
+
+    it("multiple basket items with splits and failures across items", async () => {
+      const cfg = makeConfig();
+      const broker = makeBrokerMock();
+      const failSymbols = new Set(["000858"]);
+
+      vi.mocked(broker.placeOrder).mockImplementation(async (req: OrderRequest) => {
+        if (failSymbols.has(req.symbol)) throw new Error("Symbol rejected");
+        return {
+          orderId: `order-${Date.now()}-${Math.random()}`,
+          symbol: req.symbol,
+          market: req.market,
+          side: req.side,
+          orderType: req.orderType,
+          price: req.price,
+          quantity: req.quantity,
+          filledQty: 0,
+          status: "submitted" as OrderStatus,
+          brokerType: "paper" as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      });
+
+      const mgr = new OrderManager(cfg, broker, null);
+      const svc = new BasketOrderService(mgr);
+
+      const items: BasketItem[] = [
+        makeBasketItem("600519", 600, 100), // split: 300+300, both succeed
+        makeBasketItem("000858", 600, 50), // split: 300+300, both fail
+      ];
+
+      const result = await svc.execute(items, {
+        splitPolicy: { maxChildQty: 300, lotSize: 100 },
+        failureThreshold: 0.8,
+        concurrency: 1,
+      });
+
+      expect(result.stats.totalChildren).toBe(4);
+      expect(result.stats.filled).toBe(2);
+      expect(result.stats.failed).toBe(2);
+      expect(result.status).toBe("partial");
+
+      // Verify which children failed
+      const failedChildren = result.children.filter((c) => c.status === "failed");
+      expect(failedChildren.every((c) => c.request.symbol === "000858")).toBe(true);
+    });
+  });
 });

@@ -18,6 +18,7 @@ import type { LiveEngine } from "../engine/live-engine.js";
 import { listStrategies } from "../engine/strategy-registry.js";
 import type { TickFeatureStore } from "../engine/tick-feature-store.js";
 import { buildAccumulationTop3 } from "../services/accumulation-top3.js";
+import type { AccountManager } from "../services/account-manager.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BreakoutMonitor } from "../services/breakout-monitor.js";
 import type { ComposedStrategyStore } from "../services/composed-strategy-store.js";
@@ -73,6 +74,7 @@ export interface AdminRouteDeps {
   optimizationStore?: OptimizationStore;
   taskScheduler: TaskScheduler;
   getEngine: () => LiveEngine;
+  accountManager?: AccountManager;
   tickIngressService?: TickIngressService | null;
   tickFeatureStore?: TickFeatureStore | null;
   tickStrategyService?: TickStrategyService | null;

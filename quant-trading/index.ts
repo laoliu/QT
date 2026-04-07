@@ -83,6 +83,7 @@ import {
   type HttpHandler,
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
+import { AccountManager } from "./src/services/account-manager.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
@@ -267,6 +268,25 @@ const quantTradingPlugin = {
 
     // ── Event Bus (real-time SSE) ──────────────────────────────────
     const eventBus = new EventBus({ maxRecent: 500 });
+
+    // ── Account Manager (multi-account orchestration) ───────────────
+    const accountManager = new AccountManager(config, api);
+    accountManager.registerFromConfig();
+    // Migrate legacy flat-file data into per-account directories and
+    // connect all registered accounts in the background (non-blocking).
+    void (async () => {
+      try {
+        await accountManager.migrateLegacyData();
+        await accountManager.connectAll();
+        api.logger.info(
+          `[quant-trading] AccountManager ready: ${accountManager.accountIds.length} account(s), active=${accountManager.activeAccountId}`,
+        );
+      } catch (err) {
+        api.logger.warn(
+          `[quant-trading] AccountManager init error: ${(err as Error).message}`,
+        );
+      }
+    })();
 
     // ── Log Store (in-memory ring buffer for admin log viewer) ───
     const logStore = new LogStore({ maxEntries: 2000 });
@@ -1223,6 +1243,15 @@ const quantTradingPlugin = {
         alertStore.stop();
       },
     });
+    api.registerService({
+      id: "account-manager",
+      async start() {
+        /* already connected above */
+      },
+      async stop() {
+        await accountManager.disconnectAll();
+      },
+    });
 
     // ── HTTP Routes ────────────────────────────────────────
     const rateLimiter = new RateLimiter(
@@ -1251,6 +1280,7 @@ const quantTradingPlugin = {
       getEngine,
       priceAlertService,
       taskScheduler,
+      accountManager,
       secure,
       securePublic,
     });
@@ -1273,6 +1303,7 @@ const quantTradingPlugin = {
       optimizationStore,
       taskScheduler,
       getEngine,
+      accountManager,
       tickIngressService,
       tickFeatureStore: tickFeatureStoreRef,
       tickStrategyService: tickStrategyServiceRef,

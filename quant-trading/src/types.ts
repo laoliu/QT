@@ -798,6 +798,17 @@ export type TradingAccountConfig = {
   ib?: IBBrokerConfig;
 };
 
+/**
+ * Per-account configuration — extends TradingAccountConfig with an account identifier.
+ * Used in the `accounts[]` array for multi-account setups.
+ */
+export type AccountConfig = TradingAccountConfig & {
+  /** Unique account identifier, e.g. "paper-default", "qmt-8888000001" */
+  id: string;
+  /** Optional display name for the account */
+  displayName?: string;
+};
+
 export type NotificationConfig = {
   signalAlerts?: boolean;
   dailyReport?: boolean;
@@ -823,6 +834,23 @@ export type QuantTradingConfig = {
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
+
+  // ── Multi-Account Configuration ────────────────────────────────
+
+  /**
+   * Multiple trading account configurations.
+   * When set, each entry defines a separate account with its own isolated
+   * data directory and broker connection. The legacy `tradingAccount` field
+   * is used as default when this array is empty or undefined.
+   */
+  accounts?: AccountConfig[];
+
+  /**
+   * ID of the currently active account. Tools and UI operate on this account.
+   * Must match one of the `accounts[].id` values (or "paper-default" when
+   * using the legacy single-account setup).
+   */
+  activeAccountId?: string;
   notifications?: NotificationConfig;
   /**
    * PnL monitor configuration.

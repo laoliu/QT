@@ -9,6 +9,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
+import type { AccountManager } from "../services/account-manager.js";
 import type { AlertStore } from "../services/alert-store.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { BenchmarkService } from "../services/benchmark.js";
@@ -63,6 +64,7 @@ export interface RouteDeps {
   getEngine: () => LiveEngine;
   priceAlertService: PriceAlertService;
   taskScheduler: TaskScheduler;
+  accountManager?: AccountManager;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */

@@ -143,6 +143,7 @@ import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
 import { createOptionsTradingTool } from "./src/tools/options-trading.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
+import { createTradeCostTool } from "./src/tools/trade-cost.js";
 import { createPolymarketOddsTool } from "./src/tools/polymarket-odds.js";
 import { createPortfolioBacktestTool } from "./src/tools/portfolio-backtest.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
@@ -630,6 +631,7 @@ const quantTradingPlugin = {
       breakout_monitor: createBreakoutMonitorTool(api, config, breakoutMonitor),
       trade_journal: createTradeJournalTool(api, tradeJournal),
       performance_attribution: createPerformanceAttributionTool(api, config),
+      trade_cost: createTradeCostTool(api, config),
       strategy_health: createStrategyHealthTool(api, config, strategyHealthMonitor),
       value_investing: createValueInvestingTool(api, config),
       financial_calculator: createFinancialCalculatorTool(api, config),
@@ -686,6 +688,7 @@ const quantTradingPlugin = {
       dca_schedule: "定投计划",
       trade_journal: "交易笔记",
       performance_attribution: "绩效归因",
+      trade_cost: "交易成本",
       strategy_health: "策略健康",
       correlation_analysis: "相关性分析",
       tech_moat: "技术壁垒分析",

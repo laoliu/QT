@@ -896,6 +896,23 @@ export type QuantTradingConfig = {
     criticalThresholdMs?: number;
   };
 
+  // ── Trade Cost Configuration ────────────────────────────────────
+
+  /**
+   * Trade cost & fee rate overrides for the trade_cost analytics tool.
+   * Defaults match typical A-share retail accounts.
+   */
+  tradeCost?: {
+    /** Commission rate per side (default: 0.0003 = 万3) */
+    commissionRate?: number;
+    /** Stamp duty rate, sell side only (default: 0.0005 = 0.05%) */
+    stampDutyRate?: number;
+    /** Transfer fee rate, both sides (default: 0.00002 = 0.002%) */
+    transferFeeRate?: number;
+    /** Minimum commission per leg in CNY (default: 5) */
+    minCommission?: number;
+  };
+
   // ── Options Configuration ──────────────────────────────────────
 
   /**

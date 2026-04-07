@@ -247,6 +247,28 @@
           }
         }
       },
+      "tradeCost": {
+        "type": "object",
+        "description": "交易成本统计工具的费率配置 (Trade cost analytics fee rate overrides)",
+        "properties": {
+          "commissionRate": {
+            "type": "number",
+            "description": "佣金费率，双边收取 (default: 0.0003 = 万3)"
+          },
+          "stampDutyRate": {
+            "type": "number",
+            "description": "印花税率，仅卖出时收取 (default: 0.0005 = 0.05%)"
+          },
+          "transferFeeRate": {
+            "type": "number",
+            "description": "过户费率，双边收取 (default: 0.00002 = 0.002%)"
+          },
+          "minCommission": {
+            "type": "number",
+            "description": "单笔最低佣金，单位元 (default: 5)"
+          }
+        }
+      },
       "optionsConfig": {
         "type": "object",
         "description": "期权交易模块配置 (Options trading module)",

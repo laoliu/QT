@@ -5,12 +5,15 @@
  *   execute       — Execute a basket of orders with retry, timeout, and rollback
  *   status        — Query the status of a basket order
  *   list          — List recent basket orders
+ *   cancel        — Cancel all pending/submitted legs in a basket
+ *   rollback      — Cancel + reverse all filled legs in a basket
+ *   resume        — Resume a partially-executed basket (re-runs failed/pending legs)
  *
  * Example: "帮我同时买入 600519 200股, 000001 300股, 510300 500股"
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
-import type { BasketExecutionReport, OrderSide, OrderType, QuantTradingConfig } from "../types.js";
+import type { BasketExecutionReport, BasketRollbackDetail, OrderSide, OrderType, QuantTradingConfig } from "../types.js";
 import { BasketOrderService, type BasketLegInput } from "../services/basket-order.js";
 
 export function createBasketOrderTool(
@@ -22,7 +25,9 @@ export function createBasketOrderTool(
     name: "basket_order",
     description:
       "篮子交易工具。批量下单，支持单腿失败重试、超时处理、篮子级别撤单回滚、执行结果汇总。\n" +
-      "action=execute 执行篮子交易, action=status 查询篮子状态, action=list 列出历史篮子\n\n" +
+      "action=execute 执行篮子交易, action=status 查询篮子状态, action=list 列出历史篮子\n" +
+      "action=cancel 撤销篮子(仅取消未成交), action=rollback 撤销并回滚(取消+反向平仓), " +
+      "action=resume 恢复执行(重新执行失败的腿)\n\n" +
       "legs 格式: [{symbol:'600519',side:'buy',quantity:200}, {symbol:'000001',side:'sell',quantity:100}]\n" +
       "可选参数: name(篮子名称), max_retries(最大重试次数,默认3), " +
       "leg_timeout_ms(单腿超时毫秒,默认30000), rollback_on_failure(失败时回滚,默认true)",
@@ -31,7 +36,7 @@ export function createBasketOrderTool(
       properties: {
         action: {
           type: "string",
-          enum: ["execute", "status", "list"],
+          enum: ["execute", "status", "list", "cancel", "rollback", "resume"],
           description: "操作类型",
         },
         legs: {
@@ -57,7 +62,7 @@ export function createBasketOrderTool(
         leg_timeout_ms: { type: "number", description: "单腿超时毫秒(默认30000)" },
         rollback_on_failure: { type: "boolean", description: "失败时回滚(默认true)" },
         strategy_id: { type: "string", description: "关联策略ID" },
-        basket_id: { type: "string", description: "篮子ID (用于status查询)" },
+        basket_id: { type: "string", description: "篮子ID (用于status/cancel/rollback/resume)" },
         limit: { type: "number", description: "列表数量(默认20)" },
       },
       required: ["action"],
@@ -134,6 +139,16 @@ export function createBasketOrderTool(
             );
           }
 
+          if (basket.rollbackDetails && basket.rollbackDetails.length > 0) {
+            lines.push("", "回滚明细:");
+            for (const d of basket.rollbackDetails) {
+              lines.push(`  ${d.success ? "✅" : "❌"} ${d.symbol} ${d.action}` +
+                (d.reverseSide ? ` ${d.reverseSide} ${d.reverseQty}股` : "") +
+                (d.reverseFilled ? " 已成交" : d.action === "reverse" && d.success ? " 待成交" : "") +
+                (d.errorMsg ? ` — ${d.errorMsg}` : ""));
+            }
+          }
+
           return lines.join("\n");
         }
 
@@ -145,7 +160,7 @@ export function createBasketOrderTool(
 
           const lines = ["近期篮子交易:\n"];
           for (const b of baskets.slice().reverse()) {
-            const filled = b.legs.filter((l) => l.status === "filled").length;
+            const filled = b.legs.filter((l) => l.status === "filled" || l.status === "partial_filled").length;
             lines.push(
               `  ${statusIcon(b.status)} ${b.basketId.slice(0, 8)} ${b.name ?? ""} — ` +
                 `${filled}/${b.legs.length} 笔成功 — ${b.createdAt.slice(0, 16)}`,
@@ -154,8 +169,44 @@ export function createBasketOrderTool(
           return lines.join("\n");
         }
 
+        case "cancel": {
+          const basketId = args.basket_id as string | undefined;
+          if (!basketId) return "请提供 basket_id";
+
+          try {
+            const report = await service.cancelBasket(basketId);
+            return formatReport(report);
+          } catch (err) {
+            return `撤销失败: ${(err as Error).message}`;
+          }
+        }
+
+        case "rollback": {
+          const basketId = args.basket_id as string | undefined;
+          if (!basketId) return "请提供 basket_id";
+
+          try {
+            const report = await service.cancelAndRollback(basketId);
+            return formatReport(report);
+          } catch (err) {
+            return `回滚失败: ${(err as Error).message}`;
+          }
+        }
+
+        case "resume": {
+          const basketId = args.basket_id as string | undefined;
+          if (!basketId) return "请提供 basket_id";
+
+          try {
+            const report = await service.resume(basketId);
+            return formatReport(report);
+          } catch (err) {
+            return `恢复执行失败: ${(err as Error).message}`;
+          }
+        }
+
         default:
-          return `未知操作: ${action}。支持: execute, status, list`;
+          return `未知操作: ${action}。支持: execute, status, list, cancel, rollback, resume`;
       }
     },
   };
@@ -185,6 +236,23 @@ function formatReport(report: BasketExecutionReport): string {
       `  ${legStatusIcon(leg.status)} ${leg.symbol} ${leg.side} ` +
         `${leg.filledQty}/${leg.requestedQty} ${price}${retry}${error}`,
     );
+  }
+
+  // Rollback details
+  if (report.rollbackDetails && report.rollbackDetails.length > 0) {
+    lines.push("", "回滚明细:");
+    for (const d of report.rollbackDetails) {
+      const icon = d.success ? "✅" : "❌";
+      const actionLabel = d.action === "cancel" ? "撤单" : "反向平仓";
+      const detail = d.reverseSide ? ` ${d.reverseSide} ${d.reverseQty}股` : "";
+      const fillStatus = d.reverseFilled
+        ? " 已成交"
+        : d.action === "reverse" && d.success
+          ? " 待成交"
+          : "";
+      const error = d.errorMsg ? ` — ${d.errorMsg}` : "";
+      lines.push(`  ${icon} ${d.symbol} ${actionLabel}${detail}${fillStatus}${error}`);
+    }
   }
 
   return lines.join("\n");
@@ -219,6 +287,7 @@ function statusIcon(status: string): string {
 function legStatusIcon(status: string): string {
   const icons: Record<string, string> = {
     filled: "✅",
+    partial_filled: "⚠️",
     failed: "❌",
     cancelled: "🚫",
     timeout: "⏰",

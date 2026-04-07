@@ -1052,6 +1052,7 @@ export type BasketLegStatus =
   | "pending"
   | "submitted"
   | "filled"
+  | "partial_filled"
   | "failed"
   | "cancelled"
   | "retrying"
@@ -1090,6 +1091,20 @@ export type BasketOrder = {
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+  /** Rollback detail records (populated when rollback occurs) */
+  rollbackDetails?: BasketRollbackDetail[];
+};
+
+export type BasketRollbackDetail = {
+  legId: string;
+  symbol: string;
+  action: "cancel" | "reverse";
+  success: boolean;
+  reverseSide?: OrderSide;
+  reverseQty?: number;
+  reverseOrderId?: string;
+  reverseFilled?: boolean;
+  errorMsg?: string;
 };
 
 export type BasketExecutionReport = {
@@ -1115,4 +1130,5 @@ export type BasketExecutionReport = {
   startTime: string;
   endTime: string;
   durationMs: number;
+  rollbackDetails?: BasketRollbackDetail[];
 };

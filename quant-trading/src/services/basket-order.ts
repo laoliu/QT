@@ -28,6 +28,7 @@ import path from "node:path";
 import type { OrderRequest } from "../broker/adapter.js";
 import type {
   BasketExecutionReport,
+  BasketExecutionMode,
   BasketLeg,
   BasketLegStatus,
   BasketOrder,
@@ -80,6 +81,12 @@ export interface BasketOrderOptions {
   legTimeoutMs?: number;
   rollbackOnFailure?: boolean;
   strategyId?: string;
+  /** Execute legs sequentially (sell→buy, default) or in parallel (all at once). */
+  executionMode?: BasketExecutionMode;
+  /** Overall basket timeout in ms. If the entire basket exceeds this, remaining legs are cancelled. 0 = no limit (default). */
+  basketTimeoutMs?: number;
+  /** Callback invoked on each leg status change (for real-time notifications). */
+  onLegUpdate?: (leg: BasketLeg, basket: BasketOrder) => void;
 }
 
 // ── Default market detection (mirrors OrderManager logic) ───────
@@ -131,6 +138,7 @@ function isRetryableError(errorMsg: string | undefined): boolean {
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_LEG_TIMEOUT_MS = 30_000;
+const DEFAULT_BASKET_TIMEOUT_MS = 0; // 0 = no basket-level timeout
 const ROLLBACK_TIMEOUT_MS = 15_000;
 const ROLLBACK_MAX_RETRIES = 2;
 
@@ -138,6 +146,7 @@ export class BasketOrderService {
   private cfg: QuantTradingConfig;
   private orderMgr: OrderManager;
   private logFn: (msg: string) => void;
+  private onLegUpdate?: (leg: BasketLeg, basket: BasketOrder) => void;
 
   constructor(
     cfg: QuantTradingConfig,
@@ -160,10 +169,12 @@ export class BasketOrderService {
     const startTime = new Date().toISOString();
     const startMs = Date.now();
 
+    this.onLegUpdate = opts?.onLegUpdate;
+
     const basket = this.createBasket(legs, opts);
     await this.persistBasket(basket);
 
-    this.logFn(`篮子交易开始: ${basket.basketId.slice(0, 8)} (${basket.legs.length} 笔)`);
+    this.logFn(`篮子交易开始: ${basket.basketId.slice(0, 8)} (${basket.legs.length} 笔, 模式=${basket.executionMode})`);
 
     basket.status = "executing";
     basket.updatedAt = new Date().toISOString();
@@ -315,44 +326,33 @@ export class BasketOrderService {
   // ── Internal ──────────────────────────────────────────────────
 
   /**
-   * Core execution loop — processes all pending legs in order (sell first, buy second).
-   * Updates basket status when complete.
+   * Core execution loop — processes all pending legs.
+   * Sequential mode: sells first, then buys (frees cash).
+   * Parallel mode: all legs at once (faster for independent orders).
+   * Respects basket-level timeout if configured.
    */
   private async executeLegs(basket: BasketOrder): Promise<void> {
-    // Sort: sells first (frees cash), then buys — only run pending legs
     const pendingLegs = basket.legs.filter(
       (l) => l.status === "pending" || l.status === "retrying",
     );
-    const sellLegs = pendingLegs.filter((l) => l.side === "sell" || l.side === "sell_close");
-    const buyLegs = pendingLegs.filter((l) => l.side !== "sell" && l.side !== "sell_close");
-    const orderedLegs = [...sellLegs, ...buyLegs];
+
+    if (pendingLegs.length === 0) {
+      basket.status = "completed";
+      basket.completedAt = new Date().toISOString();
+      basket.updatedAt = new Date().toISOString();
+      await this.persistBasket(basket);
+      return;
+    }
+
+    // Wrap execution in basket-level timeout if configured
+    const basketDeadline = basket.basketTimeoutMs > 0 ? Date.now() + basket.basketTimeoutMs : 0;
 
     let hasFailure = false;
 
-    for (const leg of orderedLegs) {
-      const result = await this.executeLegWithRetry(basket, leg);
-
-      if (!result) {
-        hasFailure = true;
-        this.logFn(
-          `篮子 ${basket.basketId.slice(0, 8)} 腿 ${leg.symbol} ${leg.side} 最终失败: ${leg.errorMsg}`,
-        );
-
-        if (basket.rollbackOnFailure) {
-          this.logFn(`篮子 ${basket.basketId.slice(0, 8)} 触发回滚...`);
-          basket.status = "rolling_back";
-          basket.updatedAt = new Date().toISOString();
-          await this.persistBasket(basket);
-
-          await this.rollback(basket);
-
-          basket.status = "rolled_back";
-          basket.updatedAt = new Date().toISOString();
-          basket.completedAt = new Date().toISOString();
-          await this.persistBasket(basket);
-          return;
-        }
-      }
+    if (basket.executionMode === "parallel") {
+      hasFailure = await this.executeLegsParallel(basket, pendingLegs, basketDeadline);
+    } else {
+      hasFailure = await this.executeLegsSequential(basket, pendingLegs, basketDeadline);
     }
 
     if (!hasFailure) {
@@ -367,6 +367,156 @@ export class BasketOrderService {
     }
     basket.updatedAt = new Date().toISOString();
     await this.persistBasket(basket);
+  }
+
+  /** Sequential execution: sell legs first, then buy legs. */
+  private async executeLegsSequential(
+    basket: BasketOrder,
+    pendingLegs: BasketLeg[],
+    basketDeadline: number,
+  ): Promise<boolean> {
+    const sellLegs = pendingLegs.filter((l) => l.side === "sell" || l.side === "sell_close");
+    const buyLegs = pendingLegs.filter((l) => l.side !== "sell" && l.side !== "sell_close");
+    const orderedLegs = [...sellLegs, ...buyLegs];
+
+    let hasFailure = false;
+
+    for (const leg of orderedLegs) {
+      // Check basket-level timeout
+      if (basketDeadline > 0 && Date.now() >= basketDeadline) {
+        this.logFn(
+          `篮子 ${basket.basketId.slice(0, 8)} 整体超时，取消剩余 ${orderedLegs.length - orderedLegs.indexOf(leg)} 笔`,
+        );
+        await this.cancelRemainingLegs(basket, orderedLegs, orderedLegs.indexOf(leg));
+        hasFailure = true;
+        break;
+      }
+
+      const result = await this.executeLegWithRetry(basket, leg);
+
+      if (!result) {
+        hasFailure = true;
+        this.logFn(
+          `篮子 ${basket.basketId.slice(0, 8)} 腿 ${leg.symbol} ${leg.side} 最终失败: ${leg.errorMsg}`,
+        );
+
+        if (basket.rollbackOnFailure) {
+          await this.triggerRollback(basket);
+          return true; // hasFailure
+        }
+      }
+    }
+
+    return hasFailure;
+  }
+
+  /** Parallel execution: all legs at once, with concurrent retry. */
+  private async executeLegsParallel(
+    basket: BasketOrder,
+    pendingLegs: BasketLeg[],
+    basketDeadline: number,
+  ): Promise<boolean> {
+    const executeLeg = async (leg: BasketLeg): Promise<boolean> => {
+      // Check basket-level timeout before starting each leg
+      if (basketDeadline > 0 && Date.now() >= basketDeadline) {
+        leg.status = "timeout";
+        leg.errorMsg = "篮子整体超时";
+        leg.completedAt = new Date().toISOString();
+        this.notifyLegUpdate(leg, basket);
+        return false;
+      }
+      return this.executeLegWithRetry(basket, leg);
+    };
+
+    // If basket timeout is set, race against it
+    let results: boolean[];
+    if (basketDeadline > 0) {
+      const remainingMs = Math.max(basketDeadline - Date.now(), 0);
+      results = await Promise.all(
+        pendingLegs.map((leg) =>
+          Promise.race([
+            executeLeg(leg),
+            sleep(remainingMs).then(() => {
+              if (leg.status === "pending" || leg.status === "submitted" || leg.status === "retrying") {
+                leg.status = "timeout";
+                leg.errorMsg = "篮子整体超时";
+                leg.completedAt = new Date().toISOString();
+                this.notifyLegUpdate(leg, basket);
+                // Try to cancel the order if it was submitted
+                if (leg.orderId) {
+                  this.orderMgr.cancel(leg.orderId).catch(() => {});
+                }
+              }
+              return false;
+            }),
+          ]),
+        ),
+      );
+    } else {
+      results = await Promise.all(pendingLegs.map(executeLeg));
+    }
+
+    await this.persistBasket(basket);
+
+    const hasFailure = results.some((r) => !r);
+
+    if (hasFailure && basket.rollbackOnFailure) {
+      await this.triggerRollback(basket);
+    }
+
+    return hasFailure;
+  }
+
+  /** Cancel remaining legs starting from a given index (for sequential timeout). */
+  private async cancelRemainingLegs(
+    basket: BasketOrder,
+    orderedLegs: BasketLeg[],
+    fromIndex: number,
+  ): Promise<void> {
+    for (let i = fromIndex; i < orderedLegs.length; i++) {
+      const leg = orderedLegs[i];
+      if (leg.status === "pending" || leg.status === "retrying") {
+        leg.status = "cancelled";
+        leg.errorMsg = "篮子整体超时，已取消";
+        leg.completedAt = new Date().toISOString();
+        this.notifyLegUpdate(leg, basket);
+      } else if (leg.status === "submitted" && leg.orderId) {
+        try {
+          await this.orderMgr.cancel(leg.orderId);
+          leg.status = "cancelled";
+          leg.errorMsg = "篮子整体超时，已撤单";
+          this.notifyLegUpdate(leg, basket);
+        } catch {
+          // Best effort
+        }
+      }
+    }
+    basket.updatedAt = new Date().toISOString();
+    await this.persistBasket(basket);
+  }
+
+  /** Trigger rollback sequence and update basket status. */
+  private async triggerRollback(basket: BasketOrder): Promise<void> {
+    this.logFn(`篮子 ${basket.basketId.slice(0, 8)} 触发回滚...`);
+    basket.status = "rolling_back";
+    basket.updatedAt = new Date().toISOString();
+    await this.persistBasket(basket);
+
+    await this.rollback(basket);
+
+    basket.status = "rolled_back";
+    basket.updatedAt = new Date().toISOString();
+    basket.completedAt = new Date().toISOString();
+    await this.persistBasket(basket);
+  }
+
+  /** Notify callback about leg status change. */
+  private notifyLegUpdate(leg: BasketLeg, basket: BasketOrder): void {
+    try {
+      this.onLegUpdate?.(leg, basket);
+    } catch {
+      // Never let callback errors break the flow
+    }
   }
 
   private createBasket(legs: BasketLegInput[], opts?: BasketOrderOptions): BasketOrder {
@@ -391,6 +541,8 @@ export class BasketOrderService {
       maxRetries: opts?.maxRetries ?? DEFAULT_MAX_RETRIES,
       legTimeoutMs: opts?.legTimeoutMs ?? DEFAULT_LEG_TIMEOUT_MS,
       rollbackOnFailure: opts?.rollbackOnFailure ?? true,
+      executionMode: opts?.executionMode ?? "sequential",
+      basketTimeoutMs: opts?.basketTimeoutMs ?? DEFAULT_BASKET_TIMEOUT_MS,
       strategyId: opts?.strategyId,
       createdAt: now,
       updatedAt: now,
@@ -417,6 +569,7 @@ export class BasketOrderService {
         leg.retryCount = attempt;
         basket.updatedAt = new Date().toISOString();
         await this.persistBasket(basket);
+        this.notifyLegUpdate(leg, basket);
         this.logFn(
           `篮子 ${basket.basketId.slice(0, 8)} 腿 ${leg.symbol} 重试 ${attempt}/${basket.maxRetries}`,
         );
@@ -444,6 +597,7 @@ export class BasketOrderService {
     leg.completedAt = new Date().toISOString();
     basket.updatedAt = new Date().toISOString();
     await this.persistBasket(basket);
+    this.notifyLegUpdate(leg, basket);
     return false;
   }
 
@@ -471,12 +625,14 @@ export class BasketOrderService {
     } catch (err) {
       leg.status = "failed";
       leg.errorMsg = `提交异常: ${(err as Error).message}`;
+      this.notifyLegUpdate(leg, basket);
       return false;
     }
 
     if (!submitResult.ok) {
       leg.status = "failed";
       leg.errorMsg = submitResult.reason;
+      this.notifyLegUpdate(leg, basket);
       return false;
     }
 
@@ -485,6 +641,7 @@ export class BasketOrderService {
     leg.submittedAt = new Date().toISOString();
     basket.updatedAt = new Date().toISOString();
     await this.persistBasket(basket);
+    this.notifyLegUpdate(leg, basket);
 
     // Wait for fill with timeout
     const fillResult = await this.waitForFill(leg.orderId, basket.legTimeoutMs);
@@ -495,6 +652,7 @@ export class BasketOrderService {
       leg.completedAt = new Date().toISOString();
       basket.updatedAt = new Date().toISOString();
       await this.persistBasket(basket);
+      this.notifyLegUpdate(leg, basket);
       return true;
     }
 
@@ -516,12 +674,14 @@ export class BasketOrderService {
       leg.completedAt = new Date().toISOString();
       basket.updatedAt = new Date().toISOString();
       await this.persistBasket(basket);
+      this.notifyLegUpdate(leg, basket);
       return true;
     }
 
     if (fillResult === "rejected") {
       leg.status = "failed";
       leg.errorMsg = "订单被拒绝";
+      this.notifyLegUpdate(leg, basket);
       return false;
     }
 
@@ -534,6 +694,7 @@ export class BasketOrderService {
       leg.status = "partial_filled";
       leg.errorMsg = `超时, 部分成交 ${leg.filledQty}/${leg.quantity}`;
     }
+    this.notifyLegUpdate(leg, basket);
     return false;
   }
 
@@ -617,6 +778,7 @@ export class BasketOrderService {
           leg.status = "cancelled";
           detail.success = true;
           this.logFn(`回滚: 撤销 ${leg.symbol} ${leg.side} 订单 ${leg.orderId.slice(0, 8)}`);
+          this.notifyLegUpdate(leg, basket);
         } catch (err) {
           detail.errorMsg = (err as Error).message;
           this.logFn(`回滚: 撤销 ${leg.symbol} 失败: ${(err as Error).message}`);
@@ -630,6 +792,7 @@ export class BasketOrderService {
           action: "cancel",
           success: true,
         });
+        this.notifyLegUpdate(leg, basket);
       }
     }
 
@@ -682,7 +845,24 @@ export class BasketOrderService {
             const fillResult = await this.waitForFill(result.order.orderId, ROLLBACK_TIMEOUT_MS);
             detail.reverseFilled = fillResult === "filled" || fillResult === "partial";
 
+            // Track reverse fill price for P&L calculation
             if (detail.reverseFilled) {
+              try {
+                const reverseOrder = await this.orderMgr.broker.queryOrder(result.order.orderId);
+                if (reverseOrder?.avgFillPrice) {
+                  detail.reverseFillPrice = reverseOrder.avgFillPrice;
+                  // Calculate P&L: for buy legs reversed by sell, pnl = (sellPrice - buyPrice) * qty
+                  if (leg.avgFillPrice) {
+                    const isBuyLeg = leg.side === "buy" || leg.side === "buy_open" || leg.side === "cover";
+                    const pnl = isBuyLeg
+                      ? (reverseOrder.avgFillPrice - leg.avgFillPrice) * leg.filledQty
+                      : (leg.avgFillPrice - reverseOrder.avgFillPrice) * leg.filledQty;
+                    detail.rollbackPnl = Math.round(pnl * 100) / 100;
+                  }
+                }
+              } catch {
+                // Best effort P&L tracking
+              }
               this.logFn(`回滚: 反向 ${leg.symbol} 已成交`);
             } else {
               this.logFn(`回滚: 反向 ${leg.symbol} 未完全成交 (${fillResult})`);
@@ -748,6 +928,17 @@ export class BasketOrderService {
       .filter((l) => (l.status === "filled" || l.status === "partial_filled") && l.avgFillPrice)
       .reduce((sum, l) => sum + l.filledQty * (l.avgFillPrice ?? 0), 0);
 
+    // Aggregate rollback P&L
+    let rollbackPnl: number | undefined;
+    if (basket.rollbackDetails && basket.rollbackDetails.length > 0) {
+      const pnlDetails = basket.rollbackDetails.filter((d) => d.rollbackPnl !== undefined);
+      if (pnlDetails.length > 0) {
+        rollbackPnl = Math.round(
+          pnlDetails.reduce((sum, d) => sum + (d.rollbackPnl ?? 0), 0) * 100,
+        ) / 100;
+      }
+    }
+
     return {
       basketId: basket.basketId,
       name: basket.name,
@@ -772,6 +963,7 @@ export class BasketOrderService {
       endTime,
       durationMs,
       rollbackDetails: basket.rollbackDetails,
+      rollbackPnl,
     };
   }
 

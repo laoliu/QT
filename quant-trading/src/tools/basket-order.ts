@@ -13,7 +13,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
-import type { BasketExecutionReport, BasketRollbackDetail, OrderSide, OrderType, QuantTradingConfig } from "../types.js";
+import type { BasketExecutionMode, BasketExecutionReport, BasketRollbackDetail, OrderSide, OrderType, QuantTradingConfig } from "../types.js";
 import { BasketOrderService, type BasketLegInput } from "../services/basket-order.js";
 
 export function createBasketOrderTool(
@@ -30,7 +30,9 @@ export function createBasketOrderTool(
       "action=resume 恢复执行(重新执行失败的腿)\n\n" +
       "legs 格式: [{symbol:'600519',side:'buy',quantity:200}, {symbol:'000001',side:'sell',quantity:100}]\n" +
       "可选参数: name(篮子名称), max_retries(最大重试次数,默认3), " +
-      "leg_timeout_ms(单腿超时毫秒,默认30000), rollback_on_failure(失败时回滚,默认true)",
+      "leg_timeout_ms(单腿超时毫秒,默认30000), rollback_on_failure(失败时回滚,默认true), " +
+      "execution_mode(执行模式: sequential顺序/parallel并行,默认sequential), " +
+      "basket_timeout_ms(篮子整体超时毫秒,0=不限制,默认0)",
     parameters: {
       type: "object" as const,
       properties: {
@@ -61,6 +63,8 @@ export function createBasketOrderTool(
         max_retries: { type: "number", description: "最大重试次数(默认3)" },
         leg_timeout_ms: { type: "number", description: "单腿超时毫秒(默认30000)" },
         rollback_on_failure: { type: "boolean", description: "失败时回滚(默认true)" },
+        execution_mode: { type: "string", enum: ["sequential", "parallel"], description: "执行模式: sequential顺序执行(先卖后买), parallel并行执行(默认sequential)" },
+        basket_timeout_ms: { type: "number", description: "篮子整体超时毫秒, 0=不限制(默认0)" },
         strategy_id: { type: "string", description: "关联策略ID" },
         basket_id: { type: "string", description: "篮子ID (用于status/cancel/rollback/resume)" },
         limit: { type: "number", description: "列表数量(默认20)" },
@@ -110,6 +114,8 @@ export function createBasketOrderTool(
             legTimeoutMs: args.leg_timeout_ms as number | undefined,
             rollbackOnFailure: args.rollback_on_failure as boolean | undefined,
             strategyId: args.strategy_id as string | undefined,
+            executionMode: args.execution_mode as BasketExecutionMode | undefined,
+            basketTimeoutMs: args.basket_timeout_ms as number | undefined,
           });
 
           return formatReport(report);
@@ -250,8 +256,19 @@ function formatReport(report: BasketExecutionReport): string {
         : d.action === "reverse" && d.success
           ? " 待成交"
           : "";
+      const pnl = d.rollbackPnl !== undefined
+        ? ` 损益: ${d.rollbackPnl >= 0 ? "+" : ""}¥${d.rollbackPnl.toFixed(2)}`
+        : "";
       const error = d.errorMsg ? ` — ${d.errorMsg}` : "";
-      lines.push(`  ${icon} ${d.symbol} ${actionLabel}${detail}${fillStatus}${error}`);
+      lines.push(`  ${icon} ${d.symbol} ${actionLabel}${detail}${fillStatus}${pnl}${error}`);
+    }
+
+    // Rollback total P&L
+    if (report.rollbackPnl !== undefined) {
+      lines.push(
+        `  ──────────────────────`,
+        `  回滚总损益: ${report.rollbackPnl >= 0 ? "+" : ""}¥${report.rollbackPnl.toFixed(2)}`,
+      );
     }
   }
 

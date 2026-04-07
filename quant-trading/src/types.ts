@@ -1076,6 +1076,8 @@ export type BasketLeg = {
   completedAt?: string;
 };
 
+export type BasketExecutionMode = "sequential" | "parallel";
+
 export type BasketOrder = {
   basketId: string;
   name?: string;
@@ -1087,6 +1089,10 @@ export type BasketOrder = {
   legTimeoutMs: number;
   /** Whether to rollback (cancel all) on any leg failure (default: true) */
   rollbackOnFailure: boolean;
+  /** Execution mode: sequential (sell→buy order) or parallel (all at once). Default: sequential */
+  executionMode: BasketExecutionMode;
+  /** Overall basket timeout in milliseconds. 0 = no basket-level timeout (default: 0) */
+  basketTimeoutMs: number;
   strategyId?: string;
   createdAt: string;
   updatedAt: string;
@@ -1104,6 +1110,10 @@ export type BasketRollbackDetail = {
   reverseQty?: number;
   reverseOrderId?: string;
   reverseFilled?: boolean;
+  /** Fill price of the reverse order (for P&L calculation) */
+  reverseFillPrice?: number;
+  /** Estimated P&L from the rollback (original fill vs reverse fill) */
+  rollbackPnl?: number;
   errorMsg?: string;
 };
 
@@ -1131,4 +1141,6 @@ export type BasketExecutionReport = {
   endTime: string;
   durationMs: number;
   rollbackDetails?: BasketRollbackDetail[];
+  /** Total estimated P&L from rollback reversal orders (negative = slippage cost) */
+  rollbackPnl?: number;
 };

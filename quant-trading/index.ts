@@ -82,6 +82,7 @@ import {
   RateLimiter,
   type HttpHandler,
 } from "./src/http/auth-middleware.js";
+import { registerExportRoutes } from "./src/http/export-routes.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
@@ -91,6 +92,7 @@ import { ComposedStrategyStore } from "./src/services/composed-strategy-store.js
 import { ConditionalOrderService } from "./src/services/conditional-order.js";
 import { CustomStrategyStore } from "./src/services/custom-strategy-store.js";
 import { DataQualityValidator } from "./src/services/data-quality.js";
+import { DataExportService } from "./src/services/data-export.js";
 import { createDataSyncService } from "./src/services/data-sync.js";
 import { HistoricalDataWarehouse } from "./src/services/data-warehouse.js";
 import { DcaScheduleService } from "./src/services/dca-schedule.js";
@@ -127,6 +129,7 @@ import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
+import { createDataExportTool } from "./src/tools/data-export.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
@@ -580,6 +583,19 @@ const quantTradingPlugin = {
     );
     void explorationHistoryStore.load();
 
+    // ── Data Export Service (CSV/XLSX export + 24h auto-cleanup) ──
+    const dataExportService = new DataExportService({
+      api,
+      config,
+      getEngine,
+      backtestStore,
+      scanHistoryStore,
+      equityHistory,
+      equityHistoryPaper,
+      equityHistoryLive,
+    });
+    dataExportService.start();
+
     // ── Tools (AI-callable) ──────────────────────────────────
     // Create tool instances once and share between registration and scheduled-task replay
     const toolInstances = {
@@ -654,6 +670,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      data_export: createDataExportTool(api, dataExportService),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +721,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      data_export: "数据导出",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -1223,6 +1241,15 @@ const quantTradingPlugin = {
         alertStore.stop();
       },
     });
+    api.registerService({
+      id: "data-export",
+      async start() {
+        /* already started above */
+      },
+      async stop() {
+        dataExportService.stop();
+      },
+    });
 
     // ── HTTP Routes ────────────────────────────────────────
     const rateLimiter = new RateLimiter(
@@ -1279,6 +1306,12 @@ const quantTradingPlugin = {
       tickHistoryStore: tickHistoryStoreRef,
       secure,
       securePublic,
+    });
+
+    registerExportRoutes({
+      api,
+      exportService: dataExportService,
+      secure,
     });
 
     // ── AI Workflow Instructions (injected into system prompt) ──

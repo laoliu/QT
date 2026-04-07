@@ -836,6 +836,21 @@ export type QuantTradingConfig = {
     positionWarningPct?: number;
     enabled?: boolean;
   };
+
+  /**
+   * Intraday anomaly monitor configuration.
+   * Scans watchlist + positions during trading hours for price surges/plunges,
+   * volume spikes, and limit-up/limit-down proximity.
+   */
+  intradayAnomalyMonitor?: {
+    scanIntervalSecs?: number;
+    priceChangeThreshold?: number;
+    volumeSpikeMultiplier?: number;
+    volumeAvgPeriods?: number;
+    limitProximityPct?: number;
+    dailyLimitPct?: number;
+    enabled?: boolean;
+  };
   /**
    * Cross-machine signal webhook configuration.
    * Enables the POST /quant/api/signal endpoint so a remote machine

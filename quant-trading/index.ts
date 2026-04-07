@@ -108,6 +108,7 @@ import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
 import { SignalHitRateTracker } from "./src/services/signal-hitrate.js";
+import { createIntradayAnomalyMonitorService } from "./src/services/intraday-anomaly-monitor.js";
 import { createSignalMonitorService } from "./src/services/signal-monitor.js";
 import { InMemoryStorage } from "./src/services/sqlite-storage.js";
 import { StrategyHealthMonitor } from "./src/services/strategy-health.js";
@@ -1089,6 +1090,9 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Intraday Anomaly Monitor (盘中异动监控)
+    api.registerService(createIntradayAnomalyMonitorService(api, config, eventBus, alertStore));
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

@@ -2963,6 +2963,92 @@ const ctaStrategies: StrategyDefinition[] = [
   },
 ];
 
+// ── vnpy CTA Strategies ─────────────────────────────────────────
+
+const vnpyStrategies: StrategyDefinition[] = [
+  {
+    id: "vnpy-double-ma",
+    name: "vnpy双均线 (Double MA)",
+    description: "vnpy经典双均线策略：快慢均线交叉开平仓，适合趋势行情。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "fast_window", type: "number", default: 10, description: "快速均线周期", min: 2, max: 120 },
+      { name: "slow_window", type: "number", default: 30, description: "慢速均线周期", min: 5, max: 250 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+  {
+    id: "vnpy-atr-rsi",
+    name: "vnpy ATR-RSI",
+    description: "ATR波动率过滤 + RSI超买超卖信号，适合震荡和趋势行情。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "atr_period", type: "number", default: 22, description: "ATR周期", min: 5, max: 60 },
+      { name: "rsi_period", type: "number", default: 5, description: "RSI周期", min: 2, max: 30 },
+      { name: "rsi_entry", type: "number", default: 16, description: "RSI入场阈值", min: 5, max: 30 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+  {
+    id: "vnpy-boll-channel",
+    name: "vnpy布林通道 (Bollinger Channel)",
+    description: "布林带突破策略，结合ATR动态止损。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "boll_window", type: "number", default: 18, description: "布林带周期", min: 5, max: 60 },
+      { name: "boll_dev", type: "number", default: 3.4, description: "标准差倍数", min: 1.0, max: 5.0 },
+      { name: "sl_multiplier", type: "number", default: 5.2, description: "止损ATR倍数", min: 1.0, max: 10.0 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+  {
+    id: "vnpy-turtle",
+    name: "vnpy海龟交易 (Turtle)",
+    description: "经典海龟交易法则：唐奇安通道突破入场，反向通道出场。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "entry_window", type: "number", default: 20, description: "入场通道周期", min: 5, max: 60 },
+      { name: "exit_window", type: "number", default: 10, description: "出场通道周期", min: 3, max: 30 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+  {
+    id: "vnpy-king-keltner",
+    name: "vnpy肯特纳通道 (King Keltner)",
+    description: "Keltner通道突破策略，利用ATR构建波动通道。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "kk_period", type: "number", default: 40, description: "通道周期", min: 10, max: 80 },
+      { name: "kk_dev", type: "number", default: 2.0, description: "ATR倍数", min: 1.0, max: 4.0 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+  {
+    id: "vnpy-multi-timeframe",
+    name: "vnpy多周期趋势 (Multi-Timeframe)",
+    description: "周线判趋势，日线找入场；大小周期共振时开仓。",
+    version: "1.0.0",
+    engine: "vnpy",
+    entryFile: "engines/vnpy_backtest_engine.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 5, description: "日线快速均线", min: 2, max: 30 },
+      { name: "slow_period", type: "number", default: 20, description: "日线慢速均线", min: 5, max: 60 },
+      { name: "weekly_period", type: "number", default: 10, description: "周线均线周期", min: 3, max: 30 },
+    ],
+    markets: ["cn_stock", "futures"],
+  },
+];
+
 // ── Combined + Export ────────────────────────────────────────────
 
 /**
@@ -2976,4 +3062,5 @@ export const builtinStrategies: StrategyDefinition[] = [
   ...builtinTsStrategies,
   ...backtraderStrategies,
   ...ctaStrategies,
+  ...vnpyStrategies,
 ];

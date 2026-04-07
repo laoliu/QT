@@ -9,6 +9,7 @@ import type {
   StrategyDefinition,
 } from "../types.js";
 import { runBacktraderBacktest } from "./backtrader-engine.js";
+import { runVnpyBacktest } from "./vnpy-engine.js";
 import {
   compositeStrategy,
   ctaAberration,
@@ -590,9 +591,9 @@ export function listRuleStrategies(): RuleStrategyConfig[] {
 // ── Registry ─────────────────────────────────────────────────────
 
 export function listStrategies(): StrategyDefinition[] {
-  // Only include builtin strategies that have a registered factory or use backtrader engine
+  // Only include builtin strategies that have a registered factory or use backtrader/vnpy engine
   const available = builtinStrategies.filter(
-    (s) => s.engine === "backtrader" || strategyMap.has(s.id),
+    (s) => s.engine === "backtrader" || s.engine === "vnpy" || strategyMap.has(s.id),
   );
   return [...available, ...composedDefinitions.values(), ...ruleDefinitions.values()];
 }
@@ -622,6 +623,10 @@ export async function runBacktest(
 
   if (engine === "backtrader" || strategy?.engine === "backtrader") {
     return runBacktraderBacktest(request, config);
+  }
+
+  if (engine === "vnpy" || strategy?.engine === "vnpy") {
+    return runVnpyBacktest(request, config);
   }
 
   // Builtin engine

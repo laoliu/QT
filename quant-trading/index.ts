@@ -127,6 +127,7 @@ import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
+import { createDividendTrackerTool } from "./src/tools/dividend-tracker.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
@@ -134,9 +135,11 @@ import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
+import { createIpoTrackerTool } from "./src/tools/ipo-tracker.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
+import { createMarketBreadthTool } from "./src/tools/market-breadth.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
@@ -155,6 +158,7 @@ import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
@@ -162,8 +166,10 @@ import { createStrategyExplorerTool } from "./src/tools/strategy-explorer.js";
 import { createStrategyHealthTool } from "./src/tools/strategy-health.js";
 import { createStrategyOptimizerTool } from "./src/tools/strategy-optimizer.js";
 import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
+import { createSupportResistanceTool } from "./src/tools/support-resistance.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
+import { createTradingPlanTool } from "./src/tools/trading-plan.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
@@ -654,6 +660,12 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
+      support_resistance: createSupportResistanceTool(api, config),
+      market_breadth: createMarketBreadthTool(api, config),
+      dividend_tracker: createDividendTrackerTool(api, config),
+      ipo_tracker: createIpoTrackerTool(api, config),
+      trading_plan: createTradingPlanTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +716,12 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      stock_compare: "股票对比",
+      support_resistance: "支撑压力位",
+      market_breadth: "市场宽度",
+      dividend_tracker: "分红追踪",
+      ipo_tracker: "新股追踪",
+      trading_plan: "交易计划",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

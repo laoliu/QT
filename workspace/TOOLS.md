@@ -25,6 +25,7 @@ Skills 定义工具的能力，这个文件记录你的环境特定的使用细�
 |------|------|
 | `stock_screen` | 多因子筛选（F-Score/CAN SLIM/魔法公式/技术面/量价/PEG） |
 | `stock_recommend` | AI 智能选股推荐 |
+| `stock_compare` | 多维度股票对比（2-5只，技术面/基本面/资金流/估值） |
 | `sector_analysis` | 板块排名、行业详细指标 |
 | `favorites` / `watchlist` | 自选股与关注列表管理 |
 
@@ -89,6 +90,7 @@ stock_screen(action="list_screeners")
 | `portfolio_rebalance` | 组合再平衡 |
 | `dca_schedule` | 定投计划管理 |
 | `trade_journal` | 交易日志与复盘笔记 |
+| `trading_plan` | 每日交易计划（入场区间/目标价/止损位/风险收益比） |
 | `live_trading` | 实盘交易（下单/持仓/暂停/恢复） |
 | `conditional_order` | 条件单（止损/止盈/追踪止损） |
 | `price_alert` | 价格预警 + 可选自动下单 |
@@ -98,11 +100,13 @@ stock_screen(action="list_screeners")
 | 工具 | 用途 |
 |------|------|
 | `trading_signal` | 策略信号查询（近期/按标的/按策略/命中率） |
+| `support_resistance` | 支撑压力位计算（前高前低/量价密集区/均线/斐波那契/枢轴点） |
 | `lianban_analysis` | 连板分析 |
 | `dragon_tiger` | 龙虎榜分析 |
 | `sector_synergy` | 板块协同追涨 |
 | `breakout_monitor` | 突破形态监控 |
 | `chip_accumulation` | 主力吸筹扫描 |
+| `market_breadth` | 市场宽度分析（涨跌家数/涨停跌停/新高新低/情绪评分） |
 
 ## 六、资金面与情绪
 
@@ -139,6 +143,8 @@ stock_screen(action="list_screeners")
 | `scheduled_task` | 定时任务调度 |
 | `cfo_assistant` | CFO级财报深度分析 |
 | `tech_moat` | 技术护城河分析 |
+| `dividend_tracker` | 分红追踪（除权除息日历/个股分红历史/高股息筛选） |
+| `ipo_tracker` | 新股追踪（打新日历/次新股表现/申购信息） |
 
 ---
 

@@ -64,6 +64,8 @@
 | `market_data`            | 获取实时行情、历史K线、搜索标的                 |
 | `stock_screen`           | 条件筛选（PE、PB、ROE、市值等）                 |
 | `stock_recommend`        | 智能选股推荐                                    |
+| `stock_compare`          | 多维度股票对比（技术面/基本面/资金流/估值）     |
+| `support_resistance`     | 支撑压力位计算（前高前低/量价密集区/均线/斐波那契/枢轴点） |
 | `backtest`               | 策略回测（内置引擎 + backtrader）               |
 | `portfolio`              | 模拟组合管理（买入、卖出、持仓查看）            |
 | `portfolio_backtest`     | 组合级回测                                      |
@@ -95,6 +97,7 @@
 | `position_sizing`        | 仓位管理与计算                                  |
 | `price_alert`            | 价格预警                                        |
 | `scheduled_task`         | 定时任务管理                                    |
+| `trading_plan`           | 每日交易计划（入场/目标/止损/风险收益比）       |
 
 #### 期权交易
 
@@ -122,6 +125,9 @@
 | `social_sentiment`       | 舆情分析                                        |
 | `news_summary`           | 新闻摘要                                        |
 | `polymarket_odds`        | 预测市场赔率                                    |
+| `market_breadth`         | 市场宽度分析（涨跌家数/涨停跌停/情绪评分）     |
+| `dividend_tracker`       | 分红追踪（除权除息日历/分红历史/高股息筛选）    |
+| `ipo_tracker`            | 新股追踪（打新日历/次新股表现/申购信息）        |
 
 #### 投资分析
 

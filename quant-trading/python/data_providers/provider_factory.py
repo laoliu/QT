@@ -2,13 +2,19 @@
 Market-aware data provider factory.
 
 Auto-detects market from symbol format and routes to the appropriate
-data provider (akshare for A-shares, yfinance for US/HK/global).
+data provider with multi-source fallback:
+
+  A-shares: AKShare → Tushare → JQData → YFinance
+  US/HK:    YFinance → AKShare
+  Index:    AKShare → Tushare → JQData
+  Futures:  AKShare → JQData
 
 Provides a unified interface for fetching backtest data as pandas DataFrames.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import Any, Optional
 
@@ -111,6 +117,113 @@ def to_yfinance_symbol(symbol: str, market: str = "") -> str:
     return sym
 
 
+def _get_tushare_token() -> str:
+    """Read Tushare token from env or config files."""
+    token = os.environ.get("TUSHARE_TOKEN", "")
+    if token:
+        return token
+    # Try reading from openclaw config
+    import json
+    home = os.path.expanduser("~")
+    for cfg_dir in [".openclaw-dev", ".openclaw"]:
+        try:
+            cfg_path = os.path.join(home, cfg_dir, "openclaw.json")
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            token = (cfg.get("plugins", {})
+                     .get("entries", {})
+                     .get("quant-trading", {})
+                     .get("config", {})
+                     .get("dataProviders", {})
+                     .get("tushare", {})
+                     .get("token", ""))
+            if token:
+                return token
+        except Exception:
+            continue
+    return ""
+
+
+def _get_jqdata_creds() -> tuple[str, str]:
+    """Read JQData credentials from env or config files."""
+    username = os.environ.get("JQDATA_USERNAME", "")
+    password = os.environ.get("JQDATA_PASSWORD", "")
+    if username and password:
+        return username, password
+    import json
+    home = os.path.expanduser("~")
+    for cfg_dir in [".openclaw-dev", ".openclaw"]:
+        try:
+            cfg_path = os.path.join(home, cfg_dir, "openclaw.json")
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            jq_cfg = (cfg.get("plugins", {})
+                      .get("entries", {})
+                      .get("quant-trading", {})
+                      .get("config", {})
+                      .get("dataProviders", {})
+                      .get("jqdata", {}))
+            u = jq_cfg.get("username", "")
+            p = jq_cfg.get("password", "")
+            if u and p:
+                return u, p
+        except Exception:
+            continue
+    return "", ""
+
+
+def _fetch_tushare_data(symbol: str, start_date: str, end_date: str, market: str = "cn_stock"):
+    """Fetch data via Tushare as fallback."""
+    try:
+        from data_providers.tushare_provider import get_klines
+        import pandas as pd
+
+        token = _get_tushare_token()
+        if not token:
+            return None
+
+        bars = get_klines(symbol, "1d", start_date, end_date, market, token)
+        if not bars:
+            return None
+
+        df = pd.DataFrame(bars)
+        df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df = df.set_index("date")
+        df = df[["open", "high", "low", "close", "volume"]]
+        df = df.sort_index()
+        return df
+
+    except Exception as e:
+        print(f"[tushare] Error fetching {symbol}: {e}", file=sys.stderr)
+        return None
+
+
+def _fetch_jqdata_data(symbol: str, start_date: str, end_date: str, market: str = "cn_stock"):
+    """Fetch data via JQData as fallback."""
+    try:
+        from data_providers.jqdata_provider import get_klines
+        import pandas as pd
+
+        username, password = _get_jqdata_creds()
+        if not username or not password:
+            return None
+
+        bars = get_klines(symbol, "1d", start_date, end_date, market, username, password)
+        if not bars:
+            return None
+
+        df = pd.DataFrame(bars)
+        df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df = df.set_index("date")
+        df = df[["open", "high", "low", "close", "volume"]]
+        df = df.sort_index()
+        return df
+
+    except Exception as e:
+        print(f"[jqdata] Error fetching {symbol}: {e}", file=sys.stderr)
+        return None
+
+
 def fetch_data_for_backtest(
     symbol: str,
     start_date: str,
@@ -119,7 +232,10 @@ def fetch_data_for_backtest(
 ):
     """Fetch historical data for backtesting. Returns pandas DataFrame.
 
-    Auto-routes to akshare (A-shares) or yfinance (global) based on symbol.
+    Auto-routes based on symbol with multi-source fallback:
+      A-shares:  AKShare → Tushare → JQData → YFinance
+      US/HK:     YFinance → AKShare
+      Index:     AKShare → Tushare → JQData
 
     Args:
         symbol: Stock code (600519, AAPL, 00700.HK, etc.)
@@ -134,10 +250,35 @@ def fetch_data_for_backtest(
     if not market:
         market = detect_market(symbol)
 
-    if market == "cn_stock":
-        return _fetch_cn_data(symbol, start_date, end_date)
-    else:
+    if market == "cn_stock" or market == "index":
+        # Primary: AKShare
+        df = _fetch_cn_data(symbol, start_date, end_date)
+        if df is not None and not df.empty:
+            return df
+
+        # Fallback 1: Tushare
+        print(f"[provider_factory] AKShare failed for {symbol}, trying Tushare", file=sys.stderr)
+        df = _fetch_tushare_data(symbol, start_date, end_date, market)
+        if df is not None and not df.empty:
+            return df
+
+        # Fallback 2: JQData
+        print(f"[provider_factory] Tushare failed for {symbol}, trying JQData", file=sys.stderr)
+        df = _fetch_jqdata_data(symbol, start_date, end_date, market)
+        if df is not None and not df.empty:
+            return df
+
+        # Fallback 3: YFinance
+        print(f"[provider_factory] JQData failed for {symbol}, trying YFinance", file=sys.stderr)
         return _fetch_yfinance_data(symbol, start_date, end_date, market)
+    else:
+        # Non-CN: YFinance primary, AKShare fallback for HK
+        df = _fetch_yfinance_data(symbol, start_date, end_date, market)
+        if df is not None and not df.empty:
+            return df
+        if market == "hk_stock":
+            return _fetch_cn_data(symbol, start_date, end_date)
+        return None
 
 
 def _fetch_cn_data(symbol: str, start_date: str, end_date: str):

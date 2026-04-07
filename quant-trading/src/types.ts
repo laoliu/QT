@@ -818,7 +818,7 @@ export type QuantTradingConfig = {
   dataDir?: string;
   defaultMarket?: MarketType;
   /** Shorthand provider selector: "demo" for offline/test, otherwise use `dataProviders`. */
-  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart";
+  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "jqdata" | "smart";
   dataProviders?: DataProviderConfig;
   backtestEngine?: BacktestEngine;
   pythonPath?: string;

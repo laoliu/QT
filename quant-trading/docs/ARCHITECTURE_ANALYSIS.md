@@ -105,14 +105,39 @@ export type MarketType =
 
 | 提供商               | 类型          | 支持市场             | 实现位置                              |
 | -------------------- | ------------- | -------------------- | ------------------------------------- |
-| **AKShare**          | Python Bridge | A股、期货、基金      | `data_providers/akshare_provider.py`  |
-| **Tushare**          | Python Bridge | A股                  | `data_providers/tushare_provider.py`  |
+| **AKShare**          | Python Bridge | A股、期货、基金、港股 | `data_providers/akshare_provider.py`  |
+| **Tushare**          | Python Bridge | A股、指数、ETF       | `data_providers/tushare_provider.py`  |
 | **Yahoo Finance**    | Python Bridge | 美股、港股、加密     | `data_providers/yfinance_provider.py` |
+| **JQData (聚宽)**    | Python Bridge | A股、指数、ETF、期货 | `data_providers/jqdata_provider.py`   |
 | **Options Provider** | Python Bridge | ETF/指数/商品期权    | `data_providers/options_provider.py`  |
 | **Financial**        | Python Bridge | 财务报表数据         | `data_providers/financial_provider.py`|
 | **Sector Data**      | Python Bridge | 板块分类与热点追踪   | `data_providers/sector_data.py`       |
 | **QMT (Windows)**    | HTTP Bridge   | A股、期货            | `data_providers/qmt_provider.ts`      |
 | **Mock/Demo**        | 本地生成      | 所有市场             | `market-data-provider.ts`             |
+
+**多数据源回退链**：
+
+当主数据源不可用时，系统自动切换到备用源：
+
+- **A股**: QMT → 通达信(TDX) → AKShare(东财) → AKShare(百度) → Tushare → JQData → YFinance
+- **港股**: AKShare(雪球) → YFinance
+- **美股**: YFinance
+- **期货**: AKShare → JQData
+- **指数**: AKShare → Tushare → JQData
+
+**配置方式**：
+
+```json
+{
+  "dataProvider": "smart",
+  "dataProviders": {
+    "akshare": { "enabled": true },
+    "tushare": { "enabled": true, "token": "your-tushare-token" },
+    "jqdata": { "enabled": true, "username": "your-jqdata-user", "password": "your-jqdata-pass" },
+    "yfinance": { "enabled": true }
+  }
+}
+```
 
 ---
 

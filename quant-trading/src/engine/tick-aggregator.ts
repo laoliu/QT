@@ -9,11 +9,14 @@ export type AggregatedTickBar = {
 type TickBucketState = {
   bucketStart: number;
   bar: KlineBar;
+  tickCount: number;
 };
 
 const INTERVAL_MS: Record<TickAggregationInterval, number> = {
   "3s": 3_000,
+  "10s": 10_000,
   "15s": 15_000,
+  "30s": 30_000,
   "1m": 60_000,
   "5m": 300_000,
 };
@@ -50,7 +53,7 @@ export class TickAggregator {
       const current = this.states.get(key);
 
       if (!current) {
-        this.states.set(key, { bucketStart: start, bar: createBar(tick, start) });
+        this.states.set(key, { bucketStart: start, bar: createBar(tick, start), tickCount: 1 });
         continue;
       }
 
@@ -60,7 +63,7 @@ export class TickAggregator {
           interval,
           bar: current.bar,
         });
-        this.states.set(key, { bucketStart: start, bar: createBar(tick, start) });
+        this.states.set(key, { bucketStart: start, bar: createBar(tick, start), tickCount: 1 });
         continue;
       }
 
@@ -71,7 +74,60 @@ export class TickAggregator {
       current.bar.amount = (current.bar.amount ?? 0) + tick.amount;
       current.bar.openInterest = tick.openInterest ?? current.bar.openInterest;
       current.bar.settlementPrice = tick.settlementPrice ?? current.bar.settlementPrice;
+      current.tickCount++;
     }
     return completed;
+  }
+
+  /**
+   * Flush all in-progress buckets, emitting them as completed bars.
+   * Useful at end-of-session or when switching symbols.
+   */
+  flush(symbol?: string): AggregatedTickBar[] {
+    const completed: AggregatedTickBar[] = [];
+    const keysToDelete: string[] = [];
+
+    for (const [key, state] of this.states.entries()) {
+      if (symbol) {
+        // Only flush buckets for the given symbol
+        if (!key.startsWith(`${symbol}:`)) continue;
+      }
+      const [sym, interval] = key.split(":") as [string, TickAggregationInterval];
+      completed.push({
+        symbol: sym,
+        interval,
+        bar: state.bar,
+      });
+      keysToDelete.push(key);
+    }
+
+    for (const key of keysToDelete) {
+      this.states.delete(key);
+    }
+    return completed;
+  }
+
+  /**
+   * Get the current in-progress bar for a symbol+interval (not yet completed).
+   * Returns null if no data is being accumulated.
+   */
+  getCurrentBar(symbol: string, interval: TickAggregationInterval): KlineBar | null {
+    const state = this.states.get(`${symbol}:${interval}`);
+    return state?.bar ?? null;
+  }
+
+  /**
+   * Get aggregation stats: number of active buckets and configured intervals.
+   */
+  getStats(): { activeBuckets: number; intervals: TickAggregationInterval[] } {
+    return {
+      activeBuckets: this.states.size,
+      intervals: [...this.intervals],
+    };
+  }
+
+  /** Reset all accumulated state. */
+  reset(): void {
+    this.states.clear();
   }
 }

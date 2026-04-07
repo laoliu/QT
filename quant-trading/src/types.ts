@@ -37,7 +37,10 @@ export type SymbolInfo = {
 
 export type KlineInterval = "1m" | "5m" | "15m" | "30m" | "60m" | "1d" | "1w" | "1M";
 
-export type TickAggregationInterval = "3s" | "15s" | "1m" | "5m";
+export type TickAggregationInterval = "3s" | "15s" | "1m" | "5m" | "10s" | "30s";
+
+/** Trade direction at tick level — inferred from price vs bid/ask or provided by data source. */
+export type TickDirection = "buy" | "sell" | "neutral";
 
 export type TickDepthLevel = {
   price: number;
@@ -74,6 +77,10 @@ export type TickData = {
   settlementPrice?: number;
   bidLevels?: TickDepthLevel[];
   askLevels?: TickDepthLevel[];
+  /** Inferred or source-provided trade direction (买卖方向) */
+  direction?: TickDirection;
+  /** Number of trades in this tick snapshot (笔数) */
+  tradeCount?: number;
   source?: "qmt-bridge" | "receiver" | "unknown";
   raw?: Record<string, unknown>;
 };
@@ -937,7 +944,7 @@ export type QuantTradingConfig = {
     source?: "qmt-bridge" | "receiver-proxy";
     /** Poll interval for bridge event fetches in ms (default: 3000) */
     pollIntervalMs?: number;
-    /** Aggregate raw ticks into these bar intervals (default: ["3s", "15s", "1m", "5m"]) */
+    /** Aggregate raw ticks into these bar intervals (default: ["3s", "15s", "1m", "5m"]). Supports: "3s","10s","15s","30s","1m","5m". */
     aggregateIntervals?: TickAggregationInterval[];
     /** Number of recent ticks to retain per symbol in memory (default: 256) */
     maxRecentTicksPerSymbol?: number;

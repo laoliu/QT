@@ -583,7 +583,11 @@ const quantTradingPlugin = {
     // ── Tools (AI-callable) ──────────────────────────────────
     // Create tool instances once and share between registration and scheduled-task replay
     const toolInstances = {
-      market_data: createMarketDataTool(api, config),
+      market_data: createMarketDataTool(api, config, {
+        getTickService: () => tickIngressService,
+        getFeatureStore: () => tickFeatureStoreRef,
+        getHistoryStore: () => tickHistoryStoreRef,
+      }),
       stock_screen: createStockScreenTool(api, config, scanHistoryStore),
       backtest: createBacktestTool(api, config, backtestStore),
       portfolio: createPortfolioTool(api, config, getEngine),

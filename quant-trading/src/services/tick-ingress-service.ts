@@ -10,6 +10,7 @@ import type {
   TickAggregationInterval,
   TickData,
   TickDepthLevel,
+  TickDirection,
   TickFeatures,
 } from "../types.js";
 import type { KlineBar } from "../types.js";
@@ -77,6 +78,23 @@ function normalizeQuote(
   };
 }
 
+function inferTickDirection(raw: Record<string, unknown>, quote: QuoteSnapshot): TickDirection {
+  // 1. Explicit direction from data source
+  const explicit = raw.direction ?? raw.bs_flag ?? raw.side;
+  if (explicit != null) {
+    const d = String(explicit).toLowerCase().trim();
+    if (d === "buy" || d === "b" || d === "1" || d === "bid") return "buy";
+    if (d === "sell" || d === "s" || d === "-1" || d === "2" || d === "ask" || d === "offer") return "sell";
+    return "neutral";
+  }
+  // 2. Infer from price vs bid/ask
+  if (quote.bid1 && quote.ask1 && quote.bid1 > 0 && quote.ask1 > 0) {
+    if (quote.price >= quote.ask1) return "buy";
+    if (quote.price <= quote.bid1) return "sell";
+  }
+  return "neutral";
+}
+
 function normalizeTick(raw: Record<string, unknown>, quote: QuoteSnapshot): TickData {
   return {
     symbol: quote.symbol,
@@ -92,6 +110,9 @@ function normalizeTick(raw: Record<string, unknown>, quote: QuoteSnapshot): Tick
     settlementPrice: quote.settlementPrice,
     bidLevels: normalizeDepthLevels(raw.bid_price, raw.bid_volume),
     askLevels: normalizeDepthLevels(raw.ask_price, raw.ask_volume),
+    direction: inferTickDirection(raw, quote),
+    tradeCount: typeof raw.trade_count === "number" ? raw.trade_count :
+                typeof raw.num_trades === "number" ? raw.num_trades : undefined,
     source: "unknown",
     raw,
   };

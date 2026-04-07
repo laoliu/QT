@@ -4,7 +4,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
-import type { QuantTradingConfig } from "../types.js";
+import type { QuantTradingConfig, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
 
 // ── Technical indicator types ────────────────────────────────────
 interface IndicatorResult {
@@ -23,7 +23,35 @@ interface IndicatorResult {
   low52w?: number | null;
 }
 
-export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+// ── Tick service interfaces (lazy-loaded from index.ts) ──────────
+
+export type TickServiceAccessor = {
+  getRecentTicks(symbol: string, limit?: number): TickData[];
+  getLatestTick(symbol: string): TickData | null;
+  getRecentBars(symbol: string, interval: TickAggregationInterval, limit?: number): import("../types.js").KlineBar[];
+};
+
+export type TickFeatureAccessor = {
+  getFeatures(symbol: string): TickFeatures | null;
+  getAllFeatures(): TickFeatures[];
+  getRecentFeatures(symbol: string, limit?: number): TickFeatures[];
+};
+
+export type TickHistoryAccessor = {
+  getRecentTicks(symbol: string, limit?: number): TickData[];
+  getRecentBars(symbol: string, interval: TickAggregationInterval, limit?: number): import("../types.js").KlineBar[];
+  getRecentFeatures(symbol: string, limit?: number): TickFeatures[];
+};
+
+export function createMarketDataTool(
+  api: OpenClawPluginApi,
+  config: QuantTradingConfig,
+  tickServices?: {
+    getTickService: () => TickServiceAccessor | null;
+    getFeatureStore: () => TickFeatureAccessor | null;
+    getHistoryStore: () => TickHistoryAccessor | null;
+  },
+) {
   const provider = createDataProvider(config);
 
   return {
@@ -34,15 +62,17 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
       "action=quote 实时报价,\n" +
       "action=klines 历史K线（可附带技术指标: MA/EMA/RSI/ATR/波动率/52周高低点）,\n" +
       "action=search 搜索标的,\n" +
-      "action=fundamentals 基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等)。",
+      "action=fundamentals 基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等),\n" +
+      "action=tick 实时Tick级数据（最新逐笔成交/盘口/买卖方向/微观特征）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["quote", "klines", "search", "fundamentals"],
+          enum: ["quote", "klines", "search", "fundamentals", "tick"],
           description:
-            "操作类型: quote=实时报价, klines=历史K线, search=搜索标的, fundamentals=基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等)",
+            "操作类型: quote=实时报价, klines=历史K线, search=搜索标的, " +
+            "fundamentals=基本面/估值/财务数据, tick=Tick级实时数据(逐笔/盘口/微观特征)",
         },
         symbol: {
           type: "string",
@@ -68,7 +98,7 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
         limit: {
           type: "number",
           description:
-            "返回K线条数（仅 action=klines），默认120。设为0返回全部。" +
+            "返回条数。action=klines 默认120，action=tick 默认50。设为0返回全部。" +
             "技术分析建议至少120条（含MA120），长期分析建议250条。",
         },
         indicators: {
@@ -81,6 +111,19 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
           type: "string",
           enum: ["cn_stock", "us_stock", "hk_stock", "futures", "fund", "crypto"],
           description: "市场类型，默认使用配置的 defaultMarket",
+        },
+        tickMode: {
+          type: "string",
+          enum: ["latest", "recent", "features", "bars"],
+          description:
+            "Tick数据模式（仅 action=tick 时使用）。" +
+            "latest=最新一笔Tick, recent=最近N笔Tick, " +
+            "features=微观特征(VWAP/动量/盘口失衡/波动率), bars=Tick聚合K线。默认 recent",
+        },
+        tickInterval: {
+          type: "string",
+          enum: ["3s", "10s", "15s", "30s", "1m", "5m"],
+          description: "Tick聚合周期（仅 action=tick tickMode=bars 时使用），默认 1m",
         },
       },
       required: ["action"],
@@ -191,10 +234,195 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
           return result.data;
         }
 
+        case "tick": {
+          if (!symbol) return { error: "请提供标的代码 (symbol)" };
+          return handleTickAction(symbol, args, tickServices);
+        }
+
         default:
           return { error: `未知操作: ${action}` };
       }
     },
+  };
+}
+
+// ── Tick action handler ──────────────────────────────────────────
+
+function handleTickAction(
+  symbol: string,
+  args: Record<string, unknown>,
+  tickServices?: {
+    getTickService: () => TickServiceAccessor | null;
+    getFeatureStore: () => TickFeatureAccessor | null;
+    getHistoryStore: () => TickHistoryAccessor | null;
+  },
+): Record<string, unknown> {
+  const tickMode = (args.tickMode as string) ?? "recent";
+  const limit = (args.limit as number) ?? 50;
+
+  // Try live tick service first, fall back to history store
+  const tickService = tickServices?.getTickService();
+  const featureStore = tickServices?.getFeatureStore();
+  const historyStore = tickServices?.getHistoryStore();
+
+  if (!tickService && !historyStore) {
+    return {
+      error:
+        "Tick数据服务未启用。请在配置中设置 tickData.enabled=true 并配置数据源 " +
+        "(tradingAccount.qmt.windowsBridgeUrl 或 receiver)。",
+      hint: "需要连接QMT数据桥或RECEIVER代理才能获取Tick级数据。",
+    };
+  }
+
+  switch (tickMode) {
+    case "latest": {
+      const tick = tickService?.getLatestTick(symbol);
+      if (!tick) {
+        return {
+          error: `无 ${symbol} 的Tick数据。请确认已订阅该标的 (可能需要先通过 live_trading 启动并添加监控)。`,
+          symbol,
+        };
+      }
+      return formatTickResult(tick);
+    }
+
+    case "recent": {
+      const source = tickService ?? historyStore;
+      if (!source) return { error: "Tick数据服务不可用" };
+      const ticks = source.getRecentTicks(symbol, limit > 0 ? limit : 200);
+      if (ticks.length === 0) {
+        return {
+          error: `无 ${symbol} 的Tick历史。请确认已订阅该标的。`,
+          symbol,
+        };
+      }
+      return {
+        symbol,
+        mode: "recent",
+        count: ticks.length,
+        data: ticks.map(formatTickResult),
+      };
+    }
+
+    case "features": {
+      if (!featureStore) {
+        return { error: "Tick特征计算服务未启用" };
+      }
+      const latest = featureStore.getFeatures(symbol);
+      if (!latest) {
+        // Try history store for recent features
+        if (historyStore) {
+          const recentFeatures = historyStore.getRecentFeatures(symbol, limit > 0 ? limit : 20);
+          if (recentFeatures.length > 0) {
+            return {
+              symbol,
+              mode: "features",
+              count: recentFeatures.length,
+              data: recentFeatures.map(formatFeatureResult),
+            };
+          }
+        }
+        return {
+          error: `无 ${symbol} 的Tick特征数据。请确认已订阅该标的。`,
+          symbol,
+        };
+      }
+      // Return latest + recent history if available
+      const recentFeatures = featureStore.getRecentFeatures(symbol, limit > 0 ? limit : 20);
+      return {
+        symbol,
+        mode: "features",
+        latest: formatFeatureResult(latest),
+        count: recentFeatures.length,
+        history: recentFeatures.length > 1 ? recentFeatures.map(formatFeatureResult) : undefined,
+      };
+    }
+
+    case "bars": {
+      const tickInterval = (args.tickInterval as TickAggregationInterval) ?? "1m";
+      const source = tickService ?? historyStore;
+      if (!source) return { error: "Tick数据服务不可用" };
+      const bars = source.getRecentBars(symbol, tickInterval, limit > 0 ? limit : 100);
+      if (bars.length === 0) {
+        return {
+          error: `无 ${symbol} 的 ${tickInterval} Tick聚合K线。请确认已订阅该标的。`,
+          symbol,
+          interval: tickInterval,
+        };
+      }
+      return {
+        symbol,
+        mode: "bars",
+        interval: tickInterval,
+        count: bars.length,
+        data: bars.map((b) => ({
+          time: new Date(b.timestamp).toISOString(),
+          open: b.open.toFixed(4),
+          high: b.high.toFixed(4),
+          low: b.low.toFixed(4),
+          close: b.close.toFixed(4),
+          volume: b.volume,
+          amount: b.amount,
+        })),
+      };
+    }
+
+    default:
+      return { error: `未知的Tick模式: ${tickMode}。支持: latest, recent, features, bars` };
+  }
+}
+
+function formatTickResult(tick: TickData): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    symbol: tick.symbol.code,
+    time: new Date(tick.timestamp).toISOString(),
+    price: tick.price,
+    volume: tick.volume,
+    amount: tick.amount,
+  };
+
+  if (tick.direction) result.direction = tick.direction;
+  if (tick.tradeCount != null) result.tradeCount = tick.tradeCount;
+  if (tick.open) result.open = tick.open;
+  if (tick.high) result.high = tick.high;
+  if (tick.low) result.low = tick.low;
+  if (tick.prevClose) result.prevClose = tick.prevClose;
+  if (tick.openInterest != null) result.openInterest = tick.openInterest;
+
+  // Bid/Ask depth
+  if (tick.bidLevels && tick.bidLevels.length > 0) {
+    result.bid = tick.bidLevels.map((l) => ({ price: l.price, volume: l.volume }));
+  }
+  if (tick.askLevels && tick.askLevels.length > 0) {
+    result.ask = tick.askLevels.map((l) => ({ price: l.price, volume: l.volume }));
+  }
+
+  // Spread
+  const bid1 = tick.bidLevels?.[0]?.price;
+  const ask1 = tick.askLevels?.[0]?.price;
+  if (bid1 && ask1 && bid1 > 0 && ask1 > 0) {
+    const mid = (bid1 + ask1) / 2;
+    result.spread = (ask1 - bid1).toFixed(4);
+    result.spreadBps = mid > 0 ? (((ask1 - bid1) / mid) * 10_000).toFixed(1) : undefined;
+  }
+
+  result.source = tick.source;
+  return result;
+}
+
+function formatFeatureResult(features: TickFeatures): Record<string, unknown> {
+  return {
+    symbol: features.symbol,
+    time: new Date(features.timestamp).toISOString(),
+    lastPrice: features.lastPrice,
+    microVwap: features.microVwap.toFixed(4),
+    shortMomentumPct: `${features.shortMomentumPct.toFixed(4)}%`,
+    mediumMomentumPct: `${features.mediumMomentumPct.toFixed(4)}%`,
+    spreadBps: features.spreadBps != null ? features.spreadBps.toFixed(1) : undefined,
+    orderBookImbalance: features.orderBookImbalance != null ? features.orderBookImbalance.toFixed(4) : undefined,
+    realizedVolBps: features.realizedVolBps != null ? features.realizedVolBps.toFixed(1) : undefined,
+    volumeDelta: features.volumeDelta,
+    amountDelta: features.amountDelta,
   };
 }
 

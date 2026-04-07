@@ -26,7 +26,8 @@ export type EventCategory =
   | "alert"
   | "equity"
   | "tick"
-  | "data_sync";
+  | "data_sync"
+  | "sector_flow_anomaly";
 
 export interface QuantEvent {
   /** Unique event ID (monotonic counter) */

@@ -25,7 +25,8 @@ export type AlertSource =
   | "strategy"
   | "system"
   | "price_alert"
-  | "signal";
+  | "signal"
+  | "sector_flow";
 
 export type Alert = {
   /** Unique alert id */

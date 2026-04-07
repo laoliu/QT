@@ -104,6 +104,7 @@ import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
 import { PriceAlertService } from "./src/services/price-alert.js";
+import { createSectorFlowMonitorService } from "./src/services/sector-flow-monitor.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
@@ -1089,6 +1090,9 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Sector Flow Monitor — detects sector-level fund flow anomalies every 15 min
+    api.registerService(createSectorFlowMonitorService(api, config, eventBus, alertStore));
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

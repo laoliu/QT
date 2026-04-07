@@ -50,6 +50,13 @@ INDICATOR_CATALOG = {
         {"id": "us_cpi", "name": "US CPI (美国CPI)", "frequency": "monthly"},
         {"id": "us_pmi", "name": "US ISM PMI (美国ISM PMI)", "frequency": "monthly"},
         {"id": "us_unemployment", "name": "US Unemployment Rate (美国失业率)", "frequency": "monthly"},
+        {"id": "treasury_10y", "name": "10-Year Treasury Yield (10年期美债收益率)", "frequency": "daily"},
+        {"id": "treasury_2y", "name": "2-Year Treasury Yield (2年期美债收益率)", "frequency": "daily"},
+        {"id": "yield_spread", "name": "10Y-2Y Yield Spread (期限利差)", "frequency": "daily"},
+        {"id": "us_gdp", "name": "US GDP (美国GDP)", "frequency": "quarterly"},
+        {"id": "nonfarm_payroll", "name": "Non-Farm Payrolls (非农就业)", "frequency": "monthly"},
+        {"id": "core_pce", "name": "Core PCE Price Index (核心PCE)", "frequency": "monthly"},
+        {"id": "vix", "name": "CBOE VIX (恐慌指数)", "frequency": "daily"},
     ],
 }
 
@@ -92,6 +99,13 @@ def _get_indicator_history(indicator: str, market: str, limit: int) -> dict:
     except ImportError:
         return {"error": "akshare not installed"}
 
+    # Try FRED first for US indicators when API key is available
+    fred_api_key = os.environ.get("FRED_API_KEY", "")
+    if market == "us" and fred_api_key:
+        fred_result = _try_fred_indicator(indicator, fred_api_key, limit)
+        if fred_result is not None:
+            return fred_result
+
     fetchers = {
         "gdp": _fetch_gdp,
         "cpi": _fetch_cpi,
@@ -121,6 +135,81 @@ def _get_indicator_history(indicator: str, market: str, limit: int) -> dict:
         }
     except Exception as e:
         return {"error": f"获取 {indicator} 数据失败: {e}"}
+
+
+# ── FRED integration (optional, for US indicators) ──────────────────────────
+
+# Map internal indicator IDs to FRED series IDs
+_FRED_INDICATOR_MAP = {
+    "fed_rate": "FEDFUNDS",
+    "us_cpi": "CPIAUCSL",
+    "us_pmi": "MANEMP",
+    "us_unemployment": "UNRATE",
+    "treasury_10y": "DGS10",
+    "treasury_2y": "DGS2",
+    "yield_spread": "T10Y2Y",
+    "us_gdp": "GDP",
+    "nonfarm_payroll": "PAYEMS",
+    "core_pce": "PCEPILFE",
+    "vix": "VIXCLS",
+}
+
+
+def _try_fred_indicator(indicator: str, api_key: str, limit: int) -> dict | None:
+    """Try to fetch a US indicator from FRED. Returns None if unavailable."""
+    series_id = _FRED_INDICATOR_MAP.get(indicator)
+    if not series_id:
+        return None
+
+    try:
+        from fredapi import Fred
+
+        fred = Fred(api_key=api_key)
+        series = fred.get_series(series_id)
+
+        if series is None or series.empty:
+            return None
+
+        series = series.dropna().tail(limit)
+        data = []
+        prev_val = None
+        for date, value in series.items():
+            entry = {
+                "date": date.strftime("%Y-%m-%d"),
+                "value": round(float(value), 4),
+            }
+            if prev_val is not None:
+                entry["previous"] = round(prev_val, 4)
+            data.append(entry)
+            prev_val = float(value)
+
+        # Map to existing field names for backwards compatibility
+        if indicator == "fed_rate":
+            for d in data:
+                d["rate"] = d.pop("value")
+        elif indicator == "us_cpi":
+            for d in data:
+                d["cpi_yoy"] = d.pop("value")
+        elif indicator == "us_pmi":
+            for d in data:
+                d["pmi"] = d.pop("value")
+        elif indicator == "us_unemployment":
+            for d in data:
+                d["rate"] = d.pop("value")
+
+        return {
+            "indicator": indicator,
+            "market": "us",
+            "source": "fred",
+            "count": len(data),
+            "data": data,
+        }
+
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"[fred] Error fetching {indicator}: {e}", file=sys.stderr)
+        return None
 
 
 # ── China macro fetchers ──────────────────────────────────────────────────────

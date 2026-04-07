@@ -137,6 +137,9 @@ async function _spawnPython<T = unknown>(
         ...(config.dataProviders?.jqdata?.password
           ? { JQDATA_PASSWORD: config.dataProviders.jqdata.password }
           : {}),
+        ...(config.dataProviders?.fred?.apiKey
+          ? { FRED_API_KEY: config.dataProviders.fred.apiKey }
+          : {}),
       },
     });
 

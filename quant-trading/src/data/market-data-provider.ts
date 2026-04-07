@@ -239,6 +239,68 @@ class YFinanceProvider implements MarketDataProvider {
   }
 }
 
+// ── JQData Provider (Python) ────────────────────────────────────
+
+class JQDataProvider implements MarketDataProvider {
+  name = "jqdata";
+
+  constructor(private config: QuantTradingConfig) {}
+
+  async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
+    const result = await runPythonScript<QuoteSnapshot>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "quote",
+        symbol: stripCnSuffix(symbol),
+        market: market ?? this.config.defaultMarket ?? "cn_stock",
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? null) : null;
+  }
+
+  async getKlines(
+    symbol: string,
+    interval: KlineInterval,
+    start: string,
+    end: string,
+    market?: MarketType,
+  ): Promise<KlineBar[]> {
+    const result = await runPythonScript<KlineBar[]>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "klines",
+        symbol: stripCnSuffix(symbol),
+        interval,
+        start,
+        end,
+        market: market ?? this.config.defaultMarket ?? "cn_stock",
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? []) : [];
+  }
+
+  async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
+    const result = await runPythonScript<SymbolInfo[]>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "search",
+        keyword,
+        market: market ?? this.config.defaultMarket,
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? []) : [];
+  }
+}
+
 // ── Demo / Mock Provider ─────────────────────────────────────────
 
 class DemoProvider implements MarketDataProvider {
@@ -895,7 +957,9 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
   const isRemoteQmt = config.tradingAccount?.broker === "remote-qmt";
 
   let inner: MarketDataProvider;
-  if (config.dataProviders?.tushare?.enabled) {
+  if (config.dataProviders?.jqdata?.enabled) {
+    inner = new JQDataProvider(config);
+  } else if (config.dataProviders?.tushare?.enabled) {
     inner = new TushareProvider(config);
   } else if (isRemoteQmt) {
     // QMT bridge as primary for CN stocks, with SmartProvider fallback for

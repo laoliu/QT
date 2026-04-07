@@ -116,16 +116,19 @@ def fetch_data_for_backtest(
     start_date: str,
     end_date: str,
     market: str = "",
+    provider: str = "",
 ):
     """Fetch historical data for backtesting. Returns pandas DataFrame.
 
     Auto-routes to akshare (A-shares) or yfinance (global) based on symbol.
+    When provider is specified, forces that data source.
 
     Args:
         symbol: Stock code (600519, AAPL, 00700.HK, etc.)
         start_date: YYYY-MM-DD
         end_date: YYYY-MM-DD
         market: Optional market override
+        provider: Optional provider override ("akshare", "yfinance", "jqdata")
 
     Returns:
         pandas DataFrame with columns [open, high, low, close, volume],
@@ -134,10 +137,73 @@ def fetch_data_for_backtest(
     if not market:
         market = detect_market(symbol)
 
+    # Provider override
+    if provider == "jqdata":
+        return _fetch_jqdata_data(symbol, start_date, end_date)
+
     if market == "cn_stock":
+        # Try JQData first if credentials are available, then fall back to akshare
+        jq_result = _fetch_jqdata_data(symbol, start_date, end_date)
+        if jq_result is not None:
+            return jq_result
         return _fetch_cn_data(symbol, start_date, end_date)
     else:
         return _fetch_yfinance_data(symbol, start_date, end_date, market)
+
+
+def _fetch_jqdata_data(symbol: str, start_date: str, end_date: str):
+    """Fetch A-share data via JQData (if credentials are available)."""
+    import os
+    username = os.environ.get("JQDATA_USERNAME", "")
+    password = os.environ.get("JQDATA_PASSWORD", "")
+    if not username or not password:
+        return None
+
+    try:
+        import jqdatasdk as jq
+        import pandas as pd
+
+        if not jq.is_auth():
+            _stdout = sys.stdout
+            sys.stdout = open(os.devnull, "w")
+            try:
+                jq.auth(username, password)
+            finally:
+                sys.stdout.close()
+                sys.stdout = _stdout
+
+        if not jq.is_auth():
+            return None
+
+        code = symbol.replace(".SS", "").replace(".SZ", "").replace(".SH", "").strip()
+        if code.startswith(("6", "5", "9")):
+            jq_code = f"{code}.XSHG"
+        elif code.startswith(("4", "8")):
+            jq_code = f"{code}.XBJA"
+        else:
+            jq_code = f"{code}.XSHE"
+
+        df = jq.get_price(
+            jq_code,
+            start_date=start_date,
+            end_date=end_date,
+            frequency="daily",
+            fields=["open", "high", "low", "close", "volume"],
+        )
+
+        if df is None or df.empty:
+            print(f"[jqdata] No data for {symbol}", file=sys.stderr)
+            return None
+
+        df = df[["open", "high", "low", "close", "volume"]]
+        df = df.sort_index()
+        return df
+
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"[jqdata] Error fetching {symbol}: {e}", file=sys.stderr)
+        return None
 
 
 def _fetch_cn_data(symbol: str, start_date: str, end_date: str):
@@ -190,6 +256,7 @@ def fetch_klines_batch(
     end_date: str,
     market: str = "",
     max_workers: int = 4,
+    provider: str = "",
 ) -> dict[str, Any]:
     """Fetch K-line data for multiple symbols concurrently.
 
@@ -200,7 +267,7 @@ def fetch_klines_batch(
     results: dict[str, Any] = {}
 
     def _fetch_one(sym: str) -> tuple[str, Any]:
-        return sym, fetch_data_for_backtest(sym, start_date, end_date, market or detect_market(sym))
+        return sym, fetch_data_for_backtest(sym, start_date, end_date, market or detect_market(sym), provider)
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(_fetch_one, sym): sym for sym in symbols}

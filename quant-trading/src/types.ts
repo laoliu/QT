@@ -754,6 +754,7 @@ export type DataProviderConfig = {
   jqdata?: { enabled: boolean; username?: string; password?: string };
   tushare?: { enabled: boolean; token?: string };
   yfinance?: { enabled: boolean };
+  fred?: { enabled: boolean; apiKey?: string };
 };
 
 /** Broker-specific connection configs */
@@ -818,7 +819,7 @@ export type QuantTradingConfig = {
   dataDir?: string;
   defaultMarket?: MarketType;
   /** Shorthand provider selector: "demo" for offline/test, otherwise use `dataProviders`. */
-  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart";
+  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "jqdata" | "smart";
   dataProviders?: DataProviderConfig;
   backtestEngine?: BacktestEngine;
   pythonPath?: string;

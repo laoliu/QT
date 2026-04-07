@@ -1023,4 +1023,494 @@ describe("DataExportService", () => {
       expect(second.rowCount).toBe(8);
     });
   });
+
+  // ════════════════════════════════════════════════════════════
+  // Large Data Volume — Orders, Trades, Equity
+  // ════════════════════════════════════════════════════════════
+
+  describe("large data volume — orders, trades, equity", () => {
+    it("exports 500 orders across CSV, JSON, TSV", async () => {
+      for (let i = 0; i < 500; i++) {
+        await storage.upsertOrder({
+          orderId: `order-${i}`,
+          symbol: `stock-${i % 10}`,
+          market: "cn_stock",
+          side: i % 2 === 0 ? "buy" : "sell",
+          orderType: "limit",
+          quantity: 100 + i,
+          price: 10 + i * 0.1,
+          status: i % 3 === 0 ? "filled" : "pending",
+          strategyId: "bulk-test",
+        });
+      }
+
+      const csvResult = await service.exportOrders({}, { format: "csv" });
+      expect(csvResult.rowCount).toBe(500);
+      expect(csvResult.content.split("\n")).toHaveLength(501);
+
+      const jsonResult = await service.exportOrders({}, { format: "json" });
+      const parsed = JSON.parse(jsonResult.content);
+      expect(parsed).toHaveLength(500);
+
+      const tsvResult = await service.exportOrders({}, { format: "tsv" });
+      expect(tsvResult.rowCount).toBe(500);
+    });
+
+    it("exports 500 trades", async () => {
+      for (let i = 0; i < 500; i++) {
+        await storage.insertTrade({
+          symbol: `stock-${i % 10}`,
+          side: "buy",
+          entryPrice: 100 + i,
+          exitPrice: 105 + i,
+          quantity: 100,
+          netPnl: 500 - i,
+          pnlPct: 0.05 - i * 0.0001,
+          commission: 5.4,
+          strategyId: "bulk-test",
+        });
+      }
+
+      const csvResult = await service.exportTrades({}, { format: "csv" });
+      expect(csvResult.rowCount).toBe(500);
+
+      const jsonResult = await service.exportTrades({}, { format: "json" });
+      expect(JSON.parse(jsonResult.content)).toHaveLength(500);
+    });
+
+    it("exports 500 equity snapshots", async () => {
+      for (let i = 0; i < 500; i++) {
+        const date = new Date(Date.UTC(2022, 0, 1 + i));
+        await storage.upsertEquitySnapshot({
+          date: date.toISOString().slice(0, 10),
+          equity: 100000 + i * 100,
+          cash: 50000 - i * 50,
+          marketValue: 50000 + i * 150,
+          dailyPnl: 100 - (i % 5 === 0 ? 500 : 0),
+          positionCount: 3 + (i % 4),
+          benchmark: 100000 + i * 80,
+        });
+      }
+
+      const csvResult = await service.exportEquity({}, { format: "csv" });
+      expect(csvResult.rowCount).toBe(500);
+
+      const jsonResult = await service.exportEquity({}, { format: "json" });
+      expect(JSON.parse(jsonResult.content)).toHaveLength(500);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // maxRows — Orders, Trades, Equity
+  // ════════════════════════════════════════════════════════════
+
+  describe("maxRows — orders, trades, equity", () => {
+    it("limits order export rows", async () => {
+      for (const o of makeOrders(20)) {
+        await storage.upsertOrder(o);
+      }
+
+      const result = await service.exportOrders({}, { maxRows: 5 });
+      expect(result.rowCount).toBe(5);
+    });
+
+    it("limits trade export rows", async () => {
+      for (const t of makeTrades(15)) {
+        await storage.insertTrade(t);
+      }
+
+      const result = await service.exportTrades({}, { maxRows: 7 });
+      expect(result.rowCount).toBe(7);
+    });
+
+    it("limits equity export rows", async () => {
+      for (const e of makeEquity(20)) {
+        await storage.upsertEquitySnapshot(e);
+      }
+
+      const result = await service.exportEquity({}, { maxRows: 3 });
+      expect(result.rowCount).toBe(3);
+    });
+
+    it("maxRows=1 returns exactly one row", async () => {
+      for (const t of makeTrades(5)) {
+        await storage.insertTrade(t);
+      }
+
+      const result = await service.exportTrades({}, { format: "csv", maxRows: 1 });
+      expect(result.rowCount).toBe(1);
+      const lines = result.content.split("\n");
+      expect(lines).toHaveLength(2); // header + 1 row
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // Unicode / CJK Characters
+  // ════════════════════════════════════════════════════════════
+
+  describe("Unicode / CJK characters", () => {
+    it("handles Chinese characters in signal reason (CSV)", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        reason: "突破前高，放量上涨",
+        strategyId: "龙虎榜策略",
+      });
+
+      const result = await service.exportSignals({}, { format: "csv" });
+      expect(result.rowCount).toBe(1);
+      expect(result.content).toContain("突破前高，放量上涨");
+      expect(result.content).toContain("龙虎榜策略");
+    });
+
+    it("handles Chinese characters in signal reason (JSON)", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        reason: "MACD金叉 + 成交量放大",
+        strategyId: "技术指标策略",
+      });
+
+      const result = await service.exportSignals({}, { format: "json" });
+      const parsed = JSON.parse(result.content);
+      expect(parsed[0].reason).toBe("MACD金叉 + 成交量放大");
+      expect(parsed[0].strategyId).toBe("技术指标策略");
+    });
+
+    it("CSV-escapes Chinese text containing commas", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        reason: "突破前高,放量上涨",
+        strategyId: "test",
+      });
+
+      const result = await service.exportSignals({}, { format: "csv" });
+      // Chinese text with comma should be quoted
+      expect(result.content).toContain('"突破前高,放量上涨"');
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // CSV Column Count Consistency
+  // ════════════════════════════════════════════════════════════
+
+  describe("CSV column count consistency", () => {
+    it("all kline CSV rows have the same column count as header", async () => {
+      await storage.upsertKlines(makeKlines("600519", 10));
+
+      const result = await service.exportKlines(
+        { symbol: "600519" },
+        { format: "csv" },
+      );
+      const lines = result.content.split("\n");
+      const headerColCount = lines[0]!.split(",").length;
+      expect(headerColCount).toBe(9); // KLINE_COLUMNS length
+
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.split(",").length).toBe(headerColCount);
+      }
+    });
+
+    it("all order CSV rows have consistent column count", async () => {
+      for (const o of makeOrders(5)) {
+        await storage.upsertOrder(o);
+      }
+
+      const result = await service.exportOrders({}, { format: "csv" });
+      const lines = result.content.split("\n");
+      const headerColCount = lines[0]!.split(",").length;
+      expect(headerColCount).toBe(13); // ORDER_COLUMNS length
+
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.split(",").length).toBe(headerColCount);
+      }
+    });
+
+    it("all trade CSV rows have consistent column count", async () => {
+      for (const t of makeTrades(5)) {
+        await storage.insertTrade(t);
+      }
+
+      const result = await service.exportTrades({}, { format: "csv" });
+      const lines = result.content.split("\n");
+      const headerColCount = lines[0]!.split(",").length;
+      expect(headerColCount).toBe(12); // TRADE_COLUMNS length
+
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.split(",").length).toBe(headerColCount);
+      }
+    });
+
+    it("all equity CSV rows have consistent column count", async () => {
+      for (const e of makeEquity(5)) {
+        await storage.upsertEquitySnapshot(e);
+      }
+
+      const result = await service.exportEquity({}, { format: "csv" });
+      const lines = result.content.split("\n");
+      const headerColCount = lines[0]!.split(",").length;
+      expect(headerColCount).toBe(7); // EQUITY_COLUMNS length
+
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.split(",").length).toBe(headerColCount);
+      }
+    });
+
+    it("TSV column count matches header", async () => {
+      await storage.upsertKlines(makeKlines("600519", 5));
+
+      const result = await service.exportKlines(
+        { symbol: "600519" },
+        { format: "tsv" },
+      );
+      const lines = result.content.split("\n");
+      const headerColCount = lines[0]!.split("\t").length;
+
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.split("\t").length).toBe(headerColCount);
+      }
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // Carriage Return Handling
+  // ════════════════════════════════════════════════════════════
+
+  describe("carriage return handling", () => {
+    it("escapes carriage return in CSV values", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        reason: "Line1\r\nLine2",
+        strategyId: "test",
+      });
+
+      const result = await service.exportSignals({}, { format: "csv" });
+      // \r\n in value should be quoted
+      expect(result.content).toContain('"Line1\r\nLine2"');
+      expect(result.rowCount).toBe(1);
+    });
+
+    it("escapes standalone carriage return in CSV values", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        reason: "Line1\rLine2",
+        strategyId: "test",
+      });
+
+      const result = await service.exportSignals({}, { format: "csv" });
+      expect(result.content).toContain('"Line1\rLine2"');
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // Concurrent Export Operations
+  // ════════════════════════════════════════════════════════════
+
+  describe("concurrent export operations", () => {
+    it("handles multiple simultaneous exports without interference", async () => {
+      await storage.upsertKlines(makeKlines("600519", 10));
+      for (const s of makeSignals(5)) await storage.insertSignal(s);
+      for (const o of makeOrders(4)) await storage.upsertOrder(o);
+      for (const t of makeTrades(3)) await storage.insertTrade(t);
+      for (const e of makeEquity(7)) await storage.upsertEquitySnapshot(e);
+
+      // Fire all exports concurrently
+      const [klines, signals, orders, trades, equity] = await Promise.all([
+        service.exportKlines({ symbol: "600519" }, { format: "csv" }),
+        service.exportSignals({}, { format: "json" }),
+        service.exportOrders({}, { format: "tsv" }),
+        service.exportTrades({}, { format: "csv" }),
+        service.exportEquity({}, { format: "json" }),
+      ]);
+
+      expect(klines.rowCount).toBe(10);
+      expect(klines.format).toBe("csv");
+      expect(signals.rowCount).toBe(5);
+      expect(signals.format).toBe("json");
+      expect(orders.rowCount).toBe(4);
+      expect(orders.format).toBe("tsv");
+      expect(trades.rowCount).toBe(3);
+      expect(trades.format).toBe("csv");
+      expect(equity.rowCount).toBe(7);
+      expect(equity.format).toBe("json");
+    });
+
+    it("concurrent exports of same data type in different formats produce consistent counts", async () => {
+      await storage.upsertKlines(makeKlines("600519", 20));
+
+      const [csv, json, tsv] = await Promise.all([
+        service.exportKlines({ symbol: "600519" }, { format: "csv" }),
+        service.exportKlines({ symbol: "600519" }, { format: "json" }),
+        service.exportKlines({ symbol: "600519" }, { format: "tsv" }),
+      ]);
+
+      expect(csv.rowCount).toBe(20);
+      expect(json.rowCount).toBe(20);
+      expect(tsv.rowCount).toBe(20);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // Combined Filters
+  // ════════════════════════════════════════════════════════════
+
+  describe("combined filters", () => {
+    it("applies both symbol filter and maxRows on orders", async () => {
+      for (const o of makeOrders(10, "600519")) await storage.upsertOrder(o);
+      for (let i = 0; i < 5; i++) {
+        await storage.upsertOrder({
+          orderId: `other-${i}`,
+          symbol: "000001",
+          side: "buy",
+          orderType: "limit",
+          quantity: 100,
+          price: 10,
+          status: "filled",
+        });
+      }
+
+      const result = await service.exportOrders(
+        { symbol: "600519" },
+        { format: "json", maxRows: 3 },
+      );
+      expect(result.rowCount).toBe(3);
+      const parsed = JSON.parse(result.content);
+      for (const row of parsed) {
+        expect(row.symbol).toBe("600519");
+      }
+    });
+
+    it("applies both date filter and maxRows on equity", async () => {
+      for (const e of makeEquity(30)) {
+        await storage.upsertEquitySnapshot(e);
+      }
+
+      const result = await service.exportEquity(
+        { startDate: "2024-01-10", endDate: "2024-01-25" },
+        { maxRows: 5 },
+      );
+      expect(result.rowCount).toBe(5);
+    });
+
+    it("symbol filter + strategyId filter on signals", async () => {
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 2),
+        symbol: "600519",
+        direction: "buy",
+        price: 1800,
+        strategyId: "macd",
+      });
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 3),
+        symbol: "600519",
+        direction: "sell",
+        price: 1850,
+        strategyId: "rsi",
+      });
+      await storage.insertSignal({
+        timestamp: Date.UTC(2024, 0, 4),
+        symbol: "000001",
+        direction: "buy",
+        price: 10,
+        strategyId: "macd",
+      });
+
+      const result = await service.exportSignals(
+        { symbol: "600519", strategyId: "macd" },
+        { format: "json" },
+      );
+      expect(result.rowCount).toBe(1);
+      const parsed = JSON.parse(result.content);
+      expect(parsed[0].symbol).toBe("600519");
+      expect(parsed[0].strategyId).toBe("macd");
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // JSON Array Structure Validation
+  // ════════════════════════════════════════════════════════════
+
+  describe("JSON structure validation", () => {
+    it("JSON export always produces valid JSON array", async () => {
+      // Empty data
+      const empty = await service.exportKlines(
+        { symbol: "NONE" },
+        { format: "json" },
+      );
+      expect(() => JSON.parse(empty.content)).not.toThrow();
+      expect(Array.isArray(JSON.parse(empty.content))).toBe(true);
+
+      // Single row
+      await storage.upsertKlines(makeKlines("600519", 1));
+      const single = await service.exportKlines(
+        { symbol: "600519" },
+        { format: "json" },
+      );
+      expect(Array.isArray(JSON.parse(single.content))).toBe(true);
+
+      // Multiple rows
+      await storage.upsertKlines(makeKlines("600519", 10));
+      const multi = await service.exportKlines(
+        { symbol: "600519" },
+        { format: "json" },
+      );
+      expect(Array.isArray(JSON.parse(multi.content))).toBe(true);
+    });
+
+    it("JSON keys match expected column names for each data type", async () => {
+      await storage.upsertKlines(makeKlines("600519", 1));
+      for (const s of makeSignals(1)) await storage.insertSignal(s);
+      for (const o of makeOrders(1)) await storage.upsertOrder(o);
+      for (const t of makeTrades(1)) await storage.insertTrade(t);
+      for (const e of makeEquity(1)) await storage.upsertEquitySnapshot(e);
+
+      const klineJson = JSON.parse(
+        (await service.exportKlines({ symbol: "600519" }, { format: "json" })).content,
+      );
+      expect(Object.keys(klineJson[0])).toEqual(
+        expect.arrayContaining(["symbol", "date", "open", "high", "low", "close", "volume"]),
+      );
+
+      const signalJson = JSON.parse(
+        (await service.exportSignals({}, { format: "json" })).content,
+      );
+      expect(Object.keys(signalJson[0])).toEqual(
+        expect.arrayContaining(["symbol", "direction", "price"]),
+      );
+
+      const orderJson = JSON.parse(
+        (await service.exportOrders({}, { format: "json" })).content,
+      );
+      expect(Object.keys(orderJson[0])).toEqual(
+        expect.arrayContaining(["orderId", "symbol", "side", "status"]),
+      );
+
+      const tradeJson = JSON.parse(
+        (await service.exportTrades({}, { format: "json" })).content,
+      );
+      expect(Object.keys(tradeJson[0])).toEqual(
+        expect.arrayContaining(["symbol", "entryPrice", "exitPrice", "netPnl"]),
+      );
+
+      const equityJson = JSON.parse(
+        (await service.exportEquity({}, { format: "json" })).content,
+      );
+      expect(Object.keys(equityJson[0])).toEqual(
+        expect.arrayContaining(["date", "equity", "cash", "marketValue"]),
+      );
+    });
+  });
 });

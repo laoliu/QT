@@ -531,9 +531,11 @@ describe("morning_brief — AI stock recommendations (classic)", () => {
 
     const result = await template.generate(executeTool, {} as never);
     expect(result).toContain("⭐ 600519 贵州茅台");
-    // No score or reason suffix
+    // No score or reason suffix on the stock line itself
     expect(result).not.toContain("评分:");
-    expect(result).not.toContain("—");
+    // The "—" in section headers like "AI推荐 — 经典选股" is expected;
+    // verify no reason suffix appears after the stock name
+    expect(result).toMatch(/⭐ 600519 贵州茅台\n/);
   });
 });
 

@@ -1075,6 +1075,8 @@ const quantTradingPlugin = {
             pnlPct: alert.pnlPct,
           });
         },
+        // Wire EquityHistory for cumulative max drawdown checks
+        () => getActiveEquityHistory(),
       ),
     );
     // LiveEngine is registered as a service. When tradingAccount.autoStart is

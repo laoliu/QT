@@ -5,6 +5,7 @@ import type { OpenClawPluginServiceContext } from "openclaw/plugin-sdk/core";
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
+import { EquityHistory } from "./equity-history.js";
 import { OrderManager } from "./order-manager.js";
 
 // Mock isMarketOpen
@@ -229,6 +230,162 @@ describe("PnlMonitor", () => {
     // Second tick should NOT fire again (de-dup)
     await vi.advanceTimersByTimeAsync(1100);
     expect(api.notify).toHaveBeenCalledTimes(1);
+
+    await svc.stop?.(dummyCtx);
+  });
+
+  it("emits warning alert when cumulative max drawdown exceeds warning threshold", async () => {
+    const api = makeMockApi();
+    const config = {
+      pnlMonitor: {
+        pollIntervalSecs: 1,
+        warningPct: -0.2,
+        circuitBreakerPct: -0.3,
+        drawdownWarningPct: 0.10,
+        drawdownCriticalPct: 0.15,
+        enabled: true,
+      },
+    } as QuantTradingConfig;
+
+    const account = makeAccount({ totalAssets: 900_000, todayProfit: 0 });
+    const mgr = makeMockOrderManager(account);
+
+    // Build equity history with a peak of 1M and current equity at 900k (10% drawdown)
+    const eh = new EquityHistory({ dataDir: "/tmp/test-eh-dd" });
+    eh.addSnapshot({
+      date: "2026-04-01",
+      equity: 1_000_000,
+      cash: 500_000,
+      marketValue: 500_000,
+      dailyPnl: 0,
+      positionCount: 2,
+    });
+
+    const svc = createPnlMonitorService(
+      api, config, () => mgr, undefined, undefined, () => eh,
+    );
+    await svc.start(dummyCtx);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.notify).toHaveBeenCalledTimes(1);
+    const notifyCall = api.notify.mock.calls[0]![0] as string;
+    expect(notifyCall).toContain("⚠️");
+    expect(notifyCall).toContain("最大回撤");
+    expect(notifyCall).toContain("预警线");
+
+    await svc.stop?.(dummyCtx);
+  });
+
+  it("emits critical alert and pauses engine when drawdown exceeds stop-loss line", async () => {
+    const api = makeMockApi();
+    const pauseEngine = vi.fn().mockResolvedValue(undefined);
+    const config = {
+      pnlMonitor: {
+        pollIntervalSecs: 1,
+        warningPct: -0.2,
+        circuitBreakerPct: -0.3,
+        drawdownWarningPct: 0.10,
+        drawdownCriticalPct: 0.15,
+        enabled: true,
+      },
+    } as QuantTradingConfig;
+
+    // 16% drawdown: peak 1M, current 840k
+    const account = makeAccount({ totalAssets: 840_000, todayProfit: 0 });
+    const mgr = makeMockOrderManager(account);
+
+    const eh = new EquityHistory({ dataDir: "/tmp/test-eh-dd2" });
+    eh.addSnapshot({
+      date: "2026-04-01",
+      equity: 1_000_000,
+      cash: 500_000,
+      marketValue: 500_000,
+      dailyPnl: 0,
+      positionCount: 2,
+    });
+
+    const svc = createPnlMonitorService(
+      api, config, () => mgr, pauseEngine, undefined, () => eh,
+    );
+    await svc.start(dummyCtx);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.notify).toHaveBeenCalled();
+    const calls = api.notify.mock.calls.map((c: unknown[]) => c[0] as string);
+    const criticalCall = calls.find((c: string) => c.includes("🚨"));
+    expect(criticalCall).toBeDefined();
+    expect(criticalCall).toContain("止损线");
+    expect(pauseEngine).toHaveBeenCalledTimes(1);
+
+    await svc.stop?.(dummyCtx);
+  });
+
+  it("emits warning alert when position concentration exceeds threshold", async () => {
+    const api = makeMockApi();
+    const config = {
+      pnlMonitor: {
+        pollIntervalSecs: 1,
+        warningPct: -0.2,
+        circuitBreakerPct: -0.3,
+        concentrationWarningPct: 0.25,
+        enabled: true,
+      },
+    } as QuantTradingConfig;
+
+    // Position: 300k marketValue out of 1M total = 30% > 25% threshold
+    const account = makeAccount({ totalAssets: 1_000_000, todayProfit: 0 });
+    const positions = [
+      makePosition("600519", {
+        avgCost: 100,
+        currentPrice: 100,
+        quantity: 3000,
+        marketValue: 300_000,
+      }),
+    ];
+    const mgr = makeMockOrderManager(account, positions);
+
+    const svc = createPnlMonitorService(api, config, () => mgr);
+    await svc.start(dummyCtx);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.notify).toHaveBeenCalledTimes(1);
+    const notifyCall = api.notify.mock.calls[0]![0] as string;
+    expect(notifyCall).toContain("⚠️");
+    expect(notifyCall).toContain("600519");
+    expect(notifyCall).toContain("集中度");
+
+    await svc.stop?.(dummyCtx);
+  });
+
+  it("does not emit concentration alert when position is under threshold", async () => {
+    const api = makeMockApi();
+    const config = {
+      pnlMonitor: {
+        pollIntervalSecs: 1,
+        warningPct: -0.2,
+        circuitBreakerPct: -0.3,
+        concentrationWarningPct: 0.25,
+        enabled: true,
+      },
+    } as QuantTradingConfig;
+
+    // Position: 200k marketValue out of 1M total = 20% < 25% threshold
+    const account = makeAccount({ totalAssets: 1_000_000, todayProfit: 0 });
+    const positions = [
+      makePosition("600519", {
+        avgCost: 100,
+        currentPrice: 100,
+        quantity: 2000,
+        marketValue: 200_000,
+      }),
+    ];
+    const mgr = makeMockOrderManager(account, positions);
+
+    const svc = createPnlMonitorService(api, config, () => mgr);
+    await svc.start(dummyCtx);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(api.notify).not.toHaveBeenCalled();
 
     await svc.stop?.(dummyCtx);
   });

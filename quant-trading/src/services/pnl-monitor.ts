@@ -14,6 +14,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
+import type { EquityHistory } from "./equity-history.js";
 import { tryNotify } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
 
@@ -28,7 +29,7 @@ export type PnlAlert = {
   /** Current daily PnL percentage */
   pnlPct?: number;
   /** Which metric triggered the alert */
-  trigger: "daily_pnl" | "position_loss" | "circuit_breaker";
+  trigger: "daily_pnl" | "position_loss" | "circuit_breaker" | "max_drawdown" | "position_concentration";
 };
 
 // ── Config ───────────────────────────────────────────────────────
@@ -44,6 +45,12 @@ export type PnlMonitorConfig = {
   positionWarningPct?: number;
   /** Enable/disable the monitor (default true) */
   enabled?: boolean;
+  /** Cumulative max drawdown warning threshold as pct (default 0.10 = 10%) */
+  drawdownWarningPct?: number;
+  /** Cumulative max drawdown stop-loss threshold as pct (default 0.15 = 15%) — triggers engine pause */
+  drawdownCriticalPct?: number;
+  /** Single position concentration warning threshold as pct of total assets (default 0.25 = 25%) */
+  concentrationWarningPct?: number;
 };
 
 const DEFAULTS: Required<PnlMonitorConfig> = {
@@ -52,6 +59,9 @@ const DEFAULTS: Required<PnlMonitorConfig> = {
   circuitBreakerPct: -0.05,
   positionWarningPct: -0.08,
   enabled: true,
+  drawdownWarningPct: 0.10,
+  drawdownCriticalPct: 0.15,
+  concentrationWarningPct: 0.25,
 };
 
 // ── Emoji by severity ────────────────────────────────────────────
@@ -71,6 +81,8 @@ export function createPnlMonitorService(
   pauseEngine?: () => Promise<void>,
   /** Optional callback invoked on every alert (e.g. for persisting to AlertStore). */
   onAlert?: (alert: PnlAlert) => void,
+  /** Optional EquityHistory for cumulative max drawdown checks. */
+  getEquityHistory?: () => EquityHistory | null,
 ): OpenClawPluginService {
   const monitorCfg: Required<PnlMonitorConfig> = {
     ...DEFAULTS,
@@ -120,6 +132,83 @@ export function createPnlMonitorService(
           timestamp: new Date().toISOString(),
           pnlPct: lossPct,
           trigger: "position_loss",
+        });
+      }
+    }
+  };
+
+  /**
+   * Check cumulative max drawdown against warning and critical thresholds.
+   * Returns true if engine was paused (critical drawdown), so caller can skip further checks.
+   */
+  const checkDrawdown = async (totalAssets: number): Promise<boolean> => {
+    const eh = getEquityHistory?.();
+    if (!eh) return false;
+
+    const maxDdPct = eh.getMaxDrawdownPct(totalAssets);
+    const ddFraction = maxDdPct / 100; // convert to 0-1 range for comparison
+
+    // ── Critical: stop-loss line (default 15%) ──
+    if (ddFraction >= monitorCfg.drawdownCriticalPct) {
+      await emitAlert({
+        severity: "critical",
+        message:
+          `组合累计最大回撤 ${maxDdPct.toFixed(2)}% 触及止损线 ` +
+          `${(monitorCfg.drawdownCriticalPct * 100).toFixed(0)}%，正在暂停交易引擎`,
+        timestamp: new Date().toISOString(),
+        pnlPct: -ddFraction,
+        trigger: "max_drawdown",
+      });
+      if (pauseEngine) {
+        try {
+          await pauseEngine();
+          api.logger.warn("PnlMonitor: 交易引擎已因最大回撤触及止损线被暂停");
+        } catch (err) {
+          api.logger.error(`PnlMonitor: 暂停引擎失败: ${(err as Error).message}`);
+        }
+      }
+      return true;
+    }
+
+    // ── Warning: alert line (default 10%) ──
+    if (ddFraction >= monitorCfg.drawdownWarningPct) {
+      await emitAlert({
+        severity: "warning",
+        message:
+          `组合累计最大回撤 ${maxDdPct.toFixed(2)}% 达到预警线 ` +
+          `${(monitorCfg.drawdownWarningPct * 100).toFixed(0)}%，请关注风险`,
+        timestamp: new Date().toISOString(),
+        pnlPct: -ddFraction,
+        trigger: "max_drawdown",
+      });
+    }
+
+    return false;
+  };
+
+  /**
+   * Check position concentration: warn if any single holding exceeds the threshold
+   * as a percentage of total assets.
+   */
+  const checkConcentration = async (
+    positions: LivePosition[],
+    totalAssets: number,
+  ): Promise<void> => {
+    if (totalAssets <= 0) return;
+
+    for (const pos of positions) {
+      const mv = pos.marketValue ?? (pos.currentPrice ? pos.currentPrice * pos.quantity : 0);
+      if (mv <= 0) continue;
+      const weightPct = mv / totalAssets;
+      if (weightPct >= monitorCfg.concentrationWarningPct) {
+        await emitAlert({
+          severity: "warning",
+          message:
+            `${pos.symbol} 仓位占比 ${(weightPct * 100).toFixed(1)}% ` +
+            `超过集中度预警线 ${(monitorCfg.concentrationWarningPct * 100).toFixed(0)}%，请注意分散风险`,
+          timestamp: new Date().toISOString(),
+          pnlPct: weightPct,
+          trigger: "position_concentration",
         });
       }
     }
@@ -187,6 +276,13 @@ export function createPnlMonitorService(
 
     // ── Per-position loss check ──
     await checkPositionLosses(positions);
+
+    // ── Cumulative max drawdown check ──
+    const paused = await checkDrawdown(totalAssets);
+    if (paused) return; // Engine paused due to critical drawdown, skip remaining checks
+
+    // ── Position concentration check ──
+    await checkConcentration(positions, totalAssets);
   };
 
   return {
@@ -199,7 +295,10 @@ export function createPnlMonitorService(
       api.logger.info(
         `PnlMonitor: started (poll=${monitorCfg.pollIntervalSecs}s, ` +
           `warn=${(monitorCfg.warningPct * 100).toFixed(0)}%, ` +
-          `breaker=${(monitorCfg.circuitBreakerPct * 100).toFixed(0)}%)`,
+          `breaker=${(monitorCfg.circuitBreakerPct * 100).toFixed(0)}%, ` +
+          `ddWarn=${(monitorCfg.drawdownWarningPct * 100).toFixed(0)}%, ` +
+          `ddCrit=${(monitorCfg.drawdownCriticalPct * 100).toFixed(0)}%, ` +
+          `concWarn=${(monitorCfg.concentrationWarningPct * 100).toFixed(0)}%)`,
       );
       interval = setInterval(() => void tick(), monitorCfg.pollIntervalSecs * 1000);
       // Run first check immediately

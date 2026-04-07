@@ -313,4 +313,35 @@ describe("EquityHistory", () => {
     await hist2.load();
     expect(hist2.count).toBe(1);
   });
+
+  // ── getMaxDrawdownPct ─────────────────────────────────────
+
+  it("getMaxDrawdownPct returns 0 for empty history", () => {
+    const hist = new EquityHistory({ dataDir });
+    expect(hist.getMaxDrawdownPct()).toBe(0);
+  });
+
+  it("getMaxDrawdownPct computes drawdown from snapshots only", () => {
+    const hist = new EquityHistory({ dataDir });
+    hist.addSnapshot({ date: "2024-01-01", equity: 100000, cash: 80000, marketValue: 20000, dailyPnl: 0, positionCount: 2 });
+    hist.addSnapshot({ date: "2024-01-02", equity: 110000, cash: 90000, marketValue: 20000, dailyPnl: 10000, positionCount: 2 });
+    hist.addSnapshot({ date: "2024-01-03", equity: 95000, cash: 75000, marketValue: 20000, dailyPnl: -15000, positionCount: 2 });
+    // Peak = 110000, trough = 95000 → dd = 15000/110000 ≈ 13.64%
+    expect(hist.getMaxDrawdownPct()).toBeCloseTo(13.64, 1);
+  });
+
+  it("getMaxDrawdownPct uses currentEquity for real-time update", () => {
+    const hist = new EquityHistory({ dataDir });
+    hist.addSnapshot({ date: "2024-01-01", equity: 100000, cash: 80000, marketValue: 20000, dailyPnl: 0, positionCount: 2 });
+    hist.addSnapshot({ date: "2024-01-02", equity: 110000, cash: 90000, marketValue: 20000, dailyPnl: 10000, positionCount: 2 });
+    // With currentEquity=88000: peak=110000, dd=22000/110000 = 20%
+    expect(hist.getMaxDrawdownPct(88000)).toBeCloseTo(20.0, 1);
+  });
+
+  it("getMaxDrawdownPct updates peak with currentEquity if higher", () => {
+    const hist = new EquityHistory({ dataDir });
+    hist.addSnapshot({ date: "2024-01-01", equity: 100000, cash: 80000, marketValue: 20000, dailyPnl: 0, positionCount: 2 });
+    // currentEquity=120000 becomes new peak; no drawdown
+    expect(hist.getMaxDrawdownPct(120000)).toBe(0);
+  });
 });

@@ -835,6 +835,9 @@ export type QuantTradingConfig = {
     circuitBreakerPct?: number;
     positionWarningPct?: number;
     enabled?: boolean;
+    drawdownWarningPct?: number;
+    drawdownCriticalPct?: number;
+    concentrationWarningPct?: number;
   };
   /**
    * Cross-machine signal webhook configuration.

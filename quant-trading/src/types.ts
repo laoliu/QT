@@ -824,6 +824,8 @@ export type QuantTradingConfig = {
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
   notifications?: NotificationConfig;
+  /** Multi-channel push service configuration (企业微信/钉钉/Bark/Server酱). */
+  pushChannels?: import("./services/push-service.js").PushChannelsConfig;
   /**
    * PnL monitor configuration.
    * Background service that polls account data and emits alerts

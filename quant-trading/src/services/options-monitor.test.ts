@@ -13,6 +13,7 @@ vi.mock("../broker/paper-broker.js", () => ({
 }));
 vi.mock("./notify-helper.js", () => ({
   tryNotify: vi.fn(),
+  tryNotifyWithPush: vi.fn(),
 }));
 
 const { createOptionsMonitorService } = await import("./options-monitor.js");

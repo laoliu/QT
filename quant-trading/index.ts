@@ -99,11 +99,12 @@ import { EventBus } from "./src/services/event-bus.js";
 import { ExplorationHistoryStore } from "./src/services/exploration-history-store.js";
 import { FavoritesStore } from "./src/services/favorites-store.js";
 import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
-import { tryNotify } from "./src/services/notify-helper.js";
+import { tryNotify, tryNotifyWithPush, setPushService } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
 import { PriceAlertService } from "./src/services/price-alert.js";
+import { PushService } from "./src/services/push-service.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
@@ -261,6 +262,10 @@ const quantTradingPlugin = {
       }
     }
 
+    // ── Push Service (multi-channel external notifications) ──────
+    const pushService = new PushService(config.pushChannels, api.logger);
+    setPushService(pushService);
+
     // ── Live Engine singleton (started/stopped as a service) ─────────
     const liveEngine = new LiveEngine(config, api);
     const getEngine = () => liveEngine;
@@ -344,7 +349,7 @@ const quantTradingPlugin = {
     const strategyHealthMonitor = new StrategyHealthMonitor(
       config.dataDir ?? ".",
       {},
-      (msg) => void tryNotify(api, msg),
+      (msg) => void tryNotifyWithPush(api, msg, "warning", "策略健康"),
     );
 
     // ── Conditional Order Service (止损/止盈/跟踪止损) ─────────────
@@ -366,7 +371,7 @@ const quantTradingPlugin = {
         return quote?.price ?? null;
       },
     );
-    dcaScheduleService.setNotify((m: string) => tryNotify(api, m));
+    dcaScheduleService.setNotify((m: string) => tryNotifyWithPush(api, m, "info", "定投"));
     void dcaScheduleService.load();
 
     // ── Breakout Monitor (突破监控) ────────────────────────────
@@ -382,7 +387,7 @@ const quantTradingPlugin = {
       if (!quote) return null;
       return { price: quote.price, volume: quote.volume, changePct: quote.changePct };
     });
-    breakoutMonitor.setNotifyFn((m: string) => tryNotify(api, m));
+    breakoutMonitor.setNotifyFn((m: string) => tryNotifyWithPush(api, m, "warning", "突破监控"));
     breakoutMonitor.setOrderFn(async (params) => {
       const mgr = liveEngine.orderManager;
       if (!mgr) return { ok: false, reason: "引擎未启动" };
@@ -716,7 +721,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback — delivers task results to the user's chat
-    taskScheduler.setNotify((m: string) => tryNotify(api, m));
+    taskScheduler.setNotify((m: string) => tryNotifyWithPush(api, m, "info", "定时任务"));
 
     /** Lazily-extended tool map — reuses instances from toolInstances + adds price_alert. */
     let fullToolMap: Record<
@@ -772,7 +777,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback
-    priceAlertService.setNotify((m: string) => tryNotify(api, m));
+    priceAlertService.setNotify((m: string) => tryNotifyWithPush(api, m, "critical", "价格预警"));
     // Wire quote function
     const dataProviderForAlerts = createDataProvider(config);
     priceAlertService.setQuoteFn(async (symbol: string) => {
@@ -806,7 +811,7 @@ const quantTradingPlugin = {
     });
 
     // ── Conditional Order Service wiring ──────────────────────────
-    conditionalOrderService.setNotify((m: string) => tryNotify(api, m));
+    conditionalOrderService.setNotify((m: string) => tryNotifyWithPush(api, m, "critical", "条件单"));
     conditionalOrderService.setQuoteFn(async (symbol: string) => {
       const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
       const market = detectMarketFromSymbol(symbol);

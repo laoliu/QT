@@ -22,7 +22,7 @@ import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
 import type { AlertStore } from "./alert-store.js";
 import type { EventBus } from "./event-bus.js";
-import { tryNotify } from "./notify-helper.js";
+import { tryNotifyWithPush } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
 
 function getSignalsPath(config: QuantTradingConfig): string {
@@ -298,7 +298,7 @@ export function createSignalMonitorService(
       strategyId: sig.strategyId,
     });
 
-    await tryNotify(api, msg);
+    await tryNotifyWithPush(api, msg, "warning", "策略信号");
   };
 
   return {

@@ -14,7 +14,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
-import { tryNotify } from "./notify-helper.js";
+import { tryNotifyWithPush } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
 
 // ── Alert types ──────────────────────────────────────────────────
@@ -104,7 +104,7 @@ export function createPnlMonitorService(
     // Notify alert store (if wired)
     onAlert?.(alert);
 
-    await tryNotify(api, msg);
+    await tryNotifyWithPush(api, msg, alert.severity, "PnL Monitor");
   };
 
   const checkPositionLosses = async (positions: LivePosition[]): Promise<void> => {

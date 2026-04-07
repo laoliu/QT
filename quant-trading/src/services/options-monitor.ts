@@ -13,7 +13,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { LivePosition, QuantTradingConfig } from "../types.js";
-import { tryNotify } from "./notify-helper.js";
+import { tryNotifyWithPush } from "./notify-helper.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -113,7 +113,7 @@ export function createOptionsMonitorService(
     api.logger.warn(`[options-monitor] ${emoji} ${message}`);
 
     if (severity !== "info") {
-      tryNotify(api, `${emoji} 期权风控: ${message}`);
+      tryNotifyWithPush(api, `${emoji} 期权风控: ${message}`, severity, "期权风控");
     }
   }
 

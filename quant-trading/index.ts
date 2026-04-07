@@ -103,6 +103,11 @@ import { tryNotify } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
+import {
+  createOrderReconciliationService,
+  type OrderReconciliationServiceInstance,
+} from "./src/services/order-reconciliation.js";
+import { createPositionAnomalyMonitorService } from "./src/services/position-anomaly-monitor.js";
 import { PriceAlertService } from "./src/services/price-alert.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
@@ -127,6 +132,7 @@ import { createCustomStrategyTool } from "./src/tools/custom-strategy.js";
 import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
+import { createDividendTrackerTool } from "./src/tools/dividend-tracker.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
@@ -142,9 +148,11 @@ import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
 import { createOptionsTradingTool } from "./src/tools/options-trading.js";
+import { createOrderReconciliationTool } from "./src/tools/order-reconciliation.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
 import { createPolymarketOddsTool } from "./src/tools/polymarket-odds.js";
 import { createPortfolioBacktestTool } from "./src/tools/portfolio-backtest.js";
+import { createPortfolioNewsTool } from "./src/tools/portfolio-news.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
 import { createPortfolioTool } from "./src/tools/portfolio.js";
 import { createPositionSizingTool } from "./src/tools/position-sizing.js";
@@ -152,6 +160,7 @@ import { createPriceAlertTool } from "./src/tools/price-alert.js";
 import { createRiskAnalysisTool } from "./src/tools/risk-analysis.js";
 import { createScheduledTaskTool } from "./src/tools/scheduled-task.js";
 import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
+import { createSectorRotationTool } from "./src/tools/sector-rotation.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
@@ -643,6 +652,9 @@ const quantTradingPlugin = {
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
       stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
+      dividend_tracker: createDividendTrackerTool(api, config, () => liveEngine.getPositions()),
+      sector_rotation: createSectorRotationTool(api, config, () => liveEngine.getPositions()),
+      portfolio_news: createPortfolioNewsTool(api, config, () => liveEngine.getPositions()),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
           const end = new Date().toISOString().slice(0, 10);
@@ -701,6 +713,9 @@ const quantTradingPlugin = {
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",
       stock_recommend: "智能选股推荐",
+      dividend_tracker: "分红追踪",
+      sector_rotation: "板块轮动",
+      portfolio_news: "持仓新闻",
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
@@ -1090,6 +1105,46 @@ const quantTradingPlugin = {
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
 
+    // Register Position Anomaly Monitor (sharp drop / volume spike / MA break)
+    api.registerService(
+      createPositionAnomalyMonitorService(
+        api,
+        config,
+        () => liveEngine.getPositions(),
+        async (symbol, market) => {
+          const quote = await dataProviderForAlerts.getQuote(symbol, market as never);
+          if (!quote) return null;
+          return { price: quote.price, changePct: quote.changePct, volume: quote.volume };
+        },
+        async (symbol, interval, startDate, endDate, market) =>
+          dataProviderForAlerts.getKlines(symbol, interval as never, startDate, endDate, market as never),
+      ),
+    );
+
+    // Register Order Reconciliation Monitor (stuck orders / position mismatches)
+    const orderReconciliationService = createOrderReconciliationService(
+      api,
+      config,
+      async () => {
+        const mgr = liveEngine.orderManager;
+        if (!mgr) return [];
+        return mgr.getOrders({ status: ["pending", "submitted", "partial"] });
+      },
+      () => liveEngine.getPositions(),
+      async () => {
+        const broker = liveEngine.broker;
+        if (!broker) return [];
+        return broker.queryPositions();
+      },
+    ) as OrderReconciliationServiceInstance;
+    api.registerService(orderReconciliationService);
+
+    // Register order_reconciliation tool (after service is created)
+    api.registerTool(
+      wrapTool(createOrderReconciliationTool(api, orderReconciliationService), "订单对账"),
+      { names: ["order_reconciliation"] },
+    );
+
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";
     const hasTickSource =
@@ -1354,10 +1409,20 @@ stock_recommend 是一个便捷的一键工具，自动完成 全市场选股→
 
 ### 板块分析流程（用户问"哪个板块好/热点板块"时）
 1. sector_analysis — 板块排名、涨跌幅排行
-2. fund_flow(action=rank) — 板块级资金净流入排名
-3. sector_synergy — 板块协同效应、联动分析
-4. lianban_analysis — 连板梯队，辨识市场主线
-5. dragon_tiger — 龙虎榜异动，游资动向
+2. sector_rotation(action=momentum) — 多周期板块动量排名（1周/4周/12周）
+3. sector_rotation(action=rotation_signal) — 板块轮动信号（哪些板块正在走强/走弱）
+4. fund_flow(action=rank) — 板块级资金净流入排名
+5. sector_synergy — 板块协同效应、联动分析
+6. lianban_analysis — 连板梯队，辨识市场主线
+7. dragon_tiger — 龙虎榜异动，游资动向
+
+### 持仓管理流程（用户问"我的持仓怎么样/帮我检查持仓"时）
+1. portfolio(action=show) — 当前持仓概览
+2. order_reconciliation(action=check) — 订单对账，检测卡单/持仓不一致
+3. portfolio_news(action=scan) — 持仓新闻扫描，发现重大事件
+4. sector_rotation(action=portfolio_check) — 持仓板块强弱分析
+5. dividend_tracker(action=upcoming) — 即将除权除息的持仓
+6. conditional_order(action=list) — 已设置的止损止盈条件单
 
 ### 每日简报模板（用户说"简报/早报/收盘"时）
 用以下结构组织回答：

@@ -48,6 +48,41 @@ async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): 
   await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
 }
 
+/** Append a trade record to the paper trade history file. */
+async function recordPaperTrade(
+  config: QuantTradingConfig,
+  trade: {
+    symbol: string;
+    name?: string;
+    side: "buy" | "sell";
+    quantity: number;
+    price: number;
+  },
+): Promise<void> {
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const histPath = path.join(dir, "trade-history.json");
+  let history: Array<Record<string, unknown>> = [];
+  try {
+    const raw = await fs.readFile(histPath, "utf-8");
+    history = JSON.parse(raw) as Array<Record<string, unknown>>;
+  } catch {
+    // file doesn't exist yet
+  }
+  history.push({
+    timestamp: new Date().toISOString(),
+    symbol: trade.symbol,
+    name: trade.name,
+    side: trade.side,
+    quantity: trade.quantity,
+    price: trade.price,
+    amount: trade.quantity * trade.price,
+  });
+  // Keep last 500 trades
+  if (history.length > 500) history = history.slice(-500);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(histPath, JSON.stringify(history, null, 2));
+}
+
 export function createPortfolioTool(
   api: OpenClawPluginApi,
   config: QuantTradingConfig,
@@ -183,6 +218,13 @@ export function createPortfolioTool(
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
           await savePortfolio(portfolio, config);
+          await recordPaperTrade(config, {
+            symbol,
+            name: (args.name as string) ?? symbol,
+            side: "buy",
+            quantity,
+            price,
+          });
           return {
             success: true,
             message: `买入 ${symbol} ${quantity}股 @ ¥${price}`,
@@ -213,6 +255,13 @@ export function createPortfolioTool(
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
           await savePortfolio(portfolio, config);
+          await recordPaperTrade(config, {
+            symbol,
+            name: pos.name ?? symbol,
+            side: "sell",
+            quantity,
+            price,
+          });
           return {
             success: true,
             message: `卖出 ${symbol} ${quantity}股 @ ¥${price}`,

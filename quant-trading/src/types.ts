@@ -1036,3 +1036,209 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Live vs Backtest Alignment Engine ───────────────────────────
+
+/**
+ * Source of a trade record — distinguishes live execution from backtested trades.
+ */
+export type TradeSource = "live" | "backtest" | "paper";
+
+/**
+ * Unified trade record that represents both live and backtest trades
+ * in a common structure suitable for alignment and comparison.
+ *
+ * Extends the semantics of `TradeRecord` with source tracking and
+ * backtest-specific metadata so the alignment engine can pair trades
+ * from different sources.
+ */
+export type UnifiedTradeRecord = {
+  tradeId: string;
+  source: TradeSource;
+  symbol: string;
+  name?: string;
+  market: MarketType;
+  side: OrderSide;
+  entryTime: string; // ISO datetime
+  exitTime?: string; // ISO datetime; undefined if position still open
+  entryPrice: number;
+  exitPrice?: number;
+  quantity: number;
+  grossPnl: number;
+  commission: number;
+  netPnl: number;
+  holdingDays?: number;
+  strategyId?: string;
+
+  // ── Source-specific references ──
+
+  /** Original order IDs (live/paper trades only) */
+  entryOrderId?: string;
+  exitOrderId?: string;
+
+  /** Backtest run identifier (backtest trades only) */
+  backtestId?: string;
+
+  /** Signal that triggered this trade (when available) */
+  signal?: TradingSignal;
+};
+
+/**
+ * Method used to match symbols between live and backtest records.
+ *
+ * - "exact"      — symbol codes must be identical (e.g. "600519" === "600519")
+ * - "normalized" — strip exchange suffixes and compare (e.g. "600519.SH" → "600519")
+ * - "fuzzy"      — normalized match + allow configurable alias mappings
+ */
+export type SymbolMatchMode = "exact" | "normalized" | "fuzzy";
+
+/**
+ * Configuration for the alignment engine that controls how live and
+ * backtest trades are paired together.
+ */
+export type AlignmentConfig = {
+  /**
+   * Maximum allowed time difference (in seconds) between the entry times
+   * of a live trade and a backtest trade for them to be considered a match.
+   * Default: 86400 (24 hours) — suitable for daily-bar backtests.
+   */
+  timeToleranceSec: number;
+
+  /**
+   * How to compare symbol codes across sources.
+   * Default: "normalized".
+   */
+  symbolMatchMode: SymbolMatchMode;
+
+  /**
+   * Custom symbol aliases for fuzzy matching.
+   * Maps normalized symbol → list of equivalent codes.
+   * Example: { "600519": ["600519.SH", "600519.SS"] }
+   */
+  symbolAliases?: Record<string, string[]>;
+
+  /**
+   * Whether trade direction (buy/sell) must match for pairing.
+   * Default: true.
+   */
+  requireSameDirection: boolean;
+
+  /**
+   * Maximum allowed price deviation ratio between paired trades.
+   * 0.05 means the entry prices can differ by up to 5%.
+   * When undefined, no price constraint is applied.
+   */
+  maxPriceDeviationPct?: number;
+
+  /**
+   * Maximum allowed quantity deviation ratio between paired trades.
+   * 0.1 means quantities can differ by up to 10%.
+   * When undefined, no quantity constraint is applied.
+   */
+  maxQuantityDeviationPct?: number;
+
+  /**
+   * When true, a single trade can only be paired once (1:1 matching).
+   * When false, allows one backtest trade to match multiple live trades
+   * (useful when a backtest trade is split into several live fills).
+   * Default: true.
+   */
+  oneToOne: boolean;
+
+  /**
+   * Filter: only align trades for these strategy IDs.
+   * When undefined or empty, all strategies are included.
+   */
+  strategyIds?: string[];
+};
+
+/**
+ * Match quality classification for a paired trade.
+ */
+export type MatchQuality = "exact" | "close" | "loose" | "unmatched";
+
+/**
+ * Deviation metrics between a paired live trade and its backtest counterpart.
+ */
+export type PairDeviation = {
+  /** Entry time difference in seconds (live − backtest, positive = live is later) */
+  entryTimeDeltaSec: number;
+  /** Exit time difference in seconds (undefined if either trade is still open) */
+  exitTimeDeltaSec?: number;
+  /** Entry price difference ratio: (livePrice − backtestPrice) / backtestPrice */
+  entryPriceDeviationPct: number;
+  /** Exit price difference ratio (undefined if either trade has no exit) */
+  exitPriceDeviationPct?: number;
+  /** Quantity difference ratio: (liveQty − backtestQty) / backtestQty */
+  quantityDeviationPct: number;
+  /** Net P&L difference in absolute currency units */
+  pnlDelta: number;
+  /** Net P&L difference as percentage of backtest P&L */
+  pnlDeviationPct?: number;
+};
+
+/**
+ * A paired trade produced by the alignment engine — links a live/paper
+ * trade to its backtest counterpart with deviation metrics.
+ *
+ * When one side has no match, only that side is populated and
+ * matchQuality is "unmatched".
+ */
+export type PairedTrade = {
+  pairId: string;
+  /** The live or paper trade (undefined when the backtest trade has no live counterpart) */
+  liveTrade?: UnifiedTradeRecord;
+  /** The backtest trade (undefined when the live trade has no backtest counterpart) */
+  backtestTrade?: UnifiedTradeRecord;
+  /** Overall match quality classification */
+  matchQuality: MatchQuality;
+  /** Detailed deviation metrics (only when both sides are present) */
+  deviation?: PairDeviation;
+  /** Symbol used for matching (normalized form) */
+  matchedSymbol: string;
+};
+
+/**
+ * Summary statistics for an alignment result set.
+ */
+export type AlignmentSummary = {
+  /** Total number of live trades considered */
+  totalLiveTrades: number;
+  /** Total number of backtest trades considered */
+  totalBacktestTrades: number;
+  /** Number of successfully paired trades */
+  pairedCount: number;
+  /** Live trades with no backtest counterpart */
+  unmatchedLiveCount: number;
+  /** Backtest trades with no live counterpart */
+  unmatchedBacktestCount: number;
+  /** Breakdown by match quality */
+  qualityDistribution: Record<MatchQuality, number>;
+  /** Average entry time deviation (seconds) across paired trades */
+  avgEntryTimeDeltaSec: number;
+  /** Average entry price deviation (%) across paired trades */
+  avgEntryPriceDeviationPct: number;
+  /** Total P&L from live trades */
+  liveTotalPnl: number;
+  /** Total P&L from backtest trades */
+  backtestTotalPnl: number;
+  /** P&L difference (live − backtest) */
+  pnlGap: number;
+};
+
+/**
+ * Complete result of an alignment run — contains all paired trades,
+ * unmatched trades, and summary statistics.
+ */
+export type AlignmentResult = {
+  /** Configuration used for this alignment */
+  config: AlignmentConfig;
+  /** All paired trades (including unmatched entries) */
+  pairs: PairedTrade[];
+  /** Aggregate statistics */
+  summary: AlignmentSummary;
+  /** ISO datetime when the alignment was computed */
+  alignedAt: string;
+  /** Strategy ID filter applied (if any) */
+  strategyId?: string;
+};

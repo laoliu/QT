@@ -98,7 +98,7 @@ export function validateConfig(config: unknown): ConfigIssue[] {
       }
 
       // Warn about unimplemented brokers that are valid but not yet available
-      const UNIMPLEMENTED_BROKERS = ["futu", "ib", "eastmoney"] as const;
+      const UNIMPLEMENTED_BROKERS = ["ib", "eastmoney"] as const;
       if (
         ta.broker !== undefined &&
         UNIMPLEMENTED_BROKERS.includes(ta.broker as (typeof UNIMPLEMENTED_BROKERS)[number])
@@ -141,6 +141,36 @@ export function validateConfig(config: unknown): ConfigIssue[] {
             message: "QMT broker requires accountId",
             severity: "warning",
           });
+        }
+      }
+
+      // ── Futu sub-config ──────────────────────────────────────
+      if (ta.broker === "futu" && ta.futu && typeof ta.futu === "object") {
+        const ft = ta.futu as Record<string, unknown>;
+        if (ft.openDPort !== undefined) {
+          if (typeof ft.openDPort !== "number" || ft.openDPort < 1 || ft.openDPort > 65535) {
+            issues.push({
+              path: "tradingAccount.futu.openDPort",
+              message: "openDPort must be a valid port number (1-65535)",
+              severity: "error",
+            });
+          }
+        }
+        if (ft.openDHost !== undefined && typeof ft.openDHost !== "string") {
+          issues.push({
+            path: "tradingAccount.futu.openDHost",
+            message: "openDHost must be a string",
+            severity: "error",
+          });
+        }
+        if (ft.tradeEnv !== undefined) {
+          if (ft.tradeEnv !== "REAL" && ft.tradeEnv !== "SIMULATE") {
+            issues.push({
+              path: "tradingAccount.futu.tradeEnv",
+              message: 'tradeEnv must be "REAL" or "SIMULATE"',
+              severity: "error",
+            });
+          }
         }
       }
     }

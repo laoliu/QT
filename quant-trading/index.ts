@@ -92,6 +92,7 @@ import { ConditionalOrderService } from "./src/services/conditional-order.js";
 import { CustomStrategyStore } from "./src/services/custom-strategy-store.js";
 import { DataQualityValidator } from "./src/services/data-quality.js";
 import { createDataSyncService } from "./src/services/data-sync.js";
+import { createDividendReminderService } from "./src/services/dividend-reminder.js";
 import { HistoricalDataWarehouse } from "./src/services/data-warehouse.js";
 import { DcaScheduleService } from "./src/services/dca-schedule.js";
 import { EquityHistory } from "./src/services/equity-history.js";
@@ -1164,6 +1165,10 @@ const quantTradingPlugin = {
     if (receiverService) {
       api.registerService(receiverService);
     }
+
+    // Register DividendReminderService — scans portfolio & watchlist for upcoming dividends
+    const dividendReminderService = createDividendReminderService(api, config);
+    api.registerService(dividendReminderService);
 
     // Register TaskScheduler and PriceAlertService as services for clean shutdown
     api.registerService({

@@ -243,11 +243,13 @@ async function generateMarketClose(
     // Portfolio data not available — skip
   }
 
+  // Today's date for filtering
+  const today = new Date().toISOString().slice(0, 10);
+
   // Today's trade summary
   try {
     const signalRaw = await executeTool("trading_signal", { action: "recent", limit: 20 });
     const signalData = JSON.parse(signalRaw);
-    const today = new Date().toISOString().slice(0, 10);
     const todaySignals = (signalData.signals ?? []).filter((s: Record<string, unknown>) =>
       String(s.timestamp ?? s.createdAt ?? "").startsWith(today),
     );
@@ -264,6 +266,135 @@ async function generateMarketClose(
   } catch {
     // Signal data not available — skip
   }
+
+  // Performance attribution — P&L breakdown by strategy and symbol
+  try {
+    const attrRaw = await executeTool("performance_attribution", {
+      action: "by_strategy",
+      from: today,
+      to: today,
+    });
+    const attrData = JSON.parse(attrRaw);
+    const strategies = attrData.strategies ?? attrData.breakdown ?? [];
+    if (strategies.length > 0) {
+      sections.push("**绩效归因 — 按策略**");
+      for (const s of strategies.slice(0, 10)) {
+        const pnl = s.netPnl ?? s.pnl ?? 0;
+        const pnlStr = `${pnl >= 0 ? "+" : ""}¥${Number(pnl).toFixed(2)}`;
+        const trades = s.trades ?? s.tradeCount ?? "--";
+        const winRate = s.winRate != null ? ` 胜率${(Number(s.winRate) * 100).toFixed(0)}%` : "";
+        sections.push(
+          `  • ${String(s.strategy ?? s.strategyId ?? "未知策略")} ${pnlStr} (${String(trades)}笔${winRate})`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    // Performance attribution by strategy not available — skip
+  }
+
+  try {
+    const symbolAttrRaw = await executeTool("performance_attribution", {
+      action: "by_symbol",
+      from: today,
+      to: today,
+      limit: 10,
+    });
+    const symbolAttrData = JSON.parse(symbolAttrRaw);
+    const symbols = symbolAttrData.symbols ?? symbolAttrData.breakdown ?? [];
+    if (symbols.length > 0) {
+      sections.push("**绩效归因 — 按持仓**");
+      for (const s of symbols.slice(0, 10)) {
+        const pnl = s.netPnl ?? s.pnl ?? 0;
+        const pnlStr = `${pnl >= 0 ? "+" : ""}¥${Number(pnl).toFixed(2)}`;
+        const arrow = pnl >= 0 ? "📈" : "📉";
+        sections.push(
+          `  ${arrow} ${String(s.symbol ?? s.code ?? "")} ${String(s.name ?? "")} ${pnlStr}`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    // Performance attribution by symbol not available — skip
+  }
+
+  // Trade journal — today's notes summary
+  try {
+    const journalRaw = await executeTool("trade_journal", {
+      action: "view",
+      date: today,
+      limit: 10,
+    });
+    const journalData = JSON.parse(journalRaw);
+    const notes = journalData.notes ?? journalData.entries ?? [];
+    if (notes.length > 0) {
+      sections.push("**今日交易笔记**");
+      for (const n of notes.slice(0, 5)) {
+        const symbol = n.symbol ? `[${String(n.symbol)}] ` : "";
+        const lesson = n.lesson ? ` | 教训: ${String(n.lesson)}` : "";
+        const rating = n.rating != null ? ` ⭐${String(n.rating)}` : "";
+        const content =
+          String(n.content ?? "").length > 60
+            ? `${String(n.content).slice(0, 60)}...`
+            : String(n.content ?? "");
+        sections.push(`  • ${symbol}${content}${lesson}${rating}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    // Trade journal not available — skip
+  }
+
+  // Tomorrow's watch items — earnings calendar + macro events
+  sections.push("**明日关注事项**");
+  let hasWatchItems = false;
+
+  try {
+    const earningsRaw = await executeTool("earnings_calendar", {
+      action: "upcoming",
+      days: 3,
+      limit: 10,
+    });
+    const earningsData = JSON.parse(earningsRaw);
+    const upcoming = earningsData.earnings ?? earningsData.events ?? earningsData.stocks ?? [];
+    if (upcoming.length > 0) {
+      sections.push("  📅 近期财报披露:");
+      for (const e of upcoming.slice(0, 5)) {
+        const date = e.date ?? e.reportDate ?? "";
+        const name = e.name ?? e.stockName ?? e.symbol ?? "";
+        const forecast = e.forecast ?? e.consensus ?? "";
+        const forecastStr = forecast ? ` 预期: ${String(forecast)}` : "";
+        sections.push(`  • ${String(date)} ${String(name)}${forecastStr}`);
+      }
+      hasWatchItems = true;
+    }
+  } catch {
+    // Earnings calendar not available — skip
+  }
+
+  try {
+    const macroRaw = await executeTool("macro_data", { action: "calendar", limit: 10 });
+    const macroData = JSON.parse(macroRaw);
+    const events = macroData.events ?? macroData.calendar ?? [];
+    if (events.length > 0) {
+      sections.push("  📊 近期宏观事件:");
+      for (const e of events.slice(0, 5)) {
+        const date = e.date ?? e.eventDate ?? "";
+        const name = e.name ?? e.event ?? e.indicator ?? "";
+        const prev = e.previous ?? e.lastValue ?? "";
+        const prevStr = prev ? ` 前值: ${String(prev)}` : "";
+        sections.push(`  • ${String(date)} ${String(name)}${prevStr}`);
+      }
+      hasWatchItems = true;
+    }
+  } catch {
+    // Macro calendar not available — skip
+  }
+
+  if (!hasWatchItems) {
+    sections.push("  近期无重大事件");
+  }
+  sections.push("");
 
   return sections.join("\n");
 }

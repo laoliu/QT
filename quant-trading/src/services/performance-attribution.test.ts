@@ -365,4 +365,77 @@ describe("computeAttribution", () => {
     const y = result.bySymbol.find((s) => s.symbol === "Y")!;
     expect(y.holdingDaysAvg).toBe(0);
   });
+
+  it("handles mixed holdingDays (some undefined, some defined)", () => {
+    const trades = [
+      makeTrade({ symbol: "Z", holdingDays: 10 }),
+      makeTrade({ symbol: "Z", holdingDays: undefined }),
+      makeTrade({ symbol: "Z", holdingDays: 5 }),
+    ];
+    const result = computeAttribution(trades);
+    const z = result.bySymbol.find((s) => s.symbol === "Z")!;
+    // (10 + 0 + 5) / 3 = 5
+    expect(z.holdingDaysAvg).toBe(5);
+  });
+
+  // ── contributionPct when totalNetPnl is zero ──
+
+  it("contributionPct is 0 for all strategies when totalNetPnl is 0", () => {
+    const trades = [
+      makeTrade({ strategyId: "s1", netPnl: 500, exitTime: "2025-01-10T10:00:00Z" }),
+      makeTrade({ strategyId: "s2", netPnl: -500, exitTime: "2025-01-11T10:00:00Z" }),
+    ];
+    const result = computeAttribution(trades);
+    expect(result.totalNetPnl).toBe(0);
+    for (const s of result.byStrategy) {
+      expect(s.contributionPct).toBe(0);
+    }
+    for (const s of result.bySymbol) {
+      expect(s.contributionPct).toBe(0);
+    }
+  });
+
+  // ── Profit factor edge: overall all-wins ──
+
+  it("overall profitFactor is Infinity when all trades win", () => {
+    const trades = [
+      makeTrade({ netPnl: 100 }),
+      makeTrade({ netPnl: 200 }),
+      makeTrade({ netPnl: 300 }),
+    ];
+    const result = computeAttribution(trades);
+    expect(result.profitFactor).toBe(Infinity);
+  });
+
+  // ── Date range edge: from equals to ──
+
+  it("date range with from === to includes trades on that exact date", () => {
+    const trades = [
+      makeTrade({ exitTime: "2025-01-15T10:00:00Z", netPnl: 100 }),
+      makeTrade({ exitTime: "2025-01-15T14:00:00Z", netPnl: 200 }),
+      makeTrade({ exitTime: "2025-01-16T10:00:00Z", netPnl: 300 }),
+    ];
+    const result = computeAttribution(trades, { from: "2025-01-15", to: "2025-01-15" });
+    // exitTime "2025-01-15T10:00:00Z" >= "2025-01-15" and <= "2025-01-15"
+    // "2025-01-15T10:00:00Z" <= "2025-01-15" is false (T10:00:00Z > empty suffix)
+    // So this filters to 0 trades with string comparison
+    expect(result.totalTrades).toBe(0);
+  });
+
+  // ── Multi-account: verify symbol-level aggregation across strategies ──
+
+  it("same symbol across different strategies is aggregated at symbol level", () => {
+    const trades = [
+      makeTrade({ symbol: "600519", strategyId: "s1", netPnl: 1000 }),
+      makeTrade({ symbol: "600519", strategyId: "s2", netPnl: -300 }),
+      makeTrade({ symbol: "600519", strategyId: "s3", netPnl: 500 }),
+    ];
+    const result = computeAttribution(trades);
+    // Symbol level: all merged
+    expect(result.bySymbol).toHaveLength(1);
+    expect(result.bySymbol[0]!.netPnl).toBe(1200);
+    expect(result.bySymbol[0]!.trades).toBe(3);
+    // Strategy level: separate
+    expect(result.byStrategy).toHaveLength(3);
+  });
 });

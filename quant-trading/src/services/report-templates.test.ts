@@ -24,6 +24,7 @@ describe("report-templates", () => {
     expect(ids).toContain("daily_scan");
     expect(ids).toContain("institutional_top3");
     expect(ids).toContain("daily_journal");
+    expect(ids).toContain("monthly_report");
   });
 
   it("findReportTemplate returns correct template", () => {
@@ -656,5 +657,105 @@ describe("report-templates", () => {
     expect(result).toContain("月度绩效报告");
     // totalTrades is 0, so the "整体表现" section should not appear
     // (the code checks attrData.totalTrades != null, 0 is falsy check—let's verify)
+  });
+
+  it("monthly_report shows Infinity profitFactor without rendering it", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 5,
+              totalNetPnl: 3000,
+              overallWinRate: 1.0,
+              profitFactor: Infinity,
+              avgWin: 600,
+              avgLoss: 0,
+              byStrategy: [
+                { strategyId: "winner", trades: 5, netPnl: 3000, winRate: 1.0, contributionPct: 100 },
+              ],
+              bySymbol: [{ symbol: "600519", trades: 5, netPnl: 3000 }],
+            }),
+          );
+        }
+        return Promise.reject(new Error("not available"));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("整体表现");
+    expect(result).toContain("100.0%"); // winRate
+    // profitFactor === Infinity should be skipped (code checks !== Infinity)
+    expect(result).not.toContain("盈亏比");
+  });
+
+  it("monthly_report shows losing strategy with correct icon", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 10,
+              totalNetPnl: -2000,
+              overallWinRate: 0.3,
+              profitFactor: 0.5,
+              avgWin: 200,
+              avgLoss: 400,
+              byStrategy: [
+                { strategyId: "bad-strat", trades: 10, netPnl: -2000, winRate: 0.3, contributionPct: 100 },
+              ],
+              bySymbol: [{ symbol: "000001", trades: 10, netPnl: -2000 }],
+            }),
+          );
+        }
+        return Promise.reject(new Error("not available"));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("📉"); // losing overall
+    expect(result).toContain("❌"); // losing strategy icon
+    expect(result).toContain("bad-strat");
+    expect(result).toContain("0.50"); // profitFactor
+  });
+
+  it("monthly_report handles empty strategy and symbol arrays", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    const executeTool = vi
+      .fn()
+      .mockImplementation((name: string) => {
+        if (name === "performance_attribution") {
+          return Promise.resolve(
+            JSON.stringify({
+              totalTrades: 1,
+              totalNetPnl: 100,
+              overallWinRate: 1.0,
+              avgWin: 100,
+              byStrategy: [],
+              bySymbol: [],
+            }),
+          );
+        }
+        return Promise.reject(new Error("not available"));
+      });
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("整体表现");
+    // No strategy or symbol section when arrays are empty
+    expect(result).not.toContain("策略分析");
+    expect(result).not.toContain("标的分析");
+  });
+
+  it("monthly_report shows fallback message when no data at all", async () => {
+    const template = findReportTemplate("monthly_report")!;
+    // All tools fail
+    const executeTool = vi.fn().mockRejectedValue(new Error("service down"));
+
+    const result = await template.generate(executeTool, {} as never);
+    expect(result).toContain("月度绩效报告");
+    // When all services fail, the attribution failure message is shown
+    expect(result).toContain("绩效归因数据: 获取失败");
   });
 });

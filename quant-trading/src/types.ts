@@ -1036,3 +1036,59 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Basket Order Types ──────────────────────────────────────────
+
+export type BasketOrderStatus =
+  | "pending" // 篮子已创建，未开始执行
+  | "executing" // 正在批量下单
+  | "partial" // 部分腿已完成，部分仍在执行
+  | "completed" // 所有腿全部成交
+  | "failed" // 所有腿失败或被拒绝
+  | "cancelled" // 用户主动取消
+  | "partial_filled"; // 部分腿成交、部分取消/失败（最终态）
+
+export type BasketLegStatus =
+  | "pending" // 等待下单
+  | "submitted" // 已提交至 broker
+  | "partial" // 部分成交
+  | "filled" // 全部成交
+  | "cancelled" // 已撤销
+  | "rejected" // 被拒绝
+  | "failed"; // 下单异常
+
+export type BasketLeg = {
+  /** 腿序号 (0-based) */
+  index: number;
+  symbol: string;
+  side: OrderSide;
+  orderType: OrderType;
+  quantity: number;
+  price?: number;
+  /** 关联的 Order.orderId（下单后回填） */
+  orderId?: string;
+  status: BasketLegStatus;
+  filledQty: number;
+  avgFillPrice?: number;
+  errorMsg?: string;
+  updatedAt?: string;
+};
+
+export type BasketOrder = {
+  basketId: string;
+  name?: string;
+  status: BasketOrderStatus;
+  legs: BasketLeg[];
+  /** 并发控制：同时下单的最大腿数 (默认 5) */
+  concurrency: number;
+  /** 单腿失败时的策略: continue=继续执行其余腿, cancel_remaining=撤销剩余 */
+  failurePolicy: "continue" | "cancel_remaining";
+  /** 创建时间 */
+  createdAt: string;
+  /** 最后更新时间 */
+  updatedAt: string;
+  /** 完成时间 */
+  completedAt?: string;
+  /** 策略来源 */
+  strategyId?: string;
+};

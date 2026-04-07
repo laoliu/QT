@@ -453,6 +453,29 @@ export function validateConfig(config: unknown): ConfigIssue[] {
     }
   }
 
+  // ── earningsAlert ─────────────────────────────────────────────
+  if (cfg.earningsAlert !== undefined) {
+    if (typeof cfg.earningsAlert !== "object" || cfg.earningsAlert === null) {
+      issues.push({
+        path: "earningsAlert",
+        message: "earningsAlert must be an object",
+        severity: "error",
+      });
+    } else {
+      const ea = cfg.earningsAlert as Record<string, unknown>;
+      if (ea.enabled !== undefined && typeof ea.enabled !== "boolean") {
+        issues.push({
+          path: "earningsAlert.enabled",
+          message: "earningsAlert.enabled must be a boolean",
+          severity: "error",
+        });
+      }
+      validatePositive(issues, ea, "earningsAlert.intervalMinutes", "intervalMinutes");
+      validateNonNegative(issues, ea, "earningsAlert.initialDelayMinutes", "initialDelayMinutes");
+      validatePositive(issues, ea, "earningsAlert.lookAheadDays", "lookAheadDays");
+    }
+  }
+
   return issues;
 }
 

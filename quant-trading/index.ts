@@ -1087,6 +1087,43 @@ const quantTradingPlugin = {
       setTimeout(() => void liveEngine.start(), 0);
     }
 
+    // ── Auto-scheduled Earnings Alert (持仓财报主动提醒) ─────────
+    // When earningsAlert.enabled is true, schedule a recurring task that
+    // checks portfolio holdings against upcoming earnings and pushes
+    // notifications with analyst consensus + CFO risk analysis.
+    if (config.earningsAlert?.enabled) {
+      const initialDelay = (config.earningsAlert.initialDelayMinutes ?? 2) * 60 * 1000;
+      const interval = (config.earningsAlert.intervalMinutes ?? 1440) * 60 * 1000;
+      const lookAheadDays = config.earningsAlert.lookAheadDays ?? 7;
+
+      const earningsAlertTemplate = findReportTemplate("earnings_alert");
+      if (earningsAlertTemplate) {
+        taskScheduler.scheduleDelay(
+          "持仓财报自动提醒",
+          initialDelay,
+          async () => {
+            // Override the default 7-day window with the configured lookAheadDays
+            const report = await earningsAlertTemplate.generate(
+              async (toolName, toolArgs) => {
+                if (toolName === "earnings_calendar" && toolArgs.action === "upcoming") {
+                  return executeToolByName(toolName, { ...toolArgs, days: lookAheadDays });
+                }
+                return executeToolByName(toolName, toolArgs);
+              },
+              config,
+            );
+            return report;
+          },
+          { intervalMs: interval, meta: { reportId: "earnings_alert" } },
+        );
+        api.logger.info(
+          `earnings alert auto-scheduled: initial delay ${String(config.earningsAlert.initialDelayMinutes ?? 2)}m, ` +
+            `interval ${String(config.earningsAlert.intervalMinutes ?? 1440)}m, ` +
+            `look-ahead ${String(lookAheadDays)}d`,
+        );
+      }
+    }
+
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
 

@@ -910,6 +910,26 @@ export type QuantTradingConfig = {
    */
   futuresConfig?: FuturesConfig;
 
+  // ── Earnings Alert Configuration ─────────────────────────────
+
+  /**
+   * Automatic earnings alert for portfolio holdings.
+   * When enabled, the plugin auto-schedules a daily check that scans
+   * portfolio holdings for upcoming earnings in the next 7 days.
+   * If matches are found, a notification with analyst consensus, surprise
+   * history, and CFO red-flag analysis is pushed to the user.
+   */
+  earningsAlert?: {
+    /** Enable/disable auto-scheduled earnings alert (default: false) */
+    enabled?: boolean;
+    /** How often to repeat the check in minutes (default: 1440 = once per day) */
+    intervalMinutes?: number;
+    /** Initial delay in minutes before the first check after startup (default: 2) */
+    initialDelayMinutes?: number;
+    /** Number of days ahead to scan for upcoming earnings (default: 7) */
+    lookAheadDays?: number;
+  };
+
   // ── RECEIVER Bridge Configuration ─────────────────────────────
 
   /**

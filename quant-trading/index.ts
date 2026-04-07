@@ -137,6 +137,7 @@ import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
+import { createMarginDataTool } from "./src/tools/margin-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
@@ -616,6 +617,7 @@ const quantTradingPlugin = {
       strategy_router: createStrategyRouterTool(api, config),
       sector_analysis: createSectorAnalysisTool(api, config),
       fund_flow: createFundFlowTool(api, config),
+      margin_data: createMarginDataTool(api, config),
       dragon_tiger: createDragonTigerTool(api, config),
       lianban_analysis: createLianbanAnalysisTool(api, config),
       sector_synergy: createSectorSynergyTool(api, config),
@@ -673,6 +675,7 @@ const quantTradingPlugin = {
       strategy_router: "策略路由",
       sector_analysis: "板块分析",
       fund_flow: "资金流向",
+      margin_data: "融资融券",
       dragon_tiger: "龙虎榜",
       lianban_analysis: "连板分析",
       sector_synergy: "板块协同追涨",

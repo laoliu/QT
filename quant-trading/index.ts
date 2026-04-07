@@ -83,6 +83,7 @@ import {
   type HttpHandler,
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
+import { AccountContext, AccountManager } from "./src/services/account-manager.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
@@ -118,6 +119,8 @@ import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
+import { createAccountListTool } from "./src/tools/account-list.js";
+import { createAccountSwitchTool } from "./src/tools/account-switch.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
@@ -267,6 +270,11 @@ const quantTradingPlugin = {
 
     // ── Event Bus (real-time SSE) ──────────────────────────────────
     const eventBus = new EventBus({ maxRecent: 500 });
+
+    // ── Multi-Account Manager ────────────────────────────────────────
+    const accountManager = new AccountManager(api, config);
+    const defaultAccountId = accountManager.listAccountIds()[0] ?? "default";
+    const accountContext = new AccountContext(accountManager, defaultAccountId);
 
     // ── Log Store (in-memory ring buffer for admin log viewer) ───
     const logStore = new LogStore({ maxEntries: 2000 });
@@ -654,6 +662,8 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      account_list: createAccountListTool(api, accountManager, accountContext),
+      account_switch: createAccountSwitchTool(api, accountManager, accountContext),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +714,8 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      account_list: "账户列表",
+      account_switch: "账户切换",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

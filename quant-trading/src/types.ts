@@ -823,6 +823,13 @@ export type QuantTradingConfig = {
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
+  /**
+   * Multiple trading accounts configuration.
+   * When set, the system supports switching between accounts via account_switch tool.
+   * Each entry is keyed by a unique account ID (e.g. "stock-main", "futures-hedge").
+   * If only `tradingAccount` is set, it becomes the sole account with id "default".
+   */
+  tradingAccounts?: Record<string, TradingAccountConfig & { label?: string }>;
   notifications?: NotificationConfig;
   /**
    * PnL monitor configuration.

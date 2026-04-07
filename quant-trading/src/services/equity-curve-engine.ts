@@ -87,12 +87,20 @@ export interface EquityCurveAnalysis {
   drawdownCurve: DrawdownPoint[];
   /** Max drawdown interval details */
   maxDrawdownInterval: MaxDrawdownInterval | null;
+  /** All significant drawdown episodes */
+  drawdownEpisodes: DrawdownEpisode[];
   /** Monthly returns */
   monthlyReturns: PeriodReturn[];
   /** Weekly returns */
   weeklyReturns: PeriodReturn[];
   /** Summary risk/return metrics */
   metrics: EquityCurveMetrics;
+  /** Underwater (time in drawdown) statistics */
+  underwaterStats: UnderwaterStats;
+  /** VaR and CVaR at 95% confidence */
+  var95: VaRResult;
+  /** Return distribution statistics */
+  returnDistribution: ReturnDistribution;
 }
 
 /** Summary risk/return metrics computed from the equity curve */
@@ -136,6 +144,95 @@ export interface RollingVolatilityPoint {
   date: string;
   /** Annualized volatility computed over the trailing window */
   volatility: number;
+}
+
+/** Rolling Sharpe ratio point */
+export interface RollingSharpePoint {
+  date: string;
+  /** Annualized Sharpe ratio computed over the trailing window */
+  sharpe: number;
+}
+
+/** Underwater (time spent in drawdown) statistics */
+export interface UnderwaterStats {
+  /** Total number of drawdown episodes */
+  totalEpisodes: number;
+  /** Average drawdown duration in trading days */
+  avgDurationDays: number;
+  /** Maximum drawdown duration in trading days */
+  maxDurationDays: number;
+  /** Percentage of time spent underwater (0-100) */
+  pctTimeUnderwater: number;
+  /** Current drawdown duration (0 if at peak) */
+  currentDurationDays: number;
+}
+
+/** Value at Risk / Conditional VaR result */
+export interface VaRResult {
+  /** Historical VaR at the given confidence level (positive number = loss) */
+  var: number;
+  /** Conditional VaR (Expected Shortfall) at the given confidence level */
+  cvar: number;
+  /** Confidence level used (e.g. 0.95) */
+  confidence: number;
+}
+
+/** Benchmark-relative performance metrics */
+export interface BenchmarkMetrics {
+  /** CAPM Alpha (annualized) */
+  alpha: number;
+  /** CAPM Beta */
+  beta: number;
+  /** Annualized tracking error */
+  trackingError: number;
+  /** Information ratio */
+  informationRatio: number;
+  /** Pearson correlation */
+  correlation: number;
+  /** Benchmark total return */
+  benchmarkTotalReturn: number;
+  /** Benchmark annualized return */
+  benchmarkAnnualizedReturn: number;
+  /** Excess return over benchmark */
+  excessReturn: number;
+}
+
+/** Return distribution statistics */
+export interface ReturnDistribution {
+  /** Skewness of daily returns (negative = left tail, positive = right tail) */
+  skewness: number;
+  /** Excess kurtosis of daily returns (>0 = fat tails) */
+  kurtosis: number;
+  /** Median daily return */
+  medianReturn: number;
+  /** 5th percentile daily return */
+  percentile5: number;
+  /** 25th percentile daily return */
+  percentile25: number;
+  /** 75th percentile daily return */
+  percentile75: number;
+  /** 95th percentile daily return */
+  percentile95: number;
+}
+
+/** A single drawdown episode */
+export interface DrawdownEpisode {
+  /** Date when equity peaked before this drawdown */
+  peakDate: string;
+  /** Peak equity value */
+  peakEquity: number;
+  /** Date of the trough (deepest point) */
+  troughDate: string;
+  /** Trough equity value */
+  troughEquity: number;
+  /** Maximum drawdown in this episode as decimal */
+  drawdown: number;
+  /** Date of recovery to peak level (null if not yet recovered) */
+  recoveryDate: string | null;
+  /** Duration from peak to trough in trading days */
+  peakToTroughDays: number;
+  /** Duration from peak to recovery in trading days (null if not recovered) */
+  peakToRecoveryDays: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -299,6 +396,353 @@ export function computeRollingVolatility(
     result.push({ date: dailyReturns[i]!.date, volatility: annualizedVol });
   }
   return result;
+}
+
+/**
+ * Compute rolling annualized Sharpe ratio over a trailing window.
+ * @param dailyReturns - array of daily returns
+ * @param windowSize - number of trading days in the window (default: 60 ≈ 3 months)
+ * @param riskFreeAnnual - annual risk-free rate (default: 0 for CN A-shares)
+ */
+export function computeRollingSharpe(
+  dailyReturns: DailyReturnPoint[],
+  windowSize = 60,
+  riskFreeAnnual = 0,
+): RollingSharpePoint[] {
+  if (dailyReturns.length < windowSize) return [];
+  const rfDaily = riskFreeAnnual / 252;
+  const result: RollingSharpePoint[] = [];
+  for (let i = windowSize - 1; i < dailyReturns.length; i++) {
+    const window = dailyReturns.slice(i - windowSize + 1, i + 1);
+    const excess = window.map((r) => r.dailyReturn - rfDaily);
+    const mean = excess.reduce((a, b) => a + b, 0) / windowSize;
+    const variance = excess.reduce((sum, r) => sum + (r - mean) ** 2, 0) / windowSize;
+    const std = Math.sqrt(variance);
+    const sharpe = std > 0 ? (mean / std) * Math.sqrt(252) : 0;
+    result.push({ date: dailyReturns[i]!.date, sharpe });
+  }
+  return result;
+}
+
+/**
+ * Compute underwater (time spent in drawdown) statistics.
+ */
+export function computeUnderwaterStats(snapshots: EquitySnapshot[]): UnderwaterStats {
+  const empty: UnderwaterStats = {
+    totalEpisodes: 0,
+    avgDurationDays: 0,
+    maxDurationDays: 0,
+    pctTimeUnderwater: 0,
+    currentDurationDays: 0,
+  };
+  if (snapshots.length < 2) return empty;
+
+  let peakEquity = -Infinity;
+  let episodes = 0;
+  let inDrawdown = false;
+  let currentDuration = 0;
+  let maxDuration = 0;
+  let totalUnderwaterDays = 0;
+  const durations: number[] = [];
+
+  for (const s of snapshots) {
+    if (s.equity >= peakEquity) {
+      peakEquity = s.equity;
+      if (inDrawdown) {
+        durations.push(currentDuration);
+        if (currentDuration > maxDuration) maxDuration = currentDuration;
+        currentDuration = 0;
+        inDrawdown = false;
+      }
+    } else {
+      if (!inDrawdown) {
+        inDrawdown = true;
+        episodes++;
+        currentDuration = 0;
+      }
+      currentDuration++;
+      totalUnderwaterDays++;
+    }
+  }
+
+  // Handle ongoing drawdown at end of series
+  if (inDrawdown) {
+    durations.push(currentDuration);
+    if (currentDuration > maxDuration) maxDuration = currentDuration;
+  }
+
+  const avgDuration =
+    durations.length > 0
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : 0;
+
+  return {
+    totalEpisodes: episodes,
+    avgDurationDays: avgDuration,
+    maxDurationDays: maxDuration,
+    pctTimeUnderwater:
+      snapshots.length > 1 ? (totalUnderwaterDays / (snapshots.length - 1)) * 100 : 0,
+    currentDurationDays: inDrawdown ? currentDuration : 0,
+  };
+}
+
+/**
+ * Compute Value at Risk (VaR) and Conditional VaR (Expected Shortfall)
+ * using the historical simulation method.
+ * @param dailyReturns - daily return series
+ * @param confidence - confidence level (default: 0.95 → 95%)
+ */
+export function computeVaR(
+  dailyReturns: DailyReturnPoint[],
+  confidence = 0.95,
+): VaRResult {
+  if (dailyReturns.length === 0) {
+    return { var: 0, cvar: 0, confidence };
+  }
+
+  const sorted = dailyReturns.map((r) => r.dailyReturn).sort((a, b) => a - b);
+  const alpha = 1 - confidence;
+  const idx = Math.max(Math.floor(sorted.length * alpha), 0);
+
+  const varValue = Math.abs(sorted[idx]!);
+
+  // CVaR = average of all returns below VaR threshold
+  const tailCount = Math.max(idx, 1);
+  const tail = sorted.slice(0, tailCount);
+  const cvar = Math.abs(tail.reduce((a, b) => a + b, 0) / tail.length);
+
+  return { var: varValue, cvar, confidence };
+}
+
+/**
+ * Compute benchmark-relative metrics (Alpha, Beta, Tracking Error, IR, Correlation).
+ * @param snapshots - strategy equity snapshots
+ * @param benchmarkSnapshots - benchmark equity snapshots (must share dates with strategy)
+ * @param riskFreeAnnual - annual risk-free rate (default: 0.03)
+ */
+export function computeBenchmarkMetrics(
+  snapshots: EquitySnapshot[],
+  benchmarkSnapshots: EquitySnapshot[],
+  riskFreeAnnual = 0.03,
+): BenchmarkMetrics | null {
+  if (snapshots.length < 2 || benchmarkSnapshots.length < 2) return null;
+
+  // Align by date
+  const benchMap = new Map(benchmarkSnapshots.map((s) => [s.date, s]));
+  const aligned: Array<{ date: string; equity: number; bench: number }> = [];
+  for (const s of snapshots) {
+    const b = benchMap.get(s.date);
+    if (b) aligned.push({ date: s.date, equity: s.equity, bench: b.equity });
+  }
+  if (aligned.length < 2) return null;
+
+  const stratReturns: number[] = [];
+  const benchReturns: number[] = [];
+  for (let i = 1; i < aligned.length; i++) {
+    const prev = aligned[i - 1]!;
+    const curr = aligned[i]!;
+    stratReturns.push(prev.equity > 0 ? curr.equity / prev.equity - 1 : 0);
+    benchReturns.push(prev.bench > 0 ? curr.bench / prev.bench - 1 : 0);
+  }
+
+  const n = stratReturns.length;
+  const rfDaily = riskFreeAnnual / 252;
+
+  // Means
+  const meanS = stratReturns.reduce((a, b) => a + b, 0) / n;
+  const meanB = benchReturns.reduce((a, b) => a + b, 0) / n;
+
+  // Excess returns
+  const excessS = stratReturns.map((r) => r - rfDaily);
+  const excessB = benchReturns.map((r) => r - rfDaily);
+  const meanExS = excessS.reduce((a, b) => a + b, 0) / n;
+  const meanExB = excessB.reduce((a, b) => a + b, 0) / n;
+
+  // Beta = Cov(strategy, bench) / Var(bench)
+  let cov = 0;
+  let varB = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (excessS[i]! - meanExS) * (excessB[i]! - meanExB);
+    varB += (excessB[i]! - meanExB) ** 2;
+  }
+  cov /= n;
+  varB /= n;
+
+  const beta = varB > 0 ? cov / varB : 1;
+  const alpha = (meanExS - beta * meanExB) * 252;
+
+  // Tracking error and information ratio
+  const diffs = stratReturns.map((r, i) => r - benchReturns[i]!);
+  const meanDiff = diffs.reduce((a, b) => a + b, 0) / n;
+  const diffVar = diffs.reduce((sum, d) => sum + (d - meanDiff) ** 2, 0) / (n - 1);
+  const trackingError = Math.sqrt(diffVar) * Math.sqrt(252);
+  const informationRatio = trackingError > 0 ? (meanDiff * 252) / trackingError : 0;
+
+  // Correlation
+  let varS = 0;
+  let covSB = 0;
+  for (let i = 0; i < n; i++) {
+    varS += (stratReturns[i]! - meanS) ** 2;
+    covSB += (stratReturns[i]! - meanS) * (benchReturns[i]! - meanB);
+  }
+  const stdS = Math.sqrt(varS / n);
+  const stdB = Math.sqrt(varB);
+  const correlation = stdS > 0 && stdB > 0 ? covSB / n / (stdS * stdB) : 0;
+
+  // Benchmark total/annualized return
+  const benchStart = aligned[0]!.bench;
+  const benchEnd = aligned[aligned.length - 1]!.bench;
+  const benchTotal = benchStart > 0 ? benchEnd / benchStart - 1 : 0;
+  const years = aligned.length / 252;
+  const benchAnn = years > 0 && benchStart > 0 ? (benchEnd / benchStart) ** (1 / years) - 1 : 0;
+
+  // Strategy total return
+  const stratStart = aligned[0]!.equity;
+  const stratEnd = aligned[aligned.length - 1]!.equity;
+  const stratTotal = stratStart > 0 ? stratEnd / stratStart - 1 : 0;
+
+  return {
+    alpha,
+    beta,
+    trackingError,
+    informationRatio,
+    correlation,
+    benchmarkTotalReturn: benchTotal,
+    benchmarkAnnualizedReturn: benchAnn,
+    excessReturn: stratTotal - benchTotal,
+  };
+}
+
+/**
+ * Compute return distribution statistics (skewness, kurtosis, percentiles).
+ */
+export function computeReturnDistribution(dailyReturns: DailyReturnPoint[]): ReturnDistribution {
+  const empty: ReturnDistribution = {
+    skewness: 0,
+    kurtosis: 0,
+    medianReturn: 0,
+    percentile5: 0,
+    percentile25: 0,
+    percentile75: 0,
+    percentile95: 0,
+  };
+  if (dailyReturns.length < 3) return empty;
+
+  const returns = dailyReturns.map((r) => r.dailyReturn);
+  const sorted = [...returns].sort((a, b) => a - b);
+  const n = returns.length;
+
+  const mean = returns.reduce((a, b) => a + b, 0) / n;
+  const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / n;
+  const stdDev = Math.sqrt(variance);
+
+  // Skewness: E[(X-μ)^3] / σ^3
+  let skewness = 0;
+  if (stdDev > 0) {
+    const m3 = returns.reduce((sum, r) => sum + ((r - mean) / stdDev) ** 3, 0) / n;
+    skewness = m3;
+  }
+
+  // Excess kurtosis: E[(X-μ)^4] / σ^4 - 3
+  let kurtosis = 0;
+  if (stdDev > 0) {
+    const m4 = returns.reduce((sum, r) => sum + ((r - mean) / stdDev) ** 4, 0) / n;
+    kurtosis = m4 - 3;
+  }
+
+  // Percentile helper
+  const percentile = (p: number): number => {
+    const rank = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(rank);
+    const hi = Math.ceil(rank);
+    if (lo === hi) return sorted[lo]!;
+    return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (rank - lo);
+  };
+
+  return {
+    skewness,
+    kurtosis,
+    medianReturn: percentile(50),
+    percentile5: percentile(5),
+    percentile25: percentile(25),
+    percentile75: percentile(75),
+    percentile95: percentile(95),
+  };
+}
+
+/**
+ * Find all drawdown episodes (peak → trough → recovery).
+ * Useful for analyzing the full drawdown history, not just the maximum.
+ * @param snapshots - equity snapshots sorted by date ascending
+ * @param minDrawdown - minimum drawdown threshold to report (default: 0.01 = 1%)
+ */
+export function computeAllDrawdownEpisodes(
+  snapshots: EquitySnapshot[],
+  minDrawdown = 0.01,
+): DrawdownEpisode[] {
+  if (snapshots.length < 2) return [];
+
+  const episodes: DrawdownEpisode[] = [];
+  let peakEquity = snapshots[0]!.equity;
+  let peakDate = snapshots[0]!.date;
+  let peakIdx = 0;
+  let troughEquity = peakEquity;
+  let troughDate = peakDate;
+  let troughIdx = 0;
+  let inDrawdown = false;
+  let maxDdInEpisode = 0;
+
+  for (let i = 0; i < snapshots.length; i++) {
+    const s = snapshots[i]!;
+    if (s.equity >= peakEquity) {
+      // New peak — close any open episode
+      if (inDrawdown && maxDdInEpisode >= minDrawdown) {
+        episodes.push({
+          peakDate,
+          peakEquity,
+          troughDate,
+          troughEquity,
+          drawdown: maxDdInEpisode,
+          recoveryDate: s.date,
+          peakToTroughDays: troughIdx - peakIdx,
+          peakToRecoveryDays: i - peakIdx,
+        });
+      }
+      peakEquity = s.equity;
+      peakDate = s.date;
+      peakIdx = i;
+      troughEquity = s.equity;
+      troughDate = s.date;
+      troughIdx = i;
+      inDrawdown = false;
+      maxDdInEpisode = 0;
+    } else {
+      inDrawdown = true;
+      const dd = peakEquity > 0 ? (peakEquity - s.equity) / peakEquity : 0;
+      if (dd > maxDdInEpisode) {
+        maxDdInEpisode = dd;
+        troughEquity = s.equity;
+        troughDate = s.date;
+        troughIdx = i;
+      }
+    }
+  }
+
+  // Handle ongoing (unrecovered) drawdown at end
+  if (inDrawdown && maxDdInEpisode >= minDrawdown) {
+    episodes.push({
+      peakDate,
+      peakEquity,
+      troughDate,
+      troughEquity,
+      drawdown: maxDdInEpisode,
+      recoveryDate: null,
+      peakToTroughDays: troughIdx - peakIdx,
+      peakToRecoveryDays: null,
+    });
+  }
+
+  return episodes;
 }
 
 /**
@@ -486,14 +930,19 @@ export function computeMetrics(snapshots: EquitySnapshot[]): EquityCurveMetrics 
  * Snapshots must be sorted by date ascending.
  */
 export function analyzeEquityCurve(snapshots: EquitySnapshot[]): EquityCurveAnalysis {
+  const dailyReturns = computeDailyReturns(snapshots);
   return {
     cumulativeReturns: computeCumulativeReturns(snapshots),
-    dailyReturns: computeDailyReturns(snapshots),
+    dailyReturns,
     drawdownCurve: computeDrawdownCurve(snapshots),
     maxDrawdownInterval: computeMaxDrawdownInterval(snapshots),
+    drawdownEpisodes: computeAllDrawdownEpisodes(snapshots),
     monthlyReturns: computeMonthlyReturns(snapshots),
     weeklyReturns: computeWeeklyReturns(snapshots),
     metrics: computeMetrics(snapshots),
+    underwaterStats: computeUnderwaterStats(snapshots),
+    var95: computeVaR(dailyReturns),
+    returnDistribution: computeReturnDistribution(dailyReturns),
   };
 }
 

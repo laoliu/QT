@@ -3,13 +3,19 @@ import type { EquitySnapshot } from "./equity-history.js";
 import {
   analyzeEquityCurve,
   backtestCurveToSnapshots,
+  computeAllDrawdownEpisodes,
+  computeBenchmarkMetrics,
   computeCumulativeReturns,
   computeDailyReturns,
   computeDrawdownCurve,
   computeMaxDrawdownInterval,
   computeMetrics,
   computeMonthlyReturns,
+  computeReturnDistribution,
+  computeRollingSharpe,
   computeRollingVolatility,
+  computeUnderwaterStats,
+  computeVaR,
   computeWeeklyReturns,
 } from "./equity-curve-engine.js";
 
@@ -339,9 +345,21 @@ describe("analyzeEquityCurve", () => {
     expect(result.dailyReturns).toEqual([]);
     expect(result.drawdownCurve).toEqual([]);
     expect(result.maxDrawdownInterval).toBeNull();
+    expect(result.drawdownEpisodes).toEqual([]);
     expect(result.monthlyReturns).toEqual([]);
     expect(result.weeklyReturns).toEqual([]);
     expect(result.metrics.totalReturn).toBe(0);
+    expect(result.underwaterStats.totalEpisodes).toBe(0);
+    expect(result.var95.var).toBe(0);
+    expect(result.returnDistribution.skewness).toBe(0);
+  });
+
+  it("includes new analysis fields", () => {
+    const result = analyzeEquityCurve(drawdownAndRecovery());
+    expect(result.drawdownEpisodes.length).toBeGreaterThan(0);
+    expect(result.underwaterStats.totalEpisodes).toBeGreaterThan(0);
+    expect(result.var95.confidence).toBe(0.95);
+    expect(result.returnDistribution).toBeDefined();
   });
 });
 
@@ -372,5 +390,234 @@ describe("backtestCurveToSnapshots", () => {
     const analysis = analyzeEquityCurve(snapshots);
     expect(analysis.metrics.totalReturn).toBeCloseTo(0.15, 4);
     expect(analysis.metrics.maxDrawdown).toBeGreaterThan(0);
+  });
+});
+
+// ── New feature tests ───────────────────────────────────────
+
+describe("computeRollingSharpe", () => {
+  it("returns empty when fewer data points than window", () => {
+    const returns = computeDailyReturns(trendingUp());
+    expect(computeRollingSharpe(returns, 100)).toEqual([]);
+  });
+
+  it("computes rolling Sharpe with correct length", () => {
+    const returns = computeDailyReturns(trendingUp());
+    const rolling = computeRollingSharpe(returns, 3);
+    expect(rolling).toHaveLength(returns.length - 2);
+  });
+
+  it("Sharpe is 0 for constant returns", () => {
+    const flat: EquitySnapshot[] = [];
+    for (let i = 0; i < 10; i++) {
+      flat.push(snap(`2024-01-${String(i + 2).padStart(2, "0")}`, 100000));
+    }
+    const returns = computeDailyReturns(flat);
+    const rolling = computeRollingSharpe(returns, 3);
+    expect(rolling.every((p) => p.sharpe === 0)).toBe(true);
+  });
+});
+
+describe("computeUnderwaterStats", () => {
+  it("returns zeros for empty/single snapshots", () => {
+    expect(computeUnderwaterStats([]).totalEpisodes).toBe(0);
+    expect(computeUnderwaterStats([snap("2024-01-02", 100000)]).totalEpisodes).toBe(0);
+  });
+
+  it("reports no episodes for monotonically increasing equity", () => {
+    const stats = computeUnderwaterStats([
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000),
+      snap("2024-01-04", 120000),
+    ]);
+    expect(stats.totalEpisodes).toBe(0);
+    expect(stats.pctTimeUnderwater).toBe(0);
+    expect(stats.currentDurationDays).toBe(0);
+  });
+
+  it("detects drawdown episodes correctly", () => {
+    const stats = computeUnderwaterStats(drawdownAndRecovery());
+    expect(stats.totalEpisodes).toBe(1);
+    expect(stats.maxDurationDays).toBeGreaterThan(0);
+    expect(stats.pctTimeUnderwater).toBeGreaterThan(0);
+    expect(stats.currentDurationDays).toBe(0); // recovered by end
+  });
+
+  it("reports ongoing drawdown at end of series", () => {
+    const stats = computeUnderwaterStats([
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000),
+      snap("2024-01-04", 105000),
+      snap("2024-01-05", 100000),
+    ]);
+    expect(stats.currentDurationDays).toBeGreaterThan(0);
+  });
+});
+
+describe("computeVaR", () => {
+  it("returns zeros for empty returns", () => {
+    const result = computeVaR([]);
+    expect(result.var).toBe(0);
+    expect(result.cvar).toBe(0);
+  });
+
+  it("VaR and CVaR are non-negative", () => {
+    const returns = computeDailyReturns(drawdownAndRecovery());
+    const result = computeVaR(returns);
+    expect(result.var).toBeGreaterThanOrEqual(0);
+    expect(result.cvar).toBeGreaterThanOrEqual(0);
+    expect(result.confidence).toBe(0.95);
+  });
+
+  it("CVaR >= VaR (expected shortfall is at least as large)", () => {
+    const returns = computeDailyReturns(drawdownAndRecovery());
+    const result = computeVaR(returns);
+    expect(result.cvar).toBeGreaterThanOrEqual(result.var);
+  });
+});
+
+describe("computeBenchmarkMetrics", () => {
+  it("returns null for insufficient data", () => {
+    expect(computeBenchmarkMetrics([], [])).toBeNull();
+    expect(computeBenchmarkMetrics([snap("2024-01-02", 100000)], [])).toBeNull();
+  });
+
+  it("computes benchmark metrics for aligned data", () => {
+    const strategy = [
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 102000),
+      snap("2024-01-04", 104000),
+      snap("2024-01-05", 103000),
+      snap("2024-01-08", 106000),
+    ];
+    const benchmark = [
+      snap("2024-01-02", 10000),
+      snap("2024-01-03", 10100),
+      snap("2024-01-04", 10200),
+      snap("2024-01-05", 10150),
+      snap("2024-01-08", 10300),
+    ];
+    const result = computeBenchmarkMetrics(strategy, benchmark)!;
+    expect(result).not.toBeNull();
+    expect(typeof result.alpha).toBe("number");
+    expect(typeof result.beta).toBe("number");
+    expect(typeof result.trackingError).toBe("number");
+    expect(typeof result.informationRatio).toBe("number");
+    expect(typeof result.correlation).toBe("number");
+    // Strategy outperforms benchmark
+    expect(result.excessReturn).toBeGreaterThan(0);
+  });
+
+  it("beta is ~1 for identical series", () => {
+    const data = [
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 102000),
+      snap("2024-01-04", 101000),
+      snap("2024-01-05", 103000),
+    ];
+    const result = computeBenchmarkMetrics(data, data)!;
+    expect(result.beta).toBeCloseTo(1, 2);
+    expect(result.correlation).toBeCloseTo(1, 2);
+    expect(result.trackingError).toBeCloseTo(0, 4);
+  });
+});
+
+describe("computeReturnDistribution", () => {
+  it("returns zeros for fewer than 3 data points", () => {
+    const result = computeReturnDistribution([]);
+    expect(result.skewness).toBe(0);
+    expect(result.kurtosis).toBe(0);
+  });
+
+  it("computes percentiles correctly", () => {
+    const returns = computeDailyReturns(trendingUp());
+    const result = computeReturnDistribution(returns);
+    // Percentiles should be ordered
+    expect(result.percentile5).toBeLessThanOrEqual(result.percentile25);
+    expect(result.percentile25).toBeLessThanOrEqual(result.medianReturn);
+    expect(result.medianReturn).toBeLessThanOrEqual(result.percentile75);
+    expect(result.percentile75).toBeLessThanOrEqual(result.percentile95);
+  });
+
+  it("skewness is negative for left-skewed returns", () => {
+    // Create a series with a big drop followed by small gains
+    const snapshots = [
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 101000),
+      snap("2024-01-04", 102000),
+      snap("2024-01-05", 103000),
+      snap("2024-01-08", 104000),
+      snap("2024-01-09", 90000),  // big drop
+      snap("2024-01-10", 91000),
+      snap("2024-01-11", 92000),
+    ];
+    const returns = computeDailyReturns(snapshots);
+    const result = computeReturnDistribution(returns);
+    expect(result.skewness).toBeLessThan(0);
+  });
+});
+
+describe("computeAllDrawdownEpisodes", () => {
+  it("returns empty for fewer than 2 snapshots", () => {
+    expect(computeAllDrawdownEpisodes([])).toEqual([]);
+    expect(computeAllDrawdownEpisodes([snap("2024-01-02", 100000)])).toEqual([]);
+  });
+
+  it("returns empty for monotonically increasing equity", () => {
+    const result = computeAllDrawdownEpisodes([
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000),
+      snap("2024-01-04", 120000),
+    ]);
+    expect(result).toEqual([]);
+  });
+
+  it("detects a single recovered drawdown episode", () => {
+    const result = computeAllDrawdownEpisodes(drawdownAndRecovery());
+    expect(result.length).toBe(1);
+    expect(result[0]!.peakDate).toBe("2024-01-04");
+    expect(result[0]!.troughDate).toBe("2024-01-08");
+    expect(result[0]!.recoveryDate).toBe("2024-01-11");
+    expect(result[0]!.drawdown).toBeCloseTo(15000 / 110000, 4);
+  });
+
+  it("detects unrecovered drawdown", () => {
+    const result = computeAllDrawdownEpisodes([
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000),
+      snap("2024-01-04", 95000),
+      snap("2024-01-05", 98000),
+    ]);
+    expect(result.length).toBe(1);
+    expect(result[0]!.recoveryDate).toBeNull();
+    expect(result[0]!.peakToRecoveryDays).toBeNull();
+  });
+
+  it("detects multiple drawdown episodes", () => {
+    const snapshots = [
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000), // peak 1
+      snap("2024-01-04", 95000),  // trough 1
+      snap("2024-01-05", 112000), // recovery 1 + new peak 2
+      snap("2024-01-08", 100000), // trough 2
+      snap("2024-01-09", 115000), // recovery 2
+    ];
+    const result = computeAllDrawdownEpisodes(snapshots);
+    expect(result.length).toBe(2);
+  });
+
+  it("respects minDrawdown threshold", () => {
+    const snapshots = [
+      snap("2024-01-02", 100000),
+      snap("2024-01-03", 110000),
+      snap("2024-01-04", 109000), // tiny dip: 0.9% < 1%
+      snap("2024-01-05", 115000), // recovery
+    ];
+    // With default 1% threshold, this tiny dip should be filtered
+    const result = computeAllDrawdownEpisodes(snapshots, 0.01);
+    expect(result.length).toBe(0);
+    // With a lower threshold, it should be captured
+    const result2 = computeAllDrawdownEpisodes(snapshots, 0.005);
+    expect(result2.length).toBe(1);
   });
 });

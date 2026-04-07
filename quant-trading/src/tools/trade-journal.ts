@@ -21,7 +21,8 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
       "交易笔记/复盘记录。记录每笔交易的思考和总结。" +
       "action=add_note 添加笔记, action=update_note 修改, action=delete_note 删除, " +
       "action=view 查看(按trade_id/symbol/date), action=search 搜索, " +
-      "action=recent 最近笔记, action=summary 统计概览, action=tags 标签列表。",
+      "action=recent 最近笔记, action=summary 统计概览, action=tags 标签列表, " +
+      "action=periodic_report 生成周报/月报(需指定period=week/month)。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -36,6 +37,7 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
             "recent",
             "summary",
             "tags",
+            "periodic_report",
           ],
           description: "操作类型",
         },
@@ -62,6 +64,11 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
         date: { type: "string", description: "日期 YYYY-MM-DD (默认今天)" },
         query: { type: "string", description: "搜索关键词 (search)" },
         limit: { type: "number", description: "返回数量" },
+        period: {
+          type: "string",
+          enum: ["week", "month"],
+          description: "报告周期 (periodic_report): week=周报, month=月报",
+        },
       },
       required: ["action"],
     },
@@ -165,6 +172,108 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
 
         case "tags": {
           return { tags: journal.getAllTags() };
+        }
+
+        case "periodic_report": {
+          const period = (args.period as string) ?? "week";
+          const now = new Date();
+          let startDate: string;
+          let periodLabel: string;
+
+          if (period === "month") {
+            const start = new Date(now.getFullYear(), now.getMonth(), 1);
+            startDate = start.toISOString().slice(0, 10);
+            periodLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+          } else {
+            // Default to current week (Monday to today)
+            const day = now.getDay();
+            const diff = day === 0 ? 6 : day - 1; // Monday = 0 offset
+            const start = new Date(now);
+            start.setDate(now.getDate() - diff);
+            startDate = start.toISOString().slice(0, 10);
+            periodLabel = `${startDate} ~ ${now.toISOString().slice(0, 10)}`;
+          }
+
+          const endDate = now.toISOString().slice(0, 10);
+          const notes = journal.getByDateRange(startDate, endDate);
+
+          if (notes.length === 0) {
+            return {
+              period: periodLabel,
+              message: "该周期内没有交易笔记",
+              totalTrades: 0,
+            };
+          }
+
+          // Compute stats
+          const withPnl = notes.filter((n) => n.pnl != null);
+          const totalPnl = withPnl.reduce((sum, n) => sum + n.pnl!, 0);
+          const winTrades = withPnl.filter((n) => n.pnl! > 0);
+          const lossTrades = withPnl.filter((n) => n.pnl! < 0);
+          const winRate = withPnl.length > 0 ? (winTrades.length / withPnl.length) * 100 : 0;
+          const avgWin =
+            winTrades.length > 0
+              ? winTrades.reduce((s, n) => s + n.pnl!, 0) / winTrades.length
+              : 0;
+          const avgLoss =
+            lossTrades.length > 0
+              ? lossTrades.reduce((s, n) => s + n.pnl!, 0) / lossTrades.length
+              : 0;
+          const profitFactor =
+            avgLoss !== 0 ? Math.abs(avgWin / avgLoss) : avgWin > 0 ? Infinity : 0;
+
+          // Symbol breakdown
+          const symbolMap = new Map<string, { count: number; pnl: number }>();
+          for (const n of notes) {
+            const entry = symbolMap.get(n.symbol) ?? { count: 0, pnl: 0 };
+            entry.count++;
+            if (n.pnl != null) entry.pnl += n.pnl;
+            symbolMap.set(n.symbol, entry);
+          }
+          const symbolBreakdown = [...symbolMap.entries()]
+            .sort((a, b) => b[1].pnl - a[1].pnl)
+            .map(([sym, data]) => ({
+              symbol: sym,
+              trades: data.count,
+              pnl: `¥${data.pnl.toFixed(2)}`,
+            }));
+
+          // Collect lessons and top tags
+          const lessons = notes
+            .filter((n) => n.lesson)
+            .map((n) => ({ date: n.date, symbol: n.symbol, lesson: n.lesson! }));
+          const tagCounts = new Map<string, number>();
+          for (const n of notes) {
+            for (const t of n.tags) {
+              tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+            }
+          }
+          const topTags = [...tagCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([tag, count]) => ({ tag, count }));
+
+          // Rating distribution
+          const rated = notes.filter((n) => n.rating != null);
+          const avgRating =
+            rated.length > 0
+              ? rated.reduce((sum, n) => sum + n.rating!, 0) / rated.length
+              : 0;
+
+          return {
+            period: periodLabel,
+            totalNotes: notes.length,
+            tradesWithPnl: withPnl.length,
+            totalPnl: `¥${totalPnl.toFixed(2)}`,
+            winRate: `${winRate.toFixed(1)}%`,
+            avgWin: `¥${avgWin.toFixed(2)}`,
+            avgLoss: `¥${avgLoss.toFixed(2)}`,
+            profitFactor: profitFactor === Infinity ? "∞" : profitFactor.toFixed(2),
+            avgRating: avgRating > 0 ? avgRating.toFixed(1) : "N/A",
+            symbolBreakdown,
+            topTags,
+            keyLessons: lessons.slice(0, 10),
+          };
         }
 
         default:

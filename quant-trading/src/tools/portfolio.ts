@@ -6,6 +6,8 @@ import path from "node:path";
  * Supports both paper portfolio (local JSON) and live broker positions.
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { runPythonScript } from "../bridge/python-bridge.js";
+import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 
@@ -59,6 +61,7 @@ export function createPortfolioTool(
       "管理投资组合（模拟 & 实盘）。" +
       "action=show 查看持仓, action=buy 买入, action=sell 卖出, " +
       "action=add_cash 追加资金, action=summary 组合摘要, " +
+      "action=diagnose 持仓诊断（逐只检查健康度+操作建议）, " +
       "action=live_sync 同步实盘持仓, action=live_orders 查看实盘订单, " +
       "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。",
     parameters: {
@@ -72,6 +75,7 @@ export function createPortfolioTool(
             "sell",
             "add_cash",
             "summary",
+            "diagnose",
             "live_sync",
             "live_orders",
             "live_trades",
@@ -258,6 +262,136 @@ export function createPortfolioTool(
             stockValue: `¥${totalCost.toFixed(2)}`,
             totalValue: `¥${(portfolio.cash + totalCost).toFixed(2)}`,
             positionCount: portfolio.positions.length,
+          };
+        }
+
+        case "diagnose": {
+          // Gather positions from live engine or paper portfolio
+          type DiagPosition = {
+            symbol: string;
+            name?: string;
+            quantity: number;
+            avgCost: number;
+            currentPrice?: number;
+          };
+          const diagPositions: DiagPosition[] = [];
+          let totalAssets = 0;
+
+          const engine = getEngine?.();
+          if (engine && engine.getStatus() === "running") {
+            const account = engine.getAccount();
+            const positions = engine.getPositions();
+            if (account) totalAssets = account.totalAssets;
+            for (const p of positions) {
+              diagPositions.push({
+                symbol: p.symbol,
+                name: p.name,
+                quantity: p.quantity,
+                avgCost: p.avgCost,
+                currentPrice: p.currentPrice ?? undefined,
+              });
+            }
+          } else {
+            const portfolio = await loadPortfolio(config);
+            totalAssets = portfolio.totalValue;
+            for (const p of portfolio.positions) {
+              diagPositions.push({
+                symbol: p.symbol,
+                name: p.name,
+                quantity: p.quantity,
+                avgCost: p.avgCost,
+                currentPrice: p.currentPrice ?? undefined,
+              });
+            }
+          }
+
+          if (diagPositions.length === 0) {
+            return { message: "当前无持仓", positions: [] };
+          }
+
+          // Fetch real-time quotes for positions missing current price
+          const provider = createDataProvider(config);
+          for (const pos of diagPositions) {
+            if (pos.currentPrice == null || pos.currentPrice === 0) {
+              try {
+                const market = detectMarketFromSymbol(pos.symbol);
+                const quote = await provider.getQuote(pos.symbol, market as never);
+                if (quote) pos.currentPrice = quote.price;
+              } catch {
+                // ignore quote fetch failure
+              }
+            }
+          }
+
+          // Compute per-position diagnostics
+          const diagnostics = diagPositions.map((pos) => {
+            const price = pos.currentPrice ?? pos.avgCost;
+            const marketValue = pos.quantity * price;
+            const pnl = (price - pos.avgCost) * pos.quantity;
+            const pnlPct = pos.avgCost > 0 ? ((price - pos.avgCost) / pos.avgCost) * 100 : 0;
+            const weight = totalAssets > 0 ? (marketValue / totalAssets) * 100 : 0;
+
+            // Generate advice based on position state
+            let advice: string;
+            let riskLevel: "low" | "medium" | "high";
+            const warnings: string[] = [];
+
+            if (weight > 25) {
+              warnings.push(`仓位占比 ${weight.toFixed(1)}% 超过单只上限25%`);
+            }
+
+            if (pnlPct <= -10) {
+              advice = "建议止损或减仓，亏损已超过10%";
+              riskLevel = "high";
+            } else if (pnlPct <= -5) {
+              advice = "关注止损位，亏损接近警戒线";
+              riskLevel = "medium";
+            } else if (pnlPct >= 30) {
+              advice = "浮盈丰厚，建议分批止盈锁定利润";
+              riskLevel = "medium";
+            } else if (pnlPct >= 15) {
+              advice = "浮盈良好，可上移止盈位保护利润";
+              riskLevel = "low";
+            } else if (pnlPct >= 0) {
+              advice = "持仓正常，继续持有观察";
+              riskLevel = "low";
+            } else {
+              advice = "小幅浮亏，关注支撑位是否有效";
+              riskLevel = "low";
+            }
+
+            return {
+              symbol: pos.symbol,
+              name: pos.name ?? pos.symbol,
+              quantity: pos.quantity,
+              avgCost: `¥${pos.avgCost.toFixed(2)}`,
+              currentPrice: pos.currentPrice != null ? `¥${pos.currentPrice.toFixed(2)}` : "N/A",
+              marketValue: `¥${marketValue.toFixed(2)}`,
+              pnl: `¥${pnl.toFixed(2)}`,
+              pnlPct: `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`,
+              weight: `${weight.toFixed(1)}%`,
+              riskLevel,
+              advice,
+              warnings,
+            };
+          });
+
+          // Portfolio-level summary
+          const totalPnl = diagPositions.reduce((sum, pos) => {
+            const price = pos.currentPrice ?? pos.avgCost;
+            return sum + (price - pos.avgCost) * pos.quantity;
+          }, 0);
+          const highRiskCount = diagnostics.filter((d) => d.riskLevel === "high").length;
+          const overweightCount = diagnostics.filter((d) =>
+            d.warnings.some((w) => w.includes("仓位占比")),
+          ).length;
+
+          return {
+            positionCount: diagnostics.length,
+            totalPnl: `¥${totalPnl.toFixed(2)}`,
+            highRiskPositions: highRiskCount,
+            overweightPositions: overweightCount,
+            positions: diagnostics,
           };
         }
 

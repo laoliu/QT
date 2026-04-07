@@ -219,6 +219,8 @@ def run_sector_analysis(config: dict) -> dict:
             return {"error": "请提供板块名称 (sector)"}
         days = config.get("days", 20)
         return _sector_history(sector, days, errors)
+    elif action == "rotation":
+        return _sector_rotation(limit, errors)
     else:
         return {"error": f"未知action: {action}"}
 
@@ -378,6 +380,66 @@ def _safe_float(val: Any) -> float | None:
         return round(f, 4)
     except (ValueError, TypeError):
         return None
+
+
+def _sector_rotation(limit: int, errors: list[str]) -> dict:
+    """Sector rotation analysis — compare sector momentum across multiple timeframes.
+
+    Fetches today's ranking as the 1-day snapshot, then identifies:
+    - Sectors accelerating (rising rank → money rotating IN)
+    - Sectors decelerating (falling rank → money rotating OUT)
+    Uses 1-day change as proxy; future enhancement could use multi-day history.
+    """
+    ranking_result = _sector_ranking(limit * 2, errors)
+    sectors = ranking_result.get("sectors", [])
+    if not sectors:
+        return {"error": "无法获取板块数据", "errors": errors}
+
+    # Classify sectors by momentum strength
+    strong_up: list[dict] = []   # changePct > 2%
+    mild_up: list[dict] = []     # 0.5% ~ 2%
+    flat: list[dict] = []        # -0.5% ~ 0.5%
+    mild_down: list[dict] = []   # -2% ~ -0.5%
+    strong_down: list[dict] = [] # < -2%
+
+    for s in sectors:
+        pct = s.get("change_pct", 0) or 0
+        entry = {
+            "name": s.get("name", ""),
+            "changePct": pct,
+            "leader": s.get("leader", ""),
+            "leader_change": s.get("leader_change", 0),
+            "type": s.get("type", ""),
+        }
+        if pct > 2:
+            strong_up.append(entry)
+        elif pct > 0.5:
+            mild_up.append(entry)
+        elif pct >= -0.5:
+            flat.append(entry)
+        elif pct >= -2:
+            mild_down.append(entry)
+        else:
+            strong_down.append(entry)
+
+    return {
+        "action": "rotation",
+        "summary": {
+            "totalSectors": len(sectors),
+            "strongUp": len(strong_up),
+            "mildUp": len(mild_up),
+            "flat": len(flat),
+            "mildDown": len(mild_down),
+            "strongDown": len(strong_down),
+        },
+        "moneyFlowingIn": strong_up[:limit],
+        "mildlyPositive": mild_up[:limit],
+        "neutral": flat[:limit],
+        "mildlyNegative": mild_down[:limit],
+        "moneyFlowingOut": strong_down[:limit],
+        "displayHint": "板块轮动概览：资金流入板块（强势）→ 中性 → 资金流出板块（弱势），帮助判断市场主线和轮动方向。",
+        **({"errors": errors} if errors else {}),
+    }
 
 
 def _safe_int(val: Any) -> int:

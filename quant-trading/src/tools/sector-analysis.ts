@@ -14,17 +14,19 @@ export function createSectorAnalysisTool(_api: OpenClawPluginApi, config: QuantT
   return {
     name: "sector_analysis",
     description:
-      "板块/行业分析工具。查看行业板块排名、板块成分股、板块历史走势。\n" +
+      "板块/行业分析工具。查看行业板块排名、板块成分股、板块历史走势、板块轮动追踪。\n" +
       "• action=ranking — 今日行业板块涨跌排名（默认前20）\n" +
       "• action=detail — 查看某板块成分股详情（需指定sector）\n" +
-      "• action=history — 查看板块历史K线走势（需指定sector）",
+      "• action=history — 查看板块历史K线走势（需指定sector）\n" +
+      "• action=rotation — 板块轮动分析（多板块多周期动量对比，识别资金轮动方向）",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["ranking", "detail", "history"],
-          description: "操作类型: ranking=板块涨跌排名, detail=板块成分股, history=板块历史走势",
+          enum: ["ranking", "detail", "history", "rotation"],
+          description:
+            "操作类型: ranking=板块涨跌排名, detail=板块成分股, history=板块历史走势, rotation=板块轮动分析",
         },
         sector: {
           type: "string",

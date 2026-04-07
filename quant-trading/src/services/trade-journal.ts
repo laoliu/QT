@@ -168,6 +168,11 @@ export class TradeJournal {
     return this.notes.slice(-limit).reverse();
   }
 
+  /** Get notes within a date range (inclusive). */
+  getByDateRange(startDate: string, endDate: string): TradeNote[] {
+    return this.notes.filter((n) => n.date >= startDate && n.date <= endDate);
+  }
+
   /** Get all unique tags used. */
   getAllTags(): string[] {
     const tagsSet = new Set<string>();

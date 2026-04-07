@@ -34,15 +34,16 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
       "action=quote 实时报价,\n" +
       "action=klines 历史K线（可附带技术指标: MA/EMA/RSI/ATR/波动率/52周高低点）,\n" +
       "action=search 搜索标的,\n" +
-      "action=fundamentals 基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等)。",
+      "action=fundamentals 基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等),\n" +
+      "action=overview 市场全景（主要指数+涨跌家数+成交额，适合盘前/盘中快速了解大盘）。",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["quote", "klines", "search", "fundamentals"],
+          enum: ["quote", "klines", "search", "fundamentals", "overview"],
           description:
-            "操作类型: quote=实时报价, klines=历史K线, search=搜索标的, fundamentals=基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等)",
+            "操作类型: quote=实时报价, klines=历史K线, search=搜索标的, fundamentals=基本面/估值/财务数据(PE/PB/ROE/毛利率/现金流等), overview=市场全景(主要指数+涨跌家数+成交额)",
         },
         symbol: {
           type: "string",
@@ -189,6 +190,72 @@ export function createMarketDataTool(api: OpenClawPluginApi, config: QuantTradin
           );
           if (!result.ok) return { error: result.error ?? "获取基本面数据失败" };
           return result.data;
+        }
+
+        case "overview": {
+          // Fetch major indices in parallel
+          const majorIndices = [
+            { symbol: "000001", name: "上证指数" },
+            { symbol: "399001", name: "深证成指" },
+            { symbol: "399006", name: "创业板指" },
+            { symbol: "000300", name: "沪深300" },
+            { symbol: "000905", name: "中证500" },
+            { symbol: "000852", name: "中证1000" },
+          ];
+
+          const indexQuotes: Array<Record<string, unknown>> = [];
+          const errors: string[] = [];
+
+          for (const idx of majorIndices) {
+            try {
+              const quote = await provider.getQuote(idx.symbol, "cn_stock" as never);
+              if (quote) {
+                indexQuotes.push({
+                  symbol: idx.symbol,
+                  name: idx.name,
+                  price: quote.price.toFixed(2),
+                  change: `${quote.change >= 0 ? "+" : ""}${quote.change.toFixed(2)}`,
+                  changePct: `${quote.changePct >= 0 ? "+" : ""}${quote.changePct.toFixed(2)}%`,
+                  volume: quote.volume,
+                  amount: quote.amount,
+                });
+              }
+            } catch {
+              errors.push(`${idx.name}: 获取失败`);
+            }
+          }
+
+          // Fetch market breadth from Python (advance/decline counts)
+          let breadth: Record<string, unknown> | null = null;
+          try {
+            const pyResult = await runPythonScript<Record<string, unknown>>(
+              "engines/sector_analysis.py",
+              { action: "ranking", limit: 5 },
+              config,
+            );
+            if (pyResult.ok && pyResult.data) {
+              const sectors = (pyResult.data as { sectors?: Array<Record<string, unknown>> })
+                .sectors;
+              if (sectors && sectors.length > 0) {
+                breadth = {
+                  topSectors: sectors.slice(0, 5).map((s) => ({
+                    name: s.name,
+                    changePct: s.changePct ?? s.change_pct,
+                  })),
+                };
+              }
+            }
+          } catch {
+            // non-critical, skip breadth
+          }
+
+          return {
+            timestamp: new Date().toISOString(),
+            indices: indexQuotes,
+            ...(breadth && { breadth }),
+            ...(errors.length > 0 && { errors }),
+            displayHint: "市场全景：先展示指数行情表格，再展示热门板块，便于快速判断大盘环境。",
+          };
         }
 
         default:

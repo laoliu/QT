@@ -14,7 +14,7 @@ Skills 定义工具的能力，这个文件记录你的环境特定的使用细�
 
 | 工具 | 用途 |
 |------|------|
-| `market_data` | 实时行情、K线（含技术指标）、基本面（PE/PB/ROE）、证券搜索 |
+| `market_data` | 实时行情、K线（含技术指标）、基本面（PE/PB/ROE）、证券搜索、**市场全景(overview)** |
 | `macro_data` | GDP、CPI、PMI、利率、经济周期研判 |
 | `news_summary` | 财经新闻聚合与情绪分析 |
 | `earnings_calendar` | 财报日期、分析师评级、业绩预告 |
@@ -25,8 +25,8 @@ Skills 定义工具的能力，这个文件记录你的环境特定的使用细�
 |------|------|
 | `stock_screen` | 多因子筛选（F-Score/CAN SLIM/魔法公式/技术面/量价/PEG） |
 | `stock_recommend` | AI 智能选股推荐 |
-| `sector_analysis` | 板块排名、行业详细指标 |
-| `favorites` / `watchlist` | 自选股与关注列表管理 |
+| `sector_analysis` | 板块排名、行业详细指标、**板块轮动分析(rotation)** |
+| `favorites` / `watchlist` | 自选股与关注列表管理、**批量行情(batch_quote)** |
 
 ### stock_screen 调用要点
 
@@ -84,11 +84,11 @@ stock_screen(action="list_screeners")
 
 | 工具 | 用途 |
 |------|------|
-| `portfolio` | 持仓管理（查看/买卖/跟踪） |
+| `portfolio` | 持仓管理（查看/买卖/跟踪/**持仓诊断diagnose**） |
 | `position_sizing` | 仓位计算（基于风险） |
 | `portfolio_rebalance` | 组合再平衡 |
 | `dca_schedule` | 定投计划管理 |
-| `trade_journal` | 交易日志与复盘笔记 |
+| `trade_journal` | 交易日志与复盘笔记、**周报/月报(periodic_report)** |
 | `live_trading` | 实盘交易（下单/持仓/暂停/恢复） |
 | `conditional_order` | 条件单（止损/止盈/追踪止损） |
 | `price_alert` | 价格预警 + 可选自动下单 |

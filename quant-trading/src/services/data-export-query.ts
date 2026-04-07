@@ -15,6 +15,7 @@ import path from "node:path";
 import type {
   LivePosition,
   Order,
+  PendingConfirmation,
   Portfolio,
   PortfolioPosition,
   QuantTradingConfig,
@@ -28,6 +29,7 @@ import {
   type StrategyAttribution,
   type SymbolAttribution,
 } from "./performance-attribution.js";
+import type { SignalTrackRecord } from "./signal-hitrate.js";
 import type { TradeNote } from "./trade-journal.js";
 
 // ── Exportable Intermediate Structures ──────────────────────────
@@ -173,6 +175,38 @@ export interface ExportableTradeNote {
   updatedAt: string;
 }
 
+/** Flat signal hit-rate record row ready for tabular export. */
+export interface ExportableSignalRecord {
+  signalDate: string;
+  symbol: string;
+  direction: string;
+  signalPrice: number;
+  strategyId: string;
+  reason: string;
+  confidence: number | null;
+  hitT1: string;
+  hitT3: string;
+  hitT5: string;
+  hitT10: string;
+  priceT1: number | null;
+  priceT3: number | null;
+  priceT5: number | null;
+  priceT10: number | null;
+}
+
+/** Flat confirmation history row ready for tabular export. */
+export interface ExportableConfirmation {
+  confirmId: string;
+  orderId: string;
+  channel: string;
+  userId: string;
+  status: string;
+  expiresAt: string;
+  respondedAt: string;
+  respondedBy: string;
+  messageText: string;
+}
+
 /** Account summary row. */
 export interface ExportableAccountSummary {
   mode: "paper" | "live";
@@ -205,6 +239,8 @@ export interface ExportDataset {
   symbolAttribution: ExportableSymbolAttribution[];
   periodPnl: ExportablePeriodPnl[];
   tradeNotes: ExportableTradeNote[];
+  signalRecords: ExportableSignalRecord[];
+  confirmations: ExportableConfirmation[];
   accountSummary: ExportableAccountSummary | null;
 }
 
@@ -232,6 +268,8 @@ export type ExportSection =
   | "equity"
   | "attribution"
   | "notes"
+  | "signals"
+  | "confirmations"
   | "account";
 
 const ALL_SECTIONS: ExportSection[] = [
@@ -241,6 +279,8 @@ const ALL_SECTIONS: ExportSection[] = [
   "equity",
   "attribution",
   "notes",
+  "signals",
+  "confirmations",
   "account",
 ];
 
@@ -318,6 +358,18 @@ async function queryEquityHistory(
 async function queryTradeNotes(cfg: QuantTradingConfig): Promise<TradeNote[]> {
   const filePath = path.join(dataDir(cfg), "trade-journal.json");
   return (await readJson<TradeNote[]>(filePath)) ?? [];
+}
+
+/** Load signal hit-rate records. */
+async function querySignalRecords(cfg: QuantTradingConfig): Promise<SignalTrackRecord[]> {
+  const filePath = path.join(dataDir(cfg), "signal-hitrate.json");
+  return (await readJson<SignalTrackRecord[]>(filePath)) ?? [];
+}
+
+/** Load confirmation history records. */
+async function queryConfirmations(cfg: QuantTradingConfig): Promise<PendingConfirmation[]> {
+  const filePath = path.join(dataDir(cfg), "confirmations.json");
+  return (await readJson<PendingConfirmation[]>(filePath)) ?? [];
 }
 
 // ── Transformation Functions ────────────────────────────────────
@@ -452,6 +504,54 @@ function transformTradeNote(n: TradeNote): ExportableTradeNote {
   };
 }
 
+function checkpointResult(
+  checkpoints: SignalTrackRecord["checkpoints"],
+  key: string,
+): string {
+  return checkpoints[key]?.result ?? "pending";
+}
+
+function checkpointPrice(
+  checkpoints: SignalTrackRecord["checkpoints"],
+  key: string,
+): number | null {
+  return checkpoints[key]?.price ?? null;
+}
+
+function transformSignalRecord(r: SignalTrackRecord): ExportableSignalRecord {
+  return {
+    signalDate: new Date(r.signalTimestamp).toISOString(),
+    symbol: r.symbol,
+    direction: r.direction,
+    signalPrice: r.signalPrice,
+    strategyId: r.strategyId,
+    reason: r.reason ?? "",
+    confidence: r.confidence ?? null,
+    hitT1: checkpointResult(r.checkpoints, "T+1"),
+    hitT3: checkpointResult(r.checkpoints, "T+3"),
+    hitT5: checkpointResult(r.checkpoints, "T+5"),
+    hitT10: checkpointResult(r.checkpoints, "T+10"),
+    priceT1: checkpointPrice(r.checkpoints, "T+1"),
+    priceT3: checkpointPrice(r.checkpoints, "T+3"),
+    priceT5: checkpointPrice(r.checkpoints, "T+5"),
+    priceT10: checkpointPrice(r.checkpoints, "T+10"),
+  };
+}
+
+function transformConfirmation(c: PendingConfirmation): ExportableConfirmation {
+  return {
+    confirmId: c.confirmId,
+    orderId: c.orderId,
+    channel: c.channel ?? "",
+    userId: c.userId ?? "",
+    status: c.status,
+    expiresAt: c.expiresAt,
+    respondedAt: c.respondedAt ?? "",
+    respondedBy: c.respondedBy ?? "",
+    messageText: c.messageText,
+  };
+}
+
 function buildAttributionSummary(attr: AttributionResult): ExportableAttributionSummary {
   return {
     dateFrom: attr.dateRange.from,
@@ -527,6 +627,38 @@ function filterTradeNotes(notes: TradeNote[], opts: ExportQueryOptions): TradeNo
   return result;
 }
 
+function filterSignalRecords(
+  records: SignalTrackRecord[],
+  opts: ExportQueryOptions,
+): SignalTrackRecord[] {
+  let result = records;
+  if (opts.from || opts.to) {
+    result = result.filter((r) =>
+      dateInRange(new Date(r.signalTimestamp).toISOString(), opts.from, opts.to),
+    );
+  }
+  if (opts.symbols?.length) {
+    const set = new Set(opts.symbols);
+    result = result.filter((r) => set.has(r.symbol));
+  }
+  if (opts.strategyIds?.length) {
+    const set = new Set(opts.strategyIds);
+    result = result.filter((r) => set.has(r.strategyId));
+  }
+  return result;
+}
+
+function filterConfirmations(
+  confirmations: PendingConfirmation[],
+  opts: ExportQueryOptions,
+): PendingConfirmation[] {
+  let result = confirmations;
+  if (opts.from || opts.to) {
+    result = result.filter((c) => dateInRange(c.expiresAt, opts.from, opts.to));
+  }
+  return result;
+}
+
 // ── Main Export Query Function ──────────────────────────────────
 
 /**
@@ -564,6 +696,8 @@ export async function queryExportDataset(
     symbolAttribution: [],
     periodPnl: [],
     tradeNotes: [],
+    signalRecords: [],
+    confirmations: [],
     accountSummary: null,
   };
 
@@ -631,6 +765,26 @@ export async function queryExportDataset(
       queryTradeNotes(cfg).then((raw) => {
         const filtered = filterTradeNotes(raw, opts);
         dataset.tradeNotes = filtered.map(transformTradeNote);
+      }),
+    );
+  }
+
+  // ── Signal Hit-Rate Records ──
+  if (sections.has("signals")) {
+    promises.push(
+      querySignalRecords(cfg).then((raw) => {
+        const filtered = filterSignalRecords(raw, opts);
+        dataset.signalRecords = filtered.map(transformSignalRecord);
+      }),
+    );
+  }
+
+  // ── Confirmation History ──
+  if (sections.has("confirmations")) {
+    promises.push(
+      queryConfirmations(cfg).then((raw) => {
+        const filtered = filterConfirmations(raw, opts);
+        dataset.confirmations = filtered.map(transformConfirmation);
       }),
     );
   }
@@ -820,6 +974,24 @@ export async function queryExportableAttribution(
   };
 }
 
+/** Query signal hit-rate records in exportable form. */
+export async function queryExportableSignalRecords(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableSignalRecord[]> {
+  const raw = await querySignalRecords(cfg);
+  return filterSignalRecords(raw, opts).map(transformSignalRecord);
+}
+
+/** Query confirmation history in exportable form. */
+export async function queryExportableConfirmations(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableConfirmation[]> {
+  const raw = await queryConfirmations(cfg);
+  return filterConfirmations(raw, opts).map(transformConfirmation);
+}
+
 // ── Column definitions for tabular export ───────────────────────
 
 /** Column metadata for building CSV/Excel headers from exportable types. */
@@ -897,4 +1069,33 @@ export const PERIOD_PNL_COLUMNS: ExportColumnDef[] = [
   { key: "cumPnl", label: "Cumulative P&L", labelCn: "累计盈亏" },
   { key: "wins", label: "Wins", labelCn: "盈利次数" },
   { key: "losses", label: "Losses", labelCn: "亏损次数" },
+];
+
+export const SIGNAL_RECORD_COLUMNS: ExportColumnDef[] = [
+  { key: "signalDate", label: "Signal Date", labelCn: "信号时间" },
+  { key: "symbol", label: "Symbol", labelCn: "代码" },
+  { key: "direction", label: "Direction", labelCn: "方向" },
+  { key: "signalPrice", label: "Signal Price", labelCn: "信号价格" },
+  { key: "strategyId", label: "Strategy", labelCn: "策略" },
+  { key: "reason", label: "Reason", labelCn: "原因" },
+  { key: "confidence", label: "Confidence", labelCn: "置信度" },
+  { key: "hitT1", label: "T+1 Result", labelCn: "T+1结果" },
+  { key: "hitT3", label: "T+3 Result", labelCn: "T+3结果" },
+  { key: "hitT5", label: "T+5 Result", labelCn: "T+5结果" },
+  { key: "hitT10", label: "T+10 Result", labelCn: "T+10结果" },
+  { key: "priceT1", label: "T+1 Price", labelCn: "T+1价格" },
+  { key: "priceT3", label: "T+3 Price", labelCn: "T+3价格" },
+  { key: "priceT5", label: "T+5 Price", labelCn: "T+5价格" },
+  { key: "priceT10", label: "T+10 Price", labelCn: "T+10价格" },
+];
+
+export const CONFIRMATION_COLUMNS: ExportColumnDef[] = [
+  { key: "confirmId", label: "Confirm ID", labelCn: "确认号" },
+  { key: "orderId", label: "Order ID", labelCn: "订单号" },
+  { key: "status", label: "Status", labelCn: "状态" },
+  { key: "channel", label: "Channel", labelCn: "渠道" },
+  { key: "userId", label: "User ID", labelCn: "用户" },
+  { key: "expiresAt", label: "Expires At", labelCn: "过期时间" },
+  { key: "respondedAt", label: "Responded At", labelCn: "响应时间" },
+  { key: "respondedBy", label: "Responded By", labelCn: "响应人" },
 ];

@@ -14,6 +14,8 @@ import {
   type ExportableAttributionSummary,
   type ExportableStrategyAttribution,
   type ExportableSymbolAttribution,
+  type ExportableSignalRecord,
+  type ExportableConfirmation,
   type ExportDataset,
   type ExportQueryOptions,
   ORDER_COLUMNS,
@@ -21,6 +23,8 @@ import {
   POSITION_COLUMNS,
   EQUITY_COLUMNS,
   PERIOD_PNL_COLUMNS,
+  SIGNAL_RECORD_COLUMNS,
+  CONFIRMATION_COLUMNS,
 } from "./data-export-query.js";
 
 // ── Type-level tests: verify all exportable types are flat ──────
@@ -155,6 +159,66 @@ describe("Column definitions", () => {
     expect(keys).toContain("granularity");
     expect(keys).toContain("cumPnl");
   });
+
+  it("SIGNAL_RECORD_COLUMNS includes hit-rate horizons", () => {
+    const keys = SIGNAL_RECORD_COLUMNS.map((c) => c.key);
+    expect(keys).toContain("signalDate");
+    expect(keys).toContain("hitT1");
+    expect(keys).toContain("hitT10");
+    expect(keys).toContain("priceT1");
+    expect(keys).toContain("strategyId");
+  });
+
+  it("CONFIRMATION_COLUMNS includes audit fields", () => {
+    const keys = CONFIRMATION_COLUMNS.map((c) => c.key);
+    expect(keys).toContain("confirmId");
+    expect(keys).toContain("orderId");
+    expect(keys).toContain("status");
+    expect(keys).toContain("respondedAt");
+  });
+});
+
+describe("ExportableSignalRecord", () => {
+  it("has only primitive fields with checkpoint results flattened", () => {
+    const signal: ExportableSignalRecord = {
+      signalDate: "2025-01-10T09:30:00.000Z",
+      symbol: "600519",
+      direction: "buy",
+      signalPrice: 1800,
+      strategyId: "dual-ma",
+      reason: "MA crossover",
+      confidence: 0.85,
+      hitT1: "hit",
+      hitT3: "miss",
+      hitT5: "pending",
+      hitT10: "pending",
+      priceT1: 1820,
+      priceT3: 1780,
+      priceT5: null,
+      priceT10: null,
+    };
+    expect(signal.hitT1).toBe("hit");
+    expect(signal.confidence).toBe(0.85);
+    expect(signal.priceT5).toBeNull();
+  });
+});
+
+describe("ExportableConfirmation", () => {
+  it("has flat structure with all audit fields", () => {
+    const confirm: ExportableConfirmation = {
+      confirmId: "a3f9",
+      orderId: "o-1",
+      channel: "discord",
+      userId: "user-123",
+      status: "confirmed",
+      expiresAt: "2025-01-10T09:32:00Z",
+      respondedAt: "2025-01-10T09:31:00Z",
+      respondedBy: "user-123",
+      messageText: "买入 600519 100股",
+    };
+    expect(confirm.status).toBe("confirmed");
+    expect(confirm.confirmId).toBe("a3f9");
+  });
 });
 
 describe("ExportDataset structure", () => {
@@ -173,6 +237,8 @@ describe("ExportDataset structure", () => {
       symbolAttribution: [],
       periodPnl: [],
       tradeNotes: [],
+      signalRecords: [],
+      confirmations: [],
       accountSummary: null,
     };
     expect(ds.meta.mode).toBe("paper");

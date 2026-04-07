@@ -155,6 +155,7 @@ import { createSectorAnalysisTool } from "./src/tools/sector-analysis.js";
 import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
+import { createStockDiagnosisTool } from "./src/tools/stock-diagnosis.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
@@ -654,7 +655,17 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
-    };
+    } as Record<string, { name: string; description: string; parameters: unknown; execute: (args: Record<string, unknown>) => Promise<unknown> }>;
+
+    // stock_diagnosis depends on other tool instances, so add it after the object literal
+    toolInstances.stock_diagnosis = createStockDiagnosisTool(api, config, () => ({
+      market_data: toolInstances.market_data,
+      cfo_assistant: toolInstances.cfo_assistant,
+      chip_accumulation: toolInstances.chip_accumulation,
+      fund_flow: toolInstances.fund_flow,
+      social_sentiment: toolInstances.social_sentiment,
+      sector_analysis: toolInstances.sector_analysis,
+    })) as typeof toolInstances[string];
 
     const toolLabels: Record<string, string> = {
       market_data: "行情数据",
@@ -704,6 +715,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      stock_diagnosis: "个股综合诊断",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

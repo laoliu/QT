@@ -632,7 +632,7 @@ const quantTradingPlugin = {
       performance_attribution: createPerformanceAttributionTool(api, config),
       strategy_health: createStrategyHealthTool(api, config, strategyHealthMonitor),
       value_investing: createValueInvestingTool(api, config),
-      financial_calculator: createFinancialCalculatorTool(api, config),
+      financial_calculator: createFinancialCalculatorTool(api, config, tradeJournal),
       news_summary: createNewsSummaryTool(api, config),
       polymarket_odds: createPolymarketOddsTool(api, config),
       cfo_assistant: createCfoAssistantTool(api, config),

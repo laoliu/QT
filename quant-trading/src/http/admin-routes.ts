@@ -8,6 +8,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { OrderRequest } from "../broker/adapter.js";
+import type { TradeJournal } from "../services/trade-journal.js";
 import { startOpenClawProxy } from "./openclaw-proxy.js";
 import {
   createDataProvider,
@@ -77,6 +78,7 @@ export interface AdminRouteDeps {
   tickFeatureStore?: TickFeatureStore | null;
   tickStrategyService?: TickStrategyService | null;
   tickHistoryStore?: TickHistoryStore | null;
+  tradeJournal?: TradeJournal;
   secure: (handler: HttpHandler) => HttpHandler;
   securePublic: (handler: HttpHandler) => HttpHandler;
 }
@@ -114,6 +116,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     getEngine,
     secure,
     securePublic,
+    tradeJournal,
   } = deps;
   const marketDataProvider = createDataProvider(config);
 
@@ -479,6 +482,135 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           removed ? { ok: true } : { error: `未找到收藏股票: ${code}` },
           removed ? 200 : 404,
         );
+        return;
+      }
+
+      json(res, { error: "仅支持 GET/POST/PATCH/DELETE" }, 405);
+    }),
+  });
+
+  // ── Trade Journal Page ──────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/journal",
+    handler: securePublic(async (_req, res) => {
+      const { getJournalPageHtml } = await import("./pages/journal-page.js");
+      const html = getJournalPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Trade Journal API ──────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/journal",
+    handler: secure(async (req, res) => {
+      if (!tradeJournal) {
+        json(res, { error: "TradeJournal 服务未初始化" }, 503);
+        return;
+      }
+
+      const url = new URL(req.url ?? "/", "http://localhost");
+
+      if (req.method === "GET") {
+        const query = url.searchParams.get("query") || undefined;
+        const date = url.searchParams.get("date") || undefined;
+        const tag = url.searchParams.get("tag") || undefined;
+        const minRatingRaw = url.searchParams.get("minRating");
+        const minRating = minRatingRaw ? Number(minRatingRaw) : undefined;
+
+        let notes;
+        if (query) {
+          notes = tradeJournal.search(query, 200);
+        } else if (date) {
+          notes = tradeJournal.getByDate(date);
+        } else {
+          notes = tradeJournal.getRecent(200);
+        }
+
+        // Apply tag filter
+        if (tag) {
+          notes = notes.filter((n) => n.tags.includes(tag));
+        }
+        // Apply rating filter
+        if (Number.isFinite(minRating)) {
+          notes = notes.filter((n) => (n.rating ?? 0) >= (minRating as number));
+        }
+
+        json(res, {
+          count: notes.length,
+          notes,
+          tags: tradeJournal.getAllTags(),
+          summary: tradeJournal.getSummary(),
+        });
+        return;
+      }
+
+      if (req.method === "POST") {
+        const body = await parseObjectBody(req);
+        const symbol = String(body.symbol ?? "").trim();
+        if (!symbol) {
+          json(res, { error: "缺少 symbol" }, 400);
+          return;
+        }
+        const content = String(body.content ?? "").trim();
+        if (!content) {
+          json(res, { error: "缺少 content" }, 400);
+          return;
+        }
+        const id = tradeJournal.addNote({
+          symbol,
+          content,
+          date: typeof body.date === "string" ? body.date : undefined,
+          tags: Array.isArray(body.tags)
+            ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+            : undefined,
+          rating: Number.isFinite(Number(body.rating)) ? Number(body.rating) : undefined,
+          direction: typeof body.direction === "string" ? (body.direction as "buy" | "sell" | "short" | "cover") : undefined,
+          entryPrice: Number.isFinite(Number(body.entryPrice)) ? Number(body.entryPrice) : undefined,
+          exitPrice: Number.isFinite(Number(body.exitPrice)) ? Number(body.exitPrice) : undefined,
+          pnl: Number.isFinite(Number(body.pnl)) ? Number(body.pnl) : undefined,
+          strategyId: typeof body.strategyId === "string" ? body.strategyId.trim() || undefined : undefined,
+          lesson: typeof body.lesson === "string" ? body.lesson.trim() || undefined : undefined,
+        });
+        json(res, { ok: true, id, note: tradeJournal.getNote(id) });
+        return;
+      }
+
+      if (req.method === "PATCH") {
+        const body = await parseObjectBody(req);
+        const id = String(body.id ?? "").trim();
+        if (!id) {
+          json(res, { error: "缺少 id" }, 400);
+          return;
+        }
+        const existing = tradeJournal.getNote(id);
+        if (!existing) {
+          json(res, { error: `未找到笔记: ${id}` }, 404);
+          return;
+        }
+        const ok = tradeJournal.updateNote(id, {
+          content: typeof body.content === "string" ? body.content.trim() || undefined : undefined,
+          tags: Array.isArray(body.tags)
+            ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+            : undefined,
+          rating: Number.isFinite(Number(body.rating)) ? Number(body.rating) : undefined,
+          lesson: typeof body.lesson === "string" ? body.lesson.trim() || undefined : undefined,
+        });
+        json(res, { ok, note: tradeJournal.getNote(id) });
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        const body = await parseObjectBody(req);
+        const id = String(body.id ?? "").trim();
+        if (!id) {
+          json(res, { error: "缺少 id" }, 400);
+          return;
+        }
+        const ok = tradeJournal.deleteNote(id);
+        json(res, { ok });
         return;
       }
 

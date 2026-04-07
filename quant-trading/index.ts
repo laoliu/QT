@@ -1279,6 +1279,7 @@ const quantTradingPlugin = {
       tickHistoryStore: tickHistoryStoreRef,
       secure,
       securePublic,
+      tradeJournal,
     });
 
     // ── AI Workflow Instructions (injected into system prompt) ──

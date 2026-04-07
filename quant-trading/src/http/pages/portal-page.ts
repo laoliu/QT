@@ -55,6 +55,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-datahub::before{background:linear-gradient(90deg,var(--green),var(--accent))}
 .nav-card.card-lab::before{background:linear-gradient(90deg,var(--accent),var(--yellow))}
 .nav-card.card-routing::before{background:linear-gradient(90deg,var(--purple),var(--accent))}
+.nav-card.card-journal::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -227,6 +228,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">数据驱动</span><span class="tag">规则路由</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/journal" class="nav-card card-journal" style="color:inherit;text-decoration:none">
+    <div class="icon">📝</div>
+    <h3>交易笔记</h3>
+    <p>交易复盘笔记，记录交易决策、经验教训、自评打分，按日期/标签/评分筛选，支持导出</p>
+    <div class="tags">
+      <span class="tag">复盘</span><span class="tag">笔记</span><span class="tag">自评</span>
+      <span class="tag">标签</span><span class="tag">导出</span>
+    </div>
+  </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">
     <div class="icon">📈</div>
     <h3>个股详情</h3>
@@ -263,6 +273,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/lianban</span><span class="api-desc">连板分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/event-catalyst</span><span class="api-desc">事件催化分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/datahub</span><span class="api-desc">金融数据中心</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/journal</span><span class="api-desc">交易笔记</span></div>
     </div>
 
     <div class="api-group">
@@ -313,6 +324,14 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method post">POST</span><span class="api-path">/quant/admin/api/optimize-pool</span><span class="api-desc">股票池优化</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/api/optimize-history</span><span class="api-desc">寻优历史记录</span></div>
       <div class="api-item"><span class="api-method post">POST</span><span class="api-path">/quant/admin/api/backtest</span><span class="api-desc">回测引擎</span></div>
+    </div>
+
+    <div class="api-group">
+      <h4>交易笔记</h4>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/api/journal?query=…&date=…&tag=…&minRating=…</span><span class="api-desc">笔记列表 (搜索/筛选)</span></div>
+      <div class="api-item"><span class="api-method post">POST</span><span class="api-path">/quant/admin/api/journal</span><span class="api-desc">新增笔记</span></div>
+      <div class="api-item"><span class="api-method patch">PATCH</span><span class="api-path">/quant/admin/api/journal</span><span class="api-desc">更新笔记</span></div>
+      <div class="api-item"><span class="api-method del">DEL</span><span class="api-path">/quant/admin/api/journal</span><span class="api-desc">删除笔记</span></div>
     </div>
 
     <div class="api-group">

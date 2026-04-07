@@ -140,3 +140,122 @@ describe("TaskScheduler", () => {
     expect(maxConcurrent).toBeLessThanOrEqual(2);
   });
 });
+
+describe("TaskScheduler — Cron", () => {
+  let scheduler: TaskScheduler;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    scheduler = new TaskScheduler({ maxConcurrent: 2, maxTasks: 10 });
+  });
+
+  afterEach(() => {
+    scheduler.destroy();
+    vi.useRealTimers();
+  });
+
+  it("should schedule a cron task", () => {
+    const run = vi.fn().mockResolvedValue("report");
+    const id = scheduler.scheduleCron("test cron", "0 7 * * 1-5", run, {
+      cronExpr: "0 7 * * 1-5",
+      reportId: "morning_brief",
+    });
+
+    expect(id).toMatch(/^cron-/);
+    expect(scheduler.listCron()).toHaveLength(1);
+    expect(scheduler.getCron(id)?.description).toBe("test cron");
+    expect(scheduler.getCron(id)?.enabled).toBe(true);
+    expect(scheduler.getCron(id)?.nextFireAt).toBeDefined();
+  });
+
+  it("should cancel a cron task", () => {
+    const id = scheduler.scheduleCron("to delete", "0 7 * * 1-5", async () => "x", {
+      cronExpr: "0 7 * * 1-5",
+    });
+    expect(scheduler.cancelCron(id)).toBe(true);
+    expect(scheduler.listCron()).toHaveLength(0);
+    expect(scheduler.cancelCron("nonexistent")).toBe(false);
+  });
+
+  it("should fire cron task when time matches", async () => {
+    const notify = vi.fn();
+    scheduler.setNotify(notify);
+
+    // Set current time to Monday 2026-04-06 06:59:30
+    vi.setSystemTime(new Date(2026, 3, 6, 6, 59, 30));
+
+    const run = vi.fn().mockResolvedValue("晨报内容");
+    scheduler.scheduleCron("晨间简报", "0 7 * * 1-5", run, {
+      cronExpr: "0 7 * * 1-5",
+      reportId: "morning_brief",
+    });
+
+    // Advance 30 seconds to 07:00:00 — the cron checker fires every 30s
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0]![0]).toContain("晨间简报");
+    expect(notify.mock.calls[0]![0]).toContain("晨报内容");
+  });
+
+  it("should not fire cron task on non-matching time", async () => {
+    // Set current time to Saturday 2026-04-04 06:59:30
+    vi.setSystemTime(new Date(2026, 3, 4, 6, 59, 30));
+
+    const run = vi.fn().mockResolvedValue("report");
+    scheduler.scheduleCron("weekday only", "0 7 * * 1-5", run, {
+      cronExpr: "0 7 * * 1-5",
+    });
+
+    // Advance past 07:00
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("should not double-fire within the same minute", async () => {
+    vi.setSystemTime(new Date(2026, 3, 6, 6, 59, 30));
+
+    const run = vi.fn().mockResolvedValue("report");
+    scheduler.scheduleCron("test", "0 7 * * 1-5", run, {
+      cronExpr: "0 7 * * 1-5",
+    });
+
+    // Fire at 07:00
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(run).toHaveBeenCalledTimes(1);
+
+    // Another 30s tick — still minute 0, should NOT fire again
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("should handle cron task failure gracefully", async () => {
+    const notify = vi.fn();
+    scheduler.setNotify(notify);
+
+    vi.setSystemTime(new Date(2026, 3, 6, 6, 59, 30));
+
+    const run = vi.fn().mockRejectedValue(new Error("network error"));
+    scheduler.scheduleCron("failing task", "0 7 * * 1-5", run, {
+      cronExpr: "0 7 * * 1-5",
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0]![0]).toContain("失败");
+    expect(notify.mock.calls[0]![0]).toContain("network error");
+
+    const task = scheduler.listCron()[0]!;
+    expect(task.lastError).toBe("network error");
+  });
+
+  it("should throw on invalid cron expression", () => {
+    expect(() =>
+      scheduler.scheduleCron("bad", "invalid", async () => "x", { cronExpr: "invalid" }),
+    ).toThrow();
+  });
+});

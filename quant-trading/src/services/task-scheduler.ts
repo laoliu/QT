@@ -4,12 +4,20 @@
  * Supports:
  * - One-shot delayed tasks (e.g., "retry in 15 minutes")
  * - Periodic recurring tasks (e.g., "every 30 minutes")
+ * - Cron-based tasks (e.g., "weekdays at 07:00")
  * - Persistence: serializable task metadata saved/loaded from disk
  *
  * Results are delivered via api.notify() to the user's active chat channel.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import {
+  type CronExpression,
+  cronMatches,
+  describeCron,
+  nextCronOccurrence,
+  parseCron,
+} from "./cron-parser.js";
 
 /** Serializable metadata for a task. Stored to disk for persistence across restarts. */
 export interface TaskMeta {
@@ -41,6 +49,42 @@ export interface ScheduledTask {
   meta?: TaskMeta;
 }
 
+/** Serializable metadata for a cron task. */
+export interface CronTaskMeta {
+  /** Cron expression (5-field). */
+  cronExpr: string;
+  /** Report template ID (for replay). */
+  reportId?: string;
+  /** Tool name to execute (for replay). */
+  toolName?: string;
+  /** Tool arguments (for replay). */
+  toolArgs?: Record<string, unknown>;
+}
+
+export interface CronTask {
+  id: string;
+  /** Human-readable description. */
+  description: string;
+  /** Cron expression (5-field). */
+  cronExpr: string;
+  /** Parsed cron expression for matching. */
+  cron: CronExpression;
+  /** Function to execute — returns a message string to send to the user. */
+  run: () => Promise<string>;
+  /** Whether the task is active. */
+  enabled: boolean;
+  /** Last execution time (ISO). */
+  lastRunAt?: string;
+  /** Last error message, if any. */
+  lastError?: string;
+  /** Created timestamp. */
+  createdAt: string;
+  /** Next scheduled fire time (ISO). */
+  nextFireAt?: string;
+  /** Serializable metadata for persistence. */
+  meta: CronTaskMeta;
+}
+
 export interface TaskSchedulerOptions {
   /** Max concurrent running tasks. */
   maxConcurrent?: number;
@@ -61,6 +105,13 @@ export class TaskScheduler {
   private notifyFn?: (message: string) => void | Promise<void>;
   /** Factory to rebuild `run` functions from persisted TaskMeta. Set via `setRunFactory`. */
   private runFactory?: (meta: TaskMeta) => (() => Promise<string>) | null;
+
+  // ── Cron state ────────────────────────────────────────────────
+  private cronTasks = new Map<string, CronTask>();
+  private cronIdCounter = 0;
+  private cronCheckTimer: ReturnType<typeof setInterval> | null = null;
+  /** Factory to rebuild cron `run` functions from persisted CronTaskMeta. Set via `setCronRunFactory`. */
+  private cronRunFactory?: (meta: CronTaskMeta) => (() => Promise<string>) | null;
 
   constructor(opts: TaskSchedulerOptions = {}) {
     this.maxConcurrent = opts.maxConcurrent ?? 3;
@@ -224,6 +275,12 @@ export class TaskScheduler {
     }
     this.timers.clear();
     this.saveToDisk();
+    // Clean up cron
+    if (this.cronCheckTimer) {
+      clearInterval(this.cronCheckTimer);
+      this.cronCheckTimer = null;
+    }
+    this.saveCronToDisk();
   }
 
   // ── Persistence ─────────────────────────────────────────────
@@ -306,6 +363,225 @@ export class TaskScheduler {
       }
     } finally {
       this.running--;
+    }
+  }
+
+  // ── Cron scheduling ─────────────────────────────────────────────
+
+  /** Set a factory that can rebuild cron `run` functions from persisted CronTaskMeta.
+   *  Must be called before `loadCronFromDisk()`. */
+  setCronRunFactory(fn: (meta: CronTaskMeta) => (() => Promise<string>) | null): void {
+    this.cronRunFactory = fn;
+  }
+
+  /**
+   * Schedule a cron-based task.
+   * @param description Human-readable description.
+   * @param cronExpr 5-field cron expression (minute hour dom month dow).
+   * @param run Function to execute at each cron match.
+   * @param meta Serializable metadata for persistence.
+   * @returns The cron task ID.
+   */
+  scheduleCron(
+    description: string,
+    cronExpr: string,
+    run: () => Promise<string>,
+    meta: CronTaskMeta,
+  ): string {
+    const cron = parseCron(cronExpr);
+    const id = `cron-${String(++this.cronIdCounter).padStart(4, "0")}`;
+    const now = new Date();
+    const nextFire = nextCronOccurrence(cron, now);
+
+    const task: CronTask = {
+      id,
+      description,
+      cronExpr,
+      cron,
+      run,
+      enabled: true,
+      createdAt: now.toISOString(),
+      nextFireAt: nextFire?.toISOString(),
+      meta,
+    };
+
+    this.cronTasks.set(id, task);
+    this.ensureCronChecker();
+    this.saveCronToDisk();
+
+    return id;
+  }
+
+  /** Cancel/delete a cron task by ID. */
+  cancelCron(id: string): boolean {
+    const task = this.cronTasks.get(id);
+    if (!task) return false;
+    this.cronTasks.delete(id);
+    this.saveCronToDisk();
+    return true;
+  }
+
+  /** List all cron tasks. */
+  listCron(): CronTask[] {
+    return [...this.cronTasks.values()];
+  }
+
+  /** Get a specific cron task by ID. */
+  getCron(id: string): CronTask | undefined {
+    return this.cronTasks.get(id);
+  }
+
+  /** Load persisted cron tasks from disk. Call after setCronRunFactory + setNotify. */
+  loadCronFromDisk(): void {
+    const path = this.cronPersistPath;
+    if (!path) return;
+    try {
+      if (!existsSync(path)) return;
+      const raw = readFileSync(path, "utf-8");
+      const data = JSON.parse(raw) as {
+        idCounter: number;
+        tasks: Array<{
+          id: string;
+          description: string;
+          cronExpr: string;
+          enabled: boolean;
+          createdAt: string;
+          lastRunAt?: string;
+          meta: CronTaskMeta;
+        }>;
+      };
+      this.cronIdCounter = data.idCounter ?? 0;
+      for (const t of data.tasks) {
+        if (!t.enabled || !t.meta) continue;
+        const run = this.cronRunFactory?.(t.meta);
+        if (!run) {
+          console.warn(
+            `[TaskScheduler] skipping persisted cron task "${t.description}" (id=${t.id}): run factory returned null`,
+          );
+          continue;
+        }
+
+        let cron: CronExpression;
+        try {
+          cron = parseCron(t.cronExpr);
+        } catch {
+          console.warn(
+            `[TaskScheduler] skipping cron task "${t.description}" (id=${t.id}): invalid cron expression "${t.cronExpr}"`,
+          );
+          continue;
+        }
+
+        const nextFire = nextCronOccurrence(cron, new Date());
+
+        const task: CronTask = {
+          id: t.id,
+          description: t.description,
+          cronExpr: t.cronExpr,
+          cron,
+          run,
+          enabled: true,
+          createdAt: t.createdAt,
+          lastRunAt: t.lastRunAt,
+          nextFireAt: nextFire?.toISOString(),
+          meta: t.meta,
+        };
+        this.cronTasks.set(t.id, task);
+      }
+      if (this.cronTasks.size > 0) {
+        this.ensureCronChecker();
+      }
+    } catch {
+      // Corrupt file — start fresh
+    }
+  }
+
+  // ── Cron persistence ────────────────────────────────────────────
+
+  private get cronPersistPath(): string | null {
+    if (!this.dataDir) return null;
+    return `${this.dataDir}/cron-tasks.json`;
+  }
+
+  private saveCronToDisk(): void {
+    const path = this.cronPersistPath;
+    if (!path) return;
+    try {
+      const dir = dirname(path);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const tasks = [...this.cronTasks.values()].map((t) => ({
+        id: t.id,
+        description: t.description,
+        cronExpr: t.cronExpr,
+        enabled: t.enabled,
+        createdAt: t.createdAt,
+        lastRunAt: t.lastRunAt,
+        meta: t.meta,
+      }));
+      writeFileSync(
+        path,
+        JSON.stringify({ idCounter: this.cronIdCounter, tasks }, null, 2),
+        "utf-8",
+      );
+    } catch {
+      // Best-effort persistence
+    }
+  }
+
+  // ── Cron internal ───────────────────────────────────────────────
+
+  /** Start the cron checker interval if not already running. Checks every 30s. */
+  private ensureCronChecker(): void {
+    if (this.cronCheckTimer) return;
+    this.cronCheckTimer = setInterval(() => {
+      void this.checkCronTasks();
+    }, 30_000); // Check every 30 seconds
+  }
+
+  /** Check all cron tasks and fire any that match the current minute. */
+  private async checkCronTasks(): Promise<void> {
+    const now = new Date();
+    // Truncate to current minute for matching
+    const matchDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
+
+    for (const task of this.cronTasks.values()) {
+      if (!task.enabled) continue;
+
+      // Skip if already ran this minute
+      if (task.lastRunAt) {
+        const lastRun = new Date(task.lastRunAt);
+        if (
+          lastRun.getFullYear() === matchDate.getFullYear() &&
+          lastRun.getMonth() === matchDate.getMonth() &&
+          lastRun.getDate() === matchDate.getDate() &&
+          lastRun.getHours() === matchDate.getHours() &&
+          lastRun.getMinutes() === matchDate.getMinutes()
+        ) {
+          continue;
+        }
+      }
+
+      if (!cronMatches(task.cron, matchDate)) continue;
+
+      // Fire the task
+      task.lastRunAt = now.toISOString();
+      const nextFire = nextCronOccurrence(task.cron, now);
+      task.nextFireAt = nextFire?.toISOString();
+
+      try {
+        const result = await task.run();
+        task.lastError = undefined;
+        if (this.notifyFn && result) {
+          const header = `🕐 定时报告: ${task.description}`;
+          await this.notifyFn(`${header}\n\n${result}`);
+        }
+      } catch (err) {
+        task.lastError = err instanceof Error ? err.message : String(err);
+        if (this.notifyFn) {
+          await this.notifyFn(`❌ 定时报告失败: ${task.description}\n错误: ${task.lastError}`);
+        }
+      }
+
+      this.saveCronToDisk();
     }
   }
 }

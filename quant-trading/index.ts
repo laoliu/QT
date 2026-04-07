@@ -765,6 +765,22 @@ const quantTradingPlugin = {
     });
     taskScheduler.loadFromDisk();
 
+    // Wire TaskScheduler cron run factory for persistence: rebuild cron `run` closures
+    taskScheduler.setCronRunFactory((meta) => {
+      if (meta.reportId) {
+        const template = findReportTemplate(meta.reportId);
+        if (!template) return null;
+        return async () => template.generate(executeToolByName, config);
+      }
+      if (meta.toolName) {
+        const toolName = meta.toolName;
+        const toolArgs = meta.toolArgs ?? {};
+        return async () => executeToolByName(toolName, toolArgs);
+      }
+      return null;
+    });
+    taskScheduler.loadCronFromDisk();
+
     // ── Price Alert Service (条件预警) ──────────────────────────────
     const priceAlertService = new PriceAlertService({
       checkIntervalMs: 60_000,

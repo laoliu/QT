@@ -99,7 +99,9 @@ import { EventBus } from "./src/services/event-bus.js";
 import { ExplorationHistoryStore } from "./src/services/exploration-history-store.js";
 import { FavoritesStore } from "./src/services/favorites-store.js";
 import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
-import { tryNotify } from "./src/services/notify-helper.js";
+import { tryNotify, tryNotifyWithMeta, setNotificationDispatcher } from "./src/services/notify-helper.js";
+import { createDispatcherFromConfig } from "./src/services/notification-channel.js";
+import type { NotificationChannelConfigItem } from "./src/services/notification-channel.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
@@ -261,6 +263,16 @@ const quantTradingPlugin = {
       }
     }
 
+    // ── Multi-channel Notification Dispatcher ─────────────────────
+    const channelConfigs = (config.notifications?.channels ?? []) as unknown as NotificationChannelConfigItem[];
+    const notificationDispatcher = createDispatcherFromConfig(channelConfigs);
+    setNotificationDispatcher(notificationDispatcher, api.logger);
+    if (notificationDispatcher.channelCount > 0) {
+      api.logger.info(
+        `[quant-trading] notification dispatcher: ${notificationDispatcher.channelCount} channel(s) registered`,
+      );
+    }
+
     // ── Live Engine singleton (started/stopped as a service) ─────────
     const liveEngine = new LiveEngine(config, api);
     const getEngine = () => liveEngine;
@@ -344,7 +356,7 @@ const quantTradingPlugin = {
     const strategyHealthMonitor = new StrategyHealthMonitor(
       config.dataDir ?? ".",
       {},
-      (msg) => void tryNotify(api, msg),
+      (msg) => void tryNotifyWithMeta(api, msg, { alertType: "system", severity: "warning" }),
     );
 
     // ── Conditional Order Service (止损/止盈/跟踪止损) ─────────────
@@ -366,7 +378,7 @@ const quantTradingPlugin = {
         return quote?.price ?? null;
       },
     );
-    dcaScheduleService.setNotify((m: string) => tryNotify(api, m));
+    dcaScheduleService.setNotify((m: string) => tryNotifyWithMeta(api, m, { alertType: "order" }));
     void dcaScheduleService.load();
 
     // ── Breakout Monitor (突破监控) ────────────────────────────
@@ -382,7 +394,7 @@ const quantTradingPlugin = {
       if (!quote) return null;
       return { price: quote.price, volume: quote.volume, changePct: quote.changePct };
     });
-    breakoutMonitor.setNotifyFn((m: string) => tryNotify(api, m));
+    breakoutMonitor.setNotifyFn((m: string) => tryNotifyWithMeta(api, m, { alertType: "signal" }));
     breakoutMonitor.setOrderFn(async (params) => {
       const mgr = liveEngine.orderManager;
       if (!mgr) return { ok: false, reason: "引擎未启动" };
@@ -716,7 +728,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback — delivers task results to the user's chat
-    taskScheduler.setNotify((m: string) => tryNotify(api, m));
+    taskScheduler.setNotify((m: string) => tryNotifyWithMeta(api, m, { alertType: "system" }));
 
     /** Lazily-extended tool map — reuses instances from toolInstances + adds price_alert. */
     let fullToolMap: Record<
@@ -772,7 +784,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback
-    priceAlertService.setNotify((m: string) => tryNotify(api, m));
+    priceAlertService.setNotify((m: string) => tryNotifyWithMeta(api, m, { alertType: "price_alert" }));
     // Wire quote function
     const dataProviderForAlerts = createDataProvider(config);
     priceAlertService.setQuoteFn(async (symbol: string) => {
@@ -806,7 +818,7 @@ const quantTradingPlugin = {
     });
 
     // ── Conditional Order Service wiring ──────────────────────────
-    conditionalOrderService.setNotify((m: string) => tryNotify(api, m));
+    conditionalOrderService.setNotify((m: string) => tryNotifyWithMeta(api, m, { alertType: "order" }));
     conditionalOrderService.setQuoteFn(async (symbol: string) => {
       const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
       const market = detectMarketFromSymbol(symbol);

@@ -234,7 +234,38 @@
             "type": "boolean",
             "description": "Send daily portfolio performance summary"
           },
-          "riskAlerts": { "type": "boolean", "description": "Alert on risk threshold breaches" }
+          "riskAlerts": { "type": "boolean", "description": "Alert on risk threshold breaches" },
+          "channels": {
+            "type": "array",
+            "description": "Multi-channel notification push configuration. Each entry defines one delivery channel (WeChat Work, Email, etc.)",
+            "items": {
+              "type": "object",
+              "required": ["type", "config"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["wechat_work", "email"],
+                  "description": "Channel type: wechat_work (企业微信机器人) or email (SMTP)"
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable/disable this channel (default: true)"
+                },
+                "enabledAlertTypes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["signal", "risk", "pnl", "price_alert", "connection", "data_staleness", "order", "engine", "system"]
+                  },
+                  "description": "Alert types this channel should receive. Empty = all types."
+                },
+                "config": {
+                  "type": "object",
+                  "description": "Channel-specific configuration. For wechat_work: { webhookUrl, mentionedList?, mentionedMobileList? }. For email: { smtpHost, smtpPort?, secure?, user, pass, from?, to, subjectPrefix? }."
+                }
+              }
+            }
+          }
         }
       },
       "signalWebhook": {

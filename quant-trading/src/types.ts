@@ -802,6 +802,23 @@ export type NotificationConfig = {
   signalAlerts?: boolean;
   dailyReport?: boolean;
   riskAlerts?: boolean;
+  /** Multi-channel notification delivery. Each entry configures one push channel. */
+  channels?: Array<{
+    type: "wechat_work" | "email";
+    enabled?: boolean;
+    enabledAlertTypes?: Array<
+      | "signal"
+      | "risk"
+      | "pnl"
+      | "price_alert"
+      | "connection"
+      | "data_staleness"
+      | "order"
+      | "engine"
+      | "system"
+    >;
+    config: Record<string, unknown>;
+  }>;
 };
 
 export type SignalWebhookConfig = {

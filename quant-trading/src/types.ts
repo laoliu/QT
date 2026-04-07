@@ -804,6 +804,21 @@ export type NotificationConfig = {
   riskAlerts?: boolean;
 };
 
+// ── Notification Channel (企业微信 / 钉钉 Webhook) ─────────────
+
+export type NotificationChannelType = "wecom" | "dingtalk";
+
+export type NotificationChannel = {
+  /** Channel type: 企业微信 or 钉钉 */
+  type: NotificationChannelType;
+  /** Webhook URL for the robot/bot */
+  webhookUrl: string;
+  /** Optional display name for logging */
+  name?: string;
+  /** Whether this channel is enabled (default: true) */
+  enabled?: boolean;
+};
+
 export type SignalWebhookConfig = {
   /**
    * Optional shared secret sent by the remote machine as the
@@ -824,6 +839,13 @@ export type QuantTradingConfig = {
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
   notifications?: NotificationConfig;
+
+  /**
+   * External notification channels (企业微信 / 钉钉 Webhook).
+   * When configured, signal triggers, price alerts, and circuit breaker events
+   * are automatically pushed via the configured webhook channels.
+   */
+  notificationChannels?: NotificationChannel[];
   /**
    * PnL monitor configuration.
    * Background service that polls account data and emits alerts

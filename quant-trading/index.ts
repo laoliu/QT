@@ -99,7 +99,7 @@ import { EventBus } from "./src/services/event-bus.js";
 import { ExplorationHistoryStore } from "./src/services/exploration-history-store.js";
 import { FavoritesStore } from "./src/services/favorites-store.js";
 import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
-import { tryNotify } from "./src/services/notify-helper.js";
+import { tryNotify, registerNotificationChannels } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
@@ -264,6 +264,9 @@ const quantTradingPlugin = {
     // ── Live Engine singleton (started/stopped as a service) ─────────
     const liveEngine = new LiveEngine(config, api);
     const getEngine = () => liveEngine;
+
+    // ── Register external notification channels (企业微信/钉钉) ──────
+    registerNotificationChannels(config.notificationChannels);
 
     // ── Event Bus (real-time SSE) ──────────────────────────────────
     const eventBus = new EventBus({ maxRecent: 500 });

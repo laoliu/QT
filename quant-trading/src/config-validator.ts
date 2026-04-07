@@ -4,7 +4,7 @@
  * Validates field types, enum values, and numeric ranges at startup
  * so misconfigurations surface immediately instead of at runtime.
  */
-import type { QuantTradingConfig, MarketType, BacktestEngine } from "./types.js";
+import type { QuantTradingConfig, MarketType, BacktestEngine, NotificationChannelType } from "./types.js";
 
 export interface ConfigIssue {
   path: string;
@@ -337,6 +337,81 @@ export function validateConfig(config: unknown): ConfigIssue[] {
         message: "notifications must be an object",
         severity: "error",
       });
+    }
+  }
+
+  // ── notificationChannels ──────────────────────────────────────
+  const VALID_CHANNEL_TYPES: NotificationChannelType[] = ["wecom", "dingtalk"];
+  if (cfg.notificationChannels !== undefined) {
+    if (!Array.isArray(cfg.notificationChannels)) {
+      issues.push({
+        path: "notificationChannels",
+        message: "notificationChannels must be an array",
+        severity: "error",
+      });
+    } else {
+      for (let i = 0; i < (cfg.notificationChannels as unknown[]).length; i++) {
+        const ch = (cfg.notificationChannels as unknown[])[i];
+        const prefix = `notificationChannels[${i}]`;
+
+        if (!ch || typeof ch !== "object") {
+          issues.push({
+            path: prefix,
+            message: "each notification channel must be an object",
+            severity: "error",
+          });
+          continue;
+        }
+
+        const channel = ch as Record<string, unknown>;
+
+        if (!channel.type || typeof channel.type !== "string") {
+          issues.push({
+            path: `${prefix}.type`,
+            message: "type is required and must be a string",
+            severity: "error",
+          });
+        } else if (!VALID_CHANNEL_TYPES.includes(channel.type as NotificationChannelType)) {
+          issues.push({
+            path: `${prefix}.type`,
+            message: `type "${channel.type}" is invalid. Valid: ${VALID_CHANNEL_TYPES.join(", ")}`,
+            severity: "error",
+          });
+        }
+
+        if (!channel.webhookUrl || typeof channel.webhookUrl !== "string") {
+          issues.push({
+            path: `${prefix}.webhookUrl`,
+            message: "webhookUrl is required and must be a string",
+            severity: "error",
+          });
+        } else {
+          try {
+            const url = new URL(channel.webhookUrl as string);
+            if (url.protocol !== "https:" && url.protocol !== "http:") {
+              issues.push({
+                path: `${prefix}.webhookUrl`,
+                message: "webhookUrl must use http or https protocol",
+                severity: "error",
+              });
+            }
+          } catch {
+            issues.push({
+              path: `${prefix}.webhookUrl`,
+              message: "webhookUrl is not a valid URL",
+              severity: "error",
+            });
+          }
+        }
+
+        if (channel.enabled !== undefined && typeof channel.enabled !== "boolean") {
+          issues.push({
+            path: `${prefix}.enabled`,
+            message: "enabled must be a boolean",
+            severity: "warning",
+          });
+        }
+      }
     }
   }
 

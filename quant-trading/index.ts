@@ -84,6 +84,7 @@ import {
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
+import { AuctionMonitor } from "./src/services/auction-monitor.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
@@ -425,6 +426,68 @@ const quantTradingPlugin = {
       return pos ? { quantity: pos.quantity } : null;
     });
     breakoutMonitor.start();
+
+    // ── Auction Monitor (集合竞价异动监控) ────────────────────────
+    const auctionMonitor = new AuctionMonitor({
+      checkIntervalMs: 30_000,
+      gapThresholdPct: 3,
+      volumeSurgeRatio: 0.5,
+      dataDir: config.dataDir ?? null,
+    });
+    auctionMonitor.setQuoteFn(async (symbols: string[]) => {
+      const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
+      const results = [];
+      for (const symbol of symbols) {
+        try {
+          const market = detectMarketFromSymbol(symbol);
+          const quote = await dataProviderForAlerts.getQuote(symbol, market as never);
+          if (quote) {
+            results.push({
+              symbol,
+              name: quote.symbol?.name,
+              price: quote.price,
+              prevClose: quote.prevClose,
+              volume: quote.volume,
+              changePct: quote.changePct,
+              bid1: quote.bid1,
+              ask1: quote.ask1,
+            });
+          }
+        } catch {
+          // skip failed quotes
+        }
+      }
+      return results;
+    });
+    auctionMonitor.setWatchlistFn(() =>
+      favoritesStore.listFavorites().map((f) => f.code),
+    );
+    auctionMonitor.setPositionsFn(() =>
+      liveEngine.getPositions().map((p: { symbol: string }) => p.symbol),
+    );
+    auctionMonitor.setNotifyFn((m: string) => tryNotify(api, m));
+    auctionMonitor.setAvgVolumeFn(async (symbol: string) => {
+      try {
+        const result = await runPythonScript<{ avg_volume?: number }>(
+          "indicator_calculator.py",
+          { action: "avg_volume", symbol, period: 5 },
+          config,
+        );
+        return result.avg_volume ?? null;
+      } catch {
+        return null;
+      }
+    });
+    auctionMonitor.setAlertCallback((severity, message, metadata) => {
+      alertStore.add(severity, "auction_monitor", message, metadata);
+      eventBus.emit("alert", {
+        severity,
+        type: "auction_monitor",
+        message,
+        ...metadata,
+      });
+    });
+    auctionMonitor.startScheduler();
 
     // ── Data Warehouse (persistent K-line cache) ─────────────────
     const storage = new InMemoryStorage(
@@ -1182,6 +1245,15 @@ const quantTradingPlugin = {
       },
       async stop() {
         priceAlertService.stop();
+      },
+    });
+    api.registerService({
+      id: "auction-monitor",
+      async start() {
+        /* scheduler already started above */
+      },
+      async stop() {
+        auctionMonitor.destroy();
       },
     });
     api.registerService({

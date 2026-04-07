@@ -68,6 +68,56 @@ export function getPlannerBodyHtml(b: string): string {
 
 <!-- ═══ Plan Tab ═══ -->
 <div class="tab-content active" id="tab-plan">
+  <!-- 今日交易计划面板 -->
+  <div class="card" id="today-plan-card" style="margin-bottom:16px;border-left:3px solid #f0b429">
+    <h3>📋 今日交易计划 <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="loadTodayPlan()">🔄 刷新</button>
+      <button class="btn btn-sm btn-primary" onclick="showCreatePlanModal()">➕ 新建计划</button>
+    </h3>
+    <div id="today-plan-content">
+      <p style="color:var(--text-dim)">加载中...</p>
+    </div>
+  </div>
+
+  <!-- 新建/编辑计划弹窗 -->
+  <div id="trade-plan-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+    <div style="max-width:800px;margin:40px auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 id="trade-plan-modal-title">📋 新建交易计划</h3>
+        <button class="btn btn-sm" onclick="closeTradePlanModal()">✕ 关闭</button>
+      </div>
+      <div class="form-row">
+        <label>日期</label>
+        <input type="date" id="tp-date" style="width:160px">
+      </div>
+      <div class="form-row">
+        <label>仓位预算(元)</label>
+        <input type="number" id="tp-budget" value="100000" style="width:160px">
+      </div>
+      <div class="form-row">
+        <label>备注</label>
+        <input type="text" id="tp-notes" style="width:100%" placeholder="今日交易思路...">
+      </div>
+      <h4 style="margin:12px 0 8px">目标股票</h4>
+      <div id="tp-stocks-list"></div>
+      <button class="btn btn-sm" onclick="addTpStockRow()" style="margin-top:8px">➕ 添加股票</button>
+      <div class="btn-group" style="margin-top:16px">
+        <button class="btn btn-primary" onclick="submitTradePlan()">✅ 保存计划</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 偏差报告弹窗 -->
+  <div id="deviation-report-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+    <div style="max-width:700px;margin:40px auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3>📊 执行偏差报告</h3>
+        <button class="btn btn-sm" onclick="closeDeviationModal()">✕ 关闭</button>
+      </div>
+      <div id="deviation-report-content"></div>
+    </div>
+  </div>
+
   <div class="cards">
     <div class="card">
       <h3>💰 投资目标设定</h3>

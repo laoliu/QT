@@ -106,8 +106,8 @@ describe("FutuBroker — Subscription & Event Dispatch", () => {
 
     it("handles subscribe_quote Python bridge error gracefully (no throw)", async () => {
       mockCall.mockImplementation((method: string) => {
-        if (method === "subscribe_quote") throw new Error("network timeout");
-        return {};
+        if (method === "subscribe_quote") return Promise.reject(new Error("network timeout"));
+        return Promise.resolve({});
       });
       const broker = await connectBroker();
       // Should NOT throw — errors are caught and logged
@@ -133,9 +133,9 @@ describe("FutuBroker — Subscription & Event Dispatch", () => {
     it("handles unsubscribe_quote Python bridge error gracefully", async () => {
       let subCalled = false;
       mockCall.mockImplementation((method: string) => {
-        if (method === "subscribe_quote") { subCalled = true; return {}; }
-        if (method === "unsubscribe_quote") throw new Error("already closed");
-        return {};
+        if (method === "subscribe_quote") { subCalled = true; return Promise.resolve({}); }
+        if (method === "unsubscribe_quote") return Promise.reject(new Error("already closed"));
+        return Promise.resolve({});
       });
       const broker = await connectBroker();
       const unsub = broker.subscribeQuoteEx(["AAPL"], () => {});

@@ -89,8 +89,8 @@ describe("FutuBroker — Extended Tests", () => {
   describe("symbol normalisation via placeOrder", () => {
     beforeEach(() => {
       mockCall.mockImplementation((method: string) => {
-        if (method === "place_order") return { broker_order_id: "B-1" };
-        return {};
+        if (method === "place_order") return Promise.resolve({ broker_order_id: "B-1" });
+        return Promise.resolve({});
       });
     });
 
@@ -982,8 +982,8 @@ describe("FutuBroker — Extended Tests", () => {
   describe("disconnect — error handling", () => {
     it("sets connected=false even if Python bridge call fails", async () => {
       mockCall.mockImplementation((method: string) => {
-        if (method === "disconnect") throw new Error("process already dead");
-        return {};
+        if (method === "disconnect") return Promise.reject(new Error("process already dead"));
+        return Promise.resolve({});
       });
       const broker = await connectBroker();
       expect(broker.connected).toBe(true);

@@ -20,6 +20,7 @@ import type { PriceAlertService } from "../services/price-alert.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
+import type { LiveBacktestCompareService } from "../services/live-backtest-compare.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
@@ -63,6 +64,7 @@ export interface RouteDeps {
   getEngine: () => LiveEngine;
   priceAlertService: PriceAlertService;
   taskScheduler: TaskScheduler;
+  liveBacktestCompareService?: LiveBacktestCompareService;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -538,6 +540,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Live vs Backtest Compare ──────────────────────────────────
+  registerLiveBacktestCompareRoutes(deps);
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────
@@ -1529,6 +1534,54 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
       }
 
       methodNotAllowed(res);
+    }),
+  });
+}
+
+// ── Live vs Backtest Compare routes ─────────────────────────────
+
+function registerLiveBacktestCompareRoutes({
+  api,
+  liveBacktestCompareService,
+  secure,
+}: RouteDeps): void {
+  if (!liveBacktestCompareService) return;
+
+  // POST /quant/api/compare/live-vs-backtest — compare live vs backtest
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/compare/live-vs-backtest",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        methodNotAllowed(res);
+        return;
+      }
+      const body = await parseJsonBody<Record<string, unknown>>(req);
+      const strategyId = body.strategyId as string;
+      const dateFrom = body.dateFrom as string;
+      const dateTo = body.dateTo as string;
+      if (!strategyId || !dateFrom || !dateTo) {
+        json(res, { status: "error", message: "需要 strategyId, dateFrom, dateTo" }, 400);
+        return;
+      }
+      try {
+        const result = liveBacktestCompareService.compare({ strategyId, dateFrom, dateTo });
+        json(res, { status: "ok", data: result });
+      } catch (err) {
+        json(res, { status: "error", message: (err as Error).message }, 400);
+      }
+    }),
+  });
+
+  // GET /quant/api/compare/decay-alerts — list recent decay alerts
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/compare/decay-alerts",
+    handler: secure((_req, res) => {
+      const params = urlParams(_req);
+      const strategyId = params.get("strategyId") ?? undefined;
+      const alerts = liveBacktestCompareService.getDecayAlerts(strategyId);
+      json(res, { status: "ok", data: alerts, count: alerts.length });
     }),
   });
 }

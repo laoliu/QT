@@ -87,6 +87,7 @@ import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
+import { LiveBacktestCompareService } from "./src/services/live-backtest-compare.js";
 import { ComposedStrategyStore } from "./src/services/composed-strategy-store.js";
 import { ConditionalOrderService } from "./src/services/conditional-order.js";
 import { CustomStrategyStore } from "./src/services/custom-strategy-store.js";
@@ -136,6 +137,7 @@ import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
+import { createLiveVsBacktestTool } from "./src/tools/live-vs-backtest.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
@@ -538,6 +540,15 @@ const quantTradingPlugin = {
       backtestStore.start();
     }
 
+    // ── Live vs Backtest Compare Service ──────────────────────────
+    const liveBacktestCompareService = new LiveBacktestCompareService(
+      backtestStore,
+      equityHistory,
+      alertStore,
+      eventBus,
+      (msg) => void tryNotify(api, msg),
+    );
+
     // ── Scan History Store (screening result history) ────────────
     const scanHistoryStore = new ScanHistoryStore({
       dataDir: config.dataDir ? `${config.dataDir}/scans` : undefined,
@@ -654,6 +665,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      live_vs_backtest: createLiveVsBacktestTool(api, config, liveBacktestCompareService),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +716,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      live_vs_backtest: "实盘回测对比",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -1251,6 +1264,7 @@ const quantTradingPlugin = {
       getEngine,
       priceAlertService,
       taskScheduler,
+      liveBacktestCompareService,
       secure,
       securePublic,
     });

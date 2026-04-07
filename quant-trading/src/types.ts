@@ -1080,6 +1080,14 @@ export type AlignmentConfig = {
   tradingSession?: TradingSession;
 };
 
+/** Resolved alignment config with defaults applied (tradingSession remains optional). */
+export type ResolvedAlignmentConfig = {
+  timeToleranceMs: number;
+  priceToleranceRatio: number;
+  includeUnexecuted: boolean;
+  tradingSession: TradingSession | undefined;
+};
+
 /** Trading session time window for session-aware alignment. */
 export type TradingSession = {
   /** Session name (e.g., "morning", "afternoon", "all"). */
@@ -1126,7 +1134,7 @@ export type AlignmentResult = {
   /** Per-symbol breakdown. */
   symbolBreakdown?: Record<string, AlignmentSummary>;
   /** Configuration used for this alignment. */
-  config: Required<AlignmentConfig>;
+  config: ResolvedAlignmentConfig;
 };
 
 /** A paired record when aligning TradeRecord vs TradeRecord (complete trades). */
@@ -1162,7 +1170,7 @@ export type TradeRecordAlignmentResult = {
   pairs: AlignedTradeRecordPair[];
   summary: AlignmentSummary;
   symbolBreakdown?: Record<string, AlignmentSummary>;
-  config: Required<AlignmentConfig>;
+  config: ResolvedAlignmentConfig;
 };
 
 /** Cumulative PnL drift point — tracks divergence over time. */

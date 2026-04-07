@@ -25,6 +25,7 @@ import type {
   BacktestResult,
   PnlDriftPoint,
   PnlDriftResult,
+  ResolvedAlignmentConfig,
   TradeRecord,
   TradeRecordAlignmentResult,
   TradingSession,
@@ -36,12 +37,12 @@ import type {
 const DEFAULT_TIME_TOLERANCE_MS = 86_400_000; // 1 day
 const DEFAULT_PRICE_TOLERANCE_RATIO = 0.05; // 5%
 
-function resolveConfig(config?: AlignmentConfig): Required<AlignmentConfig> {
+function resolveConfig(config?: AlignmentConfig): ResolvedAlignmentConfig {
   return {
     timeToleranceMs: config?.timeToleranceMs ?? DEFAULT_TIME_TOLERANCE_MS,
     priceToleranceRatio: config?.priceToleranceRatio ?? DEFAULT_PRICE_TOLERANCE_RATIO,
     includeUnexecuted: config?.includeUnexecuted ?? true,
-    tradingSession: config?.tradingSession ?? undefined as unknown as TradingSession,
+    tradingSession: config?.tradingSession,
   };
 }
 
@@ -145,7 +146,7 @@ interface BacktestSignalEntry {
 function alignSymbol(
   liveTrades: TradeRecord[],
   backtestSignals: TradingSignal[],
-  cfg: Required<AlignmentConfig>,
+  cfg: ResolvedAlignmentConfig,
 ): AlignedTradePair[] {
   const pairs: AlignedTradePair[] = [];
 
@@ -470,6 +471,18 @@ export function formatAlignmentReport(result: AlignmentResult): string {
     `盈亏相关性: ${s.pnlCorrelation.toFixed(4)}`,
   ];
 
+  // Per-symbol breakdown
+  if (result.symbolBreakdown && Object.keys(result.symbolBreakdown).length > 1) {
+    lines.push(``, `--- 标的明细 ---`);
+    for (const [sym, ss] of Object.entries(result.symbolBreakdown)) {
+      const matched = ss.exactMatches + ss.timeShiftedMatches;
+      lines.push(
+        `${sym}: 匹配${matched} 仅实盘${ss.liveOnlyTrades} 仅回测${ss.backtestOnlySignals} ` +
+          `执行率${(ss.executionRate * 100).toFixed(1)}% 滑点${(ss.avgPriceSlippage * 100).toFixed(3)}%`,
+      );
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -489,7 +502,7 @@ interface TradeRecordEntry {
 function alignTradeRecordsForSymbol(
   liveTrades: TradeRecord[],
   backtestTrades: TradeRecord[],
-  cfg: Required<AlignmentConfig>,
+  cfg: ResolvedAlignmentConfig,
 ): AlignedTradeRecordPair[] {
   const pairs: AlignedTradeRecordPair[] = [];
 

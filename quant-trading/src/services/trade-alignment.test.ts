@@ -637,3 +637,111 @@ describe("exportAlignmentCsv", () => {
     expect(lines.length).toBe(2);
   });
 });
+
+// ── open-position alignment ────────────────────────────────────
+
+describe("open position alignment", () => {
+  it("aligns live trades without exitTime (open positions)", () => {
+    const live = [
+      fakeLiveTrade({
+        tradeId: "t-open",
+        exitTime: undefined,
+        exitPrice: undefined,
+        holdingDays: undefined,
+        netPnl: 0,
+        grossPnl: 0,
+      }),
+    ];
+    const bt = [fakeBtTrade()];
+
+    const result = alignTradeRecords(live, bt, { strategyId: "dual-ma" });
+
+    expect(result.pairs).toHaveLength(1);
+    // Should still match on entry time + price + direction
+    expect(result.pairs[0]!.matchType).toBe("exact");
+    expect(result.pairs[0]!.liveTrade?.exitTime).toBeUndefined();
+    // Exit slippage should be undefined for open positions
+    expect(result.pairs[0]!.exitTimeDeltaMs).toBeUndefined();
+    expect(result.pairs[0]!.exitPriceSlippage).toBeUndefined();
+  });
+
+  it("aligns signal with open live trade", () => {
+    const live = [
+      fakeLiveTrade({
+        exitTime: undefined,
+        exitPrice: undefined,
+      }),
+    ];
+    const bt = fakeBacktestResult([fakeSignal()]);
+
+    const result = alignTrades(live, bt);
+
+    expect(result.pairs).toHaveLength(1);
+    expect(result.pairs[0]!.matchType).toBe("exact");
+    expect(result.pairs[0]!.liveTrade?.exitTime).toBeUndefined();
+  });
+});
+
+// ── OrderSide normalization in matching ─────────────────────────
+
+describe("OrderSide normalization", () => {
+  it("matches sell_close live trade with sell backtest signal", () => {
+    const live = [fakeLiveTrade({ side: "sell_close" })];
+    const bt = fakeBacktestResult([fakeSignal({ direction: "sell" })]);
+
+    const result = alignTrades(live, bt);
+
+    const matched = result.pairs.filter(
+      (p) => p.matchType === "exact" || p.matchType === "time_shifted",
+    );
+    expect(matched).toHaveLength(1);
+  });
+
+  it("matches buy_open live trade with buy backtest signal", () => {
+    const live = [fakeLiveTrade({ side: "buy_open" })];
+    const bt = fakeBacktestResult([fakeSignal({ direction: "buy" })]);
+
+    const result = alignTrades(live, bt);
+
+    const matched = result.pairs.filter(
+      (p) => p.matchType === "exact" || p.matchType === "time_shifted",
+    );
+    expect(matched).toHaveLength(1);
+  });
+
+  it("matches cover trade with buy signal", () => {
+    const live = [fakeLiveTrade({ side: "cover" })];
+    const bt = fakeBacktestResult([fakeSignal({ direction: "buy" })]);
+
+    const result = alignTrades(live, bt);
+
+    const matched = result.pairs.filter(
+      (p) => p.matchType === "exact" || p.matchType === "time_shifted",
+    );
+    expect(matched).toHaveLength(1);
+  });
+});
+
+// ── formatAlignmentReport per-symbol breakdown ──────────────────
+
+describe("formatAlignmentReport per-symbol breakdown", () => {
+  it("includes per-symbol breakdown when multiple symbols", () => {
+    const live = [
+      fakeLiveTrade({ tradeId: "t-1", symbol: "600519", entryPrice: 1800 }),
+      fakeLiveTrade({ tradeId: "t-2", symbol: "000001", entryPrice: 15 }),
+    ];
+    const signals = [
+      fakeSignal({ symbol: "600519", price: 1798 }),
+      fakeSignal({ symbol: "000001", price: 14.8 }),
+    ];
+    const bt = fakeBacktestResult(signals);
+
+    const result = alignTrades(live, bt);
+    const report = formatAlignmentReport(result);
+
+    expect(report).toContain("标的明细");
+    expect(report).toContain("600519");
+    expect(report).toContain("000001");
+    expect(report).toContain("执行率");
+  });
+});

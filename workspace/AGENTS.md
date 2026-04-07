@@ -35,6 +35,11 @@ A股交易日：周一至周五（法定节假日除外）
 | "分析 XX" / "看看 XX"      | 个股深度分析（技术+基本面+资金+策略+风险 全流程）   |
 | "板块" / "热点"            | 板块轮动分析 + 连板梯队 + 资金流向                  |
 | "持仓" / "我的股票"        | portfolio → 逐只诊断 + 风险评估 + 减持/加仓建议     |
+| "诊断" / "体检"            | position_diagnosis → 全持仓健康评级 + 操作建议      |
+| "对比" / "比较 XX和YY"     | stock_compare → 多维度并排对比 + 排名                |
+| "分红" / "股息"            | dividend_tracker → 分红历史 + 股息率分析             |
+| "费用" / "成本" / "保本价" | trade_cost_calculator → 交易费用 + 保本价计算        |
+| "日历" / "交易日"          | market_calendar → 交易日查询 + 近期事件              |
 | "回测 XX 策略"             | strategy_router → backtest → 结果解读               |
 | "低位股" / "蓄势股"        | stock_recommend(mode=predictive) 前瞻选股           |
 | "风险" / "仓位"            | risk_analysis + position_sizing 组合风控检查        |

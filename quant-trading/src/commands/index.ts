@@ -2234,5 +2234,84 @@ export function createQuantCommands(
         return [`🔥 今日社区热度排名 (共${String(d.count)}只)`, "", ...lines].join("\n");
       },
     },
+
+    // ── Stock Compare ──────────────────────────────────────────────
+    {
+      name: "/对比",
+      aliases: ["/compare", "/vs"],
+      description: "个股多维度对比 — /对比 600519,000858,000333",
+      async execute(args: string) {
+        const symbols = args
+          .trim()
+          .split(/[,，\s]+/)
+          .filter(Boolean);
+        if (symbols.length < 2)
+          return "用法: /对比 600519,000858 — 至少提供2只股票";
+        return `⏳ 请使用 AI 工具 stock_compare 进行对比，输入: 对比 ${symbols.join(",")}`;
+      },
+    },
+
+    // ── Trade Cost Calculator ──────────────────────────────────────
+    {
+      name: "/费用",
+      aliases: ["/成本", "/cost", "/保本价"],
+      description: "交易成本计算 — /费用 价格 数量",
+      async execute(args: string) {
+        const parts = args.trim().split(/\s+/);
+        const price = parseFloat(parts[0]);
+        const quantity = parseInt(parts[1]) || 100;
+        if (!price || isNaN(price)) return "用法: /费用 50 1000 — 计算50元买入1000股的费用";
+        // Quick inline calculation
+        const amount = price * quantity;
+        const commission = Math.max(amount * 0.0003, 5);
+        const stampDuty = amount * 0.0005;
+        const transferFee = amount * 0.00002;
+        const buyCost = commission + transferFee;
+        const sellCost = commission + stampDuty + transferFee;
+        const totalCost = buyCost + sellCost;
+        const breakevenPrice = (amount + totalCost) / (quantity * (1 - 0.0005 - 0.00002 - 0.0003));
+        const lines = [
+          `💰 交易成本计算 (${price}元 × ${quantity}股)`,
+          "",
+          `买入费用: ¥${buyCost.toFixed(2)} (佣金¥${commission.toFixed(2)} + 过户费¥${transferFee.toFixed(2)})`,
+          `卖出费用: ¥${sellCost.toFixed(2)} (佣金¥${commission.toFixed(2)} + 印花税¥${stampDuty.toFixed(2)} + 过户费¥${transferFee.toFixed(2)})`,
+          `买卖总费用: ¥${totalCost.toFixed(2)} (占比 ${((totalCost / amount) * 100).toFixed(3)}%)`,
+          `保本卖出价: ¥${breakevenPrice.toFixed(3)} (需涨 ${(((breakevenPrice - price) / price) * 100).toFixed(3)}%)`,
+        ];
+        return lines.join("\n");
+      },
+    },
+
+    // ── Market Calendar ────────────────────────────────────────────
+    {
+      name: "/日历",
+      aliases: ["/交易日", "/calendar"],
+      description: "交易日历 — 今日是否交易日 + 近期事件",
+      async execute(_args: string) {
+        return "⏳ 请使用 AI 工具 market_calendar 查询，输入: 今天是交易日吗 / 本周交易日历";
+      },
+    },
+
+    // ── Position Diagnosis ─────────────────────────────────────────
+    {
+      name: "/诊断",
+      aliases: ["/体检", "/diagnosis"],
+      description: "持仓诊断 — 全持仓健康检查 + 操作建议",
+      async execute(_args: string) {
+        return "⏳ 请使用 AI 工具 position_diagnosis 进行诊断，输入: 帮我诊断持仓 / 持仓体检";
+      },
+    },
+
+    // ── Dividend ───────────────────────────────────────────────────
+    {
+      name: "/分红",
+      aliases: ["/dividend", "/股息"],
+      description: "分红查询 — /分红 600519",
+      async execute(args: string) {
+        const symbol = args.trim();
+        if (!symbol) return "用法: /分红 600519 — 查看茅台分红历史";
+        return `⏳ 请使用 AI 工具 dividend_tracker 查询，输入: ${symbol}的分红历史`;
+      },
+    },
   ];
 }

@@ -140,6 +140,55 @@ stock_screen(action="list_screeners")
 | `cfo_assistant` | CFO级财报深度分析 |
 | `tech_moat` | 技术护城河分析 |
 
+## 十、交易辅助
+
+| 工具 | 用途 |
+|------|------|
+| `stock_compare` | 个股多维度对比（技术+基本面+涨跌幅并排对比） |
+| `dividend_tracker` | 分红追踪（历史分红、除权日、股息率排行） |
+| `trade_cost_calculator` | 交易成本计算（佣金/印花税/过户费/保本价） |
+| `market_calendar` | 交易日历（休市日/除权日/IPO/解禁/周概览） |
+| `position_diagnosis` | 持仓诊断（健康评级A-D + 风险扫描 + 操作建议） |
+
+### stock_compare 使用要点
+
+```
+# 多维度对比
+stock_compare(action="compare", symbols="600519,000858,000333")
+
+# 估值对比
+stock_compare(action="valuation", symbols="600519,000858")
+
+# 区间涨跌幅对比
+stock_compare(action="performance", symbols="600519,000858,000333", period="3m")
+```
+
+### trade_cost_calculator 使用要点
+
+```
+# 买入费用计算
+trade_cost_calculator(action="cost", price=50, quantity=1000, side="buy")
+
+# 买卖全程费用
+trade_cost_calculator(action="round_trip", price=50, quantity=1000, sell_price=55)
+
+# 保本价计算
+trade_cost_calculator(action="breakeven", price=50, quantity=1000)
+```
+
+### position_diagnosis 使用要点
+
+```
+# 全持仓诊断
+position_diagnosis(action="diagnose")
+
+# 操作建议清单
+position_diagnosis(action="action_plan")
+
+# 单只持仓深度诊断
+position_diagnosis(action="single", symbol="600519")
+```
+
 ---
 
 ## 常用快捷命令
@@ -157,6 +206,11 @@ stock_screen(action="list_screeners")
 | `/龙虎榜` | 龙虎榜 |
 | `/预警` | 设置预警 |
 | `/期权链` / `/希腊值` | 期权相关 |
+| `/对比` | 个股对比 |
+| `/分红` | 分红追踪 |
+| `/费用` / `/成本` | 交易成本计算 |
+| `/日历` | 交易日历 |
+| `/诊断` / `/体检` | 持仓诊断 |
 
 ---
 

@@ -141,6 +141,16 @@
 | `favorites`              | 股票收藏                                        |
 | `trade_journal`          | 交易笔记                                        |
 
+#### 交易辅助
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `stock_compare`          | 个股多维度对比（技术面+基本面+涨跌幅对比）      |
+| `dividend_tracker`       | 分红/股息追踪（历史分红、除权日、股息率排行）    |
+| `trade_cost_calculator`  | A股交易成本计算（佣金、印花税、过户费、保本价）  |
+| `market_calendar`        | 交易日历（休市、除权日、IPO、解禁、周概览）      |
+| `position_diagnosis`     | 持仓诊断/健康检查（评级+信号+操作建议）          |
+
 ### Chat Commands (快捷命令)
 
 ```

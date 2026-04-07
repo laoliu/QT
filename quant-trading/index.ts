@@ -167,6 +167,11 @@ import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
+import { createDividendTrackerTool } from "./src/tools/dividend-tracker.js";
+import { createTradeCostCalculatorTool } from "./src/tools/trade-cost-calculator.js";
+import { createMarketCalendarTool } from "./src/tools/market-calendar.js";
+import { createPositionDiagnosisTool } from "./src/tools/position-diagnosis.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 
 /** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
@@ -654,6 +659,11 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
+      dividend_tracker: createDividendTrackerTool(api, config),
+      trade_cost_calculator: createTradeCostCalculatorTool(api, config),
+      market_calendar: createMarketCalendarTool(api, config),
+      position_diagnosis: createPositionDiagnosisTool(api, config, getEngine),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +714,11 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      stock_compare: "个股对比",
+      dividend_tracker: "分红追踪",
+      trade_cost_calculator: "交易成本",
+      market_calendar: "交易日历",
+      position_diagnosis: "持仓诊断",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

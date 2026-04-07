@@ -14,9 +14,13 @@
 import type {
   MarketType,
   OrderSide,
+  OrderType,
+  OrderStatus,
   TradeRecord,
   PortfolioPosition,
   LivePosition,
+  Order,
+  Fill,
 } from "../types.js";
 import type { EquitySnapshot } from "./equity-history.js";
 import type {
@@ -25,6 +29,8 @@ import type {
   SymbolAttribution,
   PeriodPnl,
 } from "./performance-attribution.js";
+import type { FavoriteStock } from "./favorites-store.js";
+import type { DcaPlan } from "./dca-schedule.js";
 
 // ── Export Format ────────────────────────────────────────────
 
@@ -445,6 +451,7 @@ export const EQUITY_CURVE_FIELDS: ExportFieldMeta[] = [
 export function toPerformanceExport(
   attribution: AttributionResult,
   equitySnapshots?: EquitySnapshot[],
+  opts?: { periodGranularity?: "daily" | "weekly" | "monthly" },
 ): PerformanceExport {
   const now = new Date().toISOString();
   const dateRange = { from: attribution.dateRange.from, to: attribution.dateRange.to };
@@ -488,8 +495,14 @@ export function toPerformanceExport(
     contributionPct: s.contributionPct,
   }));
 
-  // Use monthly breakdown by default for period P&L
-  const periodRows: PeriodPnlRow[] = attribution.byMonth.map((p) => ({
+  // Period P&L — use requested granularity (default: monthly)
+  const periodSource =
+    opts?.periodGranularity === "daily"
+      ? attribution.byDay
+      : opts?.periodGranularity === "weekly"
+        ? attribution.byWeek
+        : attribution.byMonth;
+  const periodRows: PeriodPnlRow[] = periodSource.map((p) => ({
     period: p.period,
     trades: p.trades,
     netPnl: p.netPnl,
@@ -522,5 +535,317 @@ export function toPerformanceExport(
     byPeriod: { fields: PERIOD_PNL_FIELDS, data: periodRows, meta },
     equityCurve: { fields: EQUITY_CURVE_FIELDS, data: equityRows, meta },
     meta,
+  };
+}
+
+// ── Order Export ────────────────────────────────────────────────
+
+/** Flat representation of an order for export. */
+export interface OrderExportRow {
+  orderId: string;
+  brokerOrderId: string;
+  symbol: string;
+  market: MarketType;
+  side: OrderSide;
+  orderType: OrderType;
+  price: number;
+  quantity: number;
+  filledQty: number;
+  avgFillPrice: number;
+  status: OrderStatus;
+  strategyId: string;
+  errorMsg: string;
+  createdAt: string;
+  submittedAt: string;
+  filledAt: string;
+}
+
+export type OrderExport = ExportableRecord<OrderExportRow>;
+
+/** Field metadata for order exports. */
+export const ORDER_FIELDS: ExportFieldMeta[] = [
+  { key: "orderId", label: "Order ID", labelZh: "订单编号", type: "string", width: 16 },
+  { key: "brokerOrderId", label: "Broker Order ID", labelZh: "券商订单号", type: "string", width: 16 },
+  { key: "symbol", label: "Symbol", labelZh: "代码", type: "string", width: 10 },
+  { key: "market", label: "Market", labelZh: "市场", type: "string", width: 10 },
+  { key: "side", label: "Side", labelZh: "方向", type: "string", width: 10 },
+  { key: "orderType", label: "Order Type", labelZh: "订单类型", type: "string", width: 10 },
+  { key: "price", label: "Price", labelZh: "委托价", type: "number", precision: 3, width: 12 },
+  { key: "quantity", label: "Quantity", labelZh: "委托数量", type: "number", precision: 0, width: 10 },
+  { key: "filledQty", label: "Filled Qty", labelZh: "成交数量", type: "number", precision: 0, width: 10 },
+  { key: "avgFillPrice", label: "Avg Fill Price", labelZh: "成交均价", type: "number", precision: 3, width: 12 },
+  { key: "status", label: "Status", labelZh: "状态", type: "string", width: 10 },
+  { key: "strategyId", label: "Strategy", labelZh: "策略", type: "string", width: 16 },
+  { key: "errorMsg", label: "Error", labelZh: "错误信息", type: "string", width: 20, defaultVisible: false },
+  { key: "createdAt", label: "Created", labelZh: "创建时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "submittedAt", label: "Submitted", labelZh: "提交时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "filledAt", label: "Filled", labelZh: "成交时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+];
+
+/**
+ * Convert domain Order[] into an exportable structure.
+ */
+export function toOrderExport(
+  orders: Order[],
+  opts?: { from?: string; to?: string },
+): OrderExport {
+  let filtered = orders;
+  if (opts?.from) {
+    filtered = filtered.filter((o) => o.createdAt >= opts.from!);
+  }
+  if (opts?.to) {
+    const to = opts.to;
+    filtered = filtered.filter((o) => o.createdAt <= to);
+  }
+
+  const data: OrderExportRow[] = filtered.map((o) => ({
+    orderId: o.orderId,
+    brokerOrderId: o.brokerOrderId ?? "",
+    symbol: o.symbol,
+    market: o.market,
+    side: o.side,
+    orderType: o.orderType,
+    price: o.price ?? 0,
+    quantity: o.quantity,
+    filledQty: o.filledQty,
+    avgFillPrice: o.avgFillPrice ?? 0,
+    status: o.status,
+    strategyId: o.strategyId ?? "",
+    errorMsg: o.errorMsg ?? "",
+    createdAt: o.createdAt,
+    submittedAt: o.submittedAt ?? "",
+    filledAt: o.filledAt ?? "",
+  }));
+
+  return {
+    fields: ORDER_FIELDS,
+    data,
+    meta: {
+      title: "委托记录导出",
+      exportedAt: new Date().toISOString(),
+      totalRecords: data.length,
+      dateRange: opts,
+    },
+  };
+}
+
+// ── Fill Export ─────────────────────────────────────────────────
+
+/** Flat representation of a fill (execution) for export. */
+export interface FillExportRow {
+  fillId: string;
+  orderId: string;
+  symbol: string;
+  side: OrderSide;
+  price: number;
+  quantity: number;
+  amount: number;
+  commission: number;
+  tax: number;
+  totalCost: number;
+  timestamp: string;
+}
+
+export type FillExport = ExportableRecord<FillExportRow>;
+
+/** Field metadata for fill exports. */
+export const FILL_FIELDS: ExportFieldMeta[] = [
+  { key: "fillId", label: "Fill ID", labelZh: "成交编号", type: "string", width: 16 },
+  { key: "orderId", label: "Order ID", labelZh: "订单编号", type: "string", width: 16 },
+  { key: "symbol", label: "Symbol", labelZh: "代码", type: "string", width: 10 },
+  { key: "side", label: "Side", labelZh: "方向", type: "string", width: 8 },
+  { key: "price", label: "Price", labelZh: "成交价", type: "number", precision: 3, width: 12 },
+  { key: "quantity", label: "Quantity", labelZh: "成交数量", type: "number", precision: 0, width: 10 },
+  { key: "amount", label: "Amount", labelZh: "成交金额", type: "number", precision: 2, width: 14 },
+  { key: "commission", label: "Commission", labelZh: "手续费", type: "number", precision: 2, width: 12 },
+  { key: "tax", label: "Tax", labelZh: "印花税", type: "number", precision: 2, width: 12 },
+  { key: "totalCost", label: "Total Cost", labelZh: "总费用", type: "number", precision: 2, width: 12 },
+  { key: "timestamp", label: "Time", labelZh: "成交时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+];
+
+/**
+ * Convert domain Fill[] into an exportable structure.
+ */
+export function toFillExport(
+  fills: Fill[],
+  opts?: { from?: string; to?: string },
+): FillExport {
+  let filtered = fills;
+  if (opts?.from) {
+    filtered = filtered.filter((f) => f.timestamp >= opts.from!);
+  }
+  if (opts?.to) {
+    const to = opts.to;
+    filtered = filtered.filter((f) => f.timestamp <= to);
+  }
+
+  const data: FillExportRow[] = filtered.map((f) => {
+    const amount = f.price * f.quantity;
+    return {
+      fillId: f.fillId,
+      orderId: f.orderId,
+      symbol: f.symbol,
+      side: f.side,
+      price: f.price,
+      quantity: f.quantity,
+      amount,
+      commission: f.commission,
+      tax: f.tax ?? 0,
+      totalCost: f.commission + (f.tax ?? 0),
+      timestamp: f.timestamp,
+    };
+  });
+
+  return {
+    fields: FILL_FIELDS,
+    data,
+    meta: {
+      title: "成交记录导出",
+      exportedAt: new Date().toISOString(),
+      totalRecords: data.length,
+      dateRange: opts,
+    },
+  };
+}
+
+// ── Watchlist Export ────────────────────────────────────────────
+
+/** Flat representation of a watchlist entry for export. */
+export interface WatchlistExportRow {
+  code: string;
+  name: string;
+  category: string;
+  priority: number;
+  priceTarget: number;
+  convictionScore: number;
+  tags: string;
+  notes: string;
+  addedAt: string;
+  updatedAt: string;
+}
+
+export type WatchlistExport = ExportableRecord<WatchlistExportRow>;
+
+/** Field metadata for watchlist exports. */
+export const WATCHLIST_FIELDS: ExportFieldMeta[] = [
+  { key: "code", label: "Symbol", labelZh: "代码", type: "string", width: 10 },
+  { key: "name", label: "Name", labelZh: "名称", type: "string", width: 12 },
+  { key: "category", label: "Category", labelZh: "分类", type: "string", width: 12 },
+  { key: "priority", label: "Priority", labelZh: "优先级", type: "number", precision: 0, width: 8 },
+  { key: "priceTarget", label: "Price Target", labelZh: "目标价", type: "number", precision: 2, width: 12 },
+  { key: "convictionScore", label: "Conviction", labelZh: "信心度", type: "number", precision: 0, width: 10 },
+  { key: "tags", label: "Tags", labelZh: "标签", type: "string", width: 20 },
+  { key: "notes", label: "Notes", labelZh: "备注", type: "string", width: 30 },
+  { key: "addedAt", label: "Added", labelZh: "添加时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "updatedAt", label: "Updated", labelZh: "更新时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+];
+
+/**
+ * Convert FavoriteStock[] into an exportable structure.
+ */
+export function toWatchlistExport(
+  favorites: FavoriteStock[],
+  opts?: { category?: string },
+): WatchlistExport {
+  let filtered = favorites;
+  if (opts?.category) {
+    filtered = filtered.filter((f) => f.category === opts.category);
+  }
+
+  const data: WatchlistExportRow[] = filtered.map((f) => ({
+    code: f.code,
+    name: f.name ?? "",
+    category: f.category ?? "watchlist",
+    priority: f.priority ?? 0,
+    priceTarget: f.priceTarget ?? 0,
+    convictionScore: f.convictionScore ?? 0,
+    tags: (f.tags ?? []).join(", "),
+    notes: f.notes ?? "",
+    addedAt: f.addedAt,
+    updatedAt: f.updatedAt,
+  }));
+
+  return {
+    fields: WATCHLIST_FIELDS,
+    data,
+    meta: {
+      title: "自选股导出",
+      exportedAt: new Date().toISOString(),
+      totalRecords: data.length,
+    },
+  };
+}
+
+// ── DCA Plan Export ────────────────────────────────────────────
+
+/** Flat representation of a DCA (定投) plan for export. */
+export interface DcaPlanExportRow {
+  id: string;
+  symbol: string;
+  amount: number;
+  frequency: string;
+  status: string;
+  executionCount: number;
+  totalInvested: number;
+  avgCostPerExecution: number;
+  lastExecutedAt: string;
+  nextExecutionAt: string;
+  createdAt: string;
+  description: string;
+}
+
+export type DcaPlanExport = ExportableRecord<DcaPlanExportRow>;
+
+/** Field metadata for DCA plan exports. */
+export const DCA_PLAN_FIELDS: ExportFieldMeta[] = [
+  { key: "id", label: "Plan ID", labelZh: "计划编号", type: "string", width: 12 },
+  { key: "symbol", label: "Symbol", labelZh: "代码", type: "string", width: 10 },
+  { key: "amount", label: "Amount", labelZh: "每期金额", type: "number", precision: 2, width: 12 },
+  { key: "frequency", label: "Frequency", labelZh: "频率", type: "string", width: 10 },
+  { key: "status", label: "Status", labelZh: "状态", type: "string", width: 10 },
+  { key: "executionCount", label: "Executions", labelZh: "执行次数", type: "number", precision: 0, width: 10 },
+  { key: "totalInvested", label: "Total Invested", labelZh: "累计投入", type: "number", precision: 2, width: 14 },
+  { key: "avgCostPerExecution", label: "Avg Per Exec", labelZh: "每期均额", type: "number", precision: 2, width: 12 },
+  { key: "lastExecutedAt", label: "Last Executed", labelZh: "上次执行", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "nextExecutionAt", label: "Next Execution", labelZh: "下次执行", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "createdAt", label: "Created", labelZh: "创建时间", type: "datetime", format: "YYYY-MM-DD HH:mm:ss", width: 20 },
+  { key: "description", label: "Description", labelZh: "描述", type: "string", width: 24 },
+];
+
+/**
+ * Convert DcaPlan[] into an exportable structure.
+ */
+export function toDcaPlanExport(
+  plans: DcaPlan[],
+  opts?: { status?: "active" | "paused" | "cancelled" },
+): DcaPlanExport {
+  let filtered = plans;
+  if (opts?.status) {
+    filtered = filtered.filter((p) => p.status === opts.status);
+  }
+
+  const data: DcaPlanExportRow[] = filtered.map((p) => ({
+    id: p.id,
+    symbol: p.symbol,
+    amount: p.amount,
+    frequency: p.frequency,
+    status: p.status,
+    executionCount: p.executionCount,
+    totalInvested: p.totalInvested,
+    avgCostPerExecution: p.executionCount > 0 ? p.totalInvested / p.executionCount : 0,
+    lastExecutedAt: p.lastExecutedAt ?? "",
+    nextExecutionAt: p.nextExecutionAt ?? "",
+    createdAt: p.createdAt,
+    description: p.description,
+  }));
+
+  return {
+    fields: DCA_PLAN_FIELDS,
+    data,
+    meta: {
+      title: "定投计划导出",
+      exportedAt: new Date().toISOString(),
+      totalRecords: data.length,
+    },
   };
 }

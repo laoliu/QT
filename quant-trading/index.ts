@@ -128,6 +128,7 @@ import { createDataAnalysisTool } from "./src/tools/data-analysis.js";
 import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
+import { createMarginTradingTool } from "./src/tools/margin-trading.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
 import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.js";
@@ -617,6 +618,7 @@ const quantTradingPlugin = {
       sector_analysis: createSectorAnalysisTool(api, config),
       fund_flow: createFundFlowTool(api, config),
       dragon_tiger: createDragonTigerTool(api, config),
+      margin_trading: createMarginTradingTool(api, config),
       lianban_analysis: createLianbanAnalysisTool(api, config),
       sector_synergy: createSectorSynergyTool(api, config),
       options_data: createOptionsDataTool(api, config),
@@ -674,6 +676,7 @@ const quantTradingPlugin = {
       sector_analysis: "板块分析",
       fund_flow: "资金流向",
       dragon_tiger: "龙虎榜",
+      margin_trading: "两融数据与市场宽度",
       lianban_analysis: "连板分析",
       sector_synergy: "板块协同追涨",
       options_data: "期权数据",
@@ -1358,6 +1361,7 @@ stock_recommend 是一个便捷的一键工具，自动完成 全市场选股→
 3. sector_synergy — 板块协同效应、联动分析
 4. lianban_analysis — 连板梯队，辨识市场主线
 5. dragon_tiger — 龙虎榜异动，游资动向
+6. margin_trading — 两融余额、涨跌比、涨停跌停统计、市场宽度
 
 ### 每日简报模板（用户说"简报/早报/收盘"时）
 用以下结构组织回答：

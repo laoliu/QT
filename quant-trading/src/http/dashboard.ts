@@ -167,11 +167,20 @@ export function getDashboardHtml(baseUrl: string): string {
     }
     /* Chart */
     .chart-container { position: relative; }
-    .chart-container svg { width: 100%; height: 160px; }
-    .chart-label { font-size: 11px; fill: var(--text-dim); }
-    .chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .chart-area { opacity: 0.1; }
-    .chart-grid { stroke: var(--border); stroke-width: 0.5; }
+    .chart-container canvas { width: 100%; height: 100%; display: block; }
+    .chart-toolbar { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+    .chart-toolbar .btn { font-size:11px; padding:2px 8px; }
+    .chart-toolbar .range-btn { font-size:11px; padding:2px 8px; background:none; border:1px solid var(--border); color:var(--text-dim); border-radius:4px; cursor:pointer; }
+    .chart-toolbar .range-btn:hover, .chart-toolbar .range-btn.active { border-color:var(--accent); color:var(--accent); }
+    .chart-tooltip { position:absolute; display:none; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; pointer-events:none; z-index:10; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+    .chart-tooltip .tt-date { color:var(--text); font-weight:600; margin-bottom:4px; }
+    .chart-tooltip .tt-row { display:flex; justify-content:space-between; gap:16px; }
+    .chart-tooltip .tt-label { color:var(--text-dim); }
+    .chart-tooltip .tt-val { font-family:monospace; }
+    .chart-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; margin-top:4px; }
+    .chart-legend-item { display:flex; align-items:center; gap:4px; cursor:pointer; opacity:0.9; }
+    .chart-legend-item:hover { opacity:1; }
+    .chart-legend-dot { width:10px; height:3px; border-radius:1px; }
     /* Alerts */
     .alert-item {
       padding: 8px 12px;
@@ -278,7 +287,23 @@ export function getDashboardHtml(baseUrl: string): string {
           <option value="spy">S&P 500</option>
         </select>
       </h2>
-      <div class="chart-container" id="equityChart"><div class="empty">暂无数据</div></div>
+      <div class="chart-toolbar" id="chartToolbar" style="display:none;">
+        <button class="range-btn active" onclick="setChartRange(0)" data-range="0">全部</button>
+        <button class="range-btn" onclick="setChartRange(30)" data-range="30">30天</button>
+        <button class="range-btn" onclick="setChartRange(60)" data-range="60">60天</button>
+        <button class="range-btn" onclick="setChartRange(90)" data-range="90">90天</button>
+        <span style="flex:1"></span>
+        <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chkDrawdown" onchange="toggleDrawdown()" checked style="accent-color:var(--red)"> 回撤区间
+        </label>
+        <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chkEvents" onchange="toggleEvents()" checked style="accent-color:var(--accent)"> 事件标注
+        </label>
+        <button class="btn" onclick="resetChartZoom()" title="重置缩放">重置</button>
+      </div>
+      <div class="chart-container" id="equityChart" style="height:220px;"><div class="empty">暂无数据</div></div>
+      <div class="chart-tooltip" id="chartTooltip"></div>
+      <div class="chart-legend" id="chartLegend"></div>
       <div id="benchmarkStats" style="font-size:12px;color:var(--text-dim);margin-top:6px;"></div>
     </div>
 
@@ -570,159 +595,591 @@ export function getDashboardHtml(baseUrl: string): string {
         '<div class="stats"><div class="stat"><span class="value '+pctClass(d.netPnl)+'">¥'+fmt(d.netPnl)+'</span><span class="label">'+(d.date??'今日')+' 净盈亏</span></div></div>';
     }
 
-    // ── Equity chart (SVG) — powered by equity-history API ───
+    // ── Equity chart (Interactive Canvas) ─────────────────────
+    // Chart state
+    var EC = {
+      canvas: null, ctx: null,
+      fullData: [],        // full equity history [{x,y,cash,marketValue,dailyPnl,positionCount}]
+      overlayData: [],     // benchmark overlay [{x,y}]
+      eventsData: [],      // key events [{date,type,label}]
+      drawdownRanges: [],  // [{startIdx,endIdx,depth}]
+      rangeStart: 0, rangeEnd: 0,  // visible window indices into fullData
+      isDragging: false, dragStartX: 0, dragRangeStart: 0, dragRangeEnd: 0,
+      isSelecting: false, selectStartX: 0, selectEndX: 0,
+      showDrawdown: true, showEvents: true,
+      hoverIdx: -1,
+      dpr: 1
+    };
+
+    function initEquityCanvas() {
+      var container = document.getElementById('equityChart');
+      container.innerHTML = '<canvas id="equityCanvas"></canvas>';
+      EC.canvas = document.getElementById('equityCanvas');
+      EC.dpr = window.devicePixelRatio || 1;
+      var rect = container.getBoundingClientRect();
+      EC.canvas.width = rect.width * EC.dpr;
+      EC.canvas.height = rect.height * EC.dpr;
+      EC.canvas.style.width = rect.width + 'px';
+      EC.canvas.style.height = rect.height + 'px';
+      EC.ctx = EC.canvas.getContext('2d');
+      EC.ctx.scale(EC.dpr, EC.dpr);
+
+      // Mouse events for pan, zoom, hover, range-select
+      EC.canvas.addEventListener('wheel', onChartWheel, {passive: false});
+      EC.canvas.addEventListener('mousedown', onChartMouseDown);
+      EC.canvas.addEventListener('mousemove', onChartMouseMove);
+      EC.canvas.addEventListener('mouseup', onChartMouseUp);
+      EC.canvas.addEventListener('mouseleave', onChartMouseLeave);
+      // Touch events for mobile
+      EC.canvas.addEventListener('touchstart', onChartTouchStart, {passive:false});
+      EC.canvas.addEventListener('touchmove', onChartTouchMove, {passive:false});
+      EC.canvas.addEventListener('touchend', onChartTouchEnd);
+    }
+
+    function computeDrawdownRanges(data) {
+      var ranges = [];
+      var peak = -Infinity, peakIdx = 0;
+      var inDD = false, ddStart = 0, ddPeak = 0;
+      for (var i = 0; i < data.length; i++) {
+        if (data[i].y > peak) { peak = data[i].y; peakIdx = i; }
+        var dd = (peak - data[i].y) / peak;
+        if (dd > 0.02 && !inDD) { inDD = true; ddStart = peakIdx; ddPeak = peak; }
+        if (inDD && (data[i].y >= ddPeak || i === data.length - 1)) {
+          var maxDepth = 0;
+          for (var j = ddStart; j <= i; j++) { var d2 = (ddPeak - data[j].y) / ddPeak; if (d2 > maxDepth) maxDepth = d2; }
+          if (maxDepth > 0.03) { ranges.push({startIdx: ddStart, endIdx: i, depth: maxDepth}); }
+          inDD = false;
+        }
+      }
+      EC.drawdownRanges = ranges;
+    }
+
+    function collectEvents(data) {
+      var events = [];
+      if (!data.length) return events;
+      // Max drawdown point
+      var peak = -Infinity, maxDDVal = 0, maxDDIdx = 0;
+      for (var i = 0; i < data.length; i++) {
+        if (data[i].y > peak) peak = data[i].y;
+        var dd = peak - data[i].y;
+        if (dd > maxDDVal) { maxDDVal = dd; maxDDIdx = i; }
+      }
+      if (maxDDVal > 0) events.push({idx: maxDDIdx, type: 'maxdd', label: '最大回撤', color: '#f85149'});
+      // Max value point
+      var maxVal = -Infinity, maxIdx = 0;
+      for (var i = 0; i < data.length; i++) { if (data[i].y > maxVal) { maxVal = data[i].y; maxIdx = i; } }
+      events.push({idx: maxIdx, type: 'peak', label: '最高点', color: '#3fb950'});
+      // Min value point
+      var minVal = Infinity, minIdx = 0;
+      for (var i = 0; i < data.length; i++) { if (data[i].y < minVal) { minVal = data[i].y; minIdx = i; } }
+      if (minIdx !== maxDDIdx) events.push({idx: minIdx, type: 'trough', label: '最低点', color: '#d29922'});
+      // Large daily changes (>3%)
+      for (var i = 1; i < data.length; i++) {
+        var chg = (data[i].y - data[i-1].y) / data[i-1].y;
+        if (chg > 0.03) events.push({idx: i, type: 'surge', label: '+' + (chg*100).toFixed(1) + '%', color: '#3fb950'});
+        else if (chg < -0.03) events.push({idx: i, type: 'drop', label: (chg*100).toFixed(1) + '%', color: '#f85149'});
+      }
+      EC.eventsData = events;
+      return events;
+    }
+
+    function drawChart() {
+      if (!EC.canvas || !EC.ctx || !EC.fullData.length) return;
+      var canvas = EC.canvas;
+      var ctx = EC.ctx;
+      var W = canvas.width / EC.dpr, H = canvas.height / EC.dpr;
+      var padL = 62, padR = 14, padT = 14, padB = 28;
+      var cw = W - padL - padR, ch = H - padT - padB;
+
+      // Clear
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(0, 0, W, H);
+
+      var data = EC.fullData;
+      var s = EC.rangeStart, e = EC.rangeEnd;
+      if (s < 0) s = 0;
+      if (e >= data.length) e = data.length - 1;
+      if (e <= s) return;
+      var visData = data.slice(s, e + 1);
+      var visOverlay = [];
+      if (EC.overlayData.length > 0) {
+        // Align overlay to visible range by date
+        var dateMap = {};
+        EC.overlayData.forEach(function(d) { dateMap[d.x] = d.y; });
+        visData.forEach(function(d) { if (dateMap[d.x] != null) visOverlay.push({x: d.x, y: dateMap[d.x]}); });
+      }
+
+      // Compute Y range
+      var allY = visData.map(function(d){return d.y});
+      if (visOverlay.length) visOverlay.forEach(function(d){allY.push(d.y)});
+      var yMin = Math.min.apply(null, allY), yMax = Math.max.apply(null, allY);
+      var yMargin = (yMax - yMin) * 0.06 || 1;
+      yMin -= yMargin; yMax += yMargin;
+      var yRange = yMax - yMin;
+
+      function xPos(i) { return padL + cw * (i / Math.max(visData.length - 1, 1)); }
+      function yPos(v) { return padT + ch * (1 - (v - yMin) / yRange); }
+
+      // Grid lines
+      ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+      ctx.fillStyle = '#8b949e'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+      for (var gi = 0; gi <= 4; gi++) {
+        var gy = padT + ch * gi / 4;
+        ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W - padR, gy); ctx.stroke();
+        var gv = yMax - yRange * gi / 4;
+        ctx.fillText('¥' + fmt(gv), padL - 4, gy + 3);
+      }
+
+      // Drawdown highlighting
+      if (EC.showDrawdown && EC.drawdownRanges.length) {
+        EC.drawdownRanges.forEach(function(r) {
+          var rs = Math.max(r.startIdx - s, 0);
+          var re = Math.min(r.endIdx - s, visData.length - 1);
+          if (rs >= visData.length || re < 0) return;
+          var x1 = xPos(rs), x2 = xPos(re);
+          var alpha = Math.min(0.25, r.depth * 2);
+          ctx.fillStyle = 'rgba(248,81,73,' + alpha.toFixed(2) + ')';
+          ctx.fillRect(x1, padT, x2 - x1, ch);
+        });
+      }
+
+      // Range selection highlight
+      if (EC.isSelecting) {
+        var selX1 = Math.min(EC.selectStartX, EC.selectEndX);
+        var selX2 = Math.max(EC.selectStartX, EC.selectEndX);
+        ctx.fillStyle = 'rgba(88,166,255,0.15)';
+        ctx.fillRect(selX1, padT, selX2 - selX1, ch);
+        ctx.strokeStyle = 'rgba(88,166,255,0.5)'; ctx.lineWidth = 1;
+        ctx.strokeRect(selX1, padT, selX2 - selX1, ch);
+      }
+
+      // Draw main equity line + fill
+      var color = visData[visData.length - 1].y >= visData[0].y ? '#3fb950' : '#f85149';
+      ctx.strokeStyle = color; ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (var i = 0; i < visData.length; i++) {
+        var x = xPos(i), y = yPos(visData[i].y);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      // Area fill
+      ctx.lineTo(xPos(visData.length - 1), padT + ch);
+      ctx.lineTo(xPos(0), padT + ch);
+      ctx.closePath();
+      var hexR = parseInt(color.slice(1, 3), 16), hexG = parseInt(color.slice(3, 5), 16), hexB = parseInt(color.slice(5, 7), 16);
+      var grad = ctx.createLinearGradient(0, padT, 0, padT + ch);
+      grad.addColorStop(0, 'rgba(' + hexR + ',' + hexG + ',' + hexB + ',0.15)');
+      grad.addColorStop(1, 'rgba(' + hexR + ',' + hexG + ',' + hexB + ',0.01)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Draw overlay (benchmark)
+      if (visOverlay.length >= 2) {
+        ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        for (var i = 0; i < visOverlay.length; i++) {
+          // Find x position by matching date in visData
+          var oi = -1;
+          for (var vi = 0; vi < visData.length; vi++) { if (visData[vi].x === visOverlay[i].x) { oi = vi; break; } }
+          if (oi < 0) continue;
+          var x = xPos(oi), y = yPos(visOverlay[i].y);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Event annotations
+      if (EC.showEvents && EC.eventsData.length) {
+        EC.eventsData.forEach(function(ev) {
+          var evIdx = ev.idx - s;
+          if (evIdx < 0 || evIdx >= visData.length) return;
+          var x = xPos(evIdx), y = yPos(visData[evIdx].y);
+          // Marker
+          ctx.fillStyle = ev.color;
+          if (ev.type === 'maxdd' || ev.type === 'trough' || ev.type === 'drop') {
+            // Downward triangle
+            ctx.beginPath(); ctx.moveTo(x, y + 10); ctx.lineTo(x - 5, y + 3); ctx.lineTo(x + 5, y + 3); ctx.closePath(); ctx.fill();
+          } else {
+            // Upward triangle
+            ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(x - 5, y - 3); ctx.lineTo(x + 5, y - 3); ctx.closePath(); ctx.fill();
+          }
+          // Label
+          ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(ev.label, x, ev.type === 'maxdd' || ev.type === 'trough' || ev.type === 'drop' ? y + 20 : y - 14);
+        });
+      }
+
+      // X-axis labels
+      ctx.fillStyle = '#8b949e'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+      var labelCount = Math.min(6, visData.length);
+      for (var li = 0; li < labelCount; li++) {
+        var idx = Math.floor(li * (visData.length - 1) / Math.max(labelCount - 1, 1));
+        ctx.fillText(visData[idx].x, xPos(idx), H - padB + 14);
+      }
+
+      // Crosshair & tooltip
+      if (EC.hoverIdx >= 0 && EC.hoverIdx < visData.length) {
+        var hi = EC.hoverIdx;
+        var hx = xPos(hi), hy = yPos(visData[hi].y);
+        // Vertical line
+        ctx.strokeStyle = 'rgba(139,148,158,0.4)'; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(hx, padT); ctx.lineTo(hx, padT + ch); ctx.stroke();
+        // Horizontal line
+        ctx.beginPath(); ctx.moveTo(padL, hy); ctx.lineTo(W - padR, hy); ctx.stroke();
+        ctx.setLineDash([]);
+        // Dot
+        ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = '#0d1117'; ctx.lineWidth = 2; ctx.stroke();
+        // Overlay dot
+        if (visOverlay.length) {
+          for (var vi = 0; vi < visOverlay.length; vi++) {
+            if (visData[hi] && visOverlay[vi] && visData[hi].x === visOverlay[vi].x) {
+              var oy = yPos(visOverlay[vi].y);
+              ctx.beginPath(); ctx.arc(hx, oy, 4, 0, Math.PI * 2);
+              ctx.fillStyle = '#58a6ff'; ctx.fill();
+              ctx.strokeStyle = '#0d1117'; ctx.lineWidth = 2; ctx.stroke();
+              break;
+            }
+          }
+        }
+
+        // Show tooltip
+        var tip = document.getElementById('chartTooltip');
+        var d = visData[hi];
+        var html = '<div class="tt-date">' + esc(d.x) + '</div>';
+        html += '<div class="tt-row"><span class="tt-label">净值</span><span class="tt-val">¥' + fmt(d.y) + '</span></div>';
+        if (d.cash != null) html += '<div class="tt-row"><span class="tt-label">现金</span><span class="tt-val">¥' + fmt(d.cash) + '</span></div>';
+        if (d.marketValue != null) html += '<div class="tt-row"><span class="tt-label">市值</span><span class="tt-val">¥' + fmt(d.marketValue) + '</span></div>';
+        if (d.dailyPnl != null) html += '<div class="tt-row"><span class="tt-label">日盈亏</span><span class="tt-val ' + pctClass(d.dailyPnl) + '">¥' + fmt(d.dailyPnl) + '</span></div>';
+        if (d.positionCount != null) html += '<div class="tt-row"><span class="tt-label">持仓数</span><span class="tt-val">' + d.positionCount + '</span></div>';
+        // Overlay value
+        if (visOverlay.length) {
+          for (var vi = 0; vi < visOverlay.length; vi++) {
+            if (visOverlay[vi].x === d.x) {
+              html += '<div class="tt-row"><span class="tt-label" style="color:#58a6ff">基准</span><span class="tt-val" style="color:#58a6ff">¥' + fmt(visOverlay[vi].y) + '</span></div>';
+              break;
+            }
+          }
+        }
+        tip.innerHTML = html;
+        tip.style.display = 'block';
+        // Position tooltip
+        var containerRect = document.getElementById('equityChart').getBoundingClientRect();
+        var canvasRect = EC.canvas.getBoundingClientRect();
+        var tipX = hx + canvasRect.left - containerRect.left + 12;
+        var tipY = hy + canvasRect.top - containerRect.top - 20;
+        if (tipX + 180 > containerRect.width) tipX = hx + canvasRect.left - containerRect.left - 180;
+        if (tipY < 0) tipY = 10;
+        tip.style.left = tipX + 'px';
+        tip.style.top = tipY + 'px';
+      } else {
+        document.getElementById('chartTooltip').style.display = 'none';
+      }
+    }
+
+    // ── Chart interaction handlers ──────────────────────────────
+    function getChartPad() { return {l:62,r:14,t:14,b:28}; }
+    function canvasMouseIdx(e) {
+      var rect = EC.canvas.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var pad = getChartPad();
+      var cw = rect.width - pad.l - pad.r;
+      var n = EC.rangeEnd - EC.rangeStart + 1;
+      var idx = Math.round((mx - pad.l) / cw * (n - 1));
+      return Math.max(0, Math.min(n - 1, idx));
+    }
+
+    function onChartWheel(e) {
+      e.preventDefault();
+      if (!EC.fullData.length) return;
+      var rect = EC.canvas.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var pad = getChartPad();
+      var cw = rect.width - pad.l - pad.r;
+      var ratio = (mx - pad.l) / cw; // 0..1 position of mouse
+      if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+
+      var range = EC.rangeEnd - EC.rangeStart;
+      var delta = Math.sign(e.deltaY) * Math.max(1, Math.floor(range * 0.1));
+      var newRange = range + delta;
+      if (newRange < 5) newRange = 5;
+      if (newRange > EC.fullData.length - 1) newRange = EC.fullData.length - 1;
+
+      var newStart = Math.round(EC.rangeStart - (newRange - range) * ratio);
+      var newEnd = newStart + newRange;
+      if (newStart < 0) { newStart = 0; newEnd = newRange; }
+      if (newEnd >= EC.fullData.length) { newEnd = EC.fullData.length - 1; newStart = newEnd - newRange; }
+      if (newStart < 0) newStart = 0;
+
+      EC.rangeStart = newStart;
+      EC.rangeEnd = newEnd;
+      drawChart();
+    }
+
+    function onChartMouseDown(e) {
+      if (e.button === 2 || e.shiftKey) {
+        // Right-click or shift: range selection
+        EC.isSelecting = true;
+        EC.selectStartX = e.clientX - EC.canvas.getBoundingClientRect().left;
+        EC.selectEndX = EC.selectStartX;
+      } else {
+        EC.isDragging = true;
+        EC.dragStartX = e.clientX;
+        EC.dragRangeStart = EC.rangeStart;
+        EC.dragRangeEnd = EC.rangeEnd;
+      }
+      EC.canvas.style.cursor = EC.isSelecting ? 'crosshair' : 'grabbing';
+    }
+
+    function onChartMouseMove(e) {
+      if (!EC.fullData.length) return;
+      if (EC.isDragging) {
+        var dx = e.clientX - EC.dragStartX;
+        var rect = EC.canvas.getBoundingClientRect();
+        var pad = getChartPad();
+        var cw = rect.width - pad.l - pad.r;
+        var range = EC.dragRangeEnd - EC.dragRangeStart;
+        var shift = Math.round(-dx / cw * range);
+        var ns = EC.dragRangeStart + shift;
+        var ne = EC.dragRangeEnd + shift;
+        if (ns < 0) { ns = 0; ne = range; }
+        if (ne >= EC.fullData.length) { ne = EC.fullData.length - 1; ns = ne - range; }
+        if (ns < 0) ns = 0;
+        EC.rangeStart = ns; EC.rangeEnd = ne;
+        EC.hoverIdx = -1;
+        drawChart();
+      } else if (EC.isSelecting) {
+        EC.selectEndX = e.clientX - EC.canvas.getBoundingClientRect().left;
+        EC.hoverIdx = -1;
+        drawChart();
+      } else {
+        EC.hoverIdx = canvasMouseIdx(e);
+        EC.canvas.style.cursor = 'crosshair';
+        drawChart();
+      }
+    }
+
+    function onChartMouseUp(e) {
+      if (EC.isSelecting) {
+        EC.isSelecting = false;
+        // Zoom to selected range
+        var rect = EC.canvas.getBoundingClientRect();
+        var pad = getChartPad();
+        var cw = rect.width - pad.l - pad.r;
+        var n = EC.rangeEnd - EC.rangeStart + 1;
+        var x1 = Math.min(EC.selectStartX, EC.selectEndX) - pad.l;
+        var x2 = Math.max(EC.selectStartX, EC.selectEndX) - pad.l;
+        if (x2 - x1 > 10) {
+          var newStart = EC.rangeStart + Math.floor(x1 / cw * (n - 1));
+          var newEnd = EC.rangeStart + Math.ceil(x2 / cw * (n - 1));
+          if (newStart < 0) newStart = 0;
+          if (newEnd >= EC.fullData.length) newEnd = EC.fullData.length - 1;
+          if (newEnd - newStart >= 3) { EC.rangeStart = newStart; EC.rangeEnd = newEnd; }
+        }
+        drawChart();
+      }
+      EC.isDragging = false;
+      EC.isSelecting = false;
+      EC.canvas.style.cursor = 'crosshair';
+    }
+
+    function onChartMouseLeave() {
+      EC.isDragging = false;
+      EC.isSelecting = false;
+      EC.hoverIdx = -1;
+      EC.canvas.style.cursor = 'default';
+      document.getElementById('chartTooltip').style.display = 'none';
+      drawChart();
+    }
+
+    var _touchLastDist = 0, _touchLastX = 0;
+    function onChartTouchStart(e) {
+      if (e.touches.length === 1) {
+        EC.isDragging = true;
+        EC.dragStartX = e.touches[0].clientX;
+        EC.dragRangeStart = EC.rangeStart;
+        EC.dragRangeEnd = EC.rangeEnd;
+        e.preventDefault();
+      } else if (e.touches.length === 2) {
+        _touchLastDist = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
+        _touchLastX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        e.preventDefault();
+      }
+    }
+    function onChartTouchMove(e) {
+      if (e.touches.length === 1 && EC.isDragging) {
+        var dx = e.touches[0].clientX - EC.dragStartX;
+        var rect = EC.canvas.getBoundingClientRect();
+        var pad = getChartPad();
+        var cw = rect.width - pad.l - pad.r;
+        var range = EC.dragRangeEnd - EC.dragRangeStart;
+        var shift = Math.round(-dx / cw * range);
+        var ns = EC.dragRangeStart + shift;
+        var ne = EC.dragRangeEnd + shift;
+        if (ns < 0) { ns = 0; ne = range; }
+        if (ne >= EC.fullData.length) { ne = EC.fullData.length - 1; ns = ne - range; }
+        if (ns < 0) ns = 0;
+        EC.rangeStart = ns; EC.rangeEnd = ne;
+        drawChart();
+        e.preventDefault();
+      } else if (e.touches.length === 2) {
+        var dist = Math.abs(e.touches[0].clientX - e.touches[1].clientX);
+        var scale = dist / (_touchLastDist || dist);
+        var range = EC.rangeEnd - EC.rangeStart;
+        var newRange = Math.round(range / scale);
+        if (newRange < 5) newRange = 5;
+        if (newRange > EC.fullData.length - 1) newRange = EC.fullData.length - 1;
+        var mid = Math.floor((EC.rangeStart + EC.rangeEnd) / 2);
+        EC.rangeStart = Math.max(0, mid - Math.floor(newRange / 2));
+        EC.rangeEnd = Math.min(EC.fullData.length - 1, EC.rangeStart + newRange);
+        _touchLastDist = dist;
+        drawChart();
+        e.preventDefault();
+      }
+    }
+    function onChartTouchEnd() { EC.isDragging = false; }
+
+    // ── Chart controls ─────────────────────────────────────────
+    function setChartRange(days) {
+      if (!EC.fullData.length) return;
+      // Update active button
+      document.querySelectorAll('.range-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelector('.range-btn[data-range="' + days + '"]').classList.add('active');
+      if (days === 0) {
+        EC.rangeStart = 0;
+        EC.rangeEnd = EC.fullData.length - 1;
+      } else {
+        EC.rangeEnd = EC.fullData.length - 1;
+        EC.rangeStart = Math.max(0, EC.fullData.length - days);
+      }
+      drawChart();
+    }
+    function resetChartZoom() {
+      setChartRange(0);
+    }
+    function toggleDrawdown() {
+      EC.showDrawdown = document.getElementById('chkDrawdown').checked;
+      drawChart();
+    }
+    function toggleEvents() {
+      EC.showEvents = document.getElementById('chkEvents').checked;
+      drawChart();
+    }
+
+    function updateChartLegend() {
+      var html = '<div class="chart-legend-item"><div class="chart-legend-dot" style="background:' +
+        (EC.fullData.length > 1 && EC.fullData[EC.fullData.length-1].y >= EC.fullData[0].y ? '#3fb950' : '#f85149') +
+        '"></div>策略</div>';
+      if (EC.overlayData.length) html += '<div class="chart-legend-item"><div class="chart-legend-dot" style="background:#58a6ff;border-style:dashed;border-width:1px;border-color:#58a6ff;height:0;width:10px;"></div>基准</div>';
+      if (EC.showDrawdown) html += '<div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(248,81,73,0.3);width:10px;height:8px;"></div>回撤区间</div>';
+      document.getElementById('chartLegend').innerHTML = html;
+    }
+
     async function loadEquityChart() {
-      // Try dedicated equity-history endpoint first
-      const r = await api('/quant/api/equity-history?limit=120' + modeParam(true));
-      const history = r?.data;
+      var r = await api('/quant/api/equity-history?limit=120' + modeParam(true));
+      var history = r && r.data;
 
       if (history && Array.isArray(history) && history.length >= 2) {
-        renderSvgChart('equityChart', history.map(h => ({x: h.date, y: h.equity})));
+        document.getElementById('chartToolbar').style.display = 'flex';
+        EC.fullData = history.map(function(h) {
+          return {x: h.date, y: h.equity, cash: h.cash, marketValue: h.marketValue, dailyPnl: h.dailyPnl, positionCount: h.positionCount};
+        });
+        EC.rangeStart = 0;
+        EC.rangeEnd = EC.fullData.length - 1;
+        EC.overlayData = [];
+        computeDrawdownRanges(EC.fullData);
+        collectEvents(EC.fullData);
+        initEquityCanvas();
+        drawChart();
+        updateChartLegend();
+
         // Load summary stats
-        const sr = await api('/quant/api/equity-history/summary' + modeParam(false));
-        const s = sr?.data;
+        var sr = await api('/quant/api/equity-history/summary' + modeParam(false));
+        var s = sr && sr.data;
         if (s && s.totalDays > 0) {
-          const retCls = pctClass(s.totalReturnPct);
+          var retCls = pctClass(s.totalReturnPct);
           document.getElementById('equitySummary').innerHTML =
-            '<span class="'+retCls+'">'+fmt(s.totalReturnPct)+'%</span> · ' +
-            '最大回撤 '+fmt(s.maxDrawdownPct)+'% · ' +
-            '胜率 '+fmt(s.winRate)+'% · ' +
-            s.totalDays+'天';
+            '<span class="' + retCls + '">' + fmt(s.totalReturnPct) + '%</span> · ' +
+            '最大回撤 ' + fmt(s.maxDrawdownPct) + '% · ' +
+            '胜率 ' + fmt(s.winRate) + '% · ' +
+            s.totalDays + '天';
         }
+        // Auto-load benchmark
+        await loadBenchmarkOverlay();
         return;
       }
 
-      // Single data point — show current value instead of empty chart
+      // Single data point
       if (history && Array.isArray(history) && history.length === 1) {
-        const h = history[0];
+        var h = history[0];
         document.getElementById('equityChart').innerHTML =
-          '<div class="stats"><div class="stat"><span class="value">¥'+fmt(h.equity)+'</span><span class="label">'+h.date+' 净值（首日，暂无趋势）</span></div></div>';
+          '<div class="stats"><div class="stat"><span class="value">¥' + fmt(h.equity) + '</span><span class="label">' + h.date + ' 净值（首日，暂无趋势）</span></div></div>';
+        document.getElementById('chartToolbar').style.display = 'none';
         return;
       }
 
       // Fallback: try pnl endpoint for legacy data
-      const pr = await api('/quant/api/pnl' + modeParam(false)); const d=pr?.data;
-      const legacyHistory = d?.equityHistory ?? d?.history;
+      var pr = await api('/quant/api/pnl' + modeParam(false)); var d = pr && pr.data;
+      var legacyHistory = d && (d.equityHistory || d.history);
       if (legacyHistory && Array.isArray(legacyHistory) && legacyHistory.length >= 2) {
-        renderSvgChart('equityChart', legacyHistory.map(h => ({x: h.date||h.timestamp, y: h.equity||h.value})));
+        document.getElementById('chartToolbar').style.display = 'flex';
+        EC.fullData = legacyHistory.map(function(h) { return {x: h.date || h.timestamp, y: h.equity || h.value}; });
+        EC.rangeStart = 0;
+        EC.rangeEnd = EC.fullData.length - 1;
+        EC.overlayData = [];
+        computeDrawdownRanges(EC.fullData);
+        collectEvents(EC.fullData);
+        initEquityCanvas();
+        drawChart();
+        updateChartLegend();
         return;
       }
 
       // Last fallback: show current equity value
-      const tv = d?.totalValue ?? d?.equity;
+      var tv = d && (d.totalValue || d.equity);
       if (tv != null) {
         document.getElementById('equityChart').innerHTML =
-          '<div class="stats"><div class="stat"><span class="value">¥'+fmt(tv)+'</span><span class="label">当前净值</span></div></div>';
+          '<div class="stats"><div class="stat"><span class="value">¥' + fmt(tv) + '</span><span class="label">当前净值</span></div></div>';
       }
-    }
-
-    function renderSvgChart(containerId, data, overlay) {
-      if (!data.length) return;
-      const W = 600, H = 150, pad = {t:10,r:10,b:25,l:60};
-      const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
-
-      // Merge data ranges for proper scaling
-      const allY = [...data.map(d=>d.y), ...(overlay||[]).map(d=>d.y)];
-      const yMin = Math.min(...allY), yMax = Math.max(...allY);
-      const yRange = yMax - yMin || 1;
-      const xStep = cw / Math.max(data.length - 1, 1);
-
-      function buildPath(points) {
-        let p = '', a = '';
-        for (let i = 0; i < points.length; i++) {
-          const x = pad.l + i * xStep;
-          const y = pad.t + ch - ((points[i].y - yMin) / yRange) * ch;
-          p += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-          a += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-        }
-        a += 'L'+(pad.l + (points.length-1)*xStep)+','+(pad.t+ch)+'L'+pad.l+','+(pad.t+ch)+'Z';
-        return {path:p, area:a};
-      }
-
-      // Determine line color
-      const color = data[data.length-1].y >= data[0].y ? 'var(--green)' : 'var(--red)';
-      const {path, area: areaPath} = buildPath(data);
-
-      // Grid lines
-      let grid = '';
-      for (let i = 0; i <= 3; i++) {
-        const gy = pad.t + (ch / 3) * i;
-        const val = yMax - (yRange / 3) * i;
-        grid += '<line x1="'+pad.l+'" y1="'+gy+'" x2="'+(W-pad.r)+'" y2="'+gy+'" class="chart-grid"/>';
-        grid += '<text x="'+(pad.l-4)+'" y="'+(gy+4)+'" text-anchor="end" class="chart-label">¥'+fmt(val)+'</text>';
-      }
-
-      // X labels (first, mid, last)
-      const xl = [0, Math.floor(data.length/2), data.length-1];
-      for (const i of xl) {
-        if (data[i]) {
-          const x = pad.l + i * xStep;
-          grid += '<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" class="chart-label">'+data[i].x+'</text>';
-        }
-      }
-
-      let overlayPaths = '';
-      if (overlay && overlay.length >= 2) {
-        const oStep = cw / Math.max(overlay.length - 1, 1);
-        let op = '';
-        for (let i = 0; i < overlay.length; i++) {
-          const x = pad.l + i * oStep;
-          const y = pad.t + ch - ((overlay[i].y - yMin) / yRange) * ch;
-          op += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
-        }
-        overlayPaths = '<path d="'+op+'" stroke="var(--accent)" class="chart-line" stroke-dasharray="4,3" opacity="0.7"/>';
-      }
-
-      // Legend
-      let legend = '<text x="'+(W-pad.r)+'" y="'+(pad.t+10)+'" text-anchor="end" class="chart-label" fill="'+color+'">策略</text>';
-      if (overlay && overlay.length) {
-        legend += '<text x="'+(W-pad.r)+'" y="'+(pad.t+22)+'" text-anchor="end" class="chart-label" fill="var(--accent)">基准</text>';
-      }
-
-      document.getElementById(containerId).innerHTML =
-        '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">' +
-        grid +
-        '<path d="'+areaPath+'" fill="'+color+'" class="chart-area"/>' +
-        '<path d="'+path+'" stroke="'+color+'" class="chart-line"/>' +
-        overlayPaths +
-        legend +
-        '</svg>';
+      document.getElementById('chartToolbar').style.display = 'none';
     }
 
     // ── Benchmark overlay ───────────────────────────────────
     async function loadBenchmarkOverlay() {
-      const sel = document.getElementById('benchmarkSelect');
-      const benchId = sel ? sel.value : '';
-      if (!benchId) {
-        // Reload chart without overlay
-        await loadEquityChart();
+      var sel = document.getElementById('benchmarkSelect');
+      var benchId = sel ? sel.value : '';
+      if (!benchId || !EC.fullData.length) {
+        EC.overlayData = [];
+        updateChartLegend();
+        drawChart();
         document.getElementById('benchmarkStats').innerHTML = '';
         return;
       }
-      const r = await api('/quant/api/benchmark/compare?benchmark=' + benchId + modeParam(true));
+      var r = await api('/quant/api/benchmark/compare?benchmark=' + benchId + modeParam(true));
       if (!r || r.status !== 'ok' || !r.data) {
         document.getElementById('benchmarkStats').innerHTML = '<span style="color:var(--text-dim)">基准数据不足</span>';
+        EC.overlayData = [];
+        updateChartLegend();
+        drawChart();
         return;
       }
-      const cmp = r.data;
-      // Re-render chart with both curves using normalized equity values
-      const eqR = await api('/quant/api/equity-history?limit=120' + modeParam(true));
-      const history = eqR?.data;
-      if (history && history.length >= 2) {
-        const first = history[0].equity;
-        const stratData = history.map(h => ({x: h.date, y: h.equity}));
-        // Scale benchmark to same starting equity for visual comparison
-        const benchData = cmp.data.map(d => ({x: d.date, y: first * d.normalizedReturn}));
-        renderSvgChart('equityChart', stratData, benchData);
-      }
+      var cmp = r.data;
+      // Scale benchmark to same starting equity for visual comparison
+      var first = EC.fullData[0].y;
+      EC.overlayData = cmp.data.map(function(d) { return {x: d.date, y: first * d.normalizedReturn}; });
+      updateChartLegend();
+      drawChart();
       // Show stats
-      const s = cmp.stats;
-      const exCls = pctClass(s.excessReturn);
+      var s = cmp.stats;
+      var exCls = pctClass(s.excessReturn);
       document.getElementById('benchmarkStats').innerHTML =
-        '策略: <span class="'+pctClass(s.strategyReturnPct)+'">'+fmt(s.strategyReturnPct)+'%</span> · ' +
-        cmp.benchmark.name+': <span class="'+pctClass(s.benchmarkReturnPct)+'">'+fmt(s.benchmarkReturnPct)+'%</span> · ' +
-        '超额: <span class="'+exCls+'">'+fmt(s.excessReturn)+'%</span> · ' +
-        'IR: '+s.informationRatio.toFixed(2);
+        '策略: <span class="' + pctClass(s.strategyReturnPct) + '">' + fmt(s.strategyReturnPct) + '%</span> · ' +
+        cmp.benchmark.name + ': <span class="' + pctClass(s.benchmarkReturnPct) + '">' + fmt(s.benchmarkReturnPct) + '%</span> · ' +
+        '超额: <span class="' + exCls + '">' + fmt(s.excessReturn) + '%</span> · ' +
+        'IR: ' + s.informationRatio.toFixed(2);
     }
 
     // ── Health / Staleness ──────────────────────────────────

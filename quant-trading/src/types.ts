@@ -1150,6 +1150,28 @@ export type AlignmentConfig = {
    * When undefined or empty, all strategies are included.
    */
   strategyIds?: string[];
+
+  /**
+   * Group split-fill trades before alignment.
+   * When true, multiple live fills for the same symbol/direction within
+   * `splitFillWindowSec` are merged into one logical trade before matching.
+   * Default: false.
+   */
+  groupSplitFills?: boolean;
+
+  /**
+   * Time window (seconds) for grouping split fills into one logical trade.
+   * Only effective when `groupSplitFills` is true.
+   * Default: 60.
+   */
+  splitFillWindowSec?: number;
+
+  /**
+   * IANA timezone identifier for interpreting entry/exit dates when
+   * aligning across sources with different timestamp conventions.
+   * Default: "Asia/Shanghai".
+   */
+  timezone?: string;
 };
 
 /**
@@ -1175,6 +1197,8 @@ export type PairDeviation = {
   pnlDelta: number;
   /** Net P&L difference as percentage of backtest P&L */
   pnlDeviationPct?: number;
+  /** Estimated execution slippage: (actual fill price − expected signal price) / expected */
+  slippagePct?: number;
 };
 
 /**
@@ -1196,6 +1220,12 @@ export type PairedTrade = {
   deviation?: PairDeviation;
   /** Symbol used for matching (normalized form) */
   matchedSymbol: string;
+  /**
+   * Group ID linking split-fill pairs back to the same logical trade.
+   * Populated when `groupSplitFills` is enabled and multiple live fills
+   * were merged before alignment.
+   */
+  groupId?: string;
 };
 
 /**

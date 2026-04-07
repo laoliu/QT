@@ -131,6 +131,30 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
 CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged);
+
+-- Trade plans (daily trade plan management)
+CREATE TABLE IF NOT EXISTS trade_plans (
+  id              TEXT PRIMARY KEY,
+  symbol          TEXT NOT NULL,
+  direction       TEXT NOT NULL,
+  plan_price      REAL NOT NULL,
+  stop_price      REAL NOT NULL,
+  target_price    REAL NOT NULL,
+  position_ratio  REAL NOT NULL DEFAULT 10,
+  reason          TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending',
+  date            TEXT NOT NULL,
+  linked_order_id TEXT,
+  strategy_id     TEXT,
+  executed_price  REAL,
+  executed_at     TEXT,
+  cancel_reason   TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trade_plans_symbol ON trade_plans(symbol);
+CREATE INDEX IF NOT EXISTS idx_trade_plans_date ON trade_plans(date);
+CREATE INDEX IF NOT EXISTS idx_trade_plans_status ON trade_plans(status);
 `;
 
 // ── Types ────────────────────────────────────────────────────
@@ -205,6 +229,26 @@ export interface EquityRow {
   benchmark?: number;
 }
 
+export interface TradePlanRow {
+  id: string;
+  symbol: string;
+  direction: "buy" | "sell";
+  planPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  positionRatio: number;
+  reason: string;
+  status: "pending" | "executed" | "cancelled";
+  date: string;
+  linkedOrderId?: string;
+  strategyId?: string;
+  executedPrice?: number;
+  executedAt?: string;
+  cancelReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Storage interface ────────────────────────────────────────
 
 export interface QuantStorage {
@@ -243,6 +287,19 @@ export interface QuantStorage {
   upsertEquitySnapshot(row: EquityRow): Promise<void>;
   getEquitySnapshots(opts?: { start?: string; end?: string; limit?: number }): Promise<EquityRow[]>;
 
+  // ── Trade plans ─────────────────────────
+  insertTradePlan(plan: TradePlanRow): Promise<void>;
+  updateTradePlan(id: string, patch: Partial<TradePlanRow>): Promise<boolean>;
+  deleteTradePlan(id: string): Promise<boolean>;
+  getTradePlan(id: string): Promise<TradePlanRow | undefined>;
+  getTradePlans(opts?: {
+    symbol?: string;
+    date?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<TradePlanRow[]>;
+  getTradePlanCount(): Promise<{ total: number; pending: number; executed: number; cancelled: number }>;
+
   // ── Lifecycle ────────────────────────────
   close(): Promise<void>;
 }
@@ -255,6 +312,7 @@ export class InMemoryStorage implements QuantStorage {
   private orders: Map<string, OrderRow> = new Map();
   private trades: TradeRow[] = [];
   private equity: Map<string, EquityRow> = new Map();
+  private tradePlans: Map<string, TradePlanRow> = new Map();
   private nextSignalId = 1;
   private nextTradeId = 1;
   private persistPath: string | null;
@@ -284,6 +342,11 @@ export class InMemoryStorage implements QuantStorage {
         if (data.equity) {
           for (const e of data.equity) {
             this.equity.set(e.date, e);
+          }
+        }
+        if (data.tradePlans) {
+          for (const p of data.tradePlans) {
+            this.tradePlans.set(p.id, p);
           }
         }
         this.nextSignalId = this.signals.length + 1;
@@ -320,6 +383,7 @@ export class InMemoryStorage implements QuantStorage {
         orders: [...this.orders.values()],
         trades: this.trades,
         equity: [...this.equity.values()],
+        tradePlans: [...this.tradePlans.values()],
       };
       await fs.mkdir(path.dirname(this.persistPath), { recursive: true });
       await fs.writeFile(this.persistPath, JSON.stringify(data));
@@ -508,6 +572,56 @@ export class InMemoryStorage implements QuantStorage {
     result.sort((a, b) => a.date.localeCompare(b.date));
     if (opts?.limit) result = result.slice(-opts.limit);
     return result;
+  }
+
+  // ── Trade plans ──────────────────────────────────────────
+
+  async insertTradePlan(plan: TradePlanRow): Promise<void> {
+    this.tradePlans.set(plan.id, plan);
+    await this.maybePersist();
+  }
+
+  async updateTradePlan(id: string, patch: Partial<TradePlanRow>): Promise<boolean> {
+    const plan = this.tradePlans.get(id);
+    if (!plan) return false;
+    Object.assign(plan, patch, { updatedAt: new Date().toISOString() });
+    await this.maybePersist();
+    return true;
+  }
+
+  async deleteTradePlan(id: string): Promise<boolean> {
+    const ok = this.tradePlans.delete(id);
+    if (ok) await this.maybePersist();
+    return ok;
+  }
+
+  async getTradePlan(id: string): Promise<TradePlanRow | undefined> {
+    return this.tradePlans.get(id);
+  }
+
+  async getTradePlans(opts?: {
+    symbol?: string;
+    date?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<TradePlanRow[]> {
+    let result = [...this.tradePlans.values()];
+    if (opts?.symbol) result = result.filter((p) => p.symbol === opts.symbol);
+    if (opts?.date) result = result.filter((p) => p.date === opts.date);
+    if (opts?.status) result = result.filter((p) => p.status === opts.status);
+    result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (opts?.limit) result = result.slice(0, opts.limit);
+    return result;
+  }
+
+  async getTradePlanCount(): Promise<{ total: number; pending: number; executed: number; cancelled: number }> {
+    const all = [...this.tradePlans.values()];
+    return {
+      total: all.length,
+      pending: all.filter((p) => p.status === "pending").length,
+      executed: all.filter((p) => p.status === "executed").length,
+      cancelled: all.filter((p) => p.status === "cancelled").length,
+    };
   }
 
   // ── Lifecycle ─────────────────────────────────────────────
@@ -900,6 +1014,154 @@ export class SqliteStorage implements QuantStorage {
       positionCount: r.position_count as number,
       benchmark: r.benchmark as number | undefined,
     }));
+  }
+
+  // ── Trade plans ──────────────────────────────────────────
+
+  private mapTradePlanRow(r: Record<string, unknown>): TradePlanRow {
+    return {
+      id: r.id as string,
+      symbol: r.symbol as string,
+      direction: r.direction as "buy" | "sell",
+      planPrice: r.plan_price as number,
+      stopPrice: r.stop_price as number,
+      targetPrice: r.target_price as number,
+      positionRatio: r.position_ratio as number,
+      reason: r.reason as string,
+      status: r.status as "pending" | "executed" | "cancelled",
+      date: r.date as string,
+      linkedOrderId: r.linked_order_id as string | undefined,
+      strategyId: r.strategy_id as string | undefined,
+      executedPrice: r.executed_price as number | undefined,
+      executedAt: r.executed_at as string | undefined,
+      cancelReason: r.cancel_reason as string | undefined,
+      createdAt: r.created_at as string,
+      updatedAt: r.updated_at as string,
+    };
+  }
+
+  async insertTradePlan(plan: TradePlanRow): Promise<void> {
+    (this.db as Record<string, Function>)
+      .prepare(`
+      INSERT OR REPLACE INTO trade_plans
+        (id, symbol, direction, plan_price, stop_price, target_price, position_ratio, reason, status, date, linked_order_id, strategy_id, executed_price, executed_at, cancel_reason, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+      .run(
+        plan.id,
+        plan.symbol,
+        plan.direction,
+        plan.planPrice,
+        plan.stopPrice,
+        plan.targetPrice,
+        plan.positionRatio,
+        plan.reason,
+        plan.status,
+        plan.date,
+        plan.linkedOrderId ?? null,
+        plan.strategyId ?? null,
+        plan.executedPrice ?? null,
+        plan.executedAt ?? null,
+        plan.cancelReason ?? null,
+        plan.createdAt,
+        plan.updatedAt,
+      );
+  }
+
+  async updateTradePlan(id: string, patch: Partial<TradePlanRow>): Promise<boolean> {
+    const setClauses: string[] = [];
+    const params: unknown[] = [];
+    const fieldMap: Record<string, string> = {
+      planPrice: "plan_price",
+      stopPrice: "stop_price",
+      targetPrice: "target_price",
+      positionRatio: "position_ratio",
+      reason: "reason",
+      direction: "direction",
+      status: "status",
+      linkedOrderId: "linked_order_id",
+      strategyId: "strategy_id",
+      executedPrice: "executed_price",
+      executedAt: "executed_at",
+      cancelReason: "cancel_reason",
+    };
+    for (const [key, col] of Object.entries(fieldMap)) {
+      if ((patch as Record<string, unknown>)[key] !== undefined) {
+        setClauses.push(`${col} = ?`);
+        params.push((patch as Record<string, unknown>)[key]);
+      }
+    }
+    if (setClauses.length === 0) return false;
+    setClauses.push("updated_at = datetime('now')");
+    params.push(id);
+    const result = (this.db as Record<string, Function>)
+      .prepare(`UPDATE trade_plans SET ${setClauses.join(", ")} WHERE id = ?`)
+      .run(...params) as { changes: number };
+    return result.changes > 0;
+  }
+
+  async deleteTradePlan(id: string): Promise<boolean> {
+    const result = (this.db as Record<string, Function>)
+      .prepare("DELETE FROM trade_plans WHERE id = ?")
+      .run(id) as { changes: number };
+    return result.changes > 0;
+  }
+
+  async getTradePlan(id: string): Promise<TradePlanRow | undefined> {
+    const row = (this.db as Record<string, Function>)
+      .prepare("SELECT * FROM trade_plans WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+    return row ? this.mapTradePlanRow(row) : undefined;
+  }
+
+  async getTradePlans(opts?: {
+    symbol?: string;
+    date?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<TradePlanRow[]> {
+    let sql = "SELECT * FROM trade_plans WHERE 1=1";
+    const params: unknown[] = [];
+    if (opts?.symbol) {
+      sql += " AND symbol = ?";
+      params.push(opts.symbol);
+    }
+    if (opts?.date) {
+      sql += " AND date = ?";
+      params.push(opts.date);
+    }
+    if (opts?.status) {
+      sql += " AND status = ?";
+      params.push(opts.status);
+    }
+    sql += " ORDER BY created_at DESC";
+    if (opts?.limit) {
+      sql += " LIMIT ?";
+      params.push(opts.limit);
+    }
+    const rows = (this.db as Record<string, Function>).prepare(sql).all(...params) as Array<
+      Record<string, unknown>
+    >;
+    return rows.map((r) => this.mapTradePlanRow(r));
+  }
+
+  async getTradePlanCount(): Promise<{ total: number; pending: number; executed: number; cancelled: number }> {
+    const row = (this.db as Record<string, Function>)
+      .prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN status = 'executed' THEN 1 ELSE 0 END) as executed,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+        FROM trade_plans
+      `)
+      .get() as Record<string, number>;
+    return {
+      total: row.total ?? 0,
+      pending: row.pending ?? 0,
+      executed: row.executed ?? 0,
+      cancelled: row.cancelled ?? 0,
+    };
   }
 
   // ── Lifecycle ─────────────────────────────────────────────

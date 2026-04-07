@@ -337,12 +337,6 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
 
-    // ── Trade Plan Store (交易计划) ──────────────────────────────
-    const tradePlanStore = new TradePlanStore({
-      maxPlans: 2000,
-      dataDir: config.dataDir ?? null,
-    });
-
     // ── Favorites Store (股票收藏) ──────────────────────────────
     const favoritesStore = new FavoritesStore({
       dataDir: config.dataDir ?? null,
@@ -439,6 +433,11 @@ const quantTradingPlugin = {
       config.dataDir ? `${config.dataDir}/quant-storage.json` : null,
     );
     void storage.initialize();
+
+    // ── Trade Plan Store (交易计划) ──────────────────────────────
+    const tradePlanStore = new TradePlanStore(storage, { maxPlans: 2000 });
+    void tradePlanStore.init();
+
     const dataWarehouse = new HistoricalDataWarehouse({
       provider: createDataProvider(config),
       storage,

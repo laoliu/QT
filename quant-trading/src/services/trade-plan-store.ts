@@ -7,67 +7,43 @@
  *   - Link plans to conditional orders for automatic execution
  *   - Review and update plans
  *
- * Persistence follows the same JSON-file pattern as TradeJournal.
+ * Persistence is delegated to QuantStorage (sqlite-storage), supporting both
+ * SQLite and in-memory/JSON-backed fallback modes.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import type { QuantStorage, TradePlanRow } from "./sqlite-storage.js";
 
 export type PlanDirection = "buy" | "sell";
 export type PlanStatus = "pending" | "executed" | "cancelled";
 
-export interface TradePlan {
-  id: string;
-  /** Symbol code (e.g. 600519). */
-  symbol: string;
-  /** Trade direction. */
-  direction: PlanDirection;
-  /** Planned entry/exit price. */
-  planPrice: number;
-  /** Stop-loss price. */
-  stopPrice: number;
-  /** Target price. */
-  targetPrice: number;
-  /** Position ratio (0-100, e.g. 20 means 20% of total capital). */
-  positionRatio: number;
-  /** Reason / rationale for the trade. */
-  reason: string;
-  /** Execution status. */
-  status: PlanStatus;
-  /** Date of the plan (YYYY-MM-DD). */
-  date: string;
-  /** Linked conditional order ID (if auto-order was created). */
-  linkedOrderId?: string;
-  /** Strategy ID (optional). */
-  strategyId?: string;
-  /** Actual execution price (filled when executed). */
-  executedPrice?: number;
-  /** Execution timestamp. */
-  executedAt?: string;
-  /** Cancellation reason. */
-  cancelReason?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TradePlanStoreOptions {
-  maxPlans?: number;
-  dataDir?: string | null;
-}
+export type TradePlan = TradePlanRow;
 
 export class TradePlanStore {
-  private plans: TradePlan[] = [];
+  private storage: QuantStorage;
   private idCounter = 0;
-  private readonly maxPlans: number;
-  private readonly dataDir: string | null;
+  private maxPlans: number;
 
-  constructor(opts: TradePlanStoreOptions = {}) {
+  constructor(storage: QuantStorage, opts: { maxPlans?: number } = {}) {
+    this.storage = storage;
     this.maxPlans = opts.maxPlans ?? 2000;
-    this.dataDir = opts.dataDir ?? null;
-    this.loadFromDisk();
+  }
+
+  /** Restore the idCounter from existing data (call after storage.initialize). */
+  async init(): Promise<void> {
+    const plans = await this.storage.getTradePlans({ limit: 1 });
+    if (plans.length > 0) {
+      // Extract max numeric suffix from existing IDs like "tp-00042"
+      const allPlans = await this.storage.getTradePlans({ limit: this.maxPlans });
+      let maxId = 0;
+      for (const p of allPlans) {
+        const m = p.id.match(/^tp-(\d+)$/);
+        if (m) maxId = Math.max(maxId, parseInt(m[1]!, 10));
+      }
+      this.idCounter = maxId;
+    }
   }
 
   /** Create a new trade plan. Returns the plan ID. */
-  addPlan(params: {
+  async addPlan(params: {
     symbol: string;
     direction: PlanDirection;
     planPrice: number;
@@ -77,9 +53,16 @@ export class TradePlanStore {
     reason: string;
     date?: string;
     strategyId?: string;
-  }): string {
-    if (this.plans.length >= this.maxPlans) {
-      this.plans = this.plans.slice(Math.floor(this.maxPlans * 0.1));
+  }): Promise<string> {
+    // Prune if over limit
+    const counts = await this.storage.getTradePlanCount();
+    if (counts.total >= this.maxPlans) {
+      const oldest = await this.storage.getTradePlans({ limit: Math.floor(this.maxPlans * 0.1) });
+      // Delete oldest plans (getTradePlans returns newest-first, so reverse)
+      const toDelete = oldest.reverse();
+      for (const p of toDelete) {
+        await this.storage.deleteTradePlan(p.id);
+      }
     }
 
     const now = new Date().toISOString();
@@ -100,13 +83,12 @@ export class TradePlanStore {
       updatedAt: now,
     };
 
-    this.plans.push(plan);
-    this.saveToDisk();
+    await this.storage.insertTradePlan(plan);
     return id;
   }
 
-  /** Update an existing plan. */
-  updatePlan(
+  /** Update an existing pending plan. */
+  async updatePlan(
     id: string,
     patch: Partial<
       Pick<
@@ -121,144 +103,97 @@ export class TradePlanStore {
         | "strategyId"
       >
     >,
-  ): boolean {
-    const plan = this.plans.find((p) => p.id === id);
+  ): Promise<boolean> {
+    const plan = await this.storage.getTradePlan(id);
     if (!plan || plan.status !== "pending") return false;
-    if (patch.planPrice !== undefined) plan.planPrice = patch.planPrice;
-    if (patch.stopPrice !== undefined) plan.stopPrice = patch.stopPrice;
-    if (patch.targetPrice !== undefined) plan.targetPrice = patch.targetPrice;
-    if (patch.positionRatio !== undefined) plan.positionRatio = patch.positionRatio;
-    if (patch.reason !== undefined) plan.reason = patch.reason;
-    if (patch.direction !== undefined) plan.direction = patch.direction;
-    if (patch.linkedOrderId !== undefined) plan.linkedOrderId = patch.linkedOrderId;
-    if (patch.strategyId !== undefined) plan.strategyId = patch.strategyId;
-    plan.updatedAt = new Date().toISOString();
-    this.saveToDisk();
-    return true;
+    return this.storage.updateTradePlan(id, patch);
   }
 
   /** Mark a plan as executed. */
-  markExecuted(id: string, executedPrice?: number): boolean {
-    const plan = this.plans.find((p) => p.id === id);
+  async markExecuted(id: string, executedPrice?: number): Promise<boolean> {
+    const plan = await this.storage.getTradePlan(id);
     if (!plan || plan.status !== "pending") return false;
-    plan.status = "executed";
-    plan.executedPrice = executedPrice;
-    plan.executedAt = new Date().toISOString();
-    plan.updatedAt = plan.executedAt;
-    this.saveToDisk();
-    return true;
+    const now = new Date().toISOString();
+    return this.storage.updateTradePlan(id, {
+      status: "executed",
+      executedPrice,
+      executedAt: now,
+    });
   }
 
   /** Mark a plan as cancelled. */
-  markCancelled(id: string, cancelReason?: string): boolean {
-    const plan = this.plans.find((p) => p.id === id);
+  async markCancelled(id: string, cancelReason?: string): Promise<boolean> {
+    const plan = await this.storage.getTradePlan(id);
     if (!plan || plan.status !== "pending") return false;
-    plan.status = "cancelled";
-    plan.cancelReason = cancelReason;
-    plan.updatedAt = new Date().toISOString();
-    this.saveToDisk();
-    return true;
+    return this.storage.updateTradePlan(id, {
+      status: "cancelled",
+      cancelReason,
+    });
   }
 
   /** Delete a plan by ID. */
-  deletePlan(id: string): boolean {
-    const idx = this.plans.findIndex((p) => p.id === id);
-    if (idx < 0) return false;
-    this.plans.splice(idx, 1);
-    this.saveToDisk();
-    return true;
+  async deletePlan(id: string): Promise<boolean> {
+    return this.storage.deleteTradePlan(id);
   }
 
   /** Get a plan by ID. */
-  getPlan(id: string): TradePlan | undefined {
-    return this.plans.find((p) => p.id === id);
+  async getPlan(id: string): Promise<TradePlan | undefined> {
+    return this.storage.getTradePlan(id);
   }
 
   /** Get plans for a specific date. */
-  getByDate(date: string): TradePlan[] {
-    return this.plans.filter((p) => p.date === date);
+  async getByDate(date: string): Promise<TradePlan[]> {
+    return this.storage.getTradePlans({ date });
   }
 
   /** Get plans for a specific symbol. */
-  getBySymbol(symbol: string, limit = 20): TradePlan[] {
-    return this.plans.filter((p) => p.symbol === symbol).slice(-limit);
+  async getBySymbol(symbol: string, limit = 20): Promise<TradePlan[]> {
+    return this.storage.getTradePlans({ symbol, limit });
   }
 
   /** Get plans by status. */
-  getByStatus(status: PlanStatus, limit = 50): TradePlan[] {
-    return this.plans.filter((p) => p.status === status).slice(-limit);
+  async getByStatus(status: PlanStatus, limit = 50): Promise<TradePlan[]> {
+    return this.storage.getTradePlans({ status, limit });
   }
 
   /** Get recent plans (newest first). */
-  getRecent(limit = 20): TradePlan[] {
-    return this.plans.slice(-limit).reverse();
+  async getRecent(limit = 20): Promise<TradePlan[]> {
+    return this.storage.getTradePlans({ limit });
   }
 
   /** Link a conditional order to a plan. */
-  linkOrder(planId: string, orderId: string): boolean {
-    const plan = this.plans.find((p) => p.id === planId);
+  async linkOrder(planId: string, orderId: string): Promise<boolean> {
+    const plan = await this.storage.getTradePlan(planId);
     if (!plan) return false;
-    plan.linkedOrderId = orderId;
-    plan.updatedAt = new Date().toISOString();
-    this.saveToDisk();
-    return true;
+    return this.storage.updateTradePlan(planId, { linkedOrderId: orderId });
   }
 
   /** Get summary statistics. */
-  getSummary(): {
+  async getSummary(): Promise<{
     totalPlans: number;
     pending: number;
     executed: number;
     cancelled: number;
     executionRate: number;
     plansByDate: Record<string, number>;
-  } {
-    const totalPlans = this.plans.length;
-    const pending = this.plans.filter((p) => p.status === "pending").length;
-    const executed = this.plans.filter((p) => p.status === "executed").length;
-    const cancelled = this.plans.filter((p) => p.status === "cancelled").length;
-    const decided = executed + cancelled;
-    const executionRate = decided > 0 ? executed / decided : 0;
+  }> {
+    const counts = await this.storage.getTradePlanCount();
+    const decided = counts.executed + counts.cancelled;
+    const executionRate = decided > 0 ? counts.executed / decided : 0;
 
+    const allPlans = await this.storage.getTradePlans({ limit: this.maxPlans });
     const plansByDate: Record<string, number> = {};
-    for (const p of this.plans) {
+    for (const p of allPlans) {
       plansByDate[p.date] = (plansByDate[p.date] ?? 0) + 1;
     }
 
-    return { totalPlans, pending, executed, cancelled, executionRate, plansByDate };
-  }
-
-  get size(): number {
-    return this.plans.length;
-  }
-
-  // ── Persistence ────────────────────────────────────────────
-
-  private persistPath(): string | null {
-    if (!this.dataDir) return null;
-    return `${this.dataDir}/trade-plan.json`;
-  }
-
-  private saveToDisk(): void {
-    const p = this.persistPath();
-    if (!p) return;
-    const dir = dirname(p);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(p, JSON.stringify({ idCounter: this.idCounter, plans: this.plans }, null, 2));
-  }
-
-  private loadFromDisk(): void {
-    const p = this.persistPath();
-    if (!p || !existsSync(p)) return;
-    try {
-      const data = JSON.parse(readFileSync(p, "utf-8")) as {
-        idCounter: number;
-        plans: TradePlan[];
-      };
-      this.idCounter = data.idCounter ?? 0;
-      this.plans = data.plans ?? [];
-    } catch {
-      // Ignore corrupt data
-    }
+    return {
+      totalPlans: counts.total,
+      pending: counts.pending,
+      executed: counts.executed,
+      cancelled: counts.cancelled,
+      executionRate,
+      plansByDate,
+    };
   }
 }

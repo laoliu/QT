@@ -101,7 +101,7 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
             direction === "buy"
               ? (targetPrice - planPrice) / (planPrice - stopPrice)
               : (planPrice - targetPrice) / (stopPrice - planPrice);
-          const id = store.addPlan({
+          const id = await store.addPlan({
             symbol,
             direction,
             planPrice,
@@ -133,19 +133,19 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
           const status = args.status as "pending" | "executed" | "cancelled";
 
           if (planId) {
-            const plan = store.getPlan(planId);
+            const plan = await store.getPlan(planId);
             return plan ?? { error: `未找到计划 ${planId}` };
           }
           if (status) {
-            const plans = store.getByStatus(status, limit);
+            const plans = await store.getByStatus(status, limit);
             return { count: plans.length, plans };
           }
           if (symbol) {
-            const plans = store.getBySymbol(symbol, limit);
+            const plans = await store.getBySymbol(symbol, limit);
             return { count: plans.length, plans };
           }
           if (date) {
-            const plans = store.getByDate(date);
+            const plans = await store.getByDate(date);
             return { count: plans.length, plans };
           }
           return { error: "请提供 plan_id, symbol, date, 或 status" };
@@ -154,7 +154,7 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
         case "update": {
           const planId = args.plan_id as string;
           if (!planId) return { error: "请提供 plan_id" };
-          const ok = store.updatePlan(planId, {
+          const ok = await store.updatePlan(planId, {
             planPrice: args.plan_price as number | undefined,
             stopPrice: args.stop_price as number | undefined,
             targetPrice: args.target_price as number | undefined,
@@ -172,9 +172,9 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
           const planId = args.plan_id as string;
           if (!planId) return { error: "请提供 plan_id" };
           const executedPrice = args.executed_price as number | undefined;
-          const ok = store.markExecuted(planId, executedPrice);
+          const ok = await store.markExecuted(planId, executedPrice);
           if (!ok) return { error: `未找到待执行计划 ${planId}` };
-          const plan = store.getPlan(planId);
+          const plan = await store.getPlan(planId);
           return {
             message: `计划 ${planId} 已标记为已执行`,
             executedPrice: executedPrice ? `¥${executedPrice.toFixed(2)}` : undefined,
@@ -186,7 +186,7 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
           const planId = args.plan_id as string;
           if (!planId) return { error: "请提供 plan_id" };
           const cancelReason = args.cancel_reason as string | undefined;
-          const ok = store.markCancelled(planId, cancelReason);
+          const ok = await store.markCancelled(planId, cancelReason);
           return ok
             ? { message: `计划 ${planId} 已取消`, reason: cancelReason }
             : { error: `未找到待执行计划 ${planId}` };
@@ -195,7 +195,7 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
         case "delete": {
           const planId = args.plan_id as string;
           if (!planId) return { error: "请提供 plan_id" };
-          const ok = store.deletePlan(planId);
+          const ok = await store.deletePlan(planId);
           return ok ? { message: `计划 ${planId} 已删除` } : { error: `未找到计划 ${planId}` };
         }
 
@@ -203,14 +203,14 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
           const planId = args.plan_id as string;
           const orderId = args.order_id as string;
           if (!planId || !orderId) return { error: "请提供 plan_id 和 order_id" };
-          const ok = store.linkOrder(planId, orderId);
+          const ok = await store.linkOrder(planId, orderId);
           return ok
             ? { message: `计划 ${planId} 已关联条件单 ${orderId}` }
             : { error: `未找到计划 ${planId}` };
         }
 
         case "recent": {
-          const plans = store.getRecent(limit);
+          const plans = await store.getRecent(limit);
           return {
             count: plans.length,
             plans: plans.map((p) => ({
@@ -231,7 +231,7 @@ export function createTradePlanTool(_api: OpenClawPluginApi, store: TradePlanSto
 
         case "today": {
           const today = new Date().toISOString().slice(0, 10);
-          const plans = store.getByDate(today);
+          const plans = await store.getByDate(today);
           return {
             date: today,
             count: plans.length,

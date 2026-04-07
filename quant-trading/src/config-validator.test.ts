@@ -63,8 +63,16 @@ describe("config-validator", () => {
       expect(validateConfig({ tradingAccount: { mode: "paper", broker: "paper" } })).toEqual([]);
     });
 
-    it("warns on unimplemented broker", () => {
+    it("accepts futu as a valid broker (no longer unimplemented)", () => {
       const issues = validateConfig({ tradingAccount: { broker: "futu" } });
+      const warnings = issues.filter(
+        (i) => i.path === "tradingAccount.broker" && i.severity === "warning",
+      );
+      expect(warnings.length).toBe(0);
+    });
+
+    it("warns on unimplemented broker (ib)", () => {
+      const issues = validateConfig({ tradingAccount: { broker: "ib" } });
       const warnings = issues.filter(
         (i) => i.path === "tradingAccount.broker" && i.severity === "warning",
       );
@@ -72,6 +80,70 @@ describe("config-validator", () => {
       expect(warnings[0].message).toContain("not yet implemented");
     });
   });
+
+  describe("Futu sub-config", () => {
+    it("accepts valid futu config", () => {
+      const issues = validateConfig({
+        tradingAccount: {
+          broker: "futu",
+          futu: { openDHost: "127.0.0.1", openDPort: 11111, tradeEnv: "REAL" },
+        },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.openDHost")).toEqual([]);
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort")).toEqual([]);
+      expect(issuesAt(issues, "tradingAccount.futu.tradeEnv")).toEqual([]);
+    });
+
+    it("errors on invalid openDPort (0)", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { openDPort: 0 } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort").length).toBe(1);
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort")[0].severity).toBe("error");
+    });
+
+    it("errors on openDPort > 65535", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { openDPort: 70000 } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort").length).toBe(1);
+    });
+
+    it("errors on non-number openDPort", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { openDPort: "11111" } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort").length).toBe(1);
+    });
+
+    it("errors on non-string openDHost", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { openDHost: 12345 } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.openDHost").length).toBe(1);
+    });
+
+    it("errors on invalid tradeEnv", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { tradeEnv: "DEMO" } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.tradeEnv").length).toBe(1);
+    });
+
+    it("accepts SIMULATE tradeEnv", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "futu", futu: { tradeEnv: "SIMULATE" } },
+      });
+      expect(issuesAt(issues, "tradingAccount.futu.tradeEnv")).toEqual([]);
+    });
+
+    it("does not validate futu config when broker is not futu", () => {
+      const issues = validateConfig({
+        tradingAccount: { broker: "paper", futu: { openDPort: -1 } },
+      });
+      // Should not produce futu-specific errors since broker != futu
+      expect(issuesAt(issues, "tradingAccount.futu.openDPort")).toEqual([]);
+    });
 
   describe("riskLimits", () => {
     it("warns on out-of-range maxPositionPct", () => {

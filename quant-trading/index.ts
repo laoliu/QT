@@ -140,6 +140,7 @@ import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
+import { createOptionsRiskAnalysisTool } from "./src/tools/options-risk-analysis.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
 import { createOptionsTradingTool } from "./src/tools/options-trading.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
@@ -622,6 +623,7 @@ const quantTradingPlugin = {
       options_data: createOptionsDataTool(api, config),
       options_strategy: createOptionsStrategyTool(api, config),
       options_trading: createOptionsTradingTool(api, config, getEngine),
+      options_risk_analysis: createOptionsRiskAnalysisTool(api, config),
       stochastic_pricing: createStochasticPricingTool(api, config),
       watchlist: createWatchlistTool(api, config),
       favorites: createFavoritesTool(api, config),
@@ -679,6 +681,7 @@ const quantTradingPlugin = {
       options_data: "期权数据",
       options_strategy: "期权策略",
       options_trading: "期权交易",
+      options_risk_analysis: "期权风险分析",
       stochastic_pricing: "随机定价与风险",
       watchlist: "自选股管理",
       favorites: "股票收藏",

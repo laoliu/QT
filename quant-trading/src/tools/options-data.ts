@@ -335,6 +335,9 @@ function formatGreeks(g: GreeksSnapshot) {
     vega: g.vega?.toFixed(4),
     rho: g.rho?.toFixed(4),
     impliedVol: g.impliedVol != null ? (g.impliedVol * 100).toFixed(2) + "%" : undefined,
+    charm: g.charm?.toFixed(6),
+    vanna: g.vanna?.toFixed(6),
+    vomma: g.vomma?.toFixed(6),
   };
 }
 

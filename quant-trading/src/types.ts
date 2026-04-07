@@ -446,6 +446,10 @@ export type GreeksSnapshot = {
   rho: number;
   impliedVol: number; // annualized IV
   calculatedAt: number; // unix ms
+  // Second-order Greeks (optional, populated when available)
+  charm?: number; // dDelta/dTime (daily)
+  vanna?: number; // dDelta/dVol (per 1% vol)
+  vomma?: number; // dVega/dVol (per 1% vol squared)
 };
 
 /** Full option contract metadata */
@@ -676,6 +680,8 @@ export type RiskLimitsConfig = {
   maxGammaExposure?: number;
   /** Max absolute portfolio vega exposure (default: 10000) */
   maxVegaExposure?: number;
+  /** Max absolute portfolio theta exposure per day (default: 0 = no limit) */
+  maxThetaExposure?: number;
   /** Days-to-expiry threshold for near-expiry warnings (default: 3) */
   nearExpiryDays?: number;
 
@@ -712,6 +718,7 @@ export type RiskRuleId =
   | "MAX_DELTA_EXPOSURE"
   | "MAX_GAMMA_EXPOSURE"
   | "MAX_VEGA_EXPOSURE"
+  | "MAX_THETA_EXPOSURE"
   | "NEAR_EXPIRY_WARNING"
   // Futures-specific risk rules
   | "MAX_MARGIN_UTILIZATION"
@@ -993,6 +1000,8 @@ export type OptionsConfig = {
     expiryWarningDays?: number[];
     /** IV deviation threshold for alerts (std devs from mean, default: 2.0) */
     ivAlertThreshold?: number;
+    /** Max absolute portfolio Theta per day (default: 0 = no limit) */
+    maxTheta?: number;
   };
 };
 

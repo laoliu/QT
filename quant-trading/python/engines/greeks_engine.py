@@ -427,6 +427,265 @@ def _find_critical_price_put(
     return S_star
 
 
+# ── Second-Order Greeks ──────────────────────────────────────────────────────
+
+def calculate_charm(
+    S: float, K: float, T: float, r: float, sigma: float,
+    option_type: str = "call", q: float = 0.0,
+) -> float:
+    """Charm (Delta decay): dDelta/dT — measures how delta changes as time passes.
+
+    Useful for traders who delta-hedge and want to know how their hedge
+    drifts overnight without any price change.
+    Returns daily charm (annualized / 365).
+    """
+    if T <= 0 or sigma <= 0 or S <= 0:
+        return 0.0
+
+    d1 = _d1(S, K, T, r, sigma, q)
+    d2 = d1 - sigma * math.sqrt(T)
+    sqrt_T = math.sqrt(T)
+    exp_qT = math.exp(-q * T)
+    pd1 = norm.pdf(d1)
+
+    # Charm = -exp(-qT) * [pdf(d1) * (2*(r-q)*T - d2*sigma*sqrt(T)) / (2*T*sigma*sqrt(T))]
+    #         + q * exp(-qT) * N(d1)  [for call]
+    common = exp_qT * pd1 * (2.0 * (r - q) * T - d2 * sigma * sqrt_T) / (2.0 * T * sigma * sqrt_T)
+
+    if option_type == "call":
+        charm_annual = -q * exp_qT * norm.cdf(d1) - common
+    else:
+        charm_annual = q * exp_qT * norm.cdf(-d1) - common
+
+    return charm_annual / 365.0
+
+
+def calculate_vanna(
+    S: float, K: float, T: float, r: float, sigma: float, q: float = 0.0,
+) -> float:
+    """Vanna: dDelta/dSigma = dVega/dSpot — cross-sensitivity of delta to vol.
+
+    Same for calls and puts. Tells traders how their delta exposure shifts
+    when implied volatility moves.
+    Returns vanna per 1% vol change.
+    """
+    if T <= 0 or sigma <= 0 or S <= 0:
+        return 0.0
+
+    d1 = _d1(S, K, T, r, sigma, q)
+    d2 = d1 - sigma * math.sqrt(T)
+    exp_qT = math.exp(-q * T)
+    pd1 = norm.pdf(d1)
+
+    # Vanna = -exp(-qT) * pdf(d1) * d2 / sigma
+    # Normalize per 1% vol change (divide by 100)
+    return -exp_qT * pd1 * d2 / sigma / 100.0
+
+
+def calculate_vomma(
+    S: float, K: float, T: float, r: float, sigma: float, q: float = 0.0,
+) -> float:
+    """Vomma (Volga): dVega/dSigma — second derivative of price w.r.t. volatility.
+
+    Same for calls and puts. Critical for vol-of-vol risk and for
+    understanding the convexity of a position's vol exposure.
+    Returns vomma per 1% vol change squared.
+    """
+    if T <= 0 or sigma <= 0 or S <= 0:
+        return 0.0
+
+    d1 = _d1(S, K, T, r, sigma, q)
+    d2 = d1 - sigma * math.sqrt(T)
+    sqrt_T = math.sqrt(T)
+    exp_qT = math.exp(-q * T)
+    pd1 = norm.pdf(d1)
+
+    # Vomma = S * exp(-qT) * pdf(d1) * sqrt(T) * d1 * d2 / sigma
+    # Normalize per (1% vol)^2
+    return S * exp_qT * pd1 * sqrt_T * d1 * d2 / sigma / 10000.0
+
+
+# ── Greeks Sensitivity (What-If) ─────────────────────────────────────────────
+
+def greeks_what_if(
+    S: float, K: float, T: float, r: float, sigma: float,
+    option_type: str = "call", q: float = 0.0,
+    spot_bumps_pct: Optional[list] = None,
+    vol_bumps: Optional[list] = None,
+    time_bumps_days: Optional[list] = None,
+) -> list:
+    """Compute Greeks across a grid of spot/vol/time perturbations.
+
+    Returns a list of scenarios, each containing the full Greeks snapshot
+    plus the scenario parameters. This is essential for traders to understand
+    how their option positions behave under various market conditions.
+    """
+    if spot_bumps_pct is None:
+        spot_bumps_pct = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
+    if vol_bumps is None:
+        vol_bumps = [0]
+    if time_bumps_days is None:
+        time_bumps_days = [0]
+
+    scenarios = []
+    for spot_pct in spot_bumps_pct:
+        for vol_bump in vol_bumps:
+            for time_bump in time_bumps_days:
+                bumped_S = S * (1.0 + spot_pct / 100.0)
+                bumped_sigma = max(sigma + vol_bump, 0.001)
+                bumped_T = max(T - time_bump / 365.0, 0.0)
+
+                if bumped_S <= 0:
+                    continue
+
+                greeks = calculate_all_greeks(bumped_S, K, bumped_T, r, bumped_sigma, option_type, q)
+                # Add second-order Greeks
+                greeks["charm"] = round(calculate_charm(bumped_S, K, bumped_T, r, bumped_sigma, option_type, q), 6)
+                greeks["vanna"] = round(calculate_vanna(bumped_S, K, bumped_T, r, bumped_sigma, q), 6)
+                greeks["vomma"] = round(calculate_vomma(bumped_S, K, bumped_T, r, bumped_sigma, q), 6)
+
+                scenarios.append({
+                    "spotBumpPct": spot_pct,
+                    "volBump": vol_bump,
+                    "timeBumpDays": time_bump,
+                    "spotPrice": round(bumped_S, 4),
+                    "volatility": round(bumped_sigma, 4),
+                    "timeToExpiry": round(bumped_T, 6),
+                    **greeks,
+                })
+    return scenarios
+
+
+# ── P&L Attribution ──────────────────────────────────────────────────────────
+
+def pnl_attribution(
+    S_old: float, S_new: float,
+    sigma_old: float, sigma_new: float,
+    T_old: float, T_new: float,
+    K: float, r: float,
+    option_type: str = "call", q: float = 0.0,
+    quantity: int = 1, multiplier: float = 10000.0,
+) -> dict:
+    """Decompose option P&L into Greeks components.
+
+    Breaks down the actual price change into contributions from:
+      - Delta effect:  delta * dS
+      - Gamma effect:  0.5 * gamma * dS^2
+      - Theta effect:  theta * dT (in days)
+      - Vega effect:   vega * dSigma (per 1% vol)
+      - Residual:      actual change minus sum of above
+
+    This is the standard first+second order Taylor expansion used by
+    professional options desks for P&L explain.
+    """
+    dS = S_new - S_old
+    d_sigma = sigma_new - sigma_old
+    dT_days = (T_old - T_new) * 365.0  # positive = time passed
+
+    # Use old state Greeks for attribution
+    greeks = calculate_all_greeks(S_old, K, T_old, r, sigma_old, option_type, q)
+    price_old = greeks["theoreticalPrice"]
+
+    # New theoretical price
+    greeks_new = calculate_all_greeks(S_new, K, T_new, r, sigma_new, option_type, q)
+    price_new = greeks_new["theoreticalPrice"]
+    actual_change = price_new - price_old
+
+    # Delta effect
+    delta_effect = greeks["delta"] * dS
+
+    # Gamma effect (second-order spot)
+    gamma_effect = 0.5 * greeks["gamma"] * dS * dS
+
+    # Theta effect (vega is per 1% so theta is per day)
+    theta_effect = greeks["theta"] * dT_days
+
+    # Vega effect (vega is per 1% vol change)
+    vega_effect = greeks["vega"] * d_sigma * 100.0
+
+    explained = delta_effect + gamma_effect + theta_effect + vega_effect
+    residual = actual_change - explained
+
+    return {
+        "priceOld": round(price_old, 6),
+        "priceNew": round(price_new, 6),
+        "actualChange": round(actual_change, 6),
+        "deltaEffect": round(delta_effect, 6),
+        "gammaEffect": round(gamma_effect, 6),
+        "thetaEffect": round(theta_effect, 6),
+        "vegaEffect": round(vega_effect, 6),
+        "explained": round(explained, 6),
+        "residual": round(residual, 6),
+        "pnlPerContract": round(actual_change * multiplier, 2),
+        "totalPnl": round(actual_change * multiplier * quantity, 2),
+        "decomposition": {
+            "delta": round(delta_effect * multiplier * quantity, 2),
+            "gamma": round(gamma_effect * multiplier * quantity, 2),
+            "theta": round(theta_effect * multiplier * quantity, 2),
+            "vega": round(vega_effect * multiplier * quantity, 2),
+            "residual": round(residual * multiplier * quantity, 2),
+        },
+    }
+
+
+# ── Margin Estimation ────────────────────────────────────────────────────────
+
+def estimate_option_margin(
+    S: float, K: float, T: float, sigma: float,
+    option_type: str = "call",
+    position_side: str = "short",
+    quantity: int = 1,
+    multiplier: float = 10000.0,
+    settlement_price: Optional[float] = None,
+) -> dict:
+    """Estimate margin for option positions.
+
+    Uses the simplified Chinese exchange margin formula for ETF options:
+      Short call margin = (premium + max(X% * underlying - OTM, Y% * underlying)) * multiplier
+      Short put margin  = min(premium + max(X% * underlying - OTM, Y% * strike), strike) * multiplier
+
+    Where X% = 12%, Y% = 7% are typical exchange parameters.
+    Long positions only require the premium paid (no additional margin).
+    """
+    if position_side == "long":
+        premium = bsm_price(S, K, T, 0.02, sigma, option_type)
+        return {
+            "marginPerContract": round(premium * multiplier, 2),
+            "totalMargin": round(premium * multiplier * quantity, 2),
+            "marginType": "premium",
+            "note": "买方只需付权利金，无额外保证金",
+        }
+
+    premium = settlement_price if settlement_price is not None else bsm_price(S, K, T, 0.02, sigma, option_type)
+
+    # Exchange margin parameters (typical for SSE ETF options)
+    margin_rate_1 = 0.12  # 12% of underlying
+    margin_rate_2 = 0.07  # 7% of underlying (or strike for puts)
+
+    if option_type == "call":
+        otm_amount = max(K - S, 0.0)
+        margin_per_unit = premium + max(margin_rate_1 * S - otm_amount, margin_rate_2 * S)
+    else:
+        otm_amount = max(S - K, 0.0)
+        margin_per_unit = min(
+            premium + max(margin_rate_1 * S - otm_amount, margin_rate_2 * K),
+            K,
+        )
+
+    margin_per_contract = margin_per_unit * multiplier
+    total_margin = margin_per_contract * quantity
+
+    return {
+        "marginPerContract": round(margin_per_contract, 2),
+        "totalMargin": round(total_margin, 2),
+        "marginType": "short_option",
+        "premiumComponent": round(premium * multiplier, 2),
+        "marginRate1": margin_rate_1,
+        "marginRate2": margin_rate_2,
+        "note": f"{'卖出看涨' if option_type == 'call' else '卖出看跌'}期权保证金估算（交易所参数可能略有差异）",
+    }
+
+
 # ── Utility: Time to Expiry ───────────────────────────────────────────────────
 
 def days_to_expiry(expiry_str: str) -> int:
@@ -455,6 +714,9 @@ def run_greeks_engine(config: dict) -> dict:
         price        — calculate theoretical price
         iv_surface   — build IV surface from option chain data
         iv_smile     — get volatility smile for specific expiry
+        what_if      — Greeks sensitivity across spot/vol/time grid
+        pnl_explain  — P&L attribution via Greeks decomposition
+        margin       — estimate margin requirement for option position
     """
     action = config.get("action", "greeks")
 
@@ -490,6 +752,12 @@ def run_greeks_engine(config: dict) -> dict:
             )
             greeks["timeValue"] = round(greeks["theoreticalPrice"] - greeks["intrinsicValue"], 6)
             greeks["moneyness"] = round(S / K, 4) if K > 0 else 0
+
+            # Second-order Greeks
+            greeks["charm"] = round(calculate_charm(S, K, T, r, sigma, opt_type, q), 6)
+            greeks["vanna"] = round(calculate_vanna(S, K, T, r, sigma, q), 6)
+            greeks["vomma"] = round(calculate_vomma(S, K, T, r, sigma, q), 6)
+
             greeks["calculatedAt"] = int(datetime.now().timestamp() * 1000)
 
             return {"ok": True, "data": greeks}
@@ -642,6 +910,89 @@ def run_greeks_engine(config: dict) -> dict:
                 "smile": smile_data,
                 "calculatedAt": int(datetime.now().timestamp() * 1000),
             }}
+
+        elif action == "what_if":
+            S = float(config.get("spotPrice", 0))
+            K = float(config.get("strike", 0))
+            r = float(config.get("riskFreeRate", 0.02))
+            sigma = float(config.get("volatility", 0.25))
+            opt_type = config.get("optionType", "call")
+            q = float(config.get("dividendYield", 0.0))
+
+            expiry = config.get("expiry", "")
+            T = years_to_expiry(expiry) if expiry else float(config.get("timeToExpiry", 0.25))
+
+            if S <= 0 or K <= 0:
+                return {"ok": False, "error": "spotPrice and strike must be positive"}
+
+            spot_bumps = config.get("spotBumpsPct", [-10, -5, -2, -1, 0, 1, 2, 5, 10])
+            vol_bumps = config.get("volBumps", [-0.05, 0, 0.05])
+            time_bumps = config.get("timeBumpsDays", [0, 7, 14])
+
+            scenarios = greeks_what_if(S, K, T, r, sigma, opt_type, q,
+                                       spot_bumps, vol_bumps, time_bumps)
+
+            return {"ok": True, "data": {
+                "baseSpot": S,
+                "baseVol": sigma,
+                "baseTimeToExpiry": T,
+                "scenarios": scenarios,
+                "scenarioCount": len(scenarios),
+                "calculatedAt": int(datetime.now().timestamp() * 1000),
+            }}
+
+        elif action == "pnl_explain":
+            S_old = float(config.get("spotPriceOld", 0))
+            S_new = float(config.get("spotPriceNew", 0))
+            sigma_old = float(config.get("volOld", 0.25))
+            sigma_new = float(config.get("volNew", 0.25))
+            K = float(config.get("strike", 0))
+            r = float(config.get("riskFreeRate", 0.02))
+            opt_type = config.get("optionType", "call")
+            q = float(config.get("dividendYield", 0.0))
+            quantity = int(config.get("quantity", 1))
+            multiplier = float(config.get("multiplier", 10000.0))
+
+            expiry_old = config.get("expiryOld", "")
+            expiry_new = config.get("expiryNew", "")
+            if expiry_old and expiry_new:
+                T_old = years_to_expiry(expiry_old)
+                T_new = years_to_expiry(expiry_new)
+            else:
+                T_old = float(config.get("timeToExpiryOld", 0.25))
+                T_new = float(config.get("timeToExpiryNew", T_old))
+
+            if S_old <= 0 or S_new <= 0 or K <= 0:
+                return {"ok": False, "error": "spotPriceOld, spotPriceNew, strike must be positive"}
+
+            result = pnl_attribution(S_old, S_new, sigma_old, sigma_new,
+                                     T_old, T_new, K, r, opt_type, q,
+                                     quantity, multiplier)
+            result["calculatedAt"] = int(datetime.now().timestamp() * 1000)
+            return {"ok": True, "data": result}
+
+        elif action == "margin":
+            S = float(config.get("spotPrice", 0))
+            K = float(config.get("strike", 0))
+            sigma = float(config.get("volatility", 0.25))
+            opt_type = config.get("optionType", "call")
+            position_side = config.get("positionSide", "short")
+            quantity = int(config.get("quantity", 1))
+            multiplier = float(config.get("multiplier", 10000.0))
+            settlement = config.get("settlementPrice")
+            if settlement is not None:
+                settlement = float(settlement)
+
+            expiry = config.get("expiry", "")
+            T = years_to_expiry(expiry) if expiry else float(config.get("timeToExpiry", 0.25))
+
+            if S <= 0 or K <= 0:
+                return {"ok": False, "error": "spotPrice and strike must be positive"}
+
+            result = estimate_option_margin(S, K, T, sigma, opt_type,
+                                            position_side, quantity, multiplier, settlement)
+            result["calculatedAt"] = int(datetime.now().timestamp() * 1000)
+            return {"ok": True, "data": result}
 
         else:
             return {"ok": False, "error": f"Unknown action: {action}"}

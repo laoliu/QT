@@ -118,6 +118,7 @@ import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
+import { createBatchOrderTool } from "./src/tools/batch-order.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
 import { createChipAccumulationTool } from "./src/tools/chip-accumulation.js";
@@ -134,6 +135,7 @@ import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
 import { createFuturesStraddleTool } from "./src/tools/futures-straddle.js";
 import { createInstitutionalFlowTool } from "./src/tools/institutional-flow.js";
+import { createIntradayT0Tool } from "./src/tools/intraday-t0.js";
 import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
@@ -164,6 +166,7 @@ import { createStrategyOptimizerTool } from "./src/tools/strategy-optimizer.js";
 import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
+import { createTradePlanTool } from "./src/tools/trade-plan.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
@@ -654,6 +657,9 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      batch_order: createBatchOrderTool(api, config, getEngine),
+      trade_plan: createTradePlanTool(api, config, conditionalOrderService),
+      intraday_t0: createIntradayT0Tool(api, config, getEngine),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +710,9 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      batch_order: "批量委托",
+      trade_plan: "交易计划",
+      intraday_t0: "日内T+0",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

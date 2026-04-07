@@ -28,7 +28,7 @@ export type PnlAlert = {
   /** Current daily PnL percentage */
   pnlPct?: number;
   /** Which metric triggered the alert */
-  trigger: "daily_pnl" | "position_loss" | "circuit_breaker";
+  trigger: "daily_pnl" | "position_loss" | "circuit_breaker" | "profit_taking" | "position_gain" | "daily_info";
 };
 
 // ── Config ───────────────────────────────────────────────────────
@@ -42,6 +42,12 @@ export type PnlMonitorConfig = {
   circuitBreakerPct?: number;
   /** Per-position loss warning threshold (default -0.08 = -8%) */
   positionWarningPct?: number;
+  /** Daily PnL info notification threshold (absolute value, default 0.01 = ±1%) */
+  infoPct?: number;
+  /** Daily profit-taking threshold — pause engine when daily gain exceeds this (default undefined = disabled) */
+  profitTakingPct?: number;
+  /** Per-position gain alert threshold (default 0.10 = +10%) */
+  positionGainPct?: number;
   /** Enable/disable the monitor (default true) */
   enabled?: boolean;
 };
@@ -51,6 +57,9 @@ const DEFAULTS: Required<PnlMonitorConfig> = {
   warningPct: -0.03,
   circuitBreakerPct: -0.05,
   positionWarningPct: -0.08,
+  infoPct: 0.01,
+  profitTakingPct: 0,
+  positionGainPct: 0.10,
   enabled: true,
 };
 
@@ -110,16 +119,28 @@ export function createPnlMonitorService(
   const checkPositionLosses = async (positions: LivePosition[]): Promise<void> => {
     for (const pos of positions) {
       if (pos.avgCost <= 0 || !pos.currentPrice) continue;
-      const lossPct = (pos.currentPrice - pos.avgCost) / pos.avgCost;
-      if (lossPct <= monitorCfg.positionWarningPct) {
+      const pnlPct = (pos.currentPrice - pos.avgCost) / pos.avgCost;
+      if (pnlPct <= monitorCfg.positionWarningPct) {
         await emitAlert({
           severity: "warning",
           message:
-            `${pos.symbol} 浮亏 ${(lossPct * 100).toFixed(1)}% ` +
+            `${pos.symbol} 浮亏 ${(pnlPct * 100).toFixed(1)}% ` +
             `(成本 ¥${pos.avgCost.toFixed(2)} → 现价 ¥${pos.currentPrice.toFixed(2)})`,
           timestamp: new Date().toISOString(),
-          pnlPct: lossPct,
+          pnlPct: pnlPct,
           trigger: "position_loss",
+        });
+      }
+      // Position gain alert
+      if (monitorCfg.positionGainPct > 0 && pnlPct >= monitorCfg.positionGainPct) {
+        await emitAlert({
+          severity: "info",
+          message:
+            `${pos.symbol} 浮盈 +${(pnlPct * 100).toFixed(1)}% ` +
+            `(成本 ¥${pos.avgCost.toFixed(2)} → 现价 ¥${pos.currentPrice.toFixed(2)})，考虑部分止盈`,
+          timestamp: new Date().toISOString(),
+          pnlPct: pnlPct,
+          trigger: "position_gain",
         });
       }
     }
@@ -172,6 +193,28 @@ export function createPnlMonitorService(
       return; // Skip lower-severity checks
     }
 
+    // ── Profit-taking threshold (positive PnL) ──
+    if (monitorCfg.profitTakingPct > 0 && dailyPnlPct >= monitorCfg.profitTakingPct) {
+      await emitAlert({
+        severity: "warning",
+        message:
+          `日内盈利 +${(dailyPnlPct * 100).toFixed(2)}% (¥${dailyPnl.toFixed(2)}) ` +
+          `达到止盈阈值 +${(monitorCfg.profitTakingPct * 100).toFixed(0)}%，正在暂停交易引擎锁定利润`,
+        timestamp: new Date().toISOString(),
+        pnlPct: dailyPnlPct,
+        trigger: "profit_taking",
+      });
+      if (pauseEngine) {
+        try {
+          await pauseEngine();
+          api.logger.info("PnlMonitor: 交易引擎已被止盈暂停");
+        } catch (err) {
+          api.logger.error(`PnlMonitor: 暂停引擎失败: ${(err as Error).message}`);
+        }
+      }
+      return; // Skip lower-severity checks
+    }
+
     // ── Warning level ──
     if (dailyPnlPct <= monitorCfg.warningPct) {
       await emitAlert({
@@ -187,6 +230,19 @@ export function createPnlMonitorService(
 
     // ── Per-position loss check ──
     await checkPositionLosses(positions);
+
+    // ── Info level: daily PnL crosses ±infoPct ──
+    if (monitorCfg.infoPct > 0 && Math.abs(dailyPnlPct) >= monitorCfg.infoPct) {
+      const direction = dailyPnlPct > 0 ? "盈利" : "亏损";
+      await emitAlert({
+        severity: "info",
+        message:
+          `日内${direction} ${dailyPnlPct > 0 ? "+" : ""}${(dailyPnlPct * 100).toFixed(2)}% (¥${dailyPnl.toFixed(2)})`,
+        timestamp: new Date().toISOString(),
+        pnlPct: dailyPnlPct,
+        trigger: "daily_info",
+      });
+    }
   };
 
   return {

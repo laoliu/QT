@@ -63,6 +63,10 @@ export function createPriceAlertTool(
           type: "string",
           description: "预警ID（action=remove时必填）",
         },
+        activeOnly: {
+          type: "boolean",
+          description: "仅显示活跃预警（action=list，默认false）",
+        },
         repeating: {
           type: "boolean",
           description: "是否持续监控（默认false=触发一次后自动停用）",

@@ -467,6 +467,34 @@ describe("exportPositions", () => {
     const result = exportPositions([pos]);
     expect(result.content).toContain("7.84%");
   });
+
+  it("exports as TSV", () => {
+    const result = exportPositions([fakePosition()], { format: "tsv" });
+    expect(result.filename).toBe("positions.tsv");
+    expect(result.mimeType).toBe("text/tab-separated-values");
+    expect(result.rowCount).toBe(1);
+
+    const { headers } = parseTsvContent(result.content);
+    expect(headers).toContain("代码");
+    expect(headers).toContain("持仓量");
+  });
+
+  it("applies custom precision to position values", () => {
+    const pos = fakePosition({ avgCost: 150.56789 });
+    const result = exportPositions([pos], { precision: 2 });
+    expect(result.content).toContain("150.57");
+  });
+
+  it("exports only selected columns", () => {
+    const result = exportPositions([fakePosition()], {
+      columns: ["symbol", "quantity", "unrealizedPnl"],
+    });
+    const { headers } = parseCsvContent(result.content);
+    expect(headers).toHaveLength(3);
+    expect(headers).toContain("代码");
+    expect(headers).toContain("持仓量");
+    expect(headers).toContain("浮动盈亏");
+  });
 });
 
 // ── exportEquityHistory ─────────────────────────────────────
@@ -515,6 +543,43 @@ describe("exportEquityHistory", () => {
     const snap = fakeEquitySnapshot({ equity: 100000.5678 });
     const result = exportEquityHistory([snap]);
     expect(result.content).toContain("100000.57");
+  });
+
+  it("exports as TSV", () => {
+    const result = exportEquityHistory([fakeEquitySnapshot()], { format: "tsv" });
+    expect(result.filename).toBe("equity-history.tsv");
+    expect(result.mimeType).toBe("text/tab-separated-values");
+
+    const { headers } = parseTsvContent(result.content);
+    expect(headers).toContain("日期");
+    expect(headers).toContain("总权益");
+  });
+
+  it("filters with exact boundary dates (inclusive)", () => {
+    const snapshots = [
+      fakeEquitySnapshot({ date: "2024-03-01" }),
+      fakeEquitySnapshot({ date: "2024-03-15" }),
+      fakeEquitySnapshot({ date: "2024-03-31" }),
+    ];
+    const result = exportEquityHistory(snapshots, {
+      dateRange: { from: "2024-03-01", to: "2024-03-31" },
+    });
+    // Both boundary dates should be included
+    expect(result.rowCount).toBe(3);
+  });
+
+  it("exports selected columns only", () => {
+    const result = exportEquityHistory([fakeEquitySnapshot()], {
+      columns: ["date", "equity"],
+    });
+    const { headers } = parseCsvContent(result.content);
+    expect(headers).toHaveLength(2);
+  });
+
+  it("handles negative daily PnL", () => {
+    const snap = fakeEquitySnapshot({ dailyPnl: -2500.50 });
+    const result = exportEquityHistory([snap]);
+    expect(result.content).toContain("-2500.5");
   });
 });
 
@@ -625,6 +690,45 @@ describe("exportTradeJournal", () => {
     const result = exportTradeJournal([]);
     expect(result.rowCount).toBe(0);
   });
+
+  it("exports as TSV", () => {
+    const result = exportTradeJournal([fakeTradeNote()], { format: "tsv" });
+    expect(result.filename).toBe("trade-journal.tsv");
+    expect(result.mimeType).toBe("text/tab-separated-values");
+    expect(result.rowCount).toBe(1);
+
+    const { headers } = parseTsvContent(result.content);
+    expect(headers).toContain("笔记ID");
+    expect(headers).toContain("内容");
+  });
+
+  it("replaces tabs and newlines in TSV content fields", () => {
+    const note = fakeTradeNote({
+      content: "第一行\t第二行\n第三行",
+    });
+    const result = exportTradeJournal([note], { format: "tsv" });
+    const { rows } = parseTsvContent(result.content);
+    // content column (index 9) should not contain tabs or newlines
+    const contentCol = rows[0]?.[9];
+    expect(contentCol).not.toContain("\t");
+    expect(contentCol).not.toContain("\n");
+  });
+
+  it("handles empty tags array", () => {
+    const note = fakeTradeNote({ tags: [] });
+    const result = exportTradeJournal([note]);
+    expect(result.rowCount).toBe(1);
+  });
+
+  it("handles single tag", () => {
+    const note = fakeTradeNote({ tags: ["趋势"] });
+    const result = exportTradeJournal([note]);
+    expect(result.content).toContain("趋势");
+    // Should not contain semicolons for single tag
+    const { rows } = parseCsvContent(result.content);
+    const tagsCol = rows[0]?.[8]; // tags is column index 8
+    expect(tagsCol).not.toContain(";");
+  });
 });
 
 // ── exportBacktestResult ────────────────────────────────────
@@ -662,6 +766,24 @@ describe("exportBacktestResult", () => {
     (bt as { equityCurve?: unknown }).equityCurve = undefined;
     const result = exportBacktestResult(bt, { format: "csv" });
     expect(result.rowCount).toBe(0);
+  });
+
+  it("exports equity curve as TSV", () => {
+    const result = exportBacktestResult(fakeBacktestResult(), { format: "tsv" });
+    expect(result.filename).toBe("backtest-result.tsv");
+    expect(result.mimeType).toBe("text/tab-separated-values");
+    expect(result.rowCount).toBe(3);
+
+    const { headers } = parseTsvContent(result.content);
+    expect(headers).toContain("日期");
+    expect(headers).toContain("净值");
+  });
+
+  it("respects custom precision for equity curve", () => {
+    const result = exportBacktestResult(fakeBacktestResult(), { format: "csv", precision: 0 });
+    const { rows } = parseCsvContent(result.content);
+    // Values should be integers with precision=0
+    expect(rows[0]?.[1]).toBe("100000");
   });
 });
 
@@ -870,5 +992,554 @@ describe("end-to-end export scenarios", () => {
     expect(result.rowCount).toBe(3);
     expect(result.content).toContain("止损执行");
     expect(result.content).toContain("逆势交易风险大");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Numeric Edge Cases
+// ═══════════════════════════════════════════════════════════════
+
+describe("numeric edge cases", () => {
+  it("handles NaN values gracefully in trade export", () => {
+    const trade = fakeTrade({
+      entryPrice: NaN,
+      exitPrice: NaN,
+      grossPnl: NaN,
+      netPnl: NaN,
+    });
+    const result = exportTrades([trade]);
+    expect(result.rowCount).toBe(1);
+    // NaN should be formatted as empty string by formatNumber
+    const { rows } = parseCsvContent(result.content);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("handles Infinity values in position export", () => {
+    const pos = fakePosition({
+      avgCost: Infinity,
+      currentPrice: -Infinity,
+    });
+    const result = exportPositions([pos]);
+    expect(result.rowCount).toBe(1);
+  });
+
+  it("handles precision=0", () => {
+    const trade = fakeTrade({ entryPrice: 1800.56789 });
+    const result = exportTrades([trade], { precision: 0 });
+    expect(result.content).toContain("1801");
+  });
+
+  it("handles high precision (10 decimal places)", () => {
+    const trade = fakeTrade({ entryPrice: 1.23456789012345 });
+    const result = exportTrades([trade], { precision: 10 });
+    expect(result.content).toContain("1.2345678901");
+  });
+
+  it("handles very large numbers", () => {
+    const trade = fakeTrade({
+      entryPrice: 999999999.9999,
+      quantity: 1000000,
+      netPnl: 888888888.8888,
+    });
+    const result = exportTrades([trade]);
+    expect(result.rowCount).toBe(1);
+    const parsed = parseCsvContent(result.content);
+    expect(parsed.rows).toHaveLength(1);
+  });
+
+  it("handles very small fractional values", () => {
+    const trade = fakeTrade({
+      entryPrice: 0.00001,
+      exitPrice: 0.00002,
+      netPnl: 0.000001,
+    });
+    const result = exportTrades([trade], { precision: 6 });
+    expect(result.content).toContain("0.00001");
+    expect(result.content).toContain("0.00002");
+  });
+
+  it("handles NaN unrealizedPnlPct in positions", () => {
+    const pos = fakePosition({ unrealizedPnlPct: NaN });
+    const result = exportPositions([pos]);
+    expect(result.rowCount).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Boundary & Edge Condition Tests
+// ═══════════════════════════════════════════════════════════════
+
+describe("boundary conditions - columns and headers", () => {
+  it("handles non-existent column names gracefully", () => {
+    const result = exportTrades([fakeTrade()], {
+      columns: ["tradeId", "nonExistentColumn"],
+    });
+    const { headers, rows } = parseCsvContent(result.content);
+    expect(headers).toHaveLength(2);
+    // Non-existent column should produce empty values
+    expect(rows[0]?.[1]).toBe("");
+  });
+
+  it("handles empty columns array (exports nothing but header)", () => {
+    const result = exportTrades([fakeTrade()], { columns: [] });
+    // With empty columns, content is just BOM + empty header + empty data line
+    const raw = result.content.replace(/^\uFEFF/, "");
+    const lines = raw.split("\n");
+    // Two empty lines: header and one data row
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe("");
+    expect(lines[1]).toBe("");
+  });
+
+  it("handles empty columnHeaders override", () => {
+    const result = exportTrades([fakeTrade()], { columnHeaders: {} });
+    const { headers } = parseCsvContent(result.content);
+    // Should fall back to default Chinese headers
+    expect(headers).toContain("交易ID");
+  });
+
+  it("partially overrides column headers", () => {
+    const result = exportTrades([fakeTrade()], {
+      columnHeaders: { tradeId: "ID" },
+    });
+    const { headers } = parseCsvContent(result.content);
+    expect(headers).toContain("ID");
+    // Other headers remain Chinese
+    expect(headers).toContain("代码");
+    expect(headers).toContain("净利润");
+  });
+});
+
+describe("boundary conditions - date filtering", () => {
+  it("returns all items when dateRange is empty object", () => {
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2024-01-15T09:30:00Z" }),
+      fakeTrade({ tradeId: "t-2", entryTime: "2024-06-15T09:30:00Z" }),
+    ];
+    const result = exportTrades(trades, { dateRange: {} });
+    expect(result.rowCount).toBe(2);
+  });
+
+  it("handles date boundary exactly at from (inclusive)", () => {
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2024-06-01T00:00:00Z" }),
+      fakeTrade({ tradeId: "t-2", entryTime: "2024-05-31T23:59:59Z" }),
+    ];
+    const result = exportTrades(trades, {
+      dateRange: { from: "2024-06-01" },
+    });
+    expect(result.rowCount).toBe(1);
+  });
+
+  it("handles date boundary exactly at to (inclusive)", () => {
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2024-06-30T23:59:59Z" }),
+      fakeTrade({ tradeId: "t-2", entryTime: "2024-07-01T00:00:00Z" }),
+    ];
+    const result = exportTrades(trades, {
+      dateRange: { to: "2024-06-30" },
+    });
+    expect(result.rowCount).toBe(1);
+  });
+
+  it("returns empty when from > to", () => {
+    const trades = [
+      fakeTrade({ tradeId: "t-1", entryTime: "2024-06-15T09:30:00Z" }),
+    ];
+    const result = exportTrades(trades, {
+      dateRange: { from: "2024-12-01", to: "2024-01-01" },
+    });
+    expect(result.rowCount).toBe(0);
+  });
+
+  it("date filter on equity history with exact boundary", () => {
+    const snapshots = [
+      fakeEquitySnapshot({ date: "2024-03-01" }),
+      fakeEquitySnapshot({ date: "2024-02-28" }),
+      fakeEquitySnapshot({ date: "2024-03-02" }),
+    ];
+    const result = exportEquityHistory(snapshots, {
+      dateRange: { from: "2024-03-01", to: "2024-03-01" },
+    });
+    expect(result.rowCount).toBe(1);
+  });
+});
+
+describe("boundary conditions - unicode and special content", () => {
+  it("handles emoji in trade name", () => {
+    const trade = fakeTrade({ name: "🚀 火箭股份" });
+    const result = exportTrades([trade]);
+    expect(result.rowCount).toBe(1);
+    expect(result.content).toContain("🚀 火箭股份");
+  });
+
+  it("handles very long journal content", () => {
+    const longContent = "这是一段非常长的交易笔记。".repeat(500);
+    const note = fakeTradeNote({ content: longContent });
+    const result = exportTradeJournal([note]);
+    expect(result.rowCount).toBe(1);
+  });
+
+  it("handles carriage return in CSV fields", () => {
+    const trade = fakeTrade({ name: "贵州\r\n茅台" });
+    const result = exportTrades([trade]);
+    // Should be quoted since it contains \r
+    expect(result.content).toContain('"贵州\r\n茅台"');
+  });
+
+  it("handles field that is purely a number string in TSV", () => {
+    const trade = fakeTrade({ strategyId: "12345" });
+    const result = exportTrades([trade], { format: "tsv" });
+    const { rows } = parseTsvContent(result.content);
+    expect(rows[0]).toBeDefined();
+  });
+
+  it("handles empty string fields", () => {
+    const trade = fakeTrade({ name: "", strategyId: "" });
+    const result = exportTrades([trade]);
+    expect(result.rowCount).toBe(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Additional Large Data Volume Tests
+// ═══════════════════════════════════════════════════════════════
+
+describe("large data volume - additional", () => {
+  it("exports 1,000 positions across all formats", () => {
+    const positions: LivePosition[] = [];
+    for (let i = 0; i < 1_000; i++) {
+      positions.push(
+        fakePosition({
+          symbol: `${600000 + i}`,
+          name: `股票${i}`,
+          quantity: 100 * (i + 1),
+          avgCost: 10 + Math.random() * 200,
+          currentPrice: 10 + Math.random() * 200,
+          unrealizedPnl: (Math.random() - 0.5) * 50000,
+          unrealizedPnlPct: (Math.random() - 0.5) * 0.4,
+        }),
+      );
+    }
+
+    const csv = exportPositions(positions, { format: "csv" });
+    expect(csv.rowCount).toBe(1_000);
+
+    const json = exportPositions(positions, { format: "json" });
+    expect(json.rowCount).toBe(1_000);
+    const parsed = JSON.parse(json.content);
+    expect(parsed).toHaveLength(1_000);
+
+    const tsv = exportPositions(positions, { format: "tsv" });
+    expect(tsv.rowCount).toBe(1_000);
+  });
+
+  it("exports large performance report as CSV", () => {
+    const report = fakePerformanceReport();
+    const result = exportPerformanceReport(report, { format: "csv" });
+    expect(result.rowCount).toBeGreaterThan(15);
+    // Verify all categories are present
+    expect(result.content).toContain("期间");
+    expect(result.content).toContain("收益");
+    expect(result.content).toContain("回撤");
+    expect(result.content).toContain("风险调整");
+    expect(result.content).toContain("交易分析");
+    expect(result.content).toContain("资金");
+  });
+
+  it("exports backtest with 10,000 equity curve points", () => {
+    const bt = fakeBacktestResult();
+    bt.equityCurve = [];
+    let value = 100000;
+    for (let i = 0; i < 10_000; i++) {
+      value += (Math.random() - 0.48) * 500;
+      const date = new Date(2020, 0, 1);
+      date.setDate(date.getDate() + i);
+      bt.equityCurve.push({
+        date: date.toISOString().slice(0, 10),
+        value,
+      });
+    }
+
+    const csvResult = exportBacktestResult(bt, { format: "csv" });
+    expect(csvResult.rowCount).toBe(10_000);
+
+    const tsvResult = exportBacktestResult(bt, { format: "tsv" });
+    expect(tsvResult.rowCount).toBe(10_000);
+  });
+
+  it("exports 10,000 trades with date range filter", () => {
+    const trades: TradeRecord[] = [];
+    for (let i = 0; i < 10_000; i++) {
+      const month = 1 + (i % 12);
+      const day = 1 + (i % 28);
+      trades.push(
+        fakeTrade({
+          tradeId: `t-${String(i).padStart(5, "0")}`,
+          entryTime: `2024-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T09:30:00Z`,
+        }),
+      );
+    }
+
+    // Only Q2 trades (April-June)
+    const result = exportTrades(trades, {
+      dateRange: { from: "2024-04-01", to: "2024-06-30" },
+    });
+    expect(result.rowCount).toBeGreaterThan(0);
+    expect(result.rowCount).toBeLessThan(10_000);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Cross-Format Consistency - Extended
+// ═══════════════════════════════════════════════════════════════
+
+describe("cross-format consistency - all export functions", () => {
+  it("positions: CSV, JSON, TSV produce same row count", () => {
+    const positions = [
+      fakePosition({ symbol: "600519" }),
+      fakePosition({ symbol: "000858" }),
+    ];
+
+    const csv = exportPositions(positions, { format: "csv" });
+    const json = exportPositions(positions, { format: "json" });
+    const tsv = exportPositions(positions, { format: "tsv" });
+
+    expect(csv.rowCount).toBe(json.rowCount);
+    expect(csv.rowCount).toBe(tsv.rowCount);
+    expect(csv.rowCount).toBe(2);
+  });
+
+  it("equity history: CSV, JSON, TSV produce same row count", () => {
+    const snapshots = [
+      fakeEquitySnapshot({ date: "2024-06-01" }),
+      fakeEquitySnapshot({ date: "2024-06-02" }),
+      fakeEquitySnapshot({ date: "2024-06-03" }),
+    ];
+
+    const csv = exportEquityHistory(snapshots, { format: "csv" });
+    const json = exportEquityHistory(snapshots, { format: "json" });
+    const tsv = exportEquityHistory(snapshots, { format: "tsv" });
+
+    expect(csv.rowCount).toBe(json.rowCount);
+    expect(csv.rowCount).toBe(tsv.rowCount);
+    expect(csv.rowCount).toBe(3);
+  });
+
+  it("trade journal: CSV, JSON, TSV produce same row count", () => {
+    const notes = [
+      fakeTradeNote({ id: "tn-1" }),
+      fakeTradeNote({ id: "tn-2" }),
+    ];
+
+    const csv = exportTradeJournal(notes, { format: "csv" });
+    const json = exportTradeJournal(notes, { format: "json" });
+    const tsv = exportTradeJournal(notes, { format: "tsv" });
+
+    expect(csv.rowCount).toBe(json.rowCount);
+    expect(csv.rowCount).toBe(tsv.rowCount);
+  });
+
+  it("performance report: CSV and TSV produce same row count", () => {
+    const report = fakePerformanceReport();
+
+    const csv = exportPerformanceReport(report, { format: "csv" });
+    const tsv = exportPerformanceReport(report, { format: "tsv" });
+
+    expect(csv.rowCount).toBe(tsv.rowCount);
+  });
+
+  it("date range filter produces consistent results across formats for equity", () => {
+    const snapshots = [
+      fakeEquitySnapshot({ date: "2024-01-01" }),
+      fakeEquitySnapshot({ date: "2024-06-15" }),
+      fakeEquitySnapshot({ date: "2024-12-31" }),
+    ];
+    const opts: ExportOptions = { dateRange: { from: "2024-03-01", to: "2024-09-01" } };
+
+    const csv = exportEquityHistory(snapshots, { ...opts, format: "csv" });
+    const json = exportEquityHistory(snapshots, { ...opts, format: "json" });
+    const tsv = exportEquityHistory(snapshots, { ...opts, format: "tsv" });
+
+    expect(csv.rowCount).toBe(1);
+    expect(json.rowCount).toBe(1);
+    expect(tsv.rowCount).toBe(1);
+  });
+
+  it("date range filter produces consistent results across formats for journal", () => {
+    const notes = [
+      fakeTradeNote({ id: "tn-1", date: "2024-01-15" }),
+      fakeTradeNote({ id: "tn-2", date: "2024-06-15" }),
+      fakeTradeNote({ id: "tn-3", date: "2024-11-15" }),
+    ];
+    const opts: ExportOptions = { dateRange: { from: "2024-06-01" } };
+
+    const csv = exportTradeJournal(notes, { ...opts, format: "csv" });
+    const json = exportTradeJournal(notes, { ...opts, format: "json" });
+
+    expect(csv.rowCount).toBe(json.rowCount);
+    expect(csv.rowCount).toBe(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Performance Report Edge Cases
+// ═══════════════════════════════════════════════════════════════
+
+describe("performance report edge cases", () => {
+  it("handles report with zero drawdown", () => {
+    const report = fakePerformanceReport();
+    report.drawdown.maxDrawdown = 0;
+    report.drawdown.currentDrawdown = 0;
+    report.drawdown.maxDrawdownDuration = 0;
+    const result = exportPerformanceReport(report, { format: "csv" });
+    expect(result.content).toContain("0.00%");
+  });
+
+  it("handles report with 100% win rate", () => {
+    const report = fakePerformanceReport();
+    report.tradeAnalysis.winRate = 1.0;
+    report.tradeAnalysis.losingTrades = 0;
+    report.tradeAnalysis.maxConsecutiveLosses = 0;
+    const result = exportPerformanceReport(report, { format: "csv" });
+    expect(result.content).toContain("100.00%");
+  });
+
+  it("handles report with 0% win rate", () => {
+    const report = fakePerformanceReport();
+    report.tradeAnalysis.winRate = 0;
+    report.tradeAnalysis.winningTrades = 0;
+    report.tradeAnalysis.maxConsecutiveWins = 0;
+    const result = exportPerformanceReport(report, { format: "csv" });
+    expect(result.content).toContain("0.00%");
+  });
+
+  it("handles negative returns", () => {
+    const report = fakePerformanceReport();
+    report.returns.totalReturn = -0.25;
+    report.returns.annualizedReturn = -0.45;
+    report.capital.netProfit = -25000;
+    const result = exportPerformanceReport(report, { format: "csv" });
+    expect(result.content).toContain("-25.00%");
+    expect(result.content).toContain("-25000");
+  });
+
+  it("includes all metric categories in CSV output", () => {
+    const report = fakePerformanceReport();
+    const result = exportPerformanceReport(report, { format: "csv" });
+    const content = result.content;
+
+    // Count occurrences of each category
+    const categories = ["期间", "收益", "回撤", "风险调整", "交易分析", "资金"];
+    for (const cat of categories) {
+      expect(content).toContain(cat);
+    }
+  });
+
+  it("CSV row count matches number of flattened metrics", () => {
+    const report = fakePerformanceReport();
+    const result = exportPerformanceReport(report, { format: "csv" });
+    // The flattened report should have exactly 22 rows
+    // (3 period + 3 returns + 3 drawdown + 4 risk + 6 trade + 3 capital)
+    expect(result.rowCount).toBe(22);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Integration: Full Trader Workflow
+// ═══════════════════════════════════════════════════════════════
+
+describe("integration: full trader workflow", () => {
+  it("exports all data types for a complete trading day summary", () => {
+    // A trader at end of day exports everything
+    const trades = [
+      fakeTrade({ tradeId: "t-1", symbol: "600519", netPnl: 3000 }),
+      fakeTrade({ tradeId: "t-2", symbol: "000858", netPnl: -1500 }),
+    ];
+    const positions = [
+      fakePosition({ symbol: "600519", quantity: 100 }),
+      fakePosition({ symbol: "300750", quantity: 50 }),
+    ];
+    const snapshots = [
+      fakeEquitySnapshot({ date: "2024-06-10", equity: 115000 }),
+    ];
+    const report = fakePerformanceReport();
+    const notes = [
+      fakeTradeNote({ id: "tn-1", date: "2024-06-10", content: "今日总结" }),
+    ];
+
+    const tradeResult = exportTrades(trades, { format: "csv" });
+    const posResult = exportPositions(positions, { format: "csv" });
+    const eqResult = exportEquityHistory(snapshots, { format: "csv" });
+    const perfResult = exportPerformanceReport(report, { format: "json" });
+    const journalResult = exportTradeJournal(notes, { format: "csv" });
+
+    expect(tradeResult.rowCount).toBe(2);
+    expect(posResult.rowCount).toBe(2);
+    expect(eqResult.rowCount).toBe(1);
+    expect(perfResult.rowCount).toBe(1);
+    expect(journalResult.rowCount).toBe(1);
+
+    // All CSV outputs should have BOM
+    expect(tradeResult.content.charCodeAt(0)).toBe(0xfeff);
+    expect(posResult.content.charCodeAt(0)).toBe(0xfeff);
+    expect(eqResult.content.charCodeAt(0)).toBe(0xfeff);
+    expect(journalResult.content.charCodeAt(0)).toBe(0xfeff);
+
+    // JSON output should be valid
+    expect(() => JSON.parse(perfResult.content)).not.toThrow();
+  });
+
+  it("exports all formats for same data and verifies filenames and MIME types", () => {
+    const trades = [fakeTrade()];
+
+    const csv = exportTrades(trades, { format: "csv" });
+    const tsv = exportTrades(trades, { format: "tsv" });
+    const json = exportTrades(trades, { format: "json" });
+
+    expect(csv.filename).toBe("trades.csv");
+    expect(csv.mimeType).toBe("text/csv");
+
+    expect(tsv.filename).toBe("trades.tsv");
+    expect(tsv.mimeType).toBe("text/tab-separated-values");
+
+    expect(json.filename).toBe("trades.json");
+    expect(json.mimeType).toBe("application/json");
+  });
+
+  it("trader applies BOM-free export for programmatic consumption", () => {
+    const trades = [fakeTrade()];
+    const positions = [fakePosition()];
+    const snapshots = [fakeEquitySnapshot()];
+    const notes = [fakeTradeNote()];
+
+    const opts: ExportOptions = { includeBom: false };
+
+    const t = exportTrades(trades, opts);
+    const p = exportPositions(positions, opts);
+    const e = exportEquityHistory(snapshots, opts);
+    const j = exportTradeJournal(notes, opts);
+
+    // None should start with BOM
+    expect(t.content.charCodeAt(0)).not.toBe(0xfeff);
+    expect(p.content.charCodeAt(0)).not.toBe(0xfeff);
+    expect(e.content.charCodeAt(0)).not.toBe(0xfeff);
+    expect(j.content.charCodeAt(0)).not.toBe(0xfeff);
+  });
+
+  it("exports with custom English headers for international sharing", () => {
+    const trades = [fakeTrade()];
+    const result = exportTrades(trades, {
+      columns: ["tradeId", "symbol", "side", "netPnl"],
+      columnHeaders: {
+        tradeId: "Trade ID",
+        symbol: "Symbol",
+        side: "Direction",
+        netPnl: "Net P&L",
+      },
+    });
+
+    const { headers } = parseCsvContent(result.content);
+    expect(headers).toEqual(["Trade ID", "Symbol", "Direction", "Net P&L"]);
   });
 });

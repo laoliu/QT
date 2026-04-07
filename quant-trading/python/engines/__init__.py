@@ -11,4 +11,5 @@ Contains the migrated and modernized engines from jtstock:
  - futures_straddle: Butterfly spread and premium/discount arbitrage
  - tick_flow: Tick-level large order tracking, sweep detection, trade direction
  - attack_slope: Short-period price attack slope (angle) for momentum confirmation
+ - trade_record_matcher: Symbol normalization and trade record grouping by symbol
 """

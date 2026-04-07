@@ -117,6 +117,7 @@ import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
+import { createBasketOrderTool } from "./src/tools/basket-order.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
@@ -589,6 +590,7 @@ const quantTradingPlugin = {
       portfolio: createPortfolioTool(api, config, getEngine),
       portfolio_backtest: createPortfolioBacktestTool(api, config),
       portfolio_rebalance: createPortfolioRebalanceTool(api, config, getEngine),
+      basket_order: createBasketOrderTool(api, config, getEngine),
       trading_signal: createTradingSignalTool(api, config, signalHitRateTracker),
       risk_analysis: createRiskAnalysisTool(api, config),
       futures_straddle: createFuturesStraddleTool(api, config),
@@ -662,6 +664,7 @@ const quantTradingPlugin = {
       backtest: "策略回测",
       portfolio: "投资组合",
       portfolio_rebalance: "组合再平衡",
+      basket_order: "篮子订单",
       trading_signal: "交易信号",
       risk_analysis: "风险分析",
       futures_straddle: "期货套利",

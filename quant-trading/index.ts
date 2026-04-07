@@ -167,6 +167,16 @@ import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
+import { createTradingPlanTool } from "./src/tools/trading-plan.js";
+import { createMarketCalendarTool } from "./src/tools/market-calendar.js";
+import { createDividendTrackerTool } from "./src/tools/dividend-tracker.js";
+import { createTaxReportTool } from "./src/tools/tax-report.js";
+import { createNotificationConfigTool } from "./src/tools/notification-config.js";
+import { TradingPlanStore } from "./src/services/trading-plan-store.js";
+import { MarketCalendar } from "./src/services/market-calendar.js";
+import { DividendTracker } from "./src/services/dividend-tracker.js";
+import { TaxReportService } from "./src/services/tax-report.js";
+import { MultiChannelNotifier } from "./src/services/multi-channel-notifier.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 
 /** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
@@ -335,6 +345,36 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
 
+    // ── Trading Plan Store (交易计划) ────────────────────────────
+    const tradingPlanStore = new TradingPlanStore({
+      maxPlans: 2000,
+      dataDir: config.dataDir ?? null,
+    });
+
+    // ── Market Calendar (交易日历) ──────────────────────────────
+    const marketCalendar = new MarketCalendar();
+
+    // ── Dividend Tracker (分红追踪) ─────────────────────────────
+    const dividendTracker = new DividendTracker({
+      maxRecords: 5000,
+      dataDir: config.dataDir ?? null,
+    });
+
+    // ── Tax Report Service (税费报告) ───────────────────────────
+    const taxReportService = new TaxReportService({
+      dataDir: config.dataDir ?? null,
+    });
+
+    // ── Multi-Channel Notifier (多渠道通知) ──────────────────────
+    const multiChannelNotifier = new MultiChannelNotifier(api, {
+      barkUrl: (config as Record<string, unknown>).barkUrl as string | undefined,
+      wecomWebhookUrl: (config as Record<string, unknown>).wecomWebhookUrl as string | undefined,
+      dingtalkWebhookUrl: (config as Record<string, unknown>).dingtalkWebhookUrl as string | undefined,
+      feishuWebhookUrl: (config as Record<string, unknown>).feishuWebhookUrl as string | undefined,
+      customWebhookUrl: (config as Record<string, unknown>).customWebhookUrl as string | undefined,
+      enabledChannels: ((config as Record<string, unknown>).notifyChannels as string[] | undefined) as never,
+    });
+
     // ── Favorites Store (股票收藏) ──────────────────────────────
     const favoritesStore = new FavoritesStore({
       dataDir: config.dataDir ?? null,
@@ -344,7 +384,7 @@ const quantTradingPlugin = {
     const strategyHealthMonitor = new StrategyHealthMonitor(
       config.dataDir ?? ".",
       {},
-      (msg) => void tryNotify(api, msg),
+      (msg) => void multiChannelNotifier.notify(msg, "策略健康"),
     );
 
     // ── Conditional Order Service (止损/止盈/跟踪止损) ─────────────
@@ -366,7 +406,7 @@ const quantTradingPlugin = {
         return quote?.price ?? null;
       },
     );
-    dcaScheduleService.setNotify((m: string) => tryNotify(api, m));
+    dcaScheduleService.setNotify((m: string) => void multiChannelNotifier.notify(m, "定投计划"));
     void dcaScheduleService.load();
 
     // ── Breakout Monitor (突破监控) ────────────────────────────
@@ -382,7 +422,7 @@ const quantTradingPlugin = {
       if (!quote) return null;
       return { price: quote.price, volume: quote.volume, changePct: quote.changePct };
     });
-    breakoutMonitor.setNotifyFn((m: string) => tryNotify(api, m));
+    breakoutMonitor.setNotifyFn((m: string) => void multiChannelNotifier.notify(m, "突破监控"));
     breakoutMonitor.setOrderFn(async (params) => {
       const mgr = liveEngine.orderManager;
       if (!mgr) return { ok: false, reason: "引擎未启动" };
@@ -654,6 +694,11 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      trading_plan: createTradingPlanTool(api, tradingPlanStore),
+      market_calendar: createMarketCalendarTool(api, marketCalendar),
+      dividend_tracker: createDividendTrackerTool(api, dividendTracker),
+      tax_report: createTaxReportTool(api, taxReportService, dividendTracker),
+      notification_config: createNotificationConfigTool(api, multiChannelNotifier),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +749,11 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      trading_plan: "交易计划",
+      market_calendar: "交易日历",
+      dividend_tracker: "分红追踪",
+      tax_report: "税费报告",
+      notification_config: "通知配置",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -716,7 +766,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback — delivers task results to the user's chat
-    taskScheduler.setNotify((m: string) => tryNotify(api, m));
+    taskScheduler.setNotify((m: string) => void multiChannelNotifier.notify(m));
 
     /** Lazily-extended tool map — reuses instances from toolInstances + adds price_alert. */
     let fullToolMap: Record<
@@ -772,7 +822,7 @@ const quantTradingPlugin = {
       dataDir: config.dataDir ?? null,
     });
     // Wire notify callback
-    priceAlertService.setNotify((m: string) => tryNotify(api, m));
+    priceAlertService.setNotify((m: string) => void multiChannelNotifier.notify(m, "价格预警"));
     // Wire quote function
     const dataProviderForAlerts = createDataProvider(config);
     priceAlertService.setQuoteFn(async (symbol: string) => {
@@ -806,7 +856,7 @@ const quantTradingPlugin = {
     });
 
     // ── Conditional Order Service wiring ──────────────────────────
-    conditionalOrderService.setNotify((m: string) => tryNotify(api, m));
+    conditionalOrderService.setNotify((m: string) => void multiChannelNotifier.notify(m, "条件单"));
     conditionalOrderService.setQuoteFn(async (symbol: string) => {
       const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
       const market = detectMarketFromSymbol(symbol);

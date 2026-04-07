@@ -40,6 +40,7 @@
  * │  │    • institutional_flow— fund holdings, insider trades   │  │
  * │  │    • social_sentiment  — community hot stocks, sentiment │  │
  * │  │    • chip_accumulation — institutional accumulation scan │  │
+ * │  │    • auction_monitor  — call auction phase monitoring    │  │
  * │  │                                                          │  │
  * │  │  Commands (chat shortcuts):                              │  │
  * │  │    /quote /screen /backtest /portfolio /signal           │  │
@@ -84,6 +85,7 @@ import {
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
+import { createAuctionMonitorService } from "./src/services/auction-monitor.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
@@ -117,6 +119,7 @@ import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
+import { createAuctionMonitorTool } from "./src/tools/auction-monitor.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
@@ -267,6 +270,10 @@ const quantTradingPlugin = {
 
     // ── Event Bus (real-time SSE) ──────────────────────────────────
     const eventBus = new EventBus({ maxRecent: 500 });
+
+    // ── Auction Monitor (集合竞价监控) ───────────────────────────
+    const { service: auctionMonitorService, monitor: auctionMonitor } =
+      createAuctionMonitorService(api, config, eventBus);
 
     // ── Log Store (in-memory ring buffer for admin log viewer) ───
     const logStore = new LogStore({ maxEntries: 2000 });
@@ -654,6 +661,7 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      auction_monitor: createAuctionMonitorTool(api, config, auctionMonitor),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +712,7 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      auction_monitor: "竞价监控",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
@@ -1089,6 +1098,9 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Auction Monitor as a service for call auction phase monitoring
+    api.registerService(auctionMonitorService);
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

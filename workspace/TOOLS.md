@@ -103,8 +103,46 @@ stock_screen(action="list_screeners")
 | `sector_synergy` | 板块协同追涨 |
 | `breakout_monitor` | 突破形态监控 |
 | `chip_accumulation` | 主力吸筹扫描 |
+| `auction_monitor` | 集合竞价监控（9:15-9:25异动监控） |
 
 ## 六、资金面与情绪
+
+### auction_monitor 集合竞价监控
+
+监控A股9:15-9:25集合竞价阶段的异动信号。自动在竞价时段每10秒轮询数据，当出现异常信号时推送告警。
+
+```
+# 添加监控标的（支持逗号分隔批量添加）
+auction_monitor(action="watch", symbols="600519,000858,300750")
+
+# 将自选股全部添加到竞价监控
+auction_monitor(action="watch", favorites=true)
+
+# 移除监控标的
+auction_monitor(action="watch", operation="remove", symbols="600519")
+
+# 查看当前监控列表
+auction_monitor(action="watch", operation="list")
+
+# 查看竞价状态（量比、涨跌幅、委买卖比）
+auction_monitor(action="status")
+
+# 查看指定标的竞价状态
+auction_monitor(action="status", symbols="600519,000858")
+
+# 查看竞价异动告警
+auction_monitor(action="alerts", limit=10)
+```
+
+**异动告警阈值：**
+
+| 信号类型 | 阈值 | 说明 |
+|---------|------|------|
+| 量比异常 | > 3 | 竞价量比超过3倍 |
+| 竞价涨幅 | > 5% | 竞价阶段涨幅超过5% |
+| 竞价跌幅 | > 3% | 竞价阶段跌幅超过3% |
+
+---
 
 | 工具 | 用途 |
 |------|------|

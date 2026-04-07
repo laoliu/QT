@@ -8,6 +8,8 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
+import type { MarketDataProvider } from "../data/market-data-provider.js";
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -46,6 +48,33 @@ async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   portfolio.updatedAt = new Date().toISOString();
   await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
+}
+
+/** Fetch real-time quotes for paper positions and compute P&L fields */
+async function enrichPositionsWithQuotes(
+  positions: PortfolioPosition[],
+  provider: MarketDataProvider,
+): Promise<PortfolioPosition[]> {
+  const enriched = await Promise.all(
+    positions.map(async (p) => {
+      try {
+        const market = detectMarketFromSymbol(p.symbol);
+        const quote = await provider.getQuote(p.symbol, market as never);
+        if (quote?.price && quote.price > 0) {
+          const currentPrice = quote.price;
+          const marketValue = currentPrice * p.quantity;
+          const unrealizedPnl = (currentPrice - p.avgCost) * p.quantity;
+          const unrealizedPnlPct =
+            p.avgCost > 0 ? (currentPrice - p.avgCost) / p.avgCost : 0;
+          return { ...p, currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct };
+        }
+      } catch {
+        // Quote fetch failed — keep position as-is
+      }
+      return p;
+    }),
+  );
+  return enriched;
 }
 
 export function createPortfolioTool(
@@ -132,19 +161,41 @@ export function createPortfolioTool(
           }
           // Fallback to paper portfolio file
           const portfolio = await loadPortfolio(config);
+          const provider = createDataProvider(config);
+          const enrichedPositions = await enrichPositionsWithQuotes(portfolio.positions, provider);
+          const totalMarketValue = enrichedPositions.reduce(
+            (s, p) => s + (p.marketValue ?? p.quantity * p.avgCost),
+            0,
+          );
+          const totalUnrealizedPnl = enrichedPositions.reduce(
+            (s, p) => s + (p.unrealizedPnl ?? 0),
+            0,
+          );
+          const totalCost = enrichedPositions.reduce((s, p) => s + p.quantity * p.avgCost, 0);
+          const totalPnlPct = totalCost > 0 ? (totalUnrealizedPnl / totalCost) * 100 : 0;
           return {
             name: portfolio.name,
             source: "paper",
             cash: `¥${portfolio.cash.toFixed(2)}`,
-            totalValue: `¥${portfolio.totalValue.toFixed(2)}`,
-            positions: portfolio.positions.map((p) => ({
+            totalValue: `¥${(portfolio.cash + totalMarketValue).toFixed(2)}`,
+            totalMarketValue: `¥${totalMarketValue.toFixed(2)}`,
+            totalUnrealizedPnl: `¥${totalUnrealizedPnl.toFixed(2)}`,
+            totalPnlPct: `${totalPnlPct.toFixed(2)}%`,
+            positions: enrichedPositions.map((p) => ({
               symbol: p.symbol,
               name: p.name,
               quantity: p.quantity,
               avgCost: `¥${p.avgCost.toFixed(2)}`,
-              marketValue: p.marketValue ? `¥${p.marketValue.toFixed(2)}` : "N/A",
-              pnl: p.unrealizedPnl ? `¥${p.unrealizedPnl.toFixed(2)}` : "N/A",
-              pnlPct: p.unrealizedPnlPct ? `${p.unrealizedPnlPct.toFixed(2)}%` : "N/A",
+              currentPrice:
+                p.currentPrice != null ? `¥${p.currentPrice.toFixed(2)}` : "N/A",
+              marketValue:
+                p.marketValue != null ? `¥${p.marketValue.toFixed(2)}` : "N/A",
+              pnl:
+                p.unrealizedPnl != null ? `¥${p.unrealizedPnl.toFixed(2)}` : "N/A",
+              pnlPct:
+                p.unrealizedPnlPct != null
+                  ? `${(p.unrealizedPnlPct * 100).toFixed(2)}%`
+                  : "N/A",
             })),
           };
         }
@@ -250,13 +301,26 @@ export function createPortfolioTool(
             }
           }
           const portfolio = await loadPortfolio(config);
-          const totalCost = portfolio.positions.reduce((s, p) => s + p.quantity * p.avgCost, 0);
+          const provider = createDataProvider(config);
+          const enrichedPositions = await enrichPositionsWithQuotes(portfolio.positions, provider);
+          const totalMarketValue = enrichedPositions.reduce(
+            (s, p) => s + (p.marketValue ?? p.quantity * p.avgCost),
+            0,
+          );
+          const totalCost = enrichedPositions.reduce((s, p) => s + p.quantity * p.avgCost, 0);
+          const totalUnrealizedPnl = enrichedPositions.reduce(
+            (s, p) => s + (p.unrealizedPnl ?? 0),
+            0,
+          );
+          const totalPnlPct = totalCost > 0 ? (totalUnrealizedPnl / totalCost) * 100 : 0;
           return {
             name: portfolio.name,
             source: "paper",
             cash: `¥${portfolio.cash.toFixed(2)}`,
-            stockValue: `¥${totalCost.toFixed(2)}`,
-            totalValue: `¥${(portfolio.cash + totalCost).toFixed(2)}`,
+            marketValue: `¥${totalMarketValue.toFixed(2)}`,
+            totalValue: `¥${(portfolio.cash + totalMarketValue).toFixed(2)}`,
+            totalUnrealizedPnl: `¥${totalUnrealizedPnl.toFixed(2)}`,
+            totalPnlPct: `${totalPnlPct.toFixed(2)}%`,
             positionCount: portfolio.positions.length,
           };
         }

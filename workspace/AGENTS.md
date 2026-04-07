@@ -39,6 +39,11 @@ A股交易日：周一至周五（法定节假日除外）
 | "低位股" / "蓄势股"        | stock_recommend(mode=predictive) 前瞻选股           |
 | "风险" / "仓位"            | risk_analysis + position_sizing 组合风控检查        |
 | "宏观" / "大环境"          | macro_data(regime+calendar) + fund_flow(northbound) |
+| "对比 XX YY" / "PK"        | stock_compare → 多维并排对比                        |
+| "诊断" / "体检"            | holding_diagnosis → 全持仓健康度+加减仓建议         |
+| "大盘" / "总览" / "看盘"   | market_overview(dashboard) → 指数+涨跌+板块+资金    |
+| "计划买入 XX"              | trading_plan(create) → 制定入场/止损/止盈计划       |
+| "括号单" / "一键止损止盈"  | smart_order(bracket) → 入场+止损+止盈三合一         |
 
 ---
 

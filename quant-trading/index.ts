@@ -40,6 +40,11 @@
  * │  │    • institutional_flow— fund holdings, insider trades   │  │
  * │  │    • social_sentiment  — community hot stocks, sentiment │  │
  * │  │    • chip_accumulation — institutional accumulation scan │  │
+ * │  │    • stock_compare    — side-by-side stock comparison    │  │
+ * │  │    • holding_diagnosis— portfolio health check           │  │
+ * │  │    • market_overview  — market dashboard / indices       │  │
+ * │  │    • trading_plan     — trade plan with SL/TP tracking   │  │
+ * │  │    • smart_order      — bracket, iceberg, close-all      │  │
  * │  │                                                          │  │
  * │  │  Commands (chat shortcuts):                              │  │
  * │  │    /quote /screen /backtest /portfolio /signal           │  │
@@ -167,6 +172,11 @@ import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
+import { createHoldingDiagnosisTool } from "./src/tools/holding-diagnosis.js";
+import { createMarketOverviewTool } from "./src/tools/market-overview.js";
+import { createTradingPlanTool } from "./src/tools/trading-plan.js";
+import { createSmartOrderTool } from "./src/tools/smart-order.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 
 /** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
@@ -654,6 +664,11 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
+      holding_diagnosis: createHoldingDiagnosisTool(api, config),
+      market_overview: createMarketOverviewTool(api, config),
+      trading_plan: createTradingPlanTool(api, config),
+      smart_order: createSmartOrderTool(api, config, getEngine),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +719,11 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      stock_compare: "个股对比",
+      holding_diagnosis: "持仓诊断",
+      market_overview: "市场总览",
+      trading_plan: "交易计划",
+      smart_order: "智能下单",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

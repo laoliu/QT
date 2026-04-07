@@ -9,7 +9,7 @@
 │  OpenClaw Gateway (Node.js / TypeScript)                                │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │  quant-trading extension (46 AI Tools · 60+ Services · 52 策略)   │  │
+│  │  quant-trading extension (51 AI Tools · 60+ Services · 52 策略)   │  │
 │  │                                                                   │  │
 │  │  AI Tools:               Commands:         Services:              │  │
 │  │  • market_data           /quote             DataSyncService       │  │
@@ -29,7 +29,7 @@
 │  │  • strategy_router                          /quant/dashboard      │  │
 │  │  • chip_accumulation     Broker:            /quant/api/portfolio  │  │
 │  │  • institutional_flow    QMT (real)         /quant/admin/*        │  │
-│  │  • + 29 more...          Paper (sim)        /quant/data-bridge    │  │
+│  │  • + 34 more...          Paper (sim)        /quant/data-bridge    │  │
 │  │                                                                   │  │
 │  │  Engine Layer:                                                    │  │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │  │
@@ -55,7 +55,7 @@
 
 ## Features
 
-### AI Tools (通过对话调用，共 46 个)
+### AI Tools (通过对话调用，共 51 个)
 
 #### 核心分析
 
@@ -140,6 +140,16 @@
 | `watchlist`              | 自选股管理                                      |
 | `favorites`              | 股票收藏                                        |
 | `trade_journal`          | 交易笔记                                        |
+
+#### 交易工作流
+
+| Tool                     | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `stock_compare`          | 个股多维对比（2-10只并排PK）                    |
+| `holding_diagnosis`      | 一键持仓诊断（健康度/加减仓建议）               |
+| `market_overview`        | 市场总览看板（指数/涨跌/板块/资金）             |
+| `trading_plan`           | 交易计划管理（入场/止损/止盈/跟踪执行）         |
+| `smart_order`            | 智能下单（括号单/冰山单/反手/全平仓）           |
 
 ### Chat Commands (快捷命令)
 
@@ -329,6 +339,21 @@ AI:   [调用 options_trading tool] 已提交买入开仓 10005646 x1 ...
 
 User: 查看期权持仓风险摘要
 AI:   [调用 options_trading tool] Delta ±5.5, Gamma 0.12, Vega 0.45 ...
+
+User: 帮我对比茅台、五粮液、泸州老窖
+AI:   [调用 stock_compare tool] 三只白酒龙头对比：PE/PB/ROE/涨跌幅/技术面 ...
+
+User: 诊断一下我的持仓
+AI:   [调用 holding_diagnosis tool] 5只持仓诊断：2只健康/2只观察/1只建议减仓 ...
+
+User: 今天大盘怎么样
+AI:   [调用 market_overview tool] 上证 +0.5%, 创业板 +1.2%, 涨家2100/跌家2800 ...
+
+User: 我计划明天买入比亚迪，入场价250，止损240，目标280
+AI:   [调用 trading_plan tool] 已创建交易计划：盈亏比 3:1，风险4% ...
+
+User: 帮我下个括号单买入平安银行，止损10元，止盈13元
+AI:   [调用 smart_order tool] 已提交bracket单：入场+止损10+止盈13 ...
 ```
 
 ### Via CLI
@@ -436,7 +461,7 @@ pnpm install && pnpm build
 
 ```
 quant-trading/
-├── index.ts                        # Plugin entry point (46 tools registered)
+├── index.ts                        # Plugin entry point (51 tools registered)
 ├── package.json
 ├── openclaw.plugin.json            # Plugin metadata & config schema
 ├── README.md
@@ -472,7 +497,7 @@ quant-trading/
 │   │       ├── cta-channel.ts      # 5 CTA channel strategies
 │   │       ├── cta-indicator.ts    # 12 CTA indicator strategies
 │   │       └── cta-pattern.ts      # 10 CTA pattern strategies
-│   ├── tools/                      # 46 AI-callable tool implementations
+│   ├── tools/                      # 51 AI-callable tool implementations
 │   │   ├── market-data.ts          # 行情数据
 │   │   ├── stock-screen.ts         # 选股筛选
 │   │   ├── backtest.ts             # 策略回测
@@ -483,7 +508,7 @@ quant-trading/
 │   │   ├── sector-analysis.ts      # 板块分析
 │   │   ├── dragon-tiger.ts         # 龙虎榜
 │   │   ├── strategy-router.ts      # 策略路由
-│   │   └── ... (36 more tools)
+│   │   └── ... (41 more tools)
 │   ├── broker/
 │   │   ├── adapter.ts              # Broker adapter interface
 │   │   ├── paper-broker.ts         # Paper trading broker

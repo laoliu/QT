@@ -15,6 +15,7 @@ Skills 定义工具的能力，这个文件记录你的环境特定的使用细�
 | 工具 | 用途 |
 |------|------|
 | `market_data` | 实时行情、K线（含技术指标）、基本面（PE/PB/ROE）、证券搜索 |
+| `market_overview` | 市场总览看板（指数/涨跌家数/板块热力/涨跌榜/北向资金） |
 | `macro_data` | GDP、CPI、PMI、利率、经济周期研判 |
 | `news_summary` | 财经新闻聚合与情绪分析 |
 | `earnings_calendar` | 财报日期、分析师评级、业绩预告 |
@@ -27,6 +28,7 @@ Skills 定义工具的能力，这个文件记录你的环境特定的使用细�
 | `stock_recommend` | AI 智能选股推荐 |
 | `sector_analysis` | 板块排名、行业详细指标 |
 | `favorites` / `watchlist` | 自选股与关注列表管理 |
+| `stock_compare` | 多只股票并排对比（估值/基本面/技术面） |
 
 ### stock_screen 调用要点
 
@@ -92,6 +94,9 @@ stock_screen(action="list_screeners")
 | `live_trading` | 实盘交易（下单/持仓/暂停/恢复） |
 | `conditional_order` | 条件单（止损/止盈/追踪止损） |
 | `price_alert` | 价格预警 + 可选自动下单 |
+| `smart_order` | 智能下单（括号单/冰山单/反手/全平仓） |
+| `trading_plan` | 交易计划管理（入场/止损/止盈/跟踪执行/复盘） |
+| `holding_diagnosis` | 一键持仓诊断（健康度评分/加减仓建议） |
 
 ## 五、技术分析与信号
 
@@ -157,6 +162,10 @@ stock_screen(action="list_screeners")
 | `/龙虎榜` | 龙虎榜 |
 | `/预警` | 设置预警 |
 | `/期权链` / `/希腊值` | 期权相关 |
+| `/对比` | 个股对比（后跟多个代码） |
+| `/诊断` | 一键持仓诊断 |
+| `/总览` | 市场总览看板 |
+| `/计划` | 交易计划管理 |
 
 ---
 

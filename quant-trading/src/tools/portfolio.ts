@@ -9,6 +9,20 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 
+interface BatchSellResult {
+  symbol: string;
+  quantity: number;
+  success: boolean;
+  message: string;
+}
+
+interface RebalanceTradeItem {
+  symbol: string;
+  side: "buy" | "sell";
+  quantity: number;
+  reason: string;
+}
+
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
   return path.join(dir, "portfolio-paper.json");
@@ -60,7 +74,9 @@ export function createPortfolioTool(
       "action=show 查看持仓, action=buy 买入, action=sell 卖出, " +
       "action=add_cash 追加资金, action=summary 组合摘要, " +
       "action=live_sync 同步实盘持仓, action=live_orders 查看实盘订单, " +
-      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。",
+      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏, " +
+      "action=batch_sell 批量卖出(一键清仓或按条件卖出亏损持仓), " +
+      "action=batch_rebalance 按目标权重一键调仓。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -77,6 +93,8 @@ export function createPortfolioTool(
             "live_trades",
             "cancel_order",
             "daily_pnl",
+            "batch_sell",
+            "batch_rebalance",
           ],
           description: "操作类型",
         },
@@ -89,6 +107,39 @@ export function createPortfolioTool(
         status_filter: {
           type: "string",
           description: "订单状态过滤 (submitted|filled|cancelled|rejected)",
+        },
+        sell_mode: {
+          type: "string",
+          enum: ["clear_all", "by_condition"],
+          description: "批量卖出模式: clear_all=一键清仓, by_condition=按条件卖出(如亏损超过阈值)",
+        },
+        loss_threshold: {
+          type: "number",
+          description: "亏损阈值(百分比, 如 5 表示亏损>5%的持仓将被卖出, 仅 sell_mode=by_condition 时使用)",
+        },
+        symbols: {
+          type: "array",
+          items: { type: "string" },
+          description: "指定批量卖出的股票代码列表(可选, 不提供则作用于全部持仓)",
+        },
+        targets: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              symbol: { type: "string", description: "股票代码" },
+              weight: { type: "number", description: "目标权重(百分比如30, 或小数如0.3)" },
+            },
+          },
+          description: "调仓目标配置: [{symbol, weight}, ...] (用于 batch_rebalance)",
+        },
+        cash_reserve_pct: {
+          type: "number",
+          description: "保留现金比例(0-100, 默认5 = 5%, 用于 batch_rebalance)",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "是否仅预览不执行(默认 false)",
         },
       },
       required: ["action"],
@@ -379,6 +430,308 @@ export function createPortfolioTool(
           return {
             date: new Date().toISOString().slice(0, 10),
             netPnl: `¥${netPnl.toFixed(2)}`,
+          };
+        }
+
+        case "batch_sell": {
+          const engine = getEngine?.();
+          if (!engine) return { error: "实盘引擎未启动，请先执行 start_engine" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "订单管理器未就绪" };
+
+          const sellMode = (args.sell_mode as string) ?? "clear_all";
+          const lossThreshold = args.loss_threshold as number | undefined;
+          const symbolFilter = args.symbols as string[] | undefined;
+          const dryRun = (args.dry_run as boolean) ?? false;
+
+          if (sellMode === "by_condition" && (lossThreshold == null || lossThreshold <= 0)) {
+            return { error: "sell_mode=by_condition 时需要提供 loss_threshold (正数, 如 5 表示亏损>5%)" };
+          }
+
+          // Get current positions from broker
+          let positions: { symbol: string; name?: string; quantity: number; availableQty: number; unrealizedPnlPct?: number | null }[];
+          try {
+            const pos = await mgr.broker.queryPositions();
+            positions = pos.map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              quantity: p.quantity,
+              availableQty: p.availableQty ?? p.quantity,
+              unrealizedPnlPct: p.unrealizedPnlPct,
+            }));
+          } catch (err) {
+            return { error: `无法获取持仓信息: ${(err as Error).message}` };
+          }
+
+          // Filter by symbols if specified
+          if (symbolFilter && symbolFilter.length > 0) {
+            positions = positions.filter((p) => symbolFilter.includes(p.symbol));
+          }
+
+          // Filter by condition
+          let toSell: typeof positions;
+          if (sellMode === "clear_all") {
+            toSell = positions.filter((p) => p.availableQty > 0);
+          } else {
+            // by_condition: sell positions with loss exceeding threshold
+            const threshold = -(lossThreshold! / 100); // e.g. 5 -> -0.05
+            toSell = positions.filter(
+              (p) =>
+                p.availableQty > 0 &&
+                p.unrealizedPnlPct != null &&
+                p.unrealizedPnlPct < threshold,
+            );
+          }
+
+          if (toSell.length === 0) {
+            return {
+              message: sellMode === "clear_all"
+                ? "没有可卖出的持仓"
+                : `没有满足条件（亏损>${lossThreshold}%）的持仓`,
+              positionCount: positions.length,
+            };
+          }
+
+          // Dry run — preview only
+          if (dryRun) {
+            return {
+              mode: sellMode,
+              dryRun: true,
+              ...(sellMode === "by_condition" && { lossThreshold: `${lossThreshold}%` }),
+              toSell: toSell.map((p) => ({
+                symbol: p.symbol,
+                name: p.name,
+                quantity: p.availableQty,
+                pnlPct: p.unrealizedPnlPct != null ? `${(p.unrealizedPnlPct * 100).toFixed(2)}%` : "N/A",
+              })),
+              message: `预览: 将卖出 ${toSell.length} 只持仓, 使用 dry_run=false 执行`,
+            };
+          }
+
+          // Execute: submit sell orders one by one through OrderManager (risk gate + confirmation)
+          const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
+          const results: BatchSellResult[] = [];
+          for (const p of toSell) {
+            const market = detectMarketFromSymbol(p.symbol);
+            const res = await mgr.submit({
+              symbol: p.symbol,
+              market,
+              side: "sell",
+              orderType: "market",
+              quantity: p.availableQty,
+              strategyId: "batch_sell",
+              signalId: `batch_sell_${Date.now()}_${p.symbol}`,
+            });
+            results.push({
+              symbol: p.symbol,
+              quantity: p.availableQty,
+              success: res.ok,
+              message: res.ok
+                ? `卖出 ${p.availableQty} 股 — 已提交 (订单号: ${res.order.orderId})`
+                : `卖出失败: ${res.reason}`,
+            });
+          }
+
+          const successCount = results.filter((r) => r.success).length;
+          return {
+            mode: sellMode,
+            ...(sellMode === "by_condition" && { lossThreshold: `${lossThreshold}%` }),
+            total: results.length,
+            succeeded: successCount,
+            failed: results.length - successCount,
+            results,
+          };
+        }
+
+        case "batch_rebalance": {
+          const engine = getEngine?.();
+          if (!engine) return { error: "实盘引擎未启动，请先执行 start_engine" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "订单管理器未就绪" };
+
+          const rawTargets = args.targets as { symbol: string; weight: number }[] | undefined;
+          const cashReservePctRaw = (args.cash_reserve_pct as number) ?? 5;
+          const cashReservePct = cashReservePctRaw > 1 ? cashReservePctRaw / 100 : cashReservePctRaw;
+          const dryRun = (args.dry_run as boolean) ?? false;
+
+          if (!rawTargets || rawTargets.length === 0) {
+            return { error: "请提供 targets (目标配置, 如 [{symbol:'600519',weight:30},{symbol:'000001',weight:20}])" };
+          }
+
+          // Normalize weights (handle both % and decimal)
+          const targets = rawTargets.map((t) => ({
+            symbol: t.symbol,
+            weight: t.weight > 1 ? t.weight / 100 : t.weight,
+          }));
+
+          // Validate total weight
+          const totalWeight = targets.reduce((sum, t) => sum + t.weight, 0);
+          if (Math.abs(totalWeight - 1.0) > 0.05) {
+            return {
+              error: `目标权重总和为 ${(totalWeight * 100).toFixed(1)}%, 应接近100%。请调整后重试。`,
+            };
+          }
+
+          // Get current account and positions
+          let totalAssets: number;
+          let currentPositions: { symbol: string; quantity: number; marketValue: number }[];
+          try {
+            const [account, pos] = await Promise.all([
+              mgr.broker.queryAccount(),
+              mgr.broker.queryPositions(),
+            ]);
+            totalAssets =
+              account.totalAssets || account.cash + pos.reduce((s, p) => s + (p.marketValue ?? 0), 0);
+            currentPositions = pos.map((p) => ({
+              symbol: p.symbol,
+              quantity: p.quantity ?? 0,
+              marketValue: p.marketValue ?? 0,
+            }));
+          } catch (err) {
+            return { error: `无法获取账户信息: ${(err as Error).message}` };
+          }
+
+          const investableAssets = totalAssets * (1 - cashReservePct);
+
+          // Get current quotes for target symbols
+          const { detectMarketFromSymbol, createDataProvider } =
+            await import("../data/market-data-provider.js");
+          const provider = createDataProvider(config);
+
+          const prices = new Map<string, number>();
+          for (const t of targets) {
+            try {
+              const market = detectMarketFromSymbol(t.symbol);
+              const quote = await provider.getQuote(t.symbol, market as never);
+              if (quote?.price) prices.set(t.symbol, quote.price);
+            } catch {
+              // Skip symbols we can't price
+            }
+          }
+
+          // Compute rebalancing trades
+          const trades: RebalanceTradeItem[] = [];
+
+          for (const target of targets) {
+            const price = prices.get(target.symbol);
+            if (!price || price <= 0) {
+              trades.push({
+                symbol: target.symbol,
+                side: "buy",
+                quantity: 0,
+                reason: `无法获取 ${target.symbol} 的价格，跳过`,
+              });
+              continue;
+            }
+
+            const targetValue = investableAssets * target.weight;
+            const currentPos = currentPositions.find((p) => p.symbol === target.symbol);
+            const currentValue = currentPos?.marketValue ?? 0;
+            const diff = targetValue - currentValue;
+
+            // Calculate quantity (round to 100 shares for A-shares)
+            const rawQty = Math.abs(diff) / price;
+            const quantity = Math.floor(rawQty / 100) * 100;
+
+            if (quantity >= 100) {
+              trades.push({
+                symbol: target.symbol,
+                side: diff > 0 ? "buy" : "sell",
+                quantity,
+                reason: `目标 ${(target.weight * 100).toFixed(0)}% (¥${targetValue.toFixed(0)}) vs 当前 ¥${currentValue.toFixed(0)}, ${diff > 0 ? "加仓" : "减仓"} ${quantity} 股 @ ¥${price.toFixed(2)}`,
+              });
+            }
+          }
+
+          // Positions not in targets should be sold
+          for (const pos of currentPositions) {
+            if (pos.quantity > 0 && !targets.some((t) => t.symbol === pos.symbol)) {
+              trades.push({
+                symbol: pos.symbol,
+                side: "sell",
+                quantity: pos.quantity,
+                reason: `不在目标配置中, 清仓 ${pos.quantity} 股`,
+              });
+            }
+          }
+
+          if (trades.length === 0 || trades.every((t) => t.quantity === 0)) {
+            return { message: "当前持仓已接近目标配置，无需调仓" };
+          }
+
+          const sells = trades.filter((t) => t.side === "sell" && t.quantity > 0);
+          const buys = trades.filter((t) => t.side === "buy" && t.quantity > 0);
+          const skipped = trades.filter((t) => t.quantity === 0);
+
+          // Dry run — preview only
+          if (dryRun) {
+            return {
+              dryRun: true,
+              totalAssets: `¥${totalAssets.toLocaleString()}`,
+              investableAssets: `¥${investableAssets.toLocaleString()}`,
+              cashReservePct: `${(cashReservePct * 100).toFixed(0)}%`,
+              sells: sells.map((t) => ({ symbol: t.symbol, quantity: t.quantity, reason: t.reason })),
+              buys: buys.map((t) => ({ symbol: t.symbol, quantity: t.quantity, reason: t.reason })),
+              skipped: skipped.map((t) => ({ symbol: t.symbol, reason: t.reason })),
+              message: `预览: ${sells.length} 笔卖出, ${buys.length} 笔买入, 使用 dry_run=false 执行`,
+            };
+          }
+
+          // Execute: sell first (to free cash), then buy — each order goes through risk gate + confirmation
+          const orderResults: { symbol: string; side: string; quantity: number; success: boolean; message: string }[] = [];
+
+          for (const t of sells) {
+            const market = detectMarketFromSymbol(t.symbol);
+            const res = await mgr.submit({
+              symbol: t.symbol,
+              market,
+              side: "sell",
+              orderType: "market",
+              quantity: t.quantity,
+              strategyId: "batch_rebalance",
+              signalId: `rebal_${Date.now()}_${t.symbol}`,
+            });
+            orderResults.push({
+              symbol: t.symbol,
+              side: "sell",
+              quantity: t.quantity,
+              success: res.ok,
+              message: res.ok
+                ? `卖出 ${t.quantity} 股 — 已提交 (订单号: ${res.order.orderId})`
+                : `卖出失败: ${res.reason}`,
+            });
+          }
+
+          for (const t of buys) {
+            const market = detectMarketFromSymbol(t.symbol);
+            const res = await mgr.submit({
+              symbol: t.symbol,
+              market,
+              side: "buy",
+              orderType: "market",
+              quantity: t.quantity,
+              strategyId: "batch_rebalance",
+              signalId: `rebal_${Date.now()}_${t.symbol}`,
+            });
+            orderResults.push({
+              symbol: t.symbol,
+              side: "buy",
+              quantity: t.quantity,
+              success: res.ok,
+              message: res.ok
+                ? `买入 ${t.quantity} 股 — 已提交 (订单号: ${res.order.orderId})`
+                : `买入失败: ${res.reason}`,
+            });
+          }
+
+          const successCount = orderResults.filter((r) => r.success).length;
+          return {
+            totalAssets: `¥${totalAssets.toLocaleString()}`,
+            cashReservePct: `${(cashReservePct * 100).toFixed(0)}%`,
+            total: orderResults.length,
+            succeeded: successCount,
+            failed: orderResults.length - successCount,
+            results: orderResults,
           };
         }
 

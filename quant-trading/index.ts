@@ -99,7 +99,8 @@ import { EventBus } from "./src/services/event-bus.js";
 import { ExplorationHistoryStore } from "./src/services/exploration-history-store.js";
 import { FavoritesStore } from "./src/services/favorites-store.js";
 import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
-import { tryNotify } from "./src/services/notify-helper.js";
+import { NotificationService } from "./src/services/notification-service.js";
+import { setNotificationService, tryNotify } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
 import { createOptionsMonitorService } from "./src/services/options-monitor.js";
 import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
@@ -259,6 +260,15 @@ const quantTradingPlugin = {
       } else {
         api.logger.warn(`[quant-trading] config: ${prefix}${issue.message}`);
       }
+    }
+
+    // ── Notification Service (外部推送通道) ────────────────────────
+    const notificationService = new NotificationService(config.notifications);
+    setNotificationService(notificationService);
+    if (notificationService.enabledChannelCount > 0) {
+      api.logger.info(
+        `[quant-trading] notification: ${String(notificationService.enabledChannelCount)} push channel(s) enabled`,
+      );
     }
 
     // ── Live Engine singleton (started/stopped as a service) ─────────

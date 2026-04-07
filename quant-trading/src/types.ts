@@ -798,10 +798,49 @@ export type TradingAccountConfig = {
   ib?: IBBrokerConfig;
 };
 
+/** Notification channel webhook configurations. */
+export type NotificationChannelConfig = {
+  /** Channel type identifier. */
+  type: "feishu" | "wecom" | "telegram" | "discord";
+  /** Display name for this channel (used in logs). */
+  name?: string;
+  /** Whether this channel is enabled (default: true). */
+  enabled?: boolean;
+  /**
+   * Webhook URL:
+   *   - Feishu: https://open.feishu.cn/open-apis/bot/v2/hook/<token>
+   *   - WeCom: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=<key>
+   *   - Discord: https://discord.com/api/webhooks/<id>/<token>
+   *
+   * For Telegram, use format: https://api.telegram.org/bot<token>/sendMessage?chat_id=<chat_id>
+   */
+  webhookUrl: string;
+  /** Optional signing secret (Feishu v2 sign, WeCom key, etc.). */
+  secret?: string;
+};
+
+/** Quiet hours configuration — suppress non-critical notifications during off-hours. */
+export type QuietHoursConfig = {
+  /** Enable quiet hours (default: false). */
+  enabled?: boolean;
+  /** Start time in HH:mm format, e.g. "21:00". */
+  start?: string;
+  /** End time in HH:mm format, e.g. "09:00". */
+  end?: string;
+  /** Severity levels that bypass quiet hours (default: ["critical"]). */
+  bypassLevels?: NotificationSeverity[];
+};
+
+export type NotificationSeverity = "info" | "warning" | "critical";
+
 export type NotificationConfig = {
   signalAlerts?: boolean;
   dailyReport?: boolean;
   riskAlerts?: boolean;
+  /** Push notification channels (Feishu, WeCom, Telegram, Discord webhooks). */
+  channels?: NotificationChannelConfig[];
+  /** Quiet hours — suppress non-critical push notifications during specified time range. */
+  quietHours?: QuietHoursConfig;
 };
 
 export type SignalWebhookConfig = {

@@ -101,6 +101,14 @@ tr:hover{background:var(--bg3)}
 .empty-state .icon{font-size:48px;margin-bottom:12px}
 .empty-state h3{font-size:16px;color:var(--text);margin-bottom:8px}
 
+.timeline-container{position:relative;padding-left:8px}
+.timeline-day{border-left:3px solid var(--border);padding-left:16px;margin-bottom:16px;position:relative}
+.timeline-day::before{content:'';position:absolute;left:-5px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--border)}
+.timeline-date{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:inline-block;padding:2px 10px;border-radius:4px;background:var(--bg3)}
+.timeline-date.today{color:var(--accent);background:rgba(88,166,255,.15);border:1px solid var(--accent)}
+.timeline-event{padding:6px 0;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:6px;border-bottom:1px solid rgba(48,54,61,.5)}
+.timeline-event:last-child{border-bottom:none}
+
 @media(max-width:700px){
   .cards-row{grid-template-columns:1fr}
   .kpi-row{flex-direction:column}

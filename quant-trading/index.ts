@@ -129,6 +129,7 @@ import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
+import { createStockCalendarTool } from "./src/tools/stock-calendar.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
 import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.js";
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
@@ -639,6 +640,7 @@ const quantTradingPlugin = {
       data_analysis: createDataAnalysisTool(api, config),
       macro_data: createMacroDataTool(api, config),
       earnings_calendar: createEarningsCalendarTool(api, config),
+      stock_calendar: createStockCalendarTool(api, config),
       institutional_flow: createInstitutionalFlowTool(api, config),
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
@@ -697,6 +699,7 @@ const quantTradingPlugin = {
       data_analysis: "数据分析",
       macro_data: "宏观经济",
       earnings_calendar: "财报日历",
+      stock_calendar: "事件日历",
       institutional_flow: "机构持仓",
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",

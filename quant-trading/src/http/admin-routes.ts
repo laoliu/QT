@@ -2047,6 +2047,48 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Stock Calendar API (个股事件日历) ────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/stock-calendar",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const action = String(body.action ?? "upcoming_events");
+        const dataDir = config.dataDir ?? require("node:path").join(require("node:os").homedir(), ".openclaw", "quant-trading");
+        const result = await runPythonScript<Record<string, unknown>>(
+          "engines/stock_calendar_engine.py",
+          {
+            action,
+            symbols: body.symbols,
+            days: clampInteger(body.days, 1, 180, 30),
+            event_types: body.event_types,
+            limit: clampInteger(body.limit, 1, 200, 50),
+            watchlist_path: require("node:path").join(dataDir, "watchlist.json"),
+            portfolio_path: require("node:path").join(dataDir, "portfolio-paper.json"),
+          },
+          config,
+          { timeoutMs: 60_000 },
+        );
+        if (!result.ok) {
+          json(res, { error: result.error ?? "事件日历获取失败" }, 500);
+          return;
+        }
+        json(res, { status: "ok", ...result.data });
+      } catch (err) {
+        json(
+          res,
+          { error: `事件日历查询失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
   // ── Scan History API (全局扫描历史) ─────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

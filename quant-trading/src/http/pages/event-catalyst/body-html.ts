@@ -14,6 +14,7 @@ export function getEventCatalystBodyHtml(b: string): string {
 </header>
 <div class="tabs">
   <div class="tab active" data-tab="scan">🔍 全局扫描</div>
+  <div class="tab" data-tab="calendar">📅 事件日历</div>
   <div class="tab" data-tab="us">📊 美股异动</div>
   <div class="tab" data-tab="mapping">🔗 对标映射</div>
   <div class="tab" data-tab="picks">🎯 催化选股</div>
@@ -53,6 +54,44 @@ export function getEventCatalystBodyHtml(b: string): string {
     <h3>事件催化全局扫描</h3>
     <p>扫描15只美股科技龙头异动，自动映射A股对标股，叠加主力资金流验证</p>
     <p style="margin-top:8px;font-size:12px;color:var(--text-dim)">覆盖 NVDA · TSLA · AAPL · MSFT · GOOGL · META · AMD · AVGO · ASML · TSM · SMCI · ARM · MRVL · PLTR · QCOM</p>
+  </div>
+</div>
+
+<!-- ═══ Tab: Event Calendar ═══ -->
+<div class="tab-content" id="tab-calendar">
+  <div class="param-row">
+    <label>查询范围</label>
+    <select class="input" id="calScope" style="width:130px" onchange="toggleCalSymbolInput()">
+      <option value="upcoming" selected>全市场事件</option>
+      <option value="watchlist">自选股事件</option>
+      <option value="portfolio">持仓股事件</option>
+      <option value="stock">指定股票</option>
+    </select>
+    <span id="calSymbolWrap" style="display:none">
+      <label>股票代码</label>
+      <input type="text" class="input" id="calSymbols" placeholder="如 600519,000858" style="width:180px">
+    </span>
+    <label>天数</label>
+    <input type="number" class="input" id="calDays" value="30" min="7" max="180" style="width:70px">
+    <label>事件类型</label>
+    <select class="input" id="calTypes" style="width:130px" multiple>
+      <option value="all" selected>全部事件</option>
+      <option value="unlock">限售解禁</option>
+      <option value="dividend">分红除权</option>
+      <option value="earnings">财报披露</option>
+      <option value="insider">增减持</option>
+      <option value="shareholder_meeting">股东大会</option>
+      <option value="repurchase">股份回购</option>
+    </select>
+    <button class="btn btn-primary" onclick="loadCalendar()">📅 查询事件</button>
+  </div>
+  <div class="loading" id="cal-loading" style="display:none"><div class="spinner"></div><br>加载事件日历…</div>
+  <div id="cal-content" style="display:none"></div>
+  <div id="cal-placeholder" class="empty-state">
+    <div class="icon">📅</div>
+    <h3>个股事件日历与催化剂追踪</h3>
+    <p>聚合限售股解禁 · 股东大会 · 财报披露 · 分红除权 · 增减持公告 · 股份回购</p>
+    <p style="margin-top:8px;font-size:12px;color:var(--text-dim)">支持自选股/持仓股自动关联，负面事件自动预警</p>
   </div>
 </div>
 

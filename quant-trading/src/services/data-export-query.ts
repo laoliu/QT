@@ -27,6 +27,8 @@ import type { BreakoutSetup } from "./breakout-monitor.js";
 import type { ConditionalOrder } from "./conditional-order.js";
 import type { DcaPlan } from "./dca-schedule.js";
 import type { EquitySnapshot } from "./equity-history.js";
+import type { FavoriteStock } from "./favorites-store.js";
+import type { OptimizationIndexEntry } from "./optimization-store.js";
 import {
   computeAttribution,
   type AttributionResult,
@@ -35,6 +37,7 @@ import {
   type SymbolAttribution,
 } from "./performance-attribution.js";
 import type { PriceAlertCondition } from "./price-alert.js";
+import type { ScanIndexEntry } from "./scan-history-store.js";
 import type { SignalTrackRecord } from "./signal-hitrate.js";
 import type { StrategyHealthRecord } from "./strategy-health.js";
 import type { TradeNote } from "./trade-journal.js";
@@ -336,6 +339,112 @@ export interface ExportableBacktestEntry {
   finalValue: number;
 }
 
+/** Flat favorite stock row ready for tabular export. */
+export interface ExportableFavorite {
+  code: string;
+  name: string;
+  category: string;
+  priority: number;
+  priceTarget: number | null;
+  convictionScore: number | null;
+  notes: string;
+  tags: string;
+  addedAt: string;
+  updatedAt: string;
+}
+
+/** Flat scan history index row ready for tabular export. */
+export interface ExportableScanIndex {
+  id: string;
+  createdAt: string;
+  date: string;
+  screenerId: string;
+  universe: string;
+  market: string;
+  totalScreened: number;
+  resultCount: number;
+  topCodes: string;
+  tags: string;
+  notes: string;
+}
+
+/** Flat optimization index row ready for tabular export. */
+export interface ExportableOptimizationIndex {
+  id: string;
+  createdAt: string;
+  capital: number;
+  startDate: string;
+  endDate: string;
+  autoScreen: boolean;
+  totalRounds: number;
+  bestPoolLabel: string;
+  bestStrategyLabel: string;
+  bestReturn: number;
+  bestSharpe: number;
+  bestMaxDrawdown: number;
+  bestWinRate: number | null;
+  bestSymbolCount: number;
+  bestCompositeScore: number | null;
+  tags: string;
+  starred: boolean;
+  notes: string;
+}
+
+/** Flat institution activity history row ready for tabular export. */
+export interface ExportableInstitutionActivity {
+  id: string;
+  timestamp: string;
+  asOfDate: string;
+  candidateCount: number;
+  leaderCount: number;
+  baitCount: number;
+  marketTone: string;
+  northboundNetIn: number | null;
+  candidateSymbols: string;
+  leaderSymbols: string;
+  baitSymbols: string;
+  topLeaderSymbols: string;
+}
+
+/** Flat daily pick row ready for tabular export. */
+export interface ExportableDailyPick {
+  id: string;
+  timestamp: string;
+  date: string;
+  threshold: number;
+  triggered: boolean;
+  triggeredCount: number;
+  candidateCount: number;
+  pickCount: number;
+  topPicks: string;
+  triggeredUSSymbols: string;
+}
+
+/** Flat US mover row ready for tabular export. */
+export interface ExportableUsMover {
+  id: string;
+  timestamp: string;
+  date: string;
+  threshold: number;
+  totalCount: number;
+  significantCount: number;
+  topMovers: string;
+}
+
+/** Flat portfolio backtest history row ready for tabular export. */
+export interface ExportablePbtEntry {
+  id: string;
+  createdAt: string;
+  date: string;
+  symbols: string;
+  period: string;
+  initialCash: number;
+  strategyCount: number;
+  successCount: number;
+  failCount: number;
+  bestStrategy: string;
+}
+
 /** Account summary row. */
 export interface ExportableAccountSummary {
   mode: "paper" | "live";
@@ -378,6 +487,13 @@ export interface ExportDataset {
   strategyHealth: ExportableStrategyHealth[];
   alerts: ExportableAlert[];
   backtestHistory: ExportableBacktestEntry[];
+  favorites: ExportableFavorite[];
+  scanHistory: ExportableScanIndex[];
+  optimizationHistory: ExportableOptimizationIndex[];
+  institutionActivity: ExportableInstitutionActivity[];
+  dailyPicks: ExportableDailyPick[];
+  usMovers: ExportableUsMover[];
+  pbtHistory: ExportablePbtEntry[];
 }
 
 // ── Query Options ───────────────────────────────────────────────
@@ -413,7 +529,14 @@ export type ExportSection =
   | "breakoutSetups"
   | "strategyHealth"
   | "alerts"
-  | "backtestHistory";
+  | "backtestHistory"
+  | "favorites"
+  | "scanHistory"
+  | "optimizationHistory"
+  | "institutionActivity"
+  | "dailyPicks"
+  | "usMovers"
+  | "pbtHistory";
 
 const ALL_SECTIONS: ExportSection[] = [
   "orders",
@@ -432,6 +555,13 @@ const ALL_SECTIONS: ExportSection[] = [
   "strategyHealth",
   "alerts",
   "backtestHistory",
+  "favorites",
+  "scanHistory",
+  "optimizationHistory",
+  "institutionActivity",
+  "dailyPicks",
+  "usMovers",
+  "pbtHistory",
 ];
 
 // ── Internal helpers ────────────────────────────────────────────
@@ -567,6 +697,104 @@ async function queryAlerts(cfg: QuantTradingConfig): Promise<Alert[]> {
 async function queryBacktestIndex(cfg: QuantTradingConfig): Promise<BacktestIndexEntry[]> {
   const filePath = path.join(dataDir(cfg), "backtests", "index.json");
   return (await readJson<BacktestIndexEntry[]>(filePath)) ?? [];
+}
+
+/** Load favorite stocks. */
+async function queryFavorites(cfg: QuantTradingConfig): Promise<FavoriteStock[]> {
+  const filePath = path.join(dataDir(cfg), "favorites.json");
+  return (await readJson<FavoriteStock[]>(filePath)) ?? [];
+}
+
+/** Load scan history index entries. */
+async function queryScanHistoryIndex(cfg: QuantTradingConfig): Promise<ScanIndexEntry[]> {
+  const filePath = path.join(dataDir(cfg), "scans", "_index.json");
+  return (await readJson<ScanIndexEntry[]>(filePath)) ?? [];
+}
+
+/** Load optimization index entries. */
+async function queryOptimizationIndex(cfg: QuantTradingConfig): Promise<OptimizationIndexEntry[]> {
+  const filePath = path.join(dataDir(cfg), "optimizations", "_index.json");
+  return (await readJson<OptimizationIndexEntry[]>(filePath)) ?? [];
+}
+
+// ── Local types for HTTP history modules (not exported from source) ──
+
+interface InstitutionActivityHistoryEntry {
+  id: string;
+  version: string;
+  timestamp: string;
+  summary: {
+    asOfDate: string;
+    candidateCount: number;
+    leaderCount: number;
+    baitCount: number;
+    marketTone: string;
+    northboundNetIn: number | null;
+  };
+  candidateSymbols: string[];
+  leaderSymbols: string[];
+  baitSymbols: string[];
+  topLeaders: Array<{ symbol: string; name: string }>;
+}
+
+interface DailyPickHistoryEntry {
+  id: string;
+  timestamp: string;
+  date: string;
+  threshold: number;
+  triggered: boolean;
+  triggeredCount: number;
+  candidateCount: number;
+  pickCount: number;
+  picks: Array<{ code: string; name: string }>;
+  triggeredUS: Array<{ symbol: string }>;
+}
+
+interface UsMoverHistoryEntry {
+  id: string;
+  timestamp: string;
+  date: string;
+  threshold: number;
+  totalCount: number;
+  significantCount: number;
+  movers: Array<{ symbol: string; name: string; changePct: number }>;
+}
+
+interface PbtHistoryEntry {
+  id: string;
+  createdAt: string;
+  date: string;
+  symbols: string[];
+  period: string;
+  initialCash: number;
+  strategyCount: number;
+  successCount: number;
+  failCount: number;
+  bestStrategy: string | null;
+}
+
+/** Load institution activity history. */
+async function queryInstitutionActivity(cfg: QuantTradingConfig): Promise<InstitutionActivityHistoryEntry[]> {
+  const filePath = path.join(dataDir(cfg), "institution-activity-history.json");
+  return (await readJson<InstitutionActivityHistoryEntry[]>(filePath)) ?? [];
+}
+
+/** Load daily pick history. */
+async function queryDailyPickHistory(cfg: QuantTradingConfig): Promise<DailyPickHistoryEntry[]> {
+  const filePath = path.join(dataDir(cfg), "scan-history.json");
+  return (await readJson<DailyPickHistoryEntry[]>(filePath)) ?? [];
+}
+
+/** Load US mover history. */
+async function queryUsMoverHistory(cfg: QuantTradingConfig): Promise<UsMoverHistoryEntry[]> {
+  const filePath = path.join(dataDir(cfg), "us-mover-history.json");
+  return (await readJson<UsMoverHistoryEntry[]>(filePath)) ?? [];
+}
+
+/** Load portfolio backtest history. */
+async function queryPbtHistory(cfg: QuantTradingConfig): Promise<PbtHistoryEntry[]> {
+  const filePath = path.join(dataDir(cfg), "pbt-history.json");
+  return (await readJson<PbtHistoryEntry[]>(filePath)) ?? [];
 }
 
 // ── Transformation Functions ────────────────────────────────────
@@ -885,6 +1113,122 @@ function transformBacktestEntry(e: BacktestIndexEntry): ExportableBacktestEntry 
   };
 }
 
+function transformFavorite(f: FavoriteStock): ExportableFavorite {
+  return {
+    code: f.code,
+    name: f.name ?? "",
+    category: f.category ?? "",
+    priority: f.priority ?? 0,
+    priceTarget: f.priceTarget ?? null,
+    convictionScore: f.convictionScore ?? null,
+    notes: f.notes ?? "",
+    tags: f.tags?.join(", ") ?? "",
+    addedAt: f.addedAt,
+    updatedAt: f.updatedAt,
+  };
+}
+
+function transformScanIndex(e: ScanIndexEntry): ExportableScanIndex {
+  return {
+    id: e.id,
+    createdAt: e.createdAt,
+    date: e.date,
+    screenerId: e.screenerId,
+    universe: e.universe,
+    market: e.market,
+    totalScreened: e.totalScreened,
+    resultCount: e.resultCount,
+    topCodes: e.topCodes.join(", "),
+    tags: e.tags.join(", "),
+    notes: e.notes ?? "",
+  };
+}
+
+function transformOptimizationIndex(e: OptimizationIndexEntry): ExportableOptimizationIndex {
+  return {
+    id: e.id,
+    createdAt: e.createdAt,
+    capital: e.capital,
+    startDate: e.startDate,
+    endDate: e.endDate ?? "",
+    autoScreen: e.autoScreen,
+    totalRounds: e.totalRounds,
+    bestPoolLabel: e.bestPoolLabel,
+    bestStrategyLabel: e.bestStrategyLabel,
+    bestReturn: e.bestReturn,
+    bestSharpe: e.bestSharpe,
+    bestMaxDrawdown: e.bestMaxDrawdown,
+    bestWinRate: e.bestWinRate ?? null,
+    bestSymbolCount: e.bestSymbolCount,
+    bestCompositeScore: e.bestCompositeScore ?? null,
+    tags: e.tags.join(", "),
+    starred: e.starred,
+    notes: e.notes ?? "",
+  };
+}
+
+function transformInstitutionActivity(e: InstitutionActivityHistoryEntry): ExportableInstitutionActivity {
+  return {
+    id: e.id,
+    timestamp: e.timestamp,
+    asOfDate: e.summary.asOfDate,
+    candidateCount: e.summary.candidateCount,
+    leaderCount: e.summary.leaderCount,
+    baitCount: e.summary.baitCount,
+    marketTone: e.summary.marketTone,
+    northboundNetIn: e.summary.northboundNetIn,
+    candidateSymbols: e.candidateSymbols.join(", "),
+    leaderSymbols: e.leaderSymbols.join(", "),
+    baitSymbols: e.baitSymbols.join(", "),
+    topLeaderSymbols: e.topLeaders.map((l) => l.symbol).join(", "),
+  };
+}
+
+function transformDailyPick(e: DailyPickHistoryEntry): ExportableDailyPick {
+  return {
+    id: e.id,
+    timestamp: e.timestamp,
+    date: e.date,
+    threshold: e.threshold,
+    triggered: e.triggered,
+    triggeredCount: e.triggeredCount,
+    candidateCount: e.candidateCount,
+    pickCount: e.pickCount,
+    topPicks: e.picks.map((p) => `${p.code}(${p.name})`).join(", "),
+    triggeredUSSymbols: e.triggeredUS.map((u) => u.symbol).join(", "),
+  };
+}
+
+function transformUsMover(e: UsMoverHistoryEntry): ExportableUsMover {
+  return {
+    id: e.id,
+    timestamp: e.timestamp,
+    date: e.date,
+    threshold: e.threshold,
+    totalCount: e.totalCount,
+    significantCount: e.significantCount,
+    topMovers: e.movers
+      .slice(0, 10)
+      .map((m) => `${m.symbol}(${m.changePct > 0 ? "+" : ""}${m.changePct.toFixed(1)}%)`)
+      .join(", "),
+  };
+}
+
+function transformPbtEntry(e: PbtHistoryEntry): ExportablePbtEntry {
+  return {
+    id: e.id,
+    createdAt: e.createdAt,
+    date: e.date,
+    symbols: e.symbols.join(", "),
+    period: e.period,
+    initialCash: e.initialCash,
+    strategyCount: e.strategyCount,
+    successCount: e.successCount,
+    failCount: e.failCount,
+    bestStrategy: e.bestStrategy ?? "",
+  };
+}
+
 function buildAttributionSummary(attr: AttributionResult): ExportableAttributionSummary {
   return {
     dateFrom: attr.dateRange.from,
@@ -1092,6 +1436,100 @@ function filterBacktestEntries(
   return result;
 }
 
+function filterFavorites(
+  favorites: FavoriteStock[],
+  opts: ExportQueryOptions,
+): FavoriteStock[] {
+  if (!opts.symbols?.length) return favorites;
+  const set = new Set(opts.symbols);
+  return favorites.filter((f) => set.has(f.code));
+}
+
+function filterScanHistoryIndex(
+  entries: ScanIndexEntry[],
+  opts: ExportQueryOptions,
+): ScanIndexEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.createdAt, opts.from, opts.to));
+  }
+  return result;
+}
+
+function filterOptimizationIndex(
+  entries: OptimizationIndexEntry[],
+  opts: ExportQueryOptions,
+): OptimizationIndexEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.createdAt, opts.from, opts.to));
+  }
+  return result;
+}
+
+function filterInstitutionActivity(
+  entries: InstitutionActivityHistoryEntry[],
+  opts: ExportQueryOptions,
+): InstitutionActivityHistoryEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.timestamp, opts.from, opts.to));
+  }
+  if (opts.symbols?.length) {
+    const set = new Set(opts.symbols);
+    result = result.filter((e) =>
+      e.candidateSymbols.some((s) => set.has(s)) ||
+      e.leaderSymbols.some((s) => set.has(s)),
+    );
+  }
+  return result;
+}
+
+function filterDailyPicks(
+  entries: DailyPickHistoryEntry[],
+  opts: ExportQueryOptions,
+): DailyPickHistoryEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.date, opts.from, opts.to));
+  }
+  if (opts.symbols?.length) {
+    const set = new Set(opts.symbols);
+    result = result.filter((e) => e.picks.some((p) => set.has(p.code)));
+  }
+  return result;
+}
+
+function filterUsMovers(
+  entries: UsMoverHistoryEntry[],
+  opts: ExportQueryOptions,
+): UsMoverHistoryEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.date, opts.from, opts.to));
+  }
+  if (opts.symbols?.length) {
+    const set = new Set(opts.symbols);
+    result = result.filter((e) => e.movers.some((m) => set.has(m.symbol)));
+  }
+  return result;
+}
+
+function filterPbtHistory(
+  entries: PbtHistoryEntry[],
+  opts: ExportQueryOptions,
+): PbtHistoryEntry[] {
+  let result = entries;
+  if (opts.from || opts.to) {
+    result = result.filter((e) => dateInRange(e.createdAt, opts.from, opts.to));
+  }
+  if (opts.symbols?.length) {
+    const set = new Set(opts.symbols);
+    result = result.filter((e) => e.symbols.some((s) => set.has(s)));
+  }
+  return result;
+}
+
 // ── Main Export Query Function ──────────────────────────────────
 
 /**
@@ -1139,6 +1577,13 @@ export async function queryExportDataset(
     strategyHealth: [],
     alerts: [],
     backtestHistory: [],
+    favorites: [],
+    scanHistory: [],
+    optimizationHistory: [],
+    institutionActivity: [],
+    dailyPicks: [],
+    usMovers: [],
+    pbtHistory: [],
   };
 
   // Parallel data queries — only fetch what's needed
@@ -1304,6 +1749,76 @@ export async function queryExportDataset(
       queryBacktestIndex(cfg).then((raw) => {
         const filtered = filterBacktestEntries(raw, opts);
         dataset.backtestHistory = filtered.map(transformBacktestEntry);
+      }),
+    );
+  }
+
+  // ── Favorites ──
+  if (sections.has("favorites")) {
+    promises.push(
+      queryFavorites(cfg).then((raw) => {
+        const filtered = filterFavorites(raw, opts);
+        dataset.favorites = filtered.map(transformFavorite);
+      }),
+    );
+  }
+
+  // ── Scan History ──
+  if (sections.has("scanHistory")) {
+    promises.push(
+      queryScanHistoryIndex(cfg).then((raw) => {
+        const filtered = filterScanHistoryIndex(raw, opts);
+        dataset.scanHistory = filtered.map(transformScanIndex);
+      }),
+    );
+  }
+
+  // ── Optimization History ──
+  if (sections.has("optimizationHistory")) {
+    promises.push(
+      queryOptimizationIndex(cfg).then((raw) => {
+        const filtered = filterOptimizationIndex(raw, opts);
+        dataset.optimizationHistory = filtered.map(transformOptimizationIndex);
+      }),
+    );
+  }
+
+  // ── Institution Activity ──
+  if (sections.has("institutionActivity")) {
+    promises.push(
+      queryInstitutionActivity(cfg).then((raw) => {
+        const filtered = filterInstitutionActivity(raw, opts);
+        dataset.institutionActivity = filtered.map(transformInstitutionActivity);
+      }),
+    );
+  }
+
+  // ── Daily Picks ──
+  if (sections.has("dailyPicks")) {
+    promises.push(
+      queryDailyPickHistory(cfg).then((raw) => {
+        const filtered = filterDailyPicks(raw, opts);
+        dataset.dailyPicks = filtered.map(transformDailyPick);
+      }),
+    );
+  }
+
+  // ── US Movers ──
+  if (sections.has("usMovers")) {
+    promises.push(
+      queryUsMoverHistory(cfg).then((raw) => {
+        const filtered = filterUsMovers(raw, opts);
+        dataset.usMovers = filtered.map(transformUsMover);
+      }),
+    );
+  }
+
+  // ── Portfolio Backtest History ──
+  if (sections.has("pbtHistory")) {
+    promises.push(
+      queryPbtHistory(cfg).then((raw) => {
+        const filtered = filterPbtHistory(raw, opts);
+        dataset.pbtHistory = filtered.map(transformPbtEntry);
       }),
     );
   }
@@ -1565,6 +2080,69 @@ export async function queryExportableBacktestHistory(
   return filterBacktestEntries(raw, opts).map(transformBacktestEntry);
 }
 
+/** Query favorites in exportable form. */
+export async function queryExportableFavorites(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableFavorite[]> {
+  const raw = await queryFavorites(cfg);
+  return filterFavorites(raw, opts).map(transformFavorite);
+}
+
+/** Query scan history index in exportable form. */
+export async function queryExportableScanHistory(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableScanIndex[]> {
+  const raw = await queryScanHistoryIndex(cfg);
+  return filterScanHistoryIndex(raw, opts).map(transformScanIndex);
+}
+
+/** Query optimization history in exportable form. */
+export async function queryExportableOptimizationHistory(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableOptimizationIndex[]> {
+  const raw = await queryOptimizationIndex(cfg);
+  return filterOptimizationIndex(raw, opts).map(transformOptimizationIndex);
+}
+
+/** Query institution activity history in exportable form. */
+export async function queryExportableInstitutionActivity(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableInstitutionActivity[]> {
+  const raw = await queryInstitutionActivity(cfg);
+  return filterInstitutionActivity(raw, opts).map(transformInstitutionActivity);
+}
+
+/** Query daily picks history in exportable form. */
+export async function queryExportableDailyPicks(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableDailyPick[]> {
+  const raw = await queryDailyPickHistory(cfg);
+  return filterDailyPicks(raw, opts).map(transformDailyPick);
+}
+
+/** Query US mover history in exportable form. */
+export async function queryExportableUsMovers(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportableUsMover[]> {
+  const raw = await queryUsMoverHistory(cfg);
+  return filterUsMovers(raw, opts).map(transformUsMover);
+}
+
+/** Query portfolio backtest history in exportable form. */
+export async function queryExportablePbtHistory(
+  cfg: QuantTradingConfig,
+  opts: ExportQueryOptions = {},
+): Promise<ExportablePbtEntry[]> {
+  const raw = await queryPbtHistory(cfg);
+  return filterPbtHistory(raw, opts).map(transformPbtEntry);
+}
+
 // ── Column definitions for tabular export ───────────────────────
 
 /** Column metadata for building CSV/Excel headers from exportable types. */
@@ -1780,4 +2358,100 @@ export const BACKTEST_ENTRY_COLUMNS: ExportColumnDef[] = [
   { key: "totalTrades", label: "Total Trades", labelCn: "总交易数" },
   { key: "initialCash", label: "Initial Cash", labelCn: "初始资金" },
   { key: "finalValue", label: "Final Value", labelCn: "最终价值" },
+];
+
+export const FAVORITE_COLUMNS: ExportColumnDef[] = [
+  { key: "code", label: "Code", labelCn: "代码" },
+  { key: "name", label: "Name", labelCn: "名称" },
+  { key: "category", label: "Category", labelCn: "分类" },
+  { key: "priority", label: "Priority", labelCn: "优先级" },
+  { key: "priceTarget", label: "Price Target", labelCn: "目标价" },
+  { key: "convictionScore", label: "Conviction", labelCn: "确信度" },
+  { key: "notes", label: "Notes", labelCn: "备注" },
+  { key: "tags", label: "Tags", labelCn: "标签" },
+  { key: "addedAt", label: "Added At", labelCn: "添加时间" },
+  { key: "updatedAt", label: "Updated At", labelCn: "更新时间" },
+];
+
+export const SCAN_INDEX_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "Scan ID", labelCn: "扫描号" },
+  { key: "createdAt", label: "Created At", labelCn: "创建时间" },
+  { key: "date", label: "Date", labelCn: "日期" },
+  { key: "screenerId", label: "Screener", labelCn: "选股器" },
+  { key: "universe", label: "Universe", labelCn: "股票池" },
+  { key: "market", label: "Market", labelCn: "市场" },
+  { key: "totalScreened", label: "Total Screened", labelCn: "扫描总数" },
+  { key: "resultCount", label: "Results", labelCn: "结果数" },
+  { key: "topCodes", label: "Top Codes", labelCn: "精选代码" },
+  { key: "tags", label: "Tags", labelCn: "标签" },
+  { key: "notes", label: "Notes", labelCn: "备注" },
+];
+
+export const OPTIMIZATION_INDEX_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "Opt ID", labelCn: "优化号" },
+  { key: "createdAt", label: "Created At", labelCn: "创建时间" },
+  { key: "capital", label: "Capital", labelCn: "资金" },
+  { key: "startDate", label: "Start Date", labelCn: "开始日期" },
+  { key: "endDate", label: "End Date", labelCn: "结束日期" },
+  { key: "autoScreen", label: "Auto Screen", labelCn: "自动选股" },
+  { key: "totalRounds", label: "Total Rounds", labelCn: "轮次数" },
+  { key: "bestPoolLabel", label: "Best Pool", labelCn: "最佳池" },
+  { key: "bestStrategyLabel", label: "Best Strategy", labelCn: "最佳策略" },
+  { key: "bestReturn", label: "Best Return %", labelCn: "最佳收益%" },
+  { key: "bestSharpe", label: "Best Sharpe", labelCn: "最佳夏普" },
+  { key: "bestMaxDrawdown", label: "Best Max DD %", labelCn: "最佳最大回撤%" },
+  { key: "bestWinRate", label: "Best Win Rate", labelCn: "最佳胜率" },
+  { key: "bestSymbolCount", label: "Symbol Count", labelCn: "标的数" },
+  { key: "bestCompositeScore", label: "Composite Score", labelCn: "综合得分" },
+  { key: "starred", label: "Starred", labelCn: "收藏" },
+];
+
+export const INSTITUTION_ACTIVITY_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "ID", labelCn: "编号" },
+  { key: "timestamp", label: "Timestamp", labelCn: "时间" },
+  { key: "asOfDate", label: "As Of Date", labelCn: "截止日期" },
+  { key: "candidateCount", label: "Candidates", labelCn: "候选数" },
+  { key: "leaderCount", label: "Leaders", labelCn: "领涨数" },
+  { key: "baitCount", label: "Baits", labelCn: "诱多数" },
+  { key: "marketTone", label: "Market Tone", labelCn: "市场情绪" },
+  { key: "northboundNetIn", label: "Northbound Net", labelCn: "北向净额" },
+  { key: "candidateSymbols", label: "Candidate Symbols", labelCn: "候选标的" },
+  { key: "leaderSymbols", label: "Leader Symbols", labelCn: "领涨标的" },
+  { key: "topLeaderSymbols", label: "Top Leaders", labelCn: "头部标的" },
+];
+
+export const DAILY_PICK_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "ID", labelCn: "编号" },
+  { key: "timestamp", label: "Timestamp", labelCn: "时间" },
+  { key: "date", label: "Date", labelCn: "日期" },
+  { key: "threshold", label: "Threshold", labelCn: "阈值" },
+  { key: "triggered", label: "Triggered", labelCn: "触发" },
+  { key: "triggeredCount", label: "Triggered Count", labelCn: "触发数" },
+  { key: "candidateCount", label: "Candidates", labelCn: "候选数" },
+  { key: "pickCount", label: "Picks", labelCn: "精选数" },
+  { key: "topPicks", label: "Top Picks", labelCn: "精选标的" },
+  { key: "triggeredUSSymbols", label: "US Triggers", labelCn: "美股触发" },
+];
+
+export const US_MOVER_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "ID", labelCn: "编号" },
+  { key: "timestamp", label: "Timestamp", labelCn: "时间" },
+  { key: "date", label: "Date", labelCn: "日期" },
+  { key: "threshold", label: "Threshold", labelCn: "阈值" },
+  { key: "totalCount", label: "Total Count", labelCn: "总数" },
+  { key: "significantCount", label: "Significant", labelCn: "显著数" },
+  { key: "topMovers", label: "Top Movers", labelCn: "主要异动" },
+];
+
+export const PBT_ENTRY_COLUMNS: ExportColumnDef[] = [
+  { key: "id", label: "PBT ID", labelCn: "组合回测号" },
+  { key: "createdAt", label: "Created At", labelCn: "创建时间" },
+  { key: "date", label: "Date", labelCn: "日期" },
+  { key: "symbols", label: "Symbols", labelCn: "标的" },
+  { key: "period", label: "Period", labelCn: "周期" },
+  { key: "initialCash", label: "Initial Cash", labelCn: "初始资金" },
+  { key: "strategyCount", label: "Strategies", labelCn: "策略数" },
+  { key: "successCount", label: "Success", labelCn: "成功数" },
+  { key: "failCount", label: "Failed", labelCn: "失败数" },
+  { key: "bestStrategy", label: "Best Strategy", labelCn: "最佳策略" },
 ];

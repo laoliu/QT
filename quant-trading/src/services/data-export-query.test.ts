@@ -240,6 +240,13 @@ describe("ExportDataset structure", () => {
       signalRecords: [],
       confirmations: [],
       accountSummary: null,
+      priceAlerts: [],
+      conditionalOrders: [],
+      dcaPlans: [],
+      breakoutSetups: [],
+      strategyHealth: [],
+      alerts: [],
+      backtestHistory: [],
     };
     expect(ds.meta.mode).toBe("paper");
     expect(ds.orders).toEqual([]);

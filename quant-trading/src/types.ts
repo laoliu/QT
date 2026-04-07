@@ -959,6 +959,22 @@ export type QuantTradingConfig = {
       parameters?: Record<string, unknown>;
     }>;
   };
+
+  // ── Auto Review Configuration ──────────────────────────────────
+
+  /**
+   * After-market auto review (收盘自动复盘) configuration.
+   * Automatically generates and pushes a comprehensive review report
+   * at 15:15 on trading days.
+   */
+  autoReview?: {
+    /** Enable/disable auto review (default: true) */
+    enabled?: boolean;
+    /** Trigger hour in China time (default: 15) */
+    triggerHour?: number;
+    /** Trigger minute in China time (default: 15) */
+    triggerMinute?: number;
+  };
 };
 
 // ── Options Plugin Config ────────────────────────────────────────

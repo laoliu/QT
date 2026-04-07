@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "after_market_review";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1172,6 +1173,321 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+/**
+ * Build a comprehensive after-market review (收盘自动复盘).
+ *
+ * Sections: 大盘回顾 + 持仓表现 + 龙虎榜 + 绩效归因 + 明日计划
+ * Triggered automatically at 15:15 on trading days.
+ */
+async function generateAfterMarketReview(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = ["📊 **收盘自动复盘**", ""];
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ── 1. 大盘回顾 ──────────────────────────────────────────────
+  sections.push("## 一、大盘回顾", "");
+
+  // Index quotes
+  const idxLines: string[] = [];
+  for (const idx of ["000001", "399001", "399006"]) {
+    try {
+      const raw = await executeTool("market_data", { action: "quote", symbol: idx });
+      const data = JSON.parse(raw);
+      if (data.price) {
+        const name = idx === "000001" ? "上证指数" : idx === "399001" ? "深证成指" : "创业板指";
+        const changePct = data.changePct ?? "--";
+        const volume =
+          data.volume != null ? `成交${(Number(data.volume) / 1e8).toFixed(0)}亿` : "";
+        idxLines.push(`  ${name}: ${String(data.price)} (${String(changePct)}) ${volume}`);
+      }
+    } catch {
+      // Skip failed index
+    }
+  }
+  if (idxLines.length > 0) {
+    sections.push(...idxLines, "");
+  }
+
+  // Top sector performance
+  try {
+    const sectorRaw = await executeTool("sector_analysis", { action: "ranking", limit: 5 });
+    const sectorData = JSON.parse(sectorRaw);
+    if (sectorData.sectors && sectorData.sectors.length > 0) {
+      sections.push("**今日领涨板块**");
+      for (const s of sectorData.sectors.slice(0, 5)) {
+        const change =
+          s.changePct != null
+            ? `${s.changePct > 0 ? "+" : ""}${Number(s.changePct).toFixed(2)}%`
+            : "--";
+        const leader = s.leaderStock ? ` 领涨: ${String(s.leaderStock)}` : "";
+        sections.push(`  • ${String(s.name)} ${change}${leader}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    sections.push("板块数据: 获取失败\n");
+  }
+
+  // Northbound fund flow
+  try {
+    const northRaw = await executeTool("fund_flow", { action: "northbound" });
+    const northData = JSON.parse(northRaw);
+    if (northData.realtime) {
+      const rt = northData.realtime;
+      const total = rt.northTotal != null ? `${(Number(rt.northTotal) / 1e8).toFixed(2)}亿` : "--";
+      const sh = rt.hk2sh != null ? `${(Number(rt.hk2sh) / 1e8).toFixed(2)}亿` : "--";
+      const sz = rt.hk2sz != null ? `${(Number(rt.hk2sz) / 1e8).toFixed(2)}亿` : "--";
+      sections.push("**北向资金**");
+      sections.push(`  今日净流入: ${total} (沪股通 ${sh} / 深股通 ${sz})`);
+      sections.push("");
+    }
+  } catch {
+    // Northbound data not available — skip
+  }
+
+  // ── 2. 持仓表现 ──────────────────────────────────────────────
+  sections.push("## 二、持仓表现", "");
+
+  // Portfolio daily P&L
+  try {
+    const pnlRaw = await executeTool("portfolio", { action: "daily_pnl" });
+    const pnlData = JSON.parse(pnlRaw);
+    if (pnlData.netPnl != null) {
+      const pnl = Number(pnlData.netPnl);
+      const icon = pnl >= 0 ? "📈" : "📉";
+      sections.push(
+        `**今日盈亏** ${icon} ${pnl >= 0 ? "+" : ""}¥${pnl.toFixed(2)}`,
+      );
+      sections.push("");
+    }
+  } catch {
+    // daily_pnl not available
+  }
+
+  // Portfolio positions
+  try {
+    const portfolioRaw = await executeTool("portfolio", { action: "view" });
+    const portfolio = JSON.parse(portfolioRaw);
+    if (portfolio.positions && portfolio.positions.length > 0) {
+      const totalValue = portfolio.totalValue ?? portfolio.total_value;
+      const cash = portfolio.cash ?? portfolio.available_cash;
+      if (totalValue != null) {
+        sections.push(
+          `总资产: ¥${Number(totalValue).toFixed(2)}  现金: ¥${Number(cash ?? 0).toFixed(2)}  持仓${String(portfolio.positions.length)}只`,
+        );
+      }
+      sections.push("");
+      for (const p of portfolio.positions.slice(0, 15)) {
+        const pnl = p.unrealizedPnl ?? p.pnl ?? p.profit;
+        const pnlStr = pnl != null ? `${pnl >= 0 ? "+" : ""}¥${Number(pnl).toFixed(2)}` : "--";
+        const pnlPct = p.unrealizedPnlPct ?? p.pnlPct ?? p.profitPct;
+        const pctStr =
+          pnlPct != null ? `(${pnlPct >= 0 ? "+" : ""}${Number(pnlPct).toFixed(2)}%)` : "";
+        const arrow = (pnl ?? 0) >= 0 ? "📈" : "📉";
+        sections.push(`  ${arrow} ${String(p.name ?? p.symbol ?? p.code)} ${pnlStr} ${pctStr}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    sections.push("持仓数据: 获取失败\n");
+  }
+
+  // Today's realized trades
+  try {
+    const tradesRaw = await executeTool("portfolio", { action: "live_trades" });
+    const tradesData = JSON.parse(tradesRaw);
+    const trades = tradesData.trades ?? [];
+    const todayTrades = trades.filter((t: Record<string, unknown>) =>
+      String(t.exitTime ?? "").startsWith(today),
+    );
+    if (todayTrades.length > 0) {
+      sections.push("**今日成交**");
+      let totalPnl = 0;
+      let win = 0;
+      for (const t of todayTrades) {
+        const pnl = Number(t.netPnl ?? 0);
+        totalPnl += pnl;
+        if (pnl > 0) win++;
+        const icon = pnl >= 0 ? "✅" : "❌";
+        sections.push(
+          `  ${icon} ${String(t.symbol ?? "")} 买${String(t.entryPrice ?? "")}→卖${String(t.exitPrice ?? "")} ${pnl >= 0 ? "+" : ""}¥${pnl.toFixed(2)}`,
+        );
+      }
+      const winRate = todayTrades.length > 0 ? ((win / todayTrades.length) * 100).toFixed(0) : "0";
+      sections.push(
+        `  小结: ${String(todayTrades.length)}笔 胜率${winRate}% 净盈亏${totalPnl >= 0 ? "+" : ""}¥${totalPnl.toFixed(2)}`,
+      );
+      sections.push("");
+    }
+  } catch {
+    // Live trades not available — skip
+  }
+
+  // ── 3. 龙虎榜 ──────────────────────────────────────────────
+  sections.push("## 三、龙虎榜", "");
+
+  try {
+    const lhbRaw = await executeTool("dragon_tiger", { action: "daily", limit: 10 });
+    const lhbData = JSON.parse(lhbRaw);
+    if (lhbData.stocks && lhbData.stocks.length > 0) {
+      for (const s of lhbData.stocks.slice(0, 10)) {
+        const net = s.netAmount != null ? `净买${(Number(s.netAmount) / 1e8).toFixed(2)}亿` : "";
+        const reason = s.reason ? ` | ${String(s.reason)}` : "";
+        sections.push(
+          `  • ${String(s.name)}(${String(s.code)}) ${String(s.changePct ?? "")}% ${net}${reason}`,
+        );
+      }
+      sections.push("");
+    } else {
+      sections.push("今日暂无龙虎榜数据\n");
+    }
+  } catch {
+    sections.push("龙虎榜: 获取失败\n");
+  }
+
+  // ── 4. 绩效归因 ──────────────────────────────────────────────
+  sections.push("## 四、绩效归因", "");
+
+  try {
+    const attrRaw = await executeTool("performance_attribution", {
+      action: "full_report",
+      from: today,
+      to: today,
+    });
+    const attrData = JSON.parse(attrRaw);
+
+    if (attrData.totalTrades != null && Number(attrData.totalTrades) > 0) {
+      const netPnl = Number(attrData.totalNetPnl ?? 0);
+      const winRate =
+        attrData.overallWinRate != null
+          ? `${(Number(attrData.overallWinRate) * 100).toFixed(1)}%`
+          : "--";
+      sections.push(`今日交易: ${String(attrData.totalTrades)}笔`);
+      sections.push(`净盈亏: ${netPnl >= 0 ? "+" : ""}¥${netPnl.toFixed(2)}  胜率: ${winRate}`);
+
+      // Strategy breakdown
+      if (attrData.byStrategy?.length > 0) {
+        sections.push("");
+        sections.push("**按策略分解**");
+        for (const s of attrData.byStrategy) {
+          const sPnl = Number(s.netPnl ?? 0);
+          const sIcon = sPnl >= 0 ? "✅" : "❌";
+          sections.push(
+            `  ${sIcon} ${String(s.strategyId)}: ${String(s.trades)}笔 ${sPnl >= 0 ? "+" : ""}¥${sPnl.toFixed(2)}`,
+          );
+        }
+      }
+
+      // Symbol breakdown
+      if (attrData.bySymbol?.length > 0) {
+        sections.push("");
+        sections.push("**按标的分解**");
+        const sorted = [...attrData.bySymbol].sort(
+          (a: Record<string, unknown>, b: Record<string, unknown>) =>
+            Math.abs(Number(b.netPnl ?? 0)) - Math.abs(Number(a.netPnl ?? 0)),
+        );
+        for (const s of sorted.slice(0, 5)) {
+          const sPnl = Number(s.netPnl ?? 0);
+          const sIcon = sPnl >= 0 ? "📈" : "📉";
+          sections.push(
+            `  ${sIcon} ${String(s.symbol)}: ${sPnl >= 0 ? "+" : ""}¥${sPnl.toFixed(2)}`,
+          );
+        }
+      }
+      sections.push("");
+    } else {
+      sections.push("今日无已了结交易，暂无归因数据\n");
+    }
+  } catch {
+    sections.push("绩效归因: 获取失败\n");
+  }
+
+  // Risk snapshot
+  try {
+    const riskRaw = await executeTool("live_trading", { action: "get_risk_snapshot" });
+    const riskData = JSON.parse(riskRaw);
+    if (riskData.maxDrawdown != null || riskData.dailyLoss != null) {
+      sections.push("**风控快照**");
+      if (riskData.maxDrawdown != null) {
+        sections.push(`  最大回撤: ${Number(riskData.maxDrawdown).toFixed(2)}%`);
+      }
+      if (riskData.dailyLoss != null) {
+        sections.push(`  今日最大亏损: ¥${Number(riskData.dailyLoss).toFixed(2)}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    // Engine not running — skip
+  }
+
+  // ── 5. 明日计划 ──────────────────────────────────────────────
+  sections.push("## 五、明日关注", "");
+
+  // Fund flow top movers — potential momentum for tomorrow
+  try {
+    const flowRaw = await executeTool("fund_flow", { action: "rank", limit: 5 });
+    const flowData = JSON.parse(flowRaw);
+    if (flowData.stocks && flowData.stocks.length > 0) {
+      sections.push("**主力资金净流入前5（潜在延续）**");
+      for (const s of flowData.stocks.slice(0, 5)) {
+        const netIn = s.mainNetIn != null ? `${(Number(s.mainNetIn) / 1e8).toFixed(2)}亿` : "--";
+        sections.push(`  • ${String(s.name)}(${String(s.code)}) 净流入: ${netIn}`);
+      }
+      sections.push("");
+    }
+  } catch {
+    // skip
+  }
+
+  // Today's trading signals — strategies that may carry over
+  try {
+    const signalRaw = await executeTool("trading_signal", { action: "recent", limit: 20 });
+    const signalData = JSON.parse(signalRaw);
+    const todaySignals = (signalData.signals ?? []).filter((s: Record<string, unknown>) =>
+      String(s.timestamp ?? s.date ?? s.createdAt ?? "").startsWith(today),
+    );
+    const pendingBuys = todaySignals.filter(
+      (s: Record<string, unknown>) => s.direction === "buy" && s.status !== "executed",
+    );
+    if (pendingBuys.length > 0) {
+      sections.push("**未执行买入信号（待明日观察）**");
+      for (const s of pendingBuys.slice(0, 5)) {
+        sections.push(
+          `  🟡 ${String(s.symbol ?? "")} ¥${String(s.price ?? "--")} (${String(s.strategyId ?? s.reason ?? "")})`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    // skip
+  }
+
+  // Watchlist stocks to monitor
+  try {
+    const { default: fs } = await import("node:fs/promises");
+    const { default: os } = await import("node:os");
+    const { default: path } = await import("node:path");
+    const dir = _config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const watchlistPath = path.join(dir, "watchlist.json");
+    const raw = await fs.readFile(watchlistPath, "utf-8");
+    const watchlist = JSON.parse(raw) as string[];
+    if (watchlist.length > 0) {
+      sections.push(`**自选股（${String(watchlist.length)}只）待持续关注**`);
+      sections.push(`  ${watchlist.slice(0, 20).join("、")}`);
+      sections.push("");
+    }
+  } catch {
+    // No watchlist — skip
+  }
+
+  sections.push("---");
+  sections.push("*以上复盘由系统于收盘后自动生成，仅供参考，不构成投资建议。*");
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1545,14 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "after_market_review",
+    name: "收盘自动复盘",
+    description:
+      "盘后自动复盘：大盘回顾+持仓表现+龙虎榜+绩效归因+明日关注，交易日15:15自动推送",
+    defaultIntervalMinutes: 0,
+    generate: generateAfterMarketReview,
   },
 ];
 

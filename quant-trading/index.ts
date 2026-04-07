@@ -106,6 +106,7 @@ import { createPnlMonitorService } from "./src/services/pnl-monitor.js";
 import { PriceAlertService } from "./src/services/price-alert.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
+import { AutoReviewService } from "./src/services/auto-review.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
 import { SignalHitRateTracker } from "./src/services/signal-hitrate.js";
 import { createSignalMonitorService } from "./src/services/signal-monitor.js";
@@ -765,6 +766,24 @@ const quantTradingPlugin = {
     });
     taskScheduler.loadFromDisk();
 
+    // ── Auto Review Service (收盘自动复盘, 15:15 on trading days) ─────
+    const autoReviewService = new AutoReviewService({
+      triggerHour: config.autoReview?.triggerHour ?? 15,
+      triggerMinute: config.autoReview?.triggerMinute ?? 15,
+      enabled: config.autoReview?.enabled !== false,
+    });
+    const afterMarketReviewTemplate = findReportTemplate("after_market_review");
+    if (afterMarketReviewTemplate) {
+      autoReviewService.init({
+        scheduler: taskScheduler,
+        reviewTemplate: afterMarketReviewTemplate,
+        executeToolFn: executeToolByName,
+        config,
+        notifyFn: (m: string) => tryNotify(api, m),
+      });
+      autoReviewService.start();
+    }
+
     // ── Price Alert Service (条件预警) ──────────────────────────────
     const priceAlertService = new PriceAlertService({
       checkIntervalMs: 60_000,
@@ -931,6 +950,12 @@ const quantTradingPlugin = {
         aliases: ["/monthly", "/monthly_report"],
         reportId: "monthly_report",
         description: "立即生成月度绩效报告",
+      },
+      {
+        name: "/复盘",
+        aliases: ["/review", "/after_market_review"],
+        reportId: "after_market_review",
+        description: "立即生成收盘复盘报告（大盘回顾+持仓表现+龙虎榜+绩效归因+明日关注）",
       },
     ];
     for (const sc of reportShortcuts) {
@@ -1173,6 +1198,15 @@ const quantTradingPlugin = {
       },
       async stop() {
         taskScheduler.destroy();
+      },
+    });
+    api.registerService({
+      id: "auto-review",
+      async start() {
+        /* already started above */
+      },
+      async stop() {
+        autoReviewService.stop();
       },
     });
     api.registerService({

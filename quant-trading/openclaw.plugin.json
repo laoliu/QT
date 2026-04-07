@@ -221,15 +221,15 @@
               },
               "stopLossPct": {
                 "type": "number",
-                "description": "Default stop-loss percentage as a positive number, e.g. 0.05 = -5% (default: 0.05)"
+                "description": "Default stop-loss percentage as a positive number, e.g. 0.05 = -5%. When a buy order fills, a conditional stop-loss order is created at entry × (1 - stopLossPct) (default: 0.05)"
               },
               "takeProfitPct": {
                 "type": "number",
-                "description": "Default take-profit percentage as a positive number, e.g. 0.15 = +15% (default: 0.15)"
+                "description": "Default take-profit percentage as a positive number, e.g. 0.15 = +15%. When a buy order fills, a conditional take-profit order is created at entry × (1 + takeProfitPct) (default: 0.15)"
               },
               "promptWhenNoRule": {
                 "type": "boolean",
-                "description": "If true, send a reminder when no default rule is configured (default: true)"
+                "description": "If true and autoStopLoss is not enabled, send an interactive confirmation via ConfirmationManager after order fill asking whether to create default stop-loss (-5%) and take-profit (+15%) orders (default: true)"
               }
             }
           },

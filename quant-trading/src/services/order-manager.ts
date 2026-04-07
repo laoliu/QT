@@ -617,11 +617,64 @@ export class OrderManager {
     if (!autoCfg?.enabled) {
       const shouldPrompt = autoCfg?.promptWhenNoRule !== false; // default true
       if (shouldPrompt) {
-        const msg =
-          `💡 订单已成交: ${order.side} ${order.symbol} ${order.quantity}股 @ ¥${(order.avgFillPrice ?? order.price ?? 0).toFixed(2)}\n` +
-          `当前未配置自动止损止盈规则。建议在 plugin config 中设置 tradingAccount.autoStopLoss.enabled = true，` +
-          `或手动使用条件单工具设置止损止盈。`;
-        this.log(msg);
+        const fillPrice = order.avgFillPrice ?? order.price ?? 0;
+        if (fillPrice <= 0) return;
+        const filledQty = order.filledQty ?? order.quantity;
+        if (filledQty <= 0) return;
+
+        // Use ConfirmationManager to interactively ask the user
+        const confirmed = await this.confirmMgr.requestStopLossPrompt({
+          symbol: order.symbol,
+          side: order.side,
+          quantity: filledQty,
+          avgFillPrice: fillPrice,
+          orderId: order.orderId,
+        });
+
+        if (confirmed && svc) {
+          // User confirmed — create default stop-loss and take-profit
+          const defaultStopPct = 0.05;
+          const defaultTpPct = 0.15;
+
+          try {
+            const stopPrice = fillPrice * (1 - defaultStopPct);
+            const slId = svc.addStopLoss({
+              symbol: order.symbol,
+              entryPrice: fillPrice,
+              stopPrice,
+              quantity: filledQty,
+              strategyId: order.strategyId,
+              description: `自动止损: ${order.symbol} 成交价 ¥${fillPrice.toFixed(2)}, 止损 -${(defaultStopPct * 100).toFixed(1)}% @ ¥${stopPrice.toFixed(2)}`,
+            });
+            this.log(
+              `自动止损已创建 [${slId}]: ${order.symbol} 止损价 ¥${stopPrice.toFixed(2)} (-${(defaultStopPct * 100).toFixed(1)}%)`,
+            );
+          } catch (err) {
+            this.log(`自动止损创建失败: ${(err as Error).message}`);
+          }
+
+          try {
+            const targetPrice = fillPrice * (1 + defaultTpPct);
+            const tpId = svc.addTakeProfit({
+              symbol: order.symbol,
+              entryPrice: fillPrice,
+              targetPrice,
+              quantity: filledQty,
+              strategyId: order.strategyId,
+              description: `自动止盈: ${order.symbol} 成交价 ¥${fillPrice.toFixed(2)}, 止盈 +${(defaultTpPct * 100).toFixed(1)}% @ ¥${targetPrice.toFixed(2)}`,
+            });
+            this.log(
+              `自动止盈已创建 [${tpId}]: ${order.symbol} 目标价 ¥${targetPrice.toFixed(2)} (+${(defaultTpPct * 100).toFixed(1)}%)`,
+            );
+          } catch (err) {
+            this.log(`自动止盈创建失败: ${(err as Error).message}`);
+          }
+        } else if (!confirmed) {
+          this.log(
+            `用户跳过止损止盈设置: ${order.symbol}。建议在 plugin config 中设置 tradingAccount.autoStopLoss.enabled = true，` +
+            `或手动使用条件单工具设置止损止盈。`,
+          );
+        }
       }
       return;
     }

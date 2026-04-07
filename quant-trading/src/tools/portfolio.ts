@@ -8,6 +8,7 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { toCSV, type CsvColumn } from "../utils/csv-export.js";
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -60,7 +61,8 @@ export function createPortfolioTool(
       "action=show 查看持仓, action=buy 买入, action=sell 卖出, " +
       "action=add_cash 追加资金, action=summary 组合摘要, " +
       "action=live_sync 同步实盘持仓, action=live_orders 查看实盘订单, " +
-      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。",
+      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏, " +
+      "action=export 导出持仓明细CSV。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -77,6 +79,7 @@ export function createPortfolioTool(
             "live_trades",
             "cancel_order",
             "daily_pnl",
+            "export",
           ],
           description: "操作类型",
         },
@@ -379,6 +382,70 @@ export function createPortfolioTool(
           return {
             date: new Date().toISOString().slice(0, 10),
             netPnl: `¥${netPnl.toFixed(2)}`,
+          };
+        }
+
+        case "export": {
+          type PositionRow = Record<string, unknown>;
+          const columns: CsvColumn<PositionRow>[] = [
+            { label: "代码", key: "symbol" },
+            { label: "名称", key: "name" },
+            { label: "持仓数量", key: "quantity" },
+            { label: "可用数量", key: "availableQty" },
+            { label: "成本价", key: "avgCost" },
+            { label: "现价", key: "currentPrice" },
+            { label: "市值", key: "marketValue" },
+            { label: "浮动盈亏", key: "unrealizedPnl" },
+            { label: "盈亏比例(%)", key: "unrealizedPnlPct" },
+          ];
+
+          const engine = getEngine?.();
+          let rows: PositionRow[];
+          let cashValue: number;
+          let totalValue: number;
+
+          if (engine && engine.getStatus() === "running") {
+            const account = engine.getAccount();
+            const positions = engine.getPositions();
+            cashValue = account?.cash ?? 0;
+            totalValue = account?.totalAssets ?? 0;
+            rows = positions.map((p) => ({
+              symbol: p.symbol,
+              name: p.name ?? "",
+              quantity: p.quantity,
+              availableQty: p.availableQty,
+              avgCost: p.avgCost.toFixed(3),
+              currentPrice: p.currentPrice != null ? p.currentPrice.toFixed(3) : "",
+              marketValue: p.marketValue != null ? p.marketValue.toFixed(2) : "",
+              unrealizedPnl: p.unrealizedPnl != null ? p.unrealizedPnl.toFixed(2) : "",
+              unrealizedPnlPct:
+                p.unrealizedPnlPct != null ? (p.unrealizedPnlPct * 100).toFixed(2) : "",
+            }));
+          } else {
+            const portfolio = await loadPortfolio(config);
+            cashValue = portfolio.cash;
+            totalValue = portfolio.totalValue;
+            rows = portfolio.positions.map((p) => ({
+              symbol: p.symbol,
+              name: p.name ?? "",
+              quantity: p.quantity,
+              availableQty: p.quantity,
+              avgCost: p.avgCost.toFixed(3),
+              currentPrice: p.currentPrice != null ? p.currentPrice.toFixed(3) : "",
+              marketValue: p.marketValue != null ? p.marketValue.toFixed(2) : "",
+              unrealizedPnl: p.unrealizedPnl != null ? p.unrealizedPnl.toFixed(2) : "",
+              unrealizedPnlPct:
+                p.unrealizedPnlPct != null ? p.unrealizedPnlPct.toFixed(2) : "",
+            }));
+          }
+
+          const csv = toCSV(rows, columns);
+          return {
+            csv,
+            filename: `portfolio_${new Date().toISOString().slice(0, 10)}.csv`,
+            rows: rows.length,
+            cash: `¥${cashValue.toFixed(2)}`,
+            totalValue: `¥${totalValue.toFixed(2)}`,
           };
         }
 

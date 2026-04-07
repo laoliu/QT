@@ -1251,6 +1251,7 @@ const quantTradingPlugin = {
       getEngine,
       priceAlertService,
       taskScheduler,
+      tradeJournal,
       secure,
       securePublic,
     });

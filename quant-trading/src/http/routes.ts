@@ -20,6 +20,7 @@ import type { PriceAlertService } from "../services/price-alert.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
+import type { TradeJournal } from "../services/trade-journal.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
@@ -63,6 +64,7 @@ export interface RouteDeps {
   getEngine: () => LiveEngine;
   priceAlertService: PriceAlertService;
   taskScheduler: TaskScheduler;
+  tradeJournal: TradeJournal;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -538,6 +540,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── CSV Export Downloads ──────────────────────────────────────
+  registerExportRoutes(deps);
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────
@@ -1479,6 +1484,94 @@ function registerPythonToolRoutes({ api, config, secure }: RouteDeps): void {
       } catch (err) {
         json(res, { status: "error", message: (err as Error).message }, 500);
       }
+    }),
+  });
+}
+
+// ── CSV Export routes ────────────────────────────────────────────
+
+function registerExportRoutes({
+  api,
+  config,
+  backtestStore,
+  tradeJournal,
+  getEngine,
+  secure,
+}: RouteDeps): void {
+  // GET /quant/export/portfolio — download portfolio positions CSV
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/export/portfolio",
+    handler: secure(async (_req, res) => {
+      const { createPortfolioTool } = await import("../tools/portfolio.js");
+      const tool = createPortfolioTool(api, config, getEngine);
+      const result = (await tool.execute({ action: "export" })) as {
+        csv?: string;
+        filename?: string;
+        error?: string;
+      };
+      if (result.error || !result.csv) {
+        json(res, { status: "error", message: result.error ?? "导出失败" }, 400);
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+      res.end(result.csv);
+    }),
+  });
+
+  // GET /quant/export/journal — download trade journal CSV
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/export/journal",
+    handler: secure(async (_req, res) => {
+      const { createTradeJournalTool } = await import("../tools/trade-journal.js");
+      const tool = createTradeJournalTool(api, tradeJournal);
+      const result = (await tool.execute({ action: "export" })) as {
+        csv?: string;
+        filename?: string;
+        error?: string;
+      };
+      if (result.error || !result.csv) {
+        json(res, { status: "error", message: result.error ?? "导出失败" }, 400);
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+      res.end(result.csv);
+    }),
+  });
+
+  // GET /quant/export/backtest?id=xxx — download backtest trades CSV
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/export/backtest",
+    handler: secure(async (req, res) => {
+      const backtestId = urlParams(req).get("id");
+      if (!backtestId) {
+        json(res, { status: "error", message: "缺少 ?id= 参数" }, 400);
+        return;
+      }
+      const { createBacktestTool } = await import("../tools/backtest.js");
+      const tool = createBacktestTool(api, config, backtestStore);
+      const result = (await tool.execute({ action: "export", backtest_id: backtestId })) as {
+        csv?: string;
+        filename?: string;
+        error?: string;
+      };
+      if (result.error || !result.csv) {
+        json(res, { status: "error", message: result.error ?? "导出失败" }, 400);
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${result.filename}"`,
+      });
+      res.end(result.csv);
     }),
   });
 }

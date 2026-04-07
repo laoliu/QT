@@ -5,6 +5,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { QuantTradingConfig } from "../types.js";
+import { toCSV, type CsvColumn } from "../utils/csv-export.js";
 
 /** Safe toFixed — returns "N/A" when the value is nullish or not a finite number. */
 function fmt(v: unknown, digits: number): string {
@@ -22,7 +23,7 @@ export function createBacktestTool(
       "运行量化策略回测。" +
       "支持50+内置策略（双均线、动量突破、均值回归、RSI、MACD、布林带等）、用户动态组合策略（通过strategy_composer创建）和 backtrader Python 策略。" +
       "返回年化收益率、最大回撤、夏普比率、胜率等绩效指标，以及前瞻信号分析。" +
-      "action=run 运行回测, action=list 列出可用策略。\n" +
+      "action=run 运行回测, action=list 列出可用策略, action=export 导出回测交易明细CSV。\n" +
       "【重要提示】\n" +
       "• 如果用户要求'明天可以买的股票'，应将 endDate 设为今天，并检查返回的 forwardSignals 字段。\n" +
       "• 不要只用 dual-ma-crossover，先用 action=list 查看所有策略，或使用 strategy_router(action=profile_route_backtest) 自动匹配最优策略。\n" +
@@ -33,8 +34,8 @@ export function createBacktestTool(
       properties: {
         action: {
           type: "string",
-          enum: ["run", "list"],
-          description: "操作: run=运行回测, list=列出策略",
+          enum: ["run", "list", "export"],
+          description: "操作: run=运行回测, list=列出策略, export=导出回测交易明细CSV",
         },
         strategyId: {
           type: "string",
@@ -68,6 +69,10 @@ export function createBacktestTool(
         slowPeriod: {
           type: "number",
           description: "慢速均线周期（双均线策略参数）",
+        },
+        backtest_id: {
+          type: "string",
+          description: "回测结果ID (用于 export action)",
         },
       },
       required: ["action"],
@@ -180,6 +185,38 @@ export function createBacktestTool(
         } catch (err) {
           return { error: `回测失败: ${(err as Error).message}` };
         }
+      }
+
+      if (action === "export") {
+        if (!backtestStore) return { error: "回测存储未配置" };
+        const backtestId = args.backtest_id as string;
+        if (!backtestId) return { error: "请提供 backtest_id" };
+        const record = backtestStore.getFullResult(backtestId);
+        if (!record) return { error: `未找到回测记录: ${backtestId}` };
+
+        type SignalRow = Record<string, unknown>;
+        const columns: CsvColumn<SignalRow>[] = [
+          { label: "日期", key: "date" },
+          { label: "代码", key: "symbol" },
+          { label: "方向", key: "direction" },
+          { label: "价格", key: "price" },
+          { label: "原因", key: "reason" },
+        ];
+        const rows: SignalRow[] = record.result.signals.map((s) => ({
+          date: new Date(s.timestamp).toISOString().slice(0, 10),
+          symbol: s.symbol,
+          direction: s.direction,
+          price: typeof s.price === "number" && Number.isFinite(s.price) ? s.price.toFixed(2) : "",
+          reason: s.reason ?? "",
+        }));
+        const csv = toCSV(rows, columns);
+        return {
+          csv,
+          filename: `backtest_${record.result.strategyId}_${record.result.startDate}_${record.result.endDate}.csv`,
+          rows: rows.length,
+          strategy: record.result.strategyId,
+          period: `${record.result.startDate} ~ ${record.result.endDate}`,
+        };
       }
 
       return { error: `未知操作: ${action}` };

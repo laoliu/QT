@@ -260,7 +260,7 @@ export function getDashboardHtml(baseUrl: string): string {
   <div class="grid">
     <!-- Portfolio -->
     <div class="card span-3" id="portfolioCard">
-      <h2>投资组合</h2>
+      <h2>投资组合 <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="exportCSV('portfolio')" title="导出持仓明细CSV">导出CSV</button></h2>
       <div class="stats" id="portfolioStats">
         <div class="stat"><span class="value">--</span><span class="label">总资产</span></div>
       </div>
@@ -332,7 +332,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     <!-- Backtest History -->
     <div class="card">
-      <h2>回测记录</h2>
+      <h2>回测记录 <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="exportCSV('journal')" title="导出交易日志CSV">导出日志</button></h2>
       <div id="backtestHistoryPanel"><div class="empty">暂无回测记录</div></div>
     </div>
   </div>
@@ -911,14 +911,27 @@ export function getDashboardHtml(baseUrl: string): string {
       const r = await api('/quant/api/backtests?limit=10');
       const runs = r?.data ?? [];
       if (!runs.length) { document.getElementById('backtestHistoryPanel').innerHTML='<div class="empty">暂无回测记录</div>'; return; }
-      let h='<table><tr><th>策略</th><th>标的</th><th>收益</th><th>日期</th></tr>';
+      let h='<table><tr><th>策略</th><th>标的</th><th>收益</th><th>日期</th><th></th></tr>';
       for (const b of runs) {
         const ret = b.returnPct != null ? (b.returnPct*100).toFixed(1)+'%' : '--';
         const cls = pctClass(b.returnPct??0);
         const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN') : '--';
-        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td></tr>';
+        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\'backtest\',\''+esc(b.id)+'\')">CSV</button></td></tr>';
       }
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';
+    }
+
+    // ── CSV Export ───────────────────────────────────────────
+    function exportCSV(type, backtestId) {
+      let url = BASE + '/quant/export/' + type;
+      if (type === 'backtest' && backtestId) url += '?id=' + encodeURIComponent(backtestId);
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast('正在下载 ' + type + ' CSV...');
     }
 
     // ── Refresh all ─────────────────────────────────────────
@@ -977,6 +990,9 @@ export function handleDashboardRequest(): Record<string, unknown> {
       "POST /quant/api/alerts/acknowledge",
       "GET  /quant/api/events (SSE stream, ?filter=signal,order,...)",
       "GET  /quant/api/events/recent[?category=&limit=]",
+      "GET  /quant/export/portfolio",
+      "GET  /quant/export/journal",
+      "GET  /quant/export/backtest[?id=]",
     ],
   };
 }

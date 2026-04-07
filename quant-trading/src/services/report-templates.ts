@@ -215,12 +215,27 @@ async function generateMarketClose(
     // Northbound data not available — skip
   }
 
-  // Portfolio P&L summary
+  // Portfolio daily P&L
+  try {
+    const pnlRaw = await executeTool("portfolio", { action: "daily_pnl" });
+    const pnlData = JSON.parse(pnlRaw);
+    if (pnlData.netPnl != null) {
+      const pnl = Number(pnlData.netPnl);
+      const icon = pnl >= 0 ? "📈" : "📉";
+      sections.push(`**今日账户盈亏** ${icon}`);
+      sections.push(`  净盈亏: ${pnl >= 0 ? "+" : ""}¥${pnl.toFixed(2)}`);
+      sections.push("");
+    }
+  } catch {
+    // daily_pnl not available — skip
+  }
+
+  // Portfolio P&L summary (positions)
   try {
     const portfolioRaw = await executeTool("portfolio", { action: "view" });
     const portfolio = JSON.parse(portfolioRaw);
     if (portfolio.positions && portfolio.positions.length > 0) {
-      sections.push("**今日持仓盈亏**");
+      sections.push("**持仓盈亏变动**");
       const totalValue = portfolio.totalValue ?? portfolio.total_value;
       const cash = portfolio.cash ?? portfolio.available_cash;
       if (totalValue != null) {
@@ -243,26 +258,183 @@ async function generateMarketClose(
     // Portfolio data not available — skip
   }
 
-  // Today's trade summary
+  // Today's buy/sell operations (actual orders)
+  const today = new Date().toISOString().slice(0, 10);
   try {
-    const signalRaw = await executeTool("trading_signal", { action: "recent", limit: 20 });
+    const ordersRaw = await executeTool("portfolio", { action: "live_orders" });
+    const ordersData = JSON.parse(ordersRaw);
+    const orders = ordersData.orders ?? [];
+    const todayOrders = orders.filter((o: Record<string, unknown>) =>
+      String(o.createdAt ?? "").startsWith(today),
+    );
+    if (todayOrders.length > 0) {
+      sections.push("**今日买卖操作**");
+      let filled = 0;
+      let cancelled = 0;
+      for (const o of todayOrders) {
+        const side = o.side === "buy" ? "🟢买入" : "🔴卖出";
+        const status =
+          o.status === "filled"
+            ? "✅已成"
+            : o.status === "cancelled"
+              ? "❌撤单"
+              : String(o.status ?? "");
+        if (o.status === "filled") filled++;
+        if (o.status === "cancelled") cancelled++;
+        sections.push(
+          `  ${side} ${String(o.symbol ?? "")} ${String(o.qty ?? "")}股 ¥${String(o.price ?? o.avgFillPrice ?? "--")} ${status}`,
+        );
+      }
+      sections.push(
+        `  合计: ${String(todayOrders.length)}单 (成交${String(filled)} 撤单${String(cancelled)})`,
+      );
+      sections.push("");
+    }
+  } catch {
+    // Live orders not available — skip
+  }
+
+  // Today's realized trades
+  try {
+    const tradesRaw = await executeTool("portfolio", { action: "live_trades" });
+    const tradesData = JSON.parse(tradesRaw);
+    const trades = tradesData.trades ?? [];
+    const todayTrades = trades.filter((t: Record<string, unknown>) =>
+      String(t.exitTime ?? "").startsWith(today),
+    );
+    if (todayTrades.length > 0) {
+      sections.push("**今日了结交易**");
+      let totalTradePnl = 0;
+      let winCount = 0;
+      for (const t of todayTrades) {
+        const pnl = Number(t.netPnl ?? 0);
+        totalTradePnl += pnl;
+        if (pnl > 0) winCount++;
+        const icon = pnl >= 0 ? "✅" : "❌";
+        sections.push(
+          `  ${icon} ${String(t.symbol ?? "")} 买${String(t.entryPrice ?? "")}→卖${String(t.exitPrice ?? "")} ${pnl >= 0 ? "+" : ""}¥${pnl.toFixed(2)}`,
+        );
+      }
+      const winRate =
+        todayTrades.length > 0 ? ((winCount / todayTrades.length) * 100).toFixed(0) : "0";
+      sections.push(
+        `  小结: ${String(todayTrades.length)}笔 胜率${winRate}% 净盈亏${totalTradePnl >= 0 ? "+" : ""}¥${totalTradePnl.toFixed(2)}`,
+      );
+      sections.push("");
+    }
+  } catch {
+    // Live trades not available — skip
+  }
+
+  // Today's trading signals
+  try {
+    const signalRaw = await executeTool("trading_signal", { action: "recent", limit: 50 });
     const signalData = JSON.parse(signalRaw);
-    const today = new Date().toISOString().slice(0, 10);
     const todaySignals = (signalData.signals ?? []).filter((s: Record<string, unknown>) =>
       String(s.timestamp ?? s.createdAt ?? "").startsWith(today),
     );
     if (todaySignals.length > 0) {
+      const buys = todaySignals.filter(
+        (s: Record<string, unknown>) => s.direction === "buy",
+      ).length;
+      const sells = todaySignals.filter(
+        (s: Record<string, unknown>) => s.direction === "sell",
+      ).length;
+
+      // Group by strategy
+      const stratMap = new Map<string, number>();
+      for (const s of todaySignals) {
+        const id = String(s.strategy ?? s.strategyId ?? "unknown");
+        stratMap.set(id, (stratMap.get(id) ?? 0) + 1);
+      }
+
       sections.push("**今日交易信号**");
+      sections.push(
+        `  总信号: ${String(todaySignals.length)} (买入${String(buys)} 卖出${String(sells)})`,
+      );
       for (const s of todaySignals.slice(0, 10)) {
         const dir = s.direction === "buy" ? "🟢买入" : "🔴卖出";
         sections.push(
           `  ${dir} ${String(s.symbol ?? "")} ${s.price ? `¥${String(s.price)}` : ""} (${String(s.strategyId ?? s.reason ?? "")})`,
         );
       }
+      sections.push(`  按策略: ${[...stratMap].map(([k, v]) => `${k}×${String(v)}`).join(" | ")}`);
       sections.push("");
     }
   } catch {
     // Signal data not available — skip
+  }
+
+  // Signal hit rate (strategy accuracy)
+  try {
+    const hitRaw = await executeTool("trading_signal", { action: "hit_rate" });
+    const hitData = JSON.parse(hitRaw);
+    if (hitData.stats) {
+      const entries = Object.entries(hitData.stats).filter(
+        ([, stat]) => Number((stat as Record<string, unknown>).total ?? 0) > 0,
+      );
+      if (entries.length > 0) {
+        sections.push("**策略信号命中率**");
+        for (const [checkpoint, stat] of entries) {
+          const s = stat as Record<string, unknown>;
+          sections.push(
+            `  T+${checkpoint}: ${String(s.hits)}/${String(s.total)} (${(Number(s.hitRate ?? 0) * 100).toFixed(1)}%)`,
+          );
+        }
+        sections.push("");
+      }
+    }
+  } catch {
+    // Signal hit rate not available — skip
+  }
+
+  // Today's triggered alerts
+  try {
+    const alertRaw = await executeTool("price_alert", { action: "list" });
+    const alertData = JSON.parse(alertRaw);
+    const alerts = alertData.alerts ?? [];
+    const triggeredToday = alerts.filter(
+      (a: Record<string, unknown>) =>
+        a.status === "triggered" && String(a.triggeredAt ?? "").startsWith(today),
+    );
+    if (triggeredToday.length > 0) {
+      sections.push("**今日触发预警**");
+      for (const a of triggeredToday) {
+        const dir = a.direction === "above" ? "↑突破" : "↓跌破";
+        sections.push(
+          `  ⚠️ ${String(a.symbol ?? "")} ${dir} ¥${String(a.targetPrice ?? "")} (${String(a.name ?? a.reason ?? "")})`,
+        );
+      }
+      sections.push("");
+    }
+  } catch {
+    // Price alert not available — skip
+  }
+
+  // Trade journal — today's notes/reflections
+  try {
+    const journalRaw = await executeTool("trade_journal", { action: "recent", limit: 10 });
+    const journalData = JSON.parse(journalRaw);
+    const notes = journalData.notes ?? [];
+    const todayNotes = notes.filter((n: Record<string, unknown>) =>
+      String(n.date ?? "").startsWith(today),
+    );
+    if (todayNotes.length > 0) {
+      sections.push("**今日交易笔记**");
+      for (const n of todayNotes) {
+        const rating = n.rating ? `${"⭐".repeat(Number(n.rating))}` : "";
+        const tags =
+          Array.isArray(n.tags) && n.tags.length > 0 ? ` [${n.tags.join(", ")}]` : "";
+        const symbol = n.symbol ? `${String(n.symbol)} ` : "";
+        sections.push(`  📝 ${symbol}${String(n.content ?? "")}${tags} ${rating}`);
+        if (n.lesson) {
+          sections.push(`     💡 教训: ${String(n.lesson)}`);
+        }
+      }
+      sections.push("");
+    }
+  } catch {
+    // Trade journal not available — skip
   }
 
   return sections.join("\n");
@@ -1184,7 +1356,8 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
     id: "market_close",
     name: "收盘总结",
-    description: "收盘后推送：指数行情、领涨板块、龙虎榜热点、北向资金、持仓盈亏、今日信号",
+    description:
+      "收盘自动复盘：指数行情、领涨板块、龙虎榜、北向资金、账户盈亏、买卖操作、了结交易、信号统计及命中率、触发预警、交易笔记",
     defaultIntervalMinutes: 0,
     generate: generateMarketClose,
   },

@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OrderRequest } from "../broker/adapter.js";
+import type { IBrokerAdapter, OrderRequest } from "../broker/adapter.js";
 import type {
   BasketLeg,
   BasketLegStatus,
@@ -97,6 +97,8 @@ export class BasketOrderService {
   private baskets = new Map<string, BasketOrder>();
   /** Maps child orderId → { basketId, legIndex } for status callback routing. */
   private orderToLeg = new Map<string, { basketId: string; legIndex: number }>();
+  /** Unsubscribe functions from broker callbacks. */
+  private brokerUnsubs: Array<() => void> = [];
 
   constructor(cfg: QuantTradingConfig, getOrderMgr: () => OrderManager | null) {
     this.cfg = cfg;
@@ -105,6 +107,31 @@ export class BasketOrderService {
 
   setNotify(fn: (msg: string) => void | Promise<void>): void {
     this.notifyFn = fn;
+  }
+
+  /**
+   * Subscribe to a broker's fill and order-status callbacks so that
+   * basket leg states are automatically updated.
+   * Safe to call multiple times (previous subscriptions are cleaned up first).
+   */
+  subscribeToBroker(broker: IBrokerAdapter): void {
+    this.unsubscribeBroker();
+    this.brokerUnsubs.push(
+      broker.subscribeFills((fill) => {
+        void this.handleFill(fill.orderId, fill.quantity, fill.price);
+      }),
+    );
+    this.brokerUnsubs.push(
+      broker.subscribeOrderStatus((orderId, status) => {
+        void this.handleOrderStatusChange(orderId, status);
+      }),
+    );
+  }
+
+  /** Remove broker callback subscriptions. */
+  unsubscribeBroker(): void {
+    for (const unsub of this.brokerUnsubs) unsub();
+    this.brokerUnsubs = [];
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────
@@ -124,7 +151,7 @@ export class BasketOrderService {
   }
 
   destroy(): void {
-    // No timers to clean up; persistence already flushed on each mutation.
+    this.unsubscribeBroker();
   }
 
   // ── CRUD ──────────────────────────────────────────────────────
@@ -300,13 +327,8 @@ export class BasketOrderService {
     basket.updatedAt = new Date().toISOString();
     await this.persist();
 
-    // Split legs into batches based on concurrency
+    // Split legs into list for concurrent execution
     const pendingLegs = [...basket.legs];
-    let cancelled = false;
-
-    // Process with concurrency control using a semaphore pattern
-    let activeCount = 0;
-    let legIdx = 0;
 
     const submitLeg = async (leg: BasketLeg): Promise<void> => {
       const req: OrderRequest = {
@@ -346,45 +368,37 @@ export class BasketOrderService {
       }
     };
 
-    // Execute legs with concurrency limit
-    const executeWithConcurrency = async (): Promise<void> => {
-      const promises: Promise<void>[] = [];
+    // Execute legs with concurrency limit using a pool pattern
+    const pool: Promise<void>[] = [];
+    let nextLegIdx = 0;
+    let cancelled = false;
 
-      const scheduleNext = (): void => {
-        while (activeCount < basket.concurrency && legIdx < pendingLegs.length && !cancelled) {
-          const leg = pendingLegs[legIdx++];
-          activeCount++;
-          const p = submitLeg(leg).then(() => {
-            activeCount--;
+    const runNext = async (): Promise<void> => {
+      while (!cancelled && nextLegIdx < pendingLegs.length) {
+        const leg = pendingLegs[nextLegIdx++];
+        await submitLeg(leg);
 
-            // Check failure policy
-            if (
-              leg.status === "failed" || leg.status === "rejected"
-            ) {
-              if (basket.failurePolicy === "cancel_remaining") {
-                cancelled = true;
-                // Mark remaining unstarted legs as cancelled
-                for (let i = legIdx; i < pendingLegs.length; i++) {
-                  if (pendingLegs[i].status === "pending") {
-                    pendingLegs[i].status = "cancelled";
-                    pendingLegs[i].updatedAt = new Date().toISOString();
-                  }
-                }
-              }
+        // Check failure policy
+        if (
+          (leg.status === "failed" || leg.status === "rejected") &&
+          basket.failurePolicy === "cancel_remaining"
+        ) {
+          cancelled = true;
+          for (let i = nextLegIdx; i < pendingLegs.length; i++) {
+            if (pendingLegs[i].status === "pending") {
+              pendingLegs[i].status = "cancelled";
+              pendingLegs[i].updatedAt = new Date().toISOString();
             }
-
-            // Schedule more if available
-            scheduleNext();
-          });
-          promises.push(p);
+          }
         }
-      };
-
-      scheduleNext();
-      await Promise.all(promises);
+      }
     };
 
-    await executeWithConcurrency();
+    // Launch `concurrency` workers that each pull from the shared queue
+    for (let w = 0; w < Math.min(basket.concurrency, pendingLegs.length); w++) {
+      pool.push(runNext());
+    }
+    await Promise.all(pool);
 
     // Final status aggregation
     this.aggregateBasketStatus(basket);

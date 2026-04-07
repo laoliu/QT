@@ -40,6 +40,8 @@
  * │  │    • institutional_flow— fund holdings, insider trades   │  │
  * │  │    • social_sentiment  — community hot stocks, sentiment │  │
  * │  │    • chip_accumulation — institutional accumulation scan │  │
+ * │  │    • market_overview   — market breadth, advance/decline │  │
+ * │  │    • risk_control      — pre-trade risk check & limits  │  │
  * │  │                                                          │  │
  * │  │  Commands (chat shortcuts):                              │  │
  * │  │    /quote /screen /backtest /portfolio /signal           │  │
@@ -138,6 +140,7 @@ import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
+import { createMarketOverviewTool } from "./src/tools/market-overview.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
@@ -146,6 +149,7 @@ import { createPerformanceAttributionTool } from "./src/tools/performance-attrib
 import { createPolymarketOddsTool } from "./src/tools/polymarket-odds.js";
 import { createPortfolioBacktestTool } from "./src/tools/portfolio-backtest.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
+import { createRiskControlTool } from "./src/tools/risk-control.js";
 import { createPortfolioTool } from "./src/tools/portfolio.js";
 import { createPositionSizingTool } from "./src/tools/position-sizing.js";
 import { createPriceAlertTool } from "./src/tools/price-alert.js";
@@ -654,6 +658,8 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      market_overview: createMarketOverviewTool(api, config),
+      risk_control: createRiskControlTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +710,8 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      market_overview: "大盘概览",
+      risk_control: "交易风控",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

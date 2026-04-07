@@ -43,6 +43,11 @@ def run_dragon_tiger(config: dict) -> dict:
         return _stock_detail(symbol, limit, errors)
     elif action == "institution":
         return _institution_stats(limit, errors)
+    elif action == "desk":
+        desk_name = config.get("desk", "")
+        return _desk_tracker(desk_name, limit, errors)
+    elif action == "hot_money":
+        return _hot_money_ranking(limit, errors)
     else:
         return {"error": f"未知action: {action}"}
 
@@ -197,6 +202,213 @@ def _institution_stats(limit: int, errors: list[str]) -> dict:
         "action": "institution",
         "count": len(institutions),
         "stocks": institutions,
+        "errors": errors if errors else None,
+    }
+
+
+def _desk_tracker(desk_name: str, limit: int, errors: list[str]) -> dict:
+    """Track a specific broker desk's (营业部) dragon tiger activity.
+
+    If desk_name is empty, returns the most active desks ranking.
+    """
+    try:
+        import akshare as ak
+    except ImportError:
+        return {"error": "akshare 未安装"}
+
+    if not desk_name:
+        # Return most active desks
+        return _active_desks_ranking(limit, errors)
+
+    desks: list[dict] = []
+    try:
+        df = ak.stock_lhb_hyyyb_em(start_date="", end_date="")
+        if df is not None and not df.empty:
+            # Filter for desks matching the name
+            mask = df["营业部名称"].astype(str).str.contains(desk_name, na=False)
+            matched = df[mask]
+            if matched.empty:
+                return {
+                    "error": f"未找到包含「{desk_name}」的营业部",
+                    "suggestion": "请尝试更短的关键词，如 '华泰' 或 '中信'",
+                }
+
+            for _, row in matched.head(limit).iterrows():
+                desks.append({
+                    "deskName": str(row.get("营业部名称", "")),
+                    "code": str(row.get("代码", "")),
+                    "stockName": str(row.get("名称", "")),
+                    "buyAmount": _safe_float(row.get("买入额")),
+                    "sellAmount": _safe_float(row.get("卖出额")),
+                    "netAmount": _safe_float(row.get("净额")),
+                    "date": str(row.get("上榜日", "")),
+                    "changePct": _safe_float(row.get("涨跌幅")),
+                })
+    except Exception as e:
+        errors.append(f"营业部追踪获取失败: {e}")
+        # Fallback: try stock_lhb_jgstatistic_em
+        try:
+            df = ak.stock_lhb_jgstatistic_em(symbol="近一月")
+            if df is not None and not df.empty:
+                errors.append("使用备用接口获取数据")
+                for _, row in df.head(limit).iterrows():
+                    desks.append({
+                        "code": str(row.get("代码", "")),
+                        "stockName": str(row.get("名称", "")),
+                        "appearances": _safe_int(row.get("上榜次数", 0)),
+                        "totalBuy": _safe_float(row.get("龙虎榜买入额")),
+                        "totalSell": _safe_float(row.get("龙虎榜卖出额")),
+                        "totalNet": _safe_float(row.get("龙虎榜净买额")),
+                    })
+        except Exception as e2:
+            errors.append(f"备用接口也失败: {e2}")
+
+    if not desks:
+        return {"error": f"未找到「{desk_name}」的交易记录", "errors": errors}
+
+    return {
+        "action": "desk",
+        "deskName": desk_name,
+        "count": len(desks),
+        "records": desks,
+        "errors": errors if errors else None,
+    }
+
+
+def _active_desks_ranking(limit: int, errors: list[str]) -> dict:
+    """Get ranking of most active broker desks on dragon tiger list."""
+    try:
+        import akshare as ak
+    except ImportError:
+        return {"error": "akshare 未安装"}
+
+    desks: list[dict] = []
+    try:
+        df = ak.stock_lhb_hyyyb_em(start_date="", end_date="")
+        if df is not None and not df.empty:
+            # Aggregate by desk name
+            desk_stats: dict[str, dict] = {}
+            for _, row in df.iterrows():
+                name = str(row.get("营业部名称", ""))
+                if not name:
+                    continue
+                if name not in desk_stats:
+                    desk_stats[name] = {
+                        "deskName": name,
+                        "appearances": 0,
+                        "totalBuy": 0,
+                        "totalSell": 0,
+                        "totalNet": 0,
+                        "stocks": [],
+                    }
+                desk_stats[name]["appearances"] += 1
+                buy = _safe_float(row.get("买入额")) or 0
+                sell = _safe_float(row.get("卖出额")) or 0
+                desk_stats[name]["totalBuy"] += buy
+                desk_stats[name]["totalSell"] += sell
+                desk_stats[name]["totalNet"] += buy - sell
+
+                stock_name = str(row.get("名称", ""))
+                if stock_name and stock_name not in desk_stats[name]["stocks"]:
+                    desk_stats[name]["stocks"].append(stock_name)
+
+            for stats in desk_stats.values():
+                stats["totalBuy"] = round(stats["totalBuy"], 2)
+                stats["totalSell"] = round(stats["totalSell"], 2)
+                stats["totalNet"] = round(stats["totalNet"], 2)
+                stats["stockCount"] = len(stats["stocks"])
+                stats["topStocks"] = stats["stocks"][:5]
+                del stats["stocks"]
+                desks.append(stats)
+
+            desks.sort(key=lambda d: d.get("appearances", 0), reverse=True)
+
+    except Exception as e:
+        errors.append(f"活跃营业部排名获取失败: {e}")
+
+    if not desks:
+        return {"error": "无法获取营业部排名数据", "errors": errors}
+
+    return {
+        "action": "desk",
+        "deskName": None,
+        "count": len(desks[:limit]),
+        "records": desks[:limit],
+        "errors": errors if errors else None,
+    }
+
+
+def _hot_money_ranking(limit: int, errors: list[str]) -> dict:
+    """Get hot money (游资) desk activity ranking.
+
+    Identifies frequently appearing desks that are likely hot money operators.
+    """
+    try:
+        import akshare as ak
+    except ImportError:
+        return {"error": "akshare 未安装"}
+
+    hot_money: list[dict] = []
+    try:
+        df = ak.stock_lhb_hyyyb_em(start_date="", end_date="")
+        if df is not None and not df.empty:
+            # Aggregate by desk
+            desk_stats: dict[str, dict] = {}
+            for _, row in df.iterrows():
+                name = str(row.get("营业部名称", ""))
+                if not name:
+                    continue
+                if name not in desk_stats:
+                    desk_stats[name] = {
+                        "deskName": name,
+                        "buyCount": 0,
+                        "sellCount": 0,
+                        "totalBuy": 0,
+                        "totalSell": 0,
+                        "stocks": set(),
+                    }
+                buy = _safe_float(row.get("买入额")) or 0
+                sell = _safe_float(row.get("卖出额")) or 0
+                if buy > 0:
+                    desk_stats[name]["buyCount"] += 1
+                if sell > 0:
+                    desk_stats[name]["sellCount"] += 1
+                desk_stats[name]["totalBuy"] += buy
+                desk_stats[name]["totalSell"] += sell
+                stock_name = str(row.get("名称", ""))
+                if stock_name:
+                    desk_stats[name]["stocks"].add(stock_name)
+
+            # Hot money criteria: high frequency, diverse stocks, net buyer
+            for stats in desk_stats.values():
+                total_trades = stats["buyCount"] + stats["sellCount"]
+                if total_trades < 2:
+                    continue
+                net = stats["totalBuy"] - stats["totalSell"]
+                hot_money.append({
+                    "deskName": stats["deskName"],
+                    "totalTrades": total_trades,
+                    "buyCount": stats["buyCount"],
+                    "sellCount": stats["sellCount"],
+                    "totalBuy": round(stats["totalBuy"], 2),
+                    "totalSell": round(stats["totalSell"], 2),
+                    "netAmount": round(net, 2),
+                    "stockCount": len(stats["stocks"]),
+                    "recentStocks": sorted(stats["stocks"])[:5],
+                })
+
+            hot_money.sort(key=lambda d: d.get("totalTrades", 0), reverse=True)
+
+    except Exception as e:
+        errors.append(f"游资排名获取失败: {e}")
+
+    if not hot_money:
+        return {"error": "无法获取游资排名数据", "errors": errors}
+
+    return {
+        "action": "hot_money",
+        "count": len(hot_money[:limit]),
+        "hotMoney": hot_money[:limit],
         "errors": errors if errors else None,
     }
 

@@ -6,8 +6,11 @@ import path from "node:path";
  * Supports both paper portfolio (local JSON) and live broker positions.
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { MarketDataProvider } from "../data/market-data-provider.js";
+import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
-import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { computeBatchStopAdvice } from "../services/stop-advisor.js";
+import type { KlineBar, Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -52,6 +55,7 @@ export function createPortfolioTool(
   api: OpenClawPluginApi,
   config: QuantTradingConfig,
   getEngine?: () => LiveEngine | null,
+  getDataProvider?: () => MarketDataProvider,
 ) {
   return {
     name: "portfolio",
@@ -59,6 +63,7 @@ export function createPortfolioTool(
       "管理投资组合（模拟 & 实盘）。" +
       "action=show 查看持仓, action=buy 买入, action=sell 卖出, " +
       "action=add_cash 追加资金, action=summary 组合摘要, " +
+      "action=diagnose 持仓诊断(含智能止盈止损建议), " +
       "action=live_sync 同步实盘持仓, action=live_orders 查看实盘订单, " +
       "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。",
     parameters: {
@@ -72,6 +77,7 @@ export function createPortfolioTool(
             "sell",
             "add_cash",
             "summary",
+            "diagnose",
             "live_sync",
             "live_orders",
             "live_trades",
@@ -89,6 +95,11 @@ export function createPortfolioTool(
         status_filter: {
           type: "string",
           description: "订单状态过滤 (submitted|filled|cancelled|rejected)",
+        },
+        style: {
+          type: "string",
+          enum: ["short", "mid", "long"],
+          description: "交易风格（仅 action=diagnose）: short=短线, mid=中线(默认), long=长线",
         },
       },
       required: ["action"],
@@ -379,6 +390,120 @@ export function createPortfolioTool(
           return {
             date: new Date().toISOString().slice(0, 10),
             netPnl: `¥${netPnl.toFixed(2)}`,
+          };
+        }
+
+        case "diagnose": {
+          // Gather positions from live engine or paper portfolio
+          let positions: Array<{ symbol: string; name?: string; avgCost: number; currentPrice?: number; quantity: number }> = [];
+          const engine = getEngine?.();
+          if (engine && engine.getStatus() === "running") {
+            const livePositions = engine.getPositions();
+            positions = livePositions.map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              avgCost: p.avgCost,
+              currentPrice: p.currentPrice ?? undefined,
+              quantity: p.quantity,
+            }));
+          } else {
+            const portfolio = await loadPortfolio(config);
+            positions = portfolio.positions.map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              avgCost: p.avgCost,
+              currentPrice: p.currentPrice ?? undefined,
+              quantity: p.quantity,
+            }));
+          }
+
+          if (positions.length === 0) {
+            return { ok: true, message: "当前无持仓，无需诊断" };
+          }
+
+          if (!getDataProvider) {
+            return { error: "数据源不可用，无法计算止盈止损建议" };
+          }
+
+          const provider = getDataProvider();
+          const klEndDate = new Date().toISOString().slice(0, 10);
+          const klStartDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const style = (args.style as "short" | "mid" | "long") ?? "mid";
+
+          // Fetch klines for all positions in parallel
+          const positionsWithBars = await Promise.all(
+            positions.map(async (pos) => {
+              const market = detectMarketFromSymbol(pos.symbol);
+              let bars: KlineBar[] = [];
+              let currentPrice = pos.currentPrice ?? pos.avgCost;
+              try {
+                bars = await provider.getKlines(pos.symbol, "1d", klStartDate, klEndDate, market);
+                if (bars.length > 0 && !pos.currentPrice) {
+                  currentPrice = bars[bars.length - 1].close;
+                }
+              } catch {
+                // Will return error for this position
+              }
+              try {
+                const quote = await provider.getQuote(pos.symbol, market);
+                if (quote) currentPrice = quote.price;
+              } catch {
+                // Use bar close as fallback
+              }
+              return { symbol: pos.symbol, entryPrice: pos.avgCost, currentPrice, bars };
+            }),
+          );
+
+          const results = computeBatchStopAdvice(positionsWithBars, { style });
+          const diagnostics = results.map((r, idx) => {
+            const pos = positions[idx];
+            if ("error" in r) {
+              return {
+                symbol: pos.symbol,
+                name: pos.name,
+                quantity: pos.quantity,
+                error: r.error,
+              };
+            }
+            const pnlPct = ((r.currentPrice - r.entryPrice) / r.entryPrice * 100).toFixed(2);
+            const rec = r.recommended;
+            const needStopLoss = r.currentPrice < rec.stopLoss;
+            return {
+              symbol: pos.symbol,
+              name: pos.name,
+              quantity: pos.quantity,
+              avgCost: `¥${r.entryPrice}`,
+              currentPrice: `¥${r.currentPrice}`,
+              unrealizedPnlPct: `${pnlPct}%`,
+              alert: needStopLoss ? "⚠️ 已跌破建议止损位" : null,
+              recommended: {
+                stopLoss: `¥${rec.stopLoss}`,
+                takeProfit: `¥${rec.takeProfit}`,
+                stopLossPct: `${(rec.stopLossPct * 100).toFixed(1)}%`,
+                takeProfitPct: `${(rec.takeProfitPct * 100).toFixed(1)}%`,
+                rewardRiskRatio: `${rec.rewardRiskRatio}:1`,
+                method: rec.method,
+                description: rec.description,
+              },
+              marketStats: {
+                ATR14: `¥${r.marketStats.atr14}`,
+                年化波动率: `${(r.marketStats.volatility20 * 100).toFixed(1)}%`,
+                MA20: `¥${r.marketStats.ma20}`,
+              },
+            };
+          });
+
+          const alerts = diagnostics.filter((d) => "alert" in d && d.alert);
+
+          return {
+            ok: true,
+            style: style === "short" ? "短线" : style === "mid" ? "中线" : "长线",
+            totalPositions: positions.length,
+            alerts: alerts.length > 0
+              ? `${alerts.length}只持仓需要关注止损`
+              : "所有持仓在安全范围内",
+            positions: diagnostics,
+            disclaimer: "以上为量化模型计算的参考建议，不构成投资建议，请结合自身判断决策。",
           };
         }
 

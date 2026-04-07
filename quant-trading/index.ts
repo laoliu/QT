@@ -157,6 +157,7 @@ import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
+import { createStopAdvisorTool } from "./src/tools/stop-advisor.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
 import { createStrategyExplorerTool } from "./src/tools/strategy-explorer.js";
 import { createStrategyHealthTool } from "./src/tools/strategy-health.js";
@@ -580,13 +581,20 @@ const quantTradingPlugin = {
     );
     void explorationHistoryStore.load();
 
+    // ── Shared Data Provider for tools (lazy singleton) ────────────
+    let _toolDataProvider: ReturnType<typeof createDataProvider> | null = null;
+    const getToolDataProvider = () => {
+      if (!_toolDataProvider) _toolDataProvider = createDataProvider(config);
+      return _toolDataProvider;
+    };
+
     // ── Tools (AI-callable) ──────────────────────────────────
     // Create tool instances once and share between registration and scheduled-task replay
     const toolInstances = {
       market_data: createMarketDataTool(api, config),
       stock_screen: createStockScreenTool(api, config, scanHistoryStore),
       backtest: createBacktestTool(api, config, backtestStore),
-      portfolio: createPortfolioTool(api, config, getEngine),
+      portfolio: createPortfolioTool(api, config, getEngine, getToolDataProvider),
       portfolio_backtest: createPortfolioBacktestTool(api, config),
       portfolio_rebalance: createPortfolioRebalanceTool(api, config, getEngine),
       trading_signal: createTradingSignalTool(api, config, signalHitRateTracker),
@@ -626,6 +634,29 @@ const quantTradingPlugin = {
       watchlist: createWatchlistTool(api, config),
       favorites: createFavoritesTool(api, config),
       conditional_order: createConditionalOrderTool(api, conditionalOrderService),
+      stop_advisor: createStopAdvisorTool(api, config, getToolDataProvider, async () => {
+        const engine = liveEngine;
+        if (engine && engine.getStatus() === "running") {
+          return engine.getPositions().map((p) => ({
+            symbol: p.symbol,
+            avgCost: p.avgCost,
+            currentPrice: p.currentPrice ?? undefined,
+            quantity: p.quantity,
+          }));
+        }
+        // Fallback to paper portfolio
+        const { default: fs } = await import("node:fs/promises");
+        const { default: path } = await import("node:path");
+        const { default: os } = await import("node:os");
+        const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+        try {
+          const raw = await fs.readFile(path.join(dir, "portfolio-paper.json"), "utf-8");
+          const portfolio = JSON.parse(raw) as { positions: Array<{ symbol: string; avgCost: number; currentPrice?: number; quantity: number }> };
+          return portfolio.positions;
+        } catch {
+          return [];
+        }
+      }),
       dca_schedule: createDcaScheduleTool(api, dcaScheduleService),
       breakout_monitor: createBreakoutMonitorTool(api, config, breakoutMonitor),
       trade_journal: createTradeJournalTool(api, tradeJournal),
@@ -642,7 +673,7 @@ const quantTradingPlugin = {
       institutional_flow: createInstitutionalFlowTool(api, config),
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
-      stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
+      stock_recommend: createStockRecommendTool(api, config, scanHistoryStore, getToolDataProvider),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
           const end = new Date().toISOString().slice(0, 10);
@@ -683,6 +714,7 @@ const quantTradingPlugin = {
       watchlist: "自选股管理",
       favorites: "股票收藏",
       conditional_order: "条件单",
+      stop_advisor: "智能止盈止损",
       dca_schedule: "定投计划",
       trade_journal: "交易笔记",
       performance_attribution: "绩效归因",

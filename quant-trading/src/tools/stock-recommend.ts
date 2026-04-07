@@ -6,8 +6,11 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
+import type { MarketDataProvider } from "../data/market-data-provider.js";
+import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
-import type { QuantTradingConfig } from "../types.js";
+import { computeStopAdvice } from "../services/stop-advisor.js";
+import type { KlineBar, QuantTradingConfig } from "../types.js";
 
 // ── Screener rotation to avoid returning the same stocks every call ──
 // When the AI doesn't specify a screenerId, we cycle through diverse screeners
@@ -61,6 +64,7 @@ export function createStockRecommendTool(
   _api: OpenClawPluginApi,
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
+  getDataProvider?: () => MarketDataProvider,
 ) {
   return {
     name: "stock_recommend",
@@ -159,6 +163,7 @@ export function createStockRecommendTool(
           market,
           config,
           scanHistoryStore,
+          getDataProvider,
         );
       }
 
@@ -241,6 +246,38 @@ export function createStockRecommendTool(
       const recommended = backtested.slice(0, count);
       const insufficient = recommended.length < count;
 
+      // ── Step 4: Compute stop-loss / take-profit advice ──────────
+      const stopAdviceMap = new Map<string, { stopLoss: string; takeProfit: string; stopLossPct: string; takeProfitPct: string; rewardRiskRatio: string; method: string; description: string }>();
+      if (getDataProvider) {
+        const provider = getDataProvider();
+        const klEndDate = new Date().toISOString().slice(0, 10);
+        const klStartDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        await Promise.all(
+          recommended.map(async (r) => {
+            try {
+              const market = detectMarketFromSymbol(r.symbol);
+              const bars: KlineBar[] = await provider.getKlines(r.symbol, "1d", klStartDate, klEndDate, market);
+              if (bars.length < 5) return;
+              const quote = await provider.getQuote(r.symbol, market);
+              const currentPrice = quote?.price ?? bars[bars.length - 1].close;
+              const advice = computeStopAdvice(r.symbol, currentPrice, currentPrice, bars, { style: "mid" });
+              const rec = advice.recommended;
+              stopAdviceMap.set(r.symbol, {
+                stopLoss: `¥${rec.stopLoss}`,
+                takeProfit: `¥${rec.takeProfit}`,
+                stopLossPct: `${(rec.stopLossPct * 100).toFixed(1)}%`,
+                takeProfitPct: `${(rec.takeProfitPct * 100).toFixed(1)}%`,
+                rewardRiskRatio: `${rec.rewardRiskRatio}:1`,
+                method: rec.method,
+                description: rec.description,
+              });
+            } catch {
+              // Non-fatal — skip stop advice for this stock
+            }
+          }),
+        );
+      }
+
       return {
         ok: true,
         pipeline: `stock_screen(${screenerId}, ${screenResult.universe}) → strategy_router(profile_route_backtest) → rank`,
@@ -274,6 +311,7 @@ export function createStockRecommendTool(
             winRate: `${r.backtest.winRate.toFixed(1)}%`,
             totalTrades: r.backtest.totalTrades,
           },
+          stopAdvice: stopAdviceMap.get(r.symbol) ?? null,
           warnings: r.warnings,
         })),
         note: insufficient
@@ -307,6 +345,7 @@ async function runPredictiveRecommend(
   market: string,
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
+  getDataProvider?: () => MarketDataProvider,
 ): Promise<Record<string, unknown>> {
   const limit = Math.max(count * 5, 20);
 
@@ -499,6 +538,39 @@ async function runPredictiveRecommend(
     long: "长期(60日+)",
   };
 
+  // ── Step 7: Compute stop-loss / take-profit advice ──────────────
+  const stopAdviceMap = new Map<string, { stopLoss: string; takeProfit: string; stopLossPct: string; takeProfitPct: string; rewardRiskRatio: string; method: string; description: string }>();
+  if (getDataProvider) {
+    const provider = getDataProvider();
+    const klEndDate = new Date().toISOString().slice(0, 10);
+    const klStartDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await Promise.all(
+      recommended.map(async (r) => {
+        try {
+          const mkt = detectMarketFromSymbol(r.symbol);
+          const bars: KlineBar[] = await provider.getKlines(r.symbol, "1d", klStartDate, klEndDate, mkt);
+          if (bars.length < 5) return;
+          const quote = await provider.getQuote(r.symbol, mkt);
+          const currentPrice = quote?.price ?? bars[bars.length - 1].close;
+          const riskStyle = r.horizon === "short" ? "short" : r.horizon === "long" ? "long" : "mid";
+          const advice = computeStopAdvice(r.symbol, currentPrice, currentPrice, bars, { style: riskStyle as "short" | "mid" | "long" });
+          const rec = advice.recommended;
+          stopAdviceMap.set(r.symbol, {
+            stopLoss: `¥${rec.stopLoss}`,
+            takeProfit: `¥${rec.takeProfit}`,
+            stopLossPct: `${(rec.stopLossPct * 100).toFixed(1)}%`,
+            takeProfitPct: `${(rec.takeProfitPct * 100).toFixed(1)}%`,
+            rewardRiskRatio: `${rec.rewardRiskRatio}:1`,
+            method: rec.method,
+            description: rec.description,
+          });
+        } catch {
+          // Non-fatal
+        }
+      }),
+    );
+  }
+
   return {
     ok: true,
     mode: "predictive",
@@ -529,6 +601,7 @@ async function runPredictiveRecommend(
       volumeRatio: r.volumeRatio ? `${r.volumeRatio.toFixed(1)}x` : undefined,
       chipAccumulation: r.chip,
       institutionalFlow: r.institutional,
+      stopAdvice: stopAdviceMap.get(r.symbol) ?? null,
       scoringBreakdown: {
         主力吸筹: `${r.scoring.chip.toFixed(1)} (30%)`,
         量价信号: `${r.scoring.screen.toFixed(1)} (20%)`,

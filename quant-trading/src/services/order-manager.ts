@@ -16,6 +16,7 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { IBrokerAdapter, OrderRequest } from "../broker/adapter.js";
 import type {
+  AutoStopLossConfig,
   BrokerAccount,
   Fill,
   LivePosition,
@@ -27,6 +28,7 @@ import type {
   TradingSignal,
 } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import type { ConditionalOrderService } from "./conditional-order.js";
 import { ConfirmationManager } from "./confirmation-manager.js";
 import { computePositionSize } from "./position-sizer.js";
 import { RiskGate } from "./risk-gate.js";
@@ -169,6 +171,7 @@ export class OrderManager {
   private confirmMgr: ConfirmationManager;
   private api: OpenClawPluginApi | null;
   private tradeCb?: (trade: TradeRecord) => void;
+  private conditionalOrderSvc: ConditionalOrderService | null = null;
 
   // Tracks open buy orders for a symbol so we can match exits to entries
   // symbol → list of open entry order IDs (queue: FIFO)
@@ -232,6 +235,11 @@ export class OrderManager {
   /** Set a callback that fires when a trade is completed (sell fill matched to entry). */
   setTradeCallback(cb: (trade: TradeRecord) => void): void {
     this.tradeCb = cb;
+  }
+
+  /** Wire the ConditionalOrderService for auto stop-loss/take-profit on fill. */
+  setConditionalOrderService(svc: ConditionalOrderService): void {
+    this.conditionalOrderSvc = svc;
   }
 
   get confirmationManager(): ConfirmationManager {
@@ -521,6 +529,15 @@ export class OrderManager {
       release();
     }
 
+    // Post-fill hook: auto stop-loss/take-profit for fully filled buy orders
+    if (
+      order &&
+      order.status === "filled" &&
+      (fill.side === "buy" || fill.side === "cover" || fill.side === "buy_open")
+    ) {
+      void this.handlePostFillStopLoss(order);
+    }
+
     // Generate trade record for sell/close fills
     if (
       fill.side === "sell" ||
@@ -583,6 +600,79 @@ export class OrderManager {
     await updateOrder(orderId, { status }, this.cfg);
     if (status === "rejected") {
       this.log(`订单被拒绝: ${orderId.slice(0, 8)}`);
+    }
+  }
+
+  /**
+   * Post-fill hook: automatically create stop-loss and take-profit conditional
+   * orders when a buy/cover order is fully filled.
+   */
+  private async handlePostFillStopLoss(order: Order): Promise<void> {
+    const svc = this.conditionalOrderSvc;
+    if (!svc) return;
+
+    const autoCfg: AutoStopLossConfig | undefined = this.cfg.tradingAccount?.autoStopLoss;
+
+    // Feature not enabled — check if we should prompt the user
+    if (!autoCfg?.enabled) {
+      const shouldPrompt = autoCfg?.promptWhenNoRule !== false; // default true
+      if (shouldPrompt) {
+        const msg =
+          `💡 订单已成交: ${order.side} ${order.symbol} ${order.quantity}股 @ ¥${(order.avgFillPrice ?? order.price ?? 0).toFixed(2)}\n` +
+          `当前未配置自动止损止盈规则。建议在 plugin config 中设置 tradingAccount.autoStopLoss.enabled = true，` +
+          `或手动使用条件单工具设置止损止盈。`;
+        this.log(msg);
+      }
+      return;
+    }
+
+    const fillPrice = order.avgFillPrice ?? order.price ?? 0;
+    if (fillPrice <= 0) return;
+
+    const filledQty = order.filledQty ?? order.quantity;
+    if (filledQty <= 0) return;
+
+    const stopLossPct = autoCfg.stopLossPct ?? 0.05;
+    const takeProfitPct = autoCfg.takeProfitPct ?? 0.15;
+
+    // Create stop-loss order
+    if (stopLossPct > 0) {
+      try {
+        const stopPrice = fillPrice * (1 - stopLossPct);
+        const slId = svc.addStopLoss({
+          symbol: order.symbol,
+          entryPrice: fillPrice,
+          stopPrice,
+          quantity: filledQty,
+          strategyId: order.strategyId,
+          description: `自动止损: ${order.symbol} 成交价 ¥${fillPrice.toFixed(2)}, 止损 -${(stopLossPct * 100).toFixed(1)}% @ ¥${stopPrice.toFixed(2)}`,
+        });
+        this.log(
+          `自动止损已创建 [${slId}]: ${order.symbol} 止损价 ¥${stopPrice.toFixed(2)} (-${(stopLossPct * 100).toFixed(1)}%)`,
+        );
+      } catch (err) {
+        this.log(`自动止损创建失败: ${(err as Error).message}`);
+      }
+    }
+
+    // Create take-profit order
+    if (takeProfitPct > 0) {
+      try {
+        const targetPrice = fillPrice * (1 + takeProfitPct);
+        const tpId = svc.addTakeProfit({
+          symbol: order.symbol,
+          entryPrice: fillPrice,
+          targetPrice,
+          quantity: filledQty,
+          strategyId: order.strategyId,
+          description: `自动止盈: ${order.symbol} 成交价 ¥${fillPrice.toFixed(2)}, 止盈 +${(takeProfitPct * 100).toFixed(1)}% @ ¥${targetPrice.toFixed(2)}`,
+        });
+        this.log(
+          `自动止盈已创建 [${tpId}]: ${order.symbol} 目标价 ¥${targetPrice.toFixed(2)} (+${(takeProfitPct * 100).toFixed(1)}%)`,
+        );
+      } catch (err) {
+        this.log(`自动止盈创建失败: ${(err as Error).message}`);
+      }
     }
   }
 

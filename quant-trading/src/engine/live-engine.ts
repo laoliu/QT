@@ -23,6 +23,7 @@ import type { IBrokerAdapter } from "../broker/adapter.js";
 import { createBrokerAdapter } from "../broker/index.js";
 import { DataStalenessMonitor } from "../services/data-staleness-monitor.js";
 import type { StalenessAlertCallback } from "../services/data-staleness-monitor.js";
+import type { ConditionalOrderService } from "../services/conditional-order.js";
 import { isCnMarketOpen } from "../broker/paper-broker.js";
 import { tryNotify } from "../services/notify-helper.js";
 import { OrderManager } from "../services/order-manager.js";
@@ -112,6 +113,8 @@ export class LiveEngine implements OpenClawPluginService {
   private watchedSymbolsCb: ((symbols: string[]) => void) | undefined;
   /** Optional callback to detect current market regime (for auto-switch). */
   private regimeFn: (() => Promise<string | null>) | undefined;
+  /** Optional ConditionalOrderService for auto stop-loss/take-profit on fill. */
+  private conditionalOrderSvc: ConditionalOrderService | null = null;
   /** Last detected market regime. */
   private lastRegime: string | null = null;
   /** Counter for regime checks (check every 10 syncs = ~10 min). */
@@ -162,6 +165,15 @@ export class LiveEngine implements OpenClawPluginService {
     this.watchedSymbolsCb = cb;
   }
 
+  /** Wire ConditionalOrderService for auto stop-loss/take-profit on buy fills. */
+  setConditionalOrderService(svc: ConditionalOrderService): void {
+    this.conditionalOrderSvc = svc;
+    // If the engine is already running, wire it now
+    if (this.orderMgr) {
+      this.orderMgr.setConditionalOrderService(svc);
+    }
+  }
+
   /** Set a callback to detect market regime for auto-switch. */
   setRegimeCallback(fn: () => Promise<string | null>): void {
     this.regimeFn = fn;
@@ -195,6 +207,7 @@ export class LiveEngine implements OpenClawPluginService {
       // Create order manager
       const mgr = new OrderManager(this.cfg, brokerAdapter, this.api);
       if (this.tradeCb) mgr.setTradeCallback(this.tradeCb);
+      if (this.conditionalOrderSvc) mgr.setConditionalOrderService(this.conditionalOrderSvc);
       this.orderMgr = mgr;
 
       // Start Python live_engine.py

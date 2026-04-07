@@ -211,6 +211,28 @@
               }
             }
           },
+          "autoStopLoss": {
+            "type": "object",
+            "description": "Auto stop-loss/take-profit configuration: automatically create conditional orders when a buy order is filled",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Enable automatic stop-loss/take-profit on fill (default: false)"
+              },
+              "stopLossPct": {
+                "type": "number",
+                "description": "Default stop-loss percentage as a positive number, e.g. 0.05 = -5% (default: 0.05)"
+              },
+              "takeProfitPct": {
+                "type": "number",
+                "description": "Default take-profit percentage as a positive number, e.g. 0.15 = +15% (default: 0.15)"
+              },
+              "promptWhenNoRule": {
+                "type": "boolean",
+                "description": "If true, send a reminder when no default rule is configured (default: true)"
+              }
+            }
+          },
           "futu": {
             "type": "object",
             "description": "Futu OpenD broker configuration",

@@ -847,6 +847,9 @@ const quantTradingPlugin = {
     });
     conditionalOrderService.start();
 
+    // Wire ConditionalOrderService to LiveEngine for auto stop-loss/take-profit on fill
+    liveEngine.setConditionalOrderService(conditionalOrderService);
+
     // Wire price alert triggers to AlertStore + EventBus for persistence and SSE
     priceAlertService.setAlertCallback((severity, message, metadata) => {
       alertStore.add(severity, "price_alert", message, metadata);

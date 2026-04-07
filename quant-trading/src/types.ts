@@ -780,6 +780,18 @@ export type IBBrokerConfig = {
   accountId?: string; // IB account string, e.g. "U1234567"
 };
 
+/** Auto stop-loss / take-profit configuration applied after order fills. */
+export type AutoStopLossConfig = {
+  /** Enable automatic stop-loss/take-profit on fill (default: false). */
+  enabled: boolean;
+  /** Default stop-loss percentage as a positive number, e.g. 0.05 = -5% (default: 0.05). */
+  stopLossPct?: number;
+  /** Default take-profit percentage as a positive number, e.g. 0.15 = +15% (default: 0.15). */
+  takeProfitPct?: number;
+  /** If true, ask the user via ConfirmationManager when no default rule is configured (default: true). */
+  promptWhenNoRule?: boolean;
+};
+
 export type TradingAccountConfig = {
   mode: "paper" | "live";
   broker?: BrokerType;
@@ -793,6 +805,8 @@ export type TradingAccountConfig = {
   confirmationRequired?: boolean;
   /** Channel name/id to send confirmation messages */
   confirmationChannel?: string;
+  /** Auto stop-loss/take-profit after order fills. */
+  autoStopLoss?: AutoStopLossConfig;
   futu?: FutuBrokerConfig;
   qmt?: QMTBrokerConfig;
   ib?: IBBrokerConfig;

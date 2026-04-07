@@ -276,6 +276,39 @@ export type Portfolio = {
   updatedAt: string;
 };
 
+// ── Multi-Group Portfolio ──────────────────────────────────────
+
+export type PortfolioGroupType = "short_term" | "long_term" | "ipo" | "strategy" | "custom";
+
+export type PortfolioGroup = Portfolio & {
+  /** Group type tag for categorization */
+  groupType: PortfolioGroupType;
+  /** Optional description */
+  description?: string;
+  /** Per-group risk limits override */
+  riskLimits?: GroupRiskLimits;
+};
+
+export type GroupRiskLimits = {
+  /** Max weight for a single position (0-1, e.g. 0.3 = 30%) */
+  maxPositionPct?: number;
+  /** Max total group value as fraction of overall portfolio (0-1) */
+  maxGroupPct?: number;
+  /** Max concentration in a single industry/sector (0-1) */
+  maxSectorConcentration?: number;
+  /** Max number of positions in this group */
+  maxPositions?: number;
+  /** Per-group stop-loss threshold (0-1, e.g. 0.1 = 10% loss triggers alert) */
+  stopLossPct?: number;
+};
+
+export type MultiPortfolio = {
+  version: number;
+  groups: PortfolioGroup[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 // ── Screening ────────────────────────────────────────────────────
 
 export type ScreenCriteria = {

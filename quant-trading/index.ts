@@ -167,6 +167,15 @@ import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
+import { createMarketBreadthTool } from "./src/tools/market-breadth.js";
+import { createTradingPlanTool } from "./src/tools/trading-plan.js";
+import { createDividendAnalysisTool } from "./src/tools/dividend-analysis.js";
+import { createIpoCalendarTool } from "./src/tools/ipo-calendar.js";
+import { createConvertibleBondTool } from "./src/tools/convertible-bond.js";
+import { createStockCompareTool } from "./src/tools/stock-compare.js";
+import { createMarginDataTool } from "./src/tools/margin-data.js";
+import { createEtfAnalysisTool } from "./src/tools/etf-analysis.js";
+import { createFeeCalculatorTool } from "./src/tools/fee-calculator.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 
 /** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
@@ -654,6 +663,15 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      market_breadth: createMarketBreadthTool(api, config),
+      trading_plan: createTradingPlanTool(api, config),
+      dividend_analysis: createDividendAnalysisTool(api, config),
+      ipo_calendar: createIpoCalendarTool(api, config),
+      convertible_bond: createConvertibleBondTool(api, config),
+      stock_compare: createStockCompareTool(api, config),
+      margin_data: createMarginDataTool(api, config),
+      etf_analysis: createEtfAnalysisTool(api, config),
+      fee_calculator: createFeeCalculatorTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -704,6 +722,15 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      market_breadth: "市场广度",
+      trading_plan: "交易计划",
+      dividend_analysis: "分红分析",
+      ipo_calendar: "新股日历",
+      convertible_bond: "可转债分析",
+      stock_compare: "多股对比",
+      margin_data: "两融数据",
+      etf_analysis: "ETF分析",
+      fee_calculator: "费用计算",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

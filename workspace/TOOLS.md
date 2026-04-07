@@ -139,6 +139,88 @@ stock_screen(action="list_screeners")
 | `scheduled_task` | 定时任务调度 |
 | `cfo_assistant` | CFO级财报深度分析 |
 | `tech_moat` | 技术护城河分析 |
+| `fee_calculator` | 交易费用计算（佣金/印花税/过户费/保本价） |
+
+## 十、市场广度与情绪
+
+| 工具 | 用途 |
+|------|------|
+| `market_breadth` | 市场广度指标（涨跌家数比、涨停跌停、赚钱效应、综合情绪评分） |
+
+### market_breadth 调用要点
+
+```
+# 市场广度概览：涨跌家数、涨停跌停、赚钱效应
+market_breadth(action="overview")
+
+# 综合市场情绪评分（0-100，含贪婪/恐惧标签）
+market_breadth(action="sentiment")
+
+# 市场宽度：站上MA20比例
+market_breadth(action="ma_breadth", period=20)
+
+# 历史广度趋势
+market_breadth(action="history", days=20)
+```
+
+## 十一、交易计划管理
+
+| 工具 | 用途 |
+|------|------|
+| `trading_plan` | 结构化交易计划（入场区间/止损/止盈/仓位/理由） |
+
+### trading_plan 调用要点
+
+```
+# 创建交易计划
+trading_plan(action="create", symbol="600519", direction="buy",
+  entry_low=1700, entry_high=1750, stop_loss=1650, take_profit=1900,
+  position_size="1000股", reasoning="均线金叉+放量突破前高",
+  strategy="技术面突破", expires_at="2026-04-15", tags='["短线","白酒"]')
+
+# 查看活跃计划
+trading_plan(action="list")
+
+# 复盘：对比计划 vs 实际执行
+trading_plan(action="review")
+
+# 关闭计划并记录实际执行
+trading_plan(action="close", plan_id="xxx", exit_price=1880, actual_pnl=12000, followed_plan=true)
+```
+
+## 十二、新增市场分析工具
+
+| 工具 | 用途 |
+|------|------|
+| `dividend_analysis` | 分红分析（历史分红、分红日历、高股息筛选） |
+| `ipo_calendar` | 新股/IPO日历（申购日历、近期上市、中签率） |
+| `convertible_bond` | 可转债分析（双低策略、强赎预警、折价套利） |
+| `stock_compare` | 多股对比（价格走势、技术指标、基本面并排对比） |
+| `margin_data` | 融资融券/两融数据（市场余额、个股明细、趋势） |
+| `etf_analysis` | ETF分析（列表、多ETF对比、折溢价、资金流向） |
+
+### convertible_bond 调用要点
+
+```
+# 可转债双低策略筛选（低价格+低溢价率）
+convertible_bond(action="dual_low", max_price=130, max_premium=30)
+
+# 强赎预警
+convertible_bond(action="forced_redeem")
+
+# 折价转股套利机会
+convertible_bond(action="arbitrage")
+```
+
+### stock_compare 调用要点
+
+```
+# 多股综合对比（价格+技术+基本面）
+stock_compare(action="comprehensive", symbols="600519,000858,002304", days=60)
+
+# 仅价格走势对比
+stock_compare(action="price_compare", symbols="600519,000858", days=30)
+```
 
 ---
 

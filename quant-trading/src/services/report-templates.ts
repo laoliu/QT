@@ -23,7 +23,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "earnings_alert";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -123,6 +124,105 @@ async function generateMorningBrief(
     }
   } catch {
     // Portfolio data not available — skip
+  }
+
+  // Earnings alert for holdings — check if any position has earnings in the next 7 days
+  try {
+    const earningsRaw = await executeTool("earnings_calendar", {
+      action: "upcoming",
+      market: "cn",
+      days: 7,
+      limit: 100,
+    });
+    const earningsData = JSON.parse(earningsRaw);
+    const upcomingEarnings: Array<Record<string, unknown>> = earningsData.earnings ?? [];
+
+    if (upcomingEarnings.length > 0) {
+      // Get current portfolio positions
+      let positionCodes: string[] = [];
+      try {
+        const pfRaw = await executeTool("portfolio", { action: "view" });
+        const pfData = JSON.parse(pfRaw);
+        positionCodes = (pfData.positions ?? []).map(
+          (p: Record<string, unknown>) =>
+            String(p.code ?? p.symbol ?? "").replace(/\.(SH|SZ|sh|sz)$/, ""),
+        );
+      } catch {
+        // No portfolio — skip
+      }
+
+      if (positionCodes.length > 0) {
+        // Match holdings with upcoming earnings
+        const matched = upcomingEarnings.filter((e) => {
+          const eCode = String(e.symbol ?? "").replace(/\.(SH|SZ|sh|sz)$/, "");
+          return positionCodes.includes(eCode);
+        });
+
+        if (matched.length > 0) {
+          sections.push("📢 **持仓财报预警（未来7天）**");
+          for (const e of matched) {
+            const daysUntil = Math.ceil(
+              (new Date(String(e.disclosure_date)).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+            );
+            const dayLabel = daysUntil <= 1 ? "明日" : `${String(daysUntil)}天后`;
+            sections.push(
+              `  ⚠️ ${String(e.name)}(${String(e.symbol)}) — ${dayLabel}披露财报 (${String(e.disclosure_date)})`,
+            );
+
+            // Fetch analyst forecast for this stock
+            try {
+              const forecastRaw = await executeTool("earnings_calendar", {
+                action: "stock_forecast",
+                symbol: String(e.symbol),
+                market: "cn",
+              });
+              const forecastData = JSON.parse(forecastRaw);
+              const consensus = forecastData.consensus ?? forecastData.forecast;
+              if (consensus) {
+                const epsEst = consensus.eps_estimate ?? consensus.eps ?? consensus.meanEps;
+                const revEst = consensus.revenue_estimate ?? consensus.revenue ?? consensus.meanRevenue;
+                const parts: string[] = [];
+                if (epsEst != null) parts.push(`预期EPS: ${String(epsEst)}`);
+                if (revEst != null) {
+                  const revStr =
+                    Number(revEst) >= 1e8
+                      ? `${(Number(revEst) / 1e8).toFixed(2)}亿`
+                      : String(revEst);
+                  parts.push(`预期营收: ${revStr}`);
+                }
+                if (parts.length > 0) {
+                  sections.push(`    一致预期: ${parts.join(" | ")}`);
+                }
+              }
+            } catch {
+              // Forecast not available — skip
+            }
+
+            // Fetch CFO red_flags for financial risk
+            try {
+              const cfoRaw = await executeTool("cfo_assistant", {
+                action: "red_flags",
+                symbol: String(e.symbol),
+              });
+              const cfoData = JSON.parse(cfoRaw);
+              const flags = cfoData.red_flags ?? cfoData.flags ?? [];
+              if (Array.isArray(flags) && flags.length > 0) {
+                const flagSummary = flags
+                  .slice(0, 3)
+                  .map((f: Record<string, unknown>) => String(f.description ?? f.flag ?? f))
+                  .join("; ");
+                sections.push(`    🚩 风险提示: ${flagSummary}`);
+              }
+            } catch {
+              // CFO analysis not available — skip
+            }
+          }
+          sections.push("");
+        }
+      }
+    }
+  } catch {
+    // Earnings calendar not available — skip
   }
 
   return sections.join("\n");
@@ -1172,6 +1272,168 @@ async function generateMonthlyReport(
   return sections.join("\n");
 }
 
+/**
+ * Build an earnings alert report — checks portfolio holdings for upcoming earnings
+ * in the next 7 days, fetches analyst consensus and CFO red-flag analysis.
+ */
+async function generateEarningsAlert(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const sections: string[] = ["📢 **持仓财报预期提醒**", ""];
+
+  // 1) Get current portfolio positions
+  let positions: Array<Record<string, unknown>> = [];
+  try {
+    const pfRaw = await executeTool("portfolio", { action: "view" });
+    const pfData = JSON.parse(pfRaw);
+    positions = pfData.positions ?? [];
+  } catch {
+    return "📢 **持仓财报预期提醒**\n\n持仓数据获取失败，无法检查财报日程。";
+  }
+
+  if (positions.length === 0) {
+    return "📢 **持仓财报预期提醒**\n\n当前无持仓，无需检查财报日程。";
+  }
+
+  const positionCodes = positions.map(
+    (p) => String(p.code ?? p.symbol ?? "").replace(/\.(SH|SZ|sh|sz)$/, ""),
+  );
+  const positionMap = new Map(
+    positions.map((p) => [
+      String(p.code ?? p.symbol ?? "").replace(/\.(SH|SZ|sh|sz)$/, ""),
+      p,
+    ]),
+  );
+
+  // 2) Get upcoming earnings in the next 7 days
+  let upcomingEarnings: Array<Record<string, unknown>> = [];
+  try {
+    const earningsRaw = await executeTool("earnings_calendar", {
+      action: "upcoming",
+      market: "cn",
+      days: 7,
+      limit: 200,
+    });
+    const earningsData = JSON.parse(earningsRaw);
+    upcomingEarnings = earningsData.earnings ?? [];
+  } catch {
+    return "📢 **持仓财报预期提醒**\n\n财报日历数据获取失败。";
+  }
+
+  // 3) Match holdings with upcoming earnings
+  const matched = upcomingEarnings.filter((e) => {
+    const eCode = String(e.symbol ?? "").replace(/\.(SH|SZ|sh|sz)$/, "");
+    return positionCodes.includes(eCode);
+  });
+
+  if (matched.length === 0) {
+    sections.push(`已检查 ${String(positions.length)} 只持仓股，未来7天内暂无财报披露。`);
+    return sections.join("\n");
+  }
+
+  sections.push(
+    `⚠️ 以下 ${String(matched.length)} 只持仓股将在未来7天内披露财报：`,
+  );
+  sections.push("");
+
+  // 4) For each matched stock, generate detailed analysis
+  for (const e of matched) {
+    const code = String(e.symbol ?? "");
+    const name = String(e.name ?? "");
+    const discDate = String(e.disclosure_date ?? "");
+    const daysUntil = Math.ceil(
+      (new Date(discDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    );
+    const dayLabel = daysUntil <= 0 ? "今日" : daysUntil === 1 ? "明日" : `${String(daysUntil)}天后`;
+    const pos = positionMap.get(code.replace(/\.(SH|SZ|sh|sz)$/, ""));
+    const pnlStr =
+      pos?.unrealizedPnl != null
+        ? ` | 浮盈: ${Number(pos.unrealizedPnl) >= 0 ? "+" : ""}¥${Number(pos.unrealizedPnl).toFixed(2)}`
+        : "";
+
+    sections.push(`### ${name}(${code}) — ${dayLabel}披露 (${discDate})${pnlStr}`);
+
+    // Analyst consensus forecast
+    try {
+      const forecastRaw = await executeTool("earnings_calendar", {
+        action: "stock_forecast",
+        symbol: code,
+        market: "cn",
+      });
+      const forecastData = JSON.parse(forecastRaw);
+      const consensus = forecastData.consensus ?? forecastData.forecast;
+      if (consensus) {
+        const epsEst = consensus.eps_estimate ?? consensus.eps ?? consensus.meanEps;
+        const revEst = consensus.revenue_estimate ?? consensus.revenue ?? consensus.meanRevenue;
+        const growthEst = consensus.growth_rate ?? consensus.yoyGrowth;
+        const parts: string[] = [];
+        if (epsEst != null) parts.push(`预期EPS: ${String(epsEst)}`);
+        if (revEst != null) {
+          const revStr =
+            Number(revEst) >= 1e8
+              ? `${(Number(revEst) / 1e8).toFixed(2)}亿`
+              : String(revEst);
+          parts.push(`预期营收: ${revStr}`);
+        }
+        if (growthEst != null) parts.push(`预期增速: ${String(growthEst)}%`);
+        if (parts.length > 0) {
+          sections.push(`  📊 一致预期: ${parts.join(" | ")}`);
+        }
+      }
+    } catch {
+      sections.push("  📊 一致预期: 暂无数据");
+    }
+
+    // Surprise history (beat/miss track record)
+    try {
+      const surpriseRaw = await executeTool("earnings_calendar", {
+        action: "surprise_history",
+        symbol: code,
+        market: "cn",
+      });
+      const surpriseData = JSON.parse(surpriseRaw);
+      const history = surpriseData.history ?? surpriseData.surprises ?? [];
+      if (Array.isArray(history) && history.length > 0) {
+        const beats = history.filter(
+          (h: Record<string, unknown>) =>
+            h.surprise === "beat" || Number(h.surprisePct ?? 0) > 0,
+        ).length;
+        const total = history.length;
+        sections.push(`  📈 历史记录: 近${String(total)}次中${String(beats)}次超预期`);
+      }
+    } catch {
+      // Surprise history not available — skip
+    }
+
+    // CFO red_flags analysis
+    try {
+      const cfoRaw = await executeTool("cfo_assistant", {
+        action: "red_flags",
+        symbol: code,
+      });
+      const cfoData = JSON.parse(cfoRaw);
+      const flags = cfoData.red_flags ?? cfoData.flags ?? [];
+      if (Array.isArray(flags) && flags.length > 0) {
+        sections.push("  🚩 财务风险提示:");
+        for (const f of flags.slice(0, 3)) {
+          sections.push(`    • ${String(f.description ?? f.flag ?? f)}`);
+        }
+      } else {
+        sections.push("  ✅ 未检出明显财务风险信号");
+      }
+    } catch {
+      // CFO analysis not available — skip
+    }
+
+    sections.push("");
+  }
+
+  sections.push("💡 **建议**: 财报披露前后波动较大，建议关注仓位控制和止损设置。");
+
+  return sections.join("\n");
+}
+
 /** All available report templates. */
 export const REPORT_TEMPLATES: ReportTemplate[] = [
   {
@@ -1229,6 +1491,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "earnings_alert",
+    name: "持仓财报提醒",
+    description: "持仓股财报预期分析：检查未来7天持仓股财报披露，自动获取一致预期、超预期历史、财务风险提示",
+    defaultIntervalMinutes: 0,
+    generate: generateEarningsAlert,
   },
 ];
 

@@ -4,10 +4,16 @@ import path from "node:path";
 /**
  * portfolio tool — AI-callable for portfolio management.
  * Supports both paper portfolio (local JSON) and live broker positions.
+ * Supports multiple portfolios (sub-accounts) via portfolioId parameter.
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
-import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import type { Portfolio, PortfolioStore, PortfolioPosition, QuantTradingConfig } from "../types.js";
+
+function getPortfolioStorePath(config: QuantTradingConfig): string {
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return path.join(dir, "portfolio-store.json");
+}
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -20,32 +26,97 @@ function getLegacyPortfolioPath(config: QuantTradingConfig): string {
   return path.join(dir, "portfolio.json");
 }
 
-async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
-  // Try mode-specific file first, then legacy
-  for (const filePath of [getPortfolioPath(config), getLegacyPortfolioPath(config)]) {
-    try {
-      const raw = await fs.readFile(filePath, "utf-8");
-      return JSON.parse(raw) as Portfolio;
-    } catch {
-      continue;
-    }
-  }
+function createDefaultPortfolio(id = "default", name = "默认组合", cash = 100000): Portfolio {
   return {
-    id: "default",
-    name: "默认组合",
-    cash: 100000,
-    totalValue: 100000,
+    id,
+    name,
+    cash,
+    totalValue: cash,
     positions: [],
+    initialCash: cash,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 }
 
-async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): Promise<void> {
-  const filePath = getPortfolioPath(config);
+/**
+ * Load the multi-portfolio store.
+ * Migrates from single-portfolio format on first access.
+ */
+async function loadPortfolioStore(config: QuantTradingConfig): Promise<PortfolioStore> {
+  const storePath = getPortfolioStorePath(config);
+
+  // Try loading the new multi-portfolio store first
+  try {
+    const raw = await fs.readFile(storePath, "utf-8");
+    return JSON.parse(raw) as PortfolioStore;
+  } catch {
+    // Store doesn't exist yet — migrate from legacy single-portfolio
+  }
+
+  // Try loading legacy single-portfolio files
+  let legacyPortfolio: Portfolio | null = null;
+  for (const filePath of [getPortfolioPath(config), getLegacyPortfolioPath(config)]) {
+    try {
+      const raw = await fs.readFile(filePath, "utf-8");
+      legacyPortfolio = JSON.parse(raw) as Portfolio;
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  const now = new Date().toISOString();
+  if (legacyPortfolio) {
+    // Migrate: wrap existing portfolio into the store
+    legacyPortfolio.id = legacyPortfolio.id || "default";
+    const store: PortfolioStore = {
+      defaultId: legacyPortfolio.id,
+      portfolios: { [legacyPortfolio.id]: legacyPortfolio },
+      createdAt: now,
+      updatedAt: now,
+    };
+    await savePortfolioStore(store, config);
+    return store;
+  }
+
+  // No existing data — create fresh store with default portfolio
+  const defaultPf = createDefaultPortfolio();
+  const store: PortfolioStore = {
+    defaultId: "default",
+    portfolios: { default: defaultPf },
+    createdAt: now,
+    updatedAt: now,
+  };
+  return store;
+}
+
+async function savePortfolioStore(store: PortfolioStore, config: QuantTradingConfig): Promise<void> {
+  const filePath = getPortfolioStorePath(config);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  portfolio.updatedAt = new Date().toISOString();
-  await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
+  store.updatedAt = new Date().toISOString();
+  await fs.writeFile(filePath, JSON.stringify(store, null, 2));
+
+  // Also write the default portfolio to portfolio-paper.json for backward compatibility
+  const defaultPf = store.portfolios[store.defaultId];
+  if (defaultPf) {
+    const legacyPath = getPortfolioPath(config);
+    defaultPf.updatedAt = new Date().toISOString();
+    await fs.writeFile(legacyPath, JSON.stringify(defaultPf, null, 2));
+  }
+}
+
+/** Resolve portfolioId: use provided value, or fall back to store's default */
+function resolvePortfolioId(store: PortfolioStore, portfolioId?: string): string {
+  return portfolioId ?? store.defaultId;
+}
+
+/**
+ * Legacy single-portfolio loader — kept for backward compatibility with other modules.
+ */
+export async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
+  const store = await loadPortfolioStore(config);
+  return store.portfolios[store.defaultId] ?? createDefaultPortfolio();
 }
 
 export function createPortfolioTool(
@@ -56,11 +127,14 @@ export function createPortfolioTool(
   return {
     name: "portfolio",
     description:
-      "管理投资组合（模拟 & 实盘）。" +
+      "管理投资组合（模拟 & 实盘），支持多组合（子账户）管理。" +
       "action=show 查看持仓, action=buy 买入, action=sell 卖出, " +
       "action=add_cash 追加资金, action=summary 组合摘要, " +
+      "action=list_portfolios 列出所有组合, action=create_portfolio 创建子组合, " +
+      "action=delete_portfolio 删除组合, " +
       "action=live_sync 同步实盘持仓, action=live_orders 查看实盘订单, " +
-      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。",
+      "action=live_trades 查看成交记录, action=daily_pnl 当日盈亏。" +
+      "通过 portfolio_id 参数指定操作的组合，默认为 'default'。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -72,6 +146,9 @@ export function createPortfolioTool(
             "sell",
             "add_cash",
             "summary",
+            "list_portfolios",
+            "create_portfolio",
+            "delete_portfolio",
             "live_sync",
             "live_orders",
             "live_trades",
@@ -79,6 +156,19 @@ export function createPortfolioTool(
             "daily_pnl",
           ],
           description: "操作类型",
+        },
+        portfolio_id: {
+          type: "string",
+          description:
+            "组合ID，默认为 'default'。可选值如 'short_term'（短线）, 'long_term'（中长线）, 'ipo'（打新）等",
+        },
+        portfolio_name: {
+          type: "string",
+          description: "组合名称（创建组合时使用）",
+        },
+        initial_cash: {
+          type: "number",
+          description: "初始资金（创建组合时使用），默认 100000",
         },
         symbol: { type: "string", description: "标的代码" },
         name: { type: "string", description: "标的名称(可选)" },
@@ -95,44 +185,133 @@ export function createPortfolioTool(
     },
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
+      const portfolioId = args.portfolio_id as string | undefined;
 
       switch (action) {
+        // ── Multi-portfolio management actions ──────────────────
+
+        case "list_portfolios": {
+          const store = await loadPortfolioStore(config);
+          const portfolios = Object.values(store.portfolios).map((p) => ({
+            id: p.id,
+            name: p.name,
+            cash: `¥${p.cash.toFixed(2)}`,
+            totalValue: `¥${p.totalValue.toFixed(2)}`,
+            positionCount: p.positions.length,
+            isDefault: p.id === store.defaultId,
+            createdAt: p.createdAt,
+          }));
+
+          // Cross-portfolio aggregation
+          const totalCash = Object.values(store.portfolios).reduce((s, p) => s + p.cash, 0);
+          const totalValue = Object.values(store.portfolios).reduce((s, p) => s + p.totalValue, 0);
+          const totalPositions = Object.values(store.portfolios).reduce(
+            (s, p) => s + p.positions.length,
+            0,
+          );
+
+          return {
+            portfolioCount: portfolios.length,
+            defaultId: store.defaultId,
+            portfolios,
+            aggregate: {
+              totalCash: `¥${totalCash.toFixed(2)}`,
+              totalValue: `¥${totalValue.toFixed(2)}`,
+              totalPositions,
+            },
+          };
+        }
+
+        case "create_portfolio": {
+          const store = await loadPortfolioStore(config);
+          const newId = portfolioId ?? (args.portfolio_name as string)?.toLowerCase().replace(/\s+/g, "_");
+          if (!newId) {
+            return { error: "请提供 portfolio_id 或 portfolio_name" };
+          }
+          if (store.portfolios[newId]) {
+            return { error: `组合 '${newId}' 已存在` };
+          }
+          const newName = (args.portfolio_name as string) ?? newId;
+          const cash = (args.initial_cash as number) ?? 100000;
+          const newPortfolio = createDefaultPortfolio(newId, newName, cash);
+          store.portfolios[newId] = newPortfolio;
+          await savePortfolioStore(store, config);
+          return {
+            success: true,
+            message: `组合 '${newName}' (${newId}) 已创建`,
+            portfolio: {
+              id: newId,
+              name: newName,
+              cash: `¥${cash.toFixed(2)}`,
+              totalValue: `¥${cash.toFixed(2)}`,
+            },
+          };
+        }
+
+        case "delete_portfolio": {
+          const store = await loadPortfolioStore(config);
+          const deleteId = resolvePortfolioId(store, portfolioId);
+          if (deleteId === store.defaultId) {
+            return { error: "不能删除默认组合" };
+          }
+          const target = store.portfolios[deleteId];
+          if (!target) {
+            return { error: `组合 '${deleteId}' 不存在` };
+          }
+          if (target.positions.length > 0) {
+            return { error: `组合 '${deleteId}' 仍有 ${target.positions.length} 个持仓，请先清仓` };
+          }
+          delete store.portfolios[deleteId];
+          await savePortfolioStore(store, config);
+          return { success: true, message: `组合 '${deleteId}' 已删除` };
+        }
+
+        // ── Existing actions with portfolioId routing ──────────
+
         case "show":
         case "view": {
-          // Prefer live broker data when engine is running
-          const engine = getEngine?.();
-          if (engine && engine.getStatus() === "running") {
-            const account = engine.getAccount();
-            const positions = engine.getPositions();
-            if (account) {
-              return {
-                name: account.brokerType === "paper" ? "模拟组合" : "实盘组合",
-                source: account.brokerType,
-                cash: `¥${account.cash.toFixed(2)}`,
-                totalValue: `¥${account.totalAssets.toFixed(2)}`,
-                marketValue: `¥${account.marketValue.toFixed(2)}`,
-                profit: `¥${account.profit.toFixed(2)}`,
-                profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
-                positions: positions.map((p) => ({
-                  symbol: p.symbol,
-                  name: p.name,
-                  quantity: p.quantity,
-                  availableQty: p.availableQty,
-                  avgCost: `¥${p.avgCost.toFixed(3)}`,
-                  currentPrice: p.currentPrice != null ? `¥${p.currentPrice.toFixed(3)}` : "N/A",
-                  marketValue: p.marketValue != null ? `¥${p.marketValue.toFixed(2)}` : "N/A",
-                  pnl: p.unrealizedPnl != null ? `¥${p.unrealizedPnl.toFixed(2)}` : "N/A",
-                  pnlPct:
-                    p.unrealizedPnlPct != null
-                      ? `${(p.unrealizedPnlPct * 100).toFixed(2)}%`
-                      : "N/A",
-                })),
-              };
+          // Prefer live broker data when engine is running (only for default portfolio)
+          if (!portfolioId || portfolioId === "default") {
+            const engine = getEngine?.();
+            if (engine && engine.getStatus() === "running") {
+              const account = engine.getAccount();
+              const positions = engine.getPositions();
+              if (account) {
+                return {
+                  name: account.brokerType === "paper" ? "模拟组合" : "实盘组合",
+                  source: account.brokerType,
+                  cash: `¥${account.cash.toFixed(2)}`,
+                  totalValue: `¥${account.totalAssets.toFixed(2)}`,
+                  marketValue: `¥${account.marketValue.toFixed(2)}`,
+                  profit: `¥${account.profit.toFixed(2)}`,
+                  profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
+                  positions: positions.map((p) => ({
+                    symbol: p.symbol,
+                    name: p.name,
+                    quantity: p.quantity,
+                    availableQty: p.availableQty,
+                    avgCost: `¥${p.avgCost.toFixed(3)}`,
+                    currentPrice: p.currentPrice != null ? `¥${p.currentPrice.toFixed(3)}` : "N/A",
+                    marketValue: p.marketValue != null ? `¥${p.marketValue.toFixed(2)}` : "N/A",
+                    pnl: p.unrealizedPnl != null ? `¥${p.unrealizedPnl.toFixed(2)}` : "N/A",
+                    pnlPct:
+                      p.unrealizedPnlPct != null
+                        ? `${(p.unrealizedPnlPct * 100).toFixed(2)}%`
+                        : "N/A",
+                  })),
+                };
+              }
             }
           }
-          // Fallback to paper portfolio file
-          const portfolio = await loadPortfolio(config);
+          // Paper portfolio from store
+          const store = await loadPortfolioStore(config);
+          const pfId = resolvePortfolioId(store, portfolioId);
+          const portfolio = store.portfolios[pfId];
+          if (!portfolio) {
+            return { error: `组合 '${pfId}' 不存在。使用 action=list_portfolios 查看所有组合` };
+          }
           return {
+            id: portfolio.id,
             name: portfolio.name,
             source: "paper",
             cash: `¥${portfolio.cash.toFixed(2)}`,
@@ -150,7 +329,12 @@ export function createPortfolioTool(
         }
 
         case "buy": {
-          const portfolio = await loadPortfolio(config);
+          const store = await loadPortfolioStore(config);
+          const pfId = resolvePortfolioId(store, portfolioId);
+          const portfolio = store.portfolios[pfId];
+          if (!portfolio) {
+            return { error: `组合 '${pfId}' 不存在` };
+          }
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
@@ -160,7 +344,7 @@ export function createPortfolioTool(
           const cost = quantity * price;
           if (cost > portfolio.cash) {
             return {
-              error: `资金不足。需要 ¥${cost.toFixed(2)}，可用 ¥${portfolio.cash.toFixed(2)}`,
+              error: `资金不足。需要 ¥${cost.toFixed(2)}，可用 ¥${portfolio.cash.toFixed(2)}（组合: ${portfolio.name}）`,
             };
           }
 
@@ -182,16 +366,22 @@ export function createPortfolioTool(
           portfolio.totalValue =
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
+          await savePortfolioStore(store, config);
           return {
             success: true,
-            message: `买入 ${symbol} ${quantity}股 @ ¥${price}`,
+            message: `[${portfolio.name}] 买入 ${symbol} ${quantity}股 @ ¥${price}`,
+            portfolioId: pfId,
             cash: `¥${portfolio.cash.toFixed(2)}`,
           };
         }
 
         case "sell": {
-          const portfolio = await loadPortfolio(config);
+          const store = await loadPortfolioStore(config);
+          const pfId = resolvePortfolioId(store, portfolioId);
+          const portfolio = store.portfolios[pfId];
+          if (!portfolio) {
+            return { error: `组合 '${pfId}' 不存在` };
+          }
           const symbol = args.symbol as string;
           const quantity = args.quantity as number;
           const price = args.price as number;
@@ -200,7 +390,9 @@ export function createPortfolioTool(
           }
           const pos = portfolio.positions.find((p) => p.symbol === symbol);
           if (!pos || pos.quantity < quantity) {
-            return { error: `持仓不足: ${symbol} 当前持有 ${pos?.quantity ?? 0}股` };
+            return {
+              error: `持仓不足: ${symbol} 在组合 '${portfolio.name}' 中持有 ${pos?.quantity ?? 0}股`,
+            };
           }
 
           const proceeds = quantity * price;
@@ -212,46 +404,65 @@ export function createPortfolioTool(
           portfolio.totalValue =
             portfolio.cash +
             portfolio.positions.reduce((s, p) => s + p.quantity * (p.currentPrice ?? p.avgCost), 0);
-          await savePortfolio(portfolio, config);
+          await savePortfolioStore(store, config);
           return {
             success: true,
-            message: `卖出 ${symbol} ${quantity}股 @ ¥${price}`,
+            message: `[${portfolio.name}] 卖出 ${symbol} ${quantity}股 @ ¥${price}`,
+            portfolioId: pfId,
             cash: `¥${portfolio.cash.toFixed(2)}`,
           };
         }
 
         case "add_cash": {
-          const portfolio = await loadPortfolio(config);
+          const store = await loadPortfolioStore(config);
+          const pfId = resolvePortfolioId(store, portfolioId);
+          const portfolio = store.portfolios[pfId];
+          if (!portfolio) {
+            return { error: `组合 '${pfId}' 不存在` };
+          }
           const amount = args.amount as number;
           if (!amount || amount <= 0) return { error: "请提供正数金额" };
           portfolio.cash += amount;
           portfolio.totalValue += amount;
-          await savePortfolio(portfolio, config);
-          return { success: true, cash: `¥${portfolio.cash.toFixed(2)}` };
+          await savePortfolioStore(store, config);
+          return {
+            success: true,
+            portfolioId: pfId,
+            portfolioName: portfolio.name,
+            cash: `¥${portfolio.cash.toFixed(2)}`,
+          };
         }
 
         case "summary": {
-          // Prefer live broker data when engine is running
-          const engine = getEngine?.();
-          if (engine && engine.getStatus() === "running") {
-            const account = engine.getAccount();
-            const positions = engine.getPositions();
-            if (account) {
-              return {
-                name: account.brokerType === "paper" ? "模拟组合" : "实盘组合",
-                source: account.brokerType,
-                cash: `¥${account.cash.toFixed(2)}`,
-                marketValue: `¥${account.marketValue.toFixed(2)}`,
-                totalValue: `¥${account.totalAssets.toFixed(2)}`,
-                profit: `¥${account.profit.toFixed(2)}`,
-                profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
-                positionCount: positions.length,
-              };
+          // Prefer live broker data when engine is running (only for default portfolio)
+          if (!portfolioId || portfolioId === "default") {
+            const engine = getEngine?.();
+            if (engine && engine.getStatus() === "running") {
+              const account = engine.getAccount();
+              const positions = engine.getPositions();
+              if (account) {
+                return {
+                  name: account.brokerType === "paper" ? "模拟组合" : "实盘组合",
+                  source: account.brokerType,
+                  cash: `¥${account.cash.toFixed(2)}`,
+                  marketValue: `¥${account.marketValue.toFixed(2)}`,
+                  totalValue: `¥${account.totalAssets.toFixed(2)}`,
+                  profit: `¥${account.profit.toFixed(2)}`,
+                  profitPct: `${(account.profitPct * 100).toFixed(2)}%`,
+                  positionCount: positions.length,
+                };
+              }
             }
           }
-          const portfolio = await loadPortfolio(config);
+          const store = await loadPortfolioStore(config);
+          const pfId = resolvePortfolioId(store, portfolioId);
+          const portfolio = store.portfolios[pfId];
+          if (!portfolio) {
+            return { error: `组合 '${pfId}' 不存在` };
+          }
           const totalCost = portfolio.positions.reduce((s, p) => s + p.quantity * p.avgCost, 0);
           return {
+            id: portfolio.id,
             name: portfolio.name,
             source: "paper",
             cash: `¥${portfolio.cash.toFixed(2)}`,
@@ -260,6 +471,8 @@ export function createPortfolioTool(
             positionCount: portfolio.positions.length,
           };
         }
+
+        // ── Live engine actions (unchanged, operate on broker account) ──
 
         case "live_sync": {
           const engine = getEngine?.();
@@ -388,3 +601,16 @@ export function createPortfolioTool(
     },
   };
 }
+
+/**
+ * Load all portfolios from the store — exported for use by other modules
+ * (e.g. risk analysis cross-portfolio aggregation).
+ */
+export async function loadAllPortfolios(
+  config: QuantTradingConfig,
+): Promise<Record<string, Portfolio>> {
+  const store = await loadPortfolioStore(config);
+  return store.portfolios;
+}
+
+export { loadPortfolioStore, savePortfolioStore };

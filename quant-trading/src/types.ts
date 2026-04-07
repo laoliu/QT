@@ -276,6 +276,20 @@ export type Portfolio = {
   updatedAt: string;
 };
 
+/**
+ * Multi-portfolio store — persisted as a single JSON file.
+ * Contains multiple named portfolios (sub-accounts) keyed by portfolio ID.
+ * Supports use cases like: short-term trading, mid-/long-term holding, IPO subscription, etc.
+ */
+export type PortfolioStore = {
+  /** Default portfolio ID to use when none is specified */
+  defaultId: string;
+  /** All portfolios keyed by ID */
+  portfolios: Record<string, Portfolio>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 // ── Screening ────────────────────────────────────────────────────
 
 export type ScreenCriteria = {

@@ -8,7 +8,8 @@ import type { LiveEngine } from "../engine/live-engine.js";
  * HTTP API for portfolio operations (REST-style).
  * Used by the web dashboard and external integrations.
  */
-import type { Portfolio, QuantTradingConfig, OrderSide, OrderType, MarketType } from "../types.js";
+import type { Portfolio, PortfolioStore, QuantTradingConfig, OrderSide, OrderType, MarketType } from "../types.js";
+import { loadPortfolioStore } from "../tools/portfolio.js";
 
 // ── Pagination Helper ────────────────────────────────────────────
 
@@ -257,6 +258,59 @@ export async function handlePaperPortfolioOnly(
       positions: [],
     },
   };
+}
+
+/**
+ * GET /quant/api/portfolios — list all portfolios (multi-portfolio support).
+ * Returns summary of all sub-accounts with aggregate totals.
+ */
+export async function handleListPortfoliosApi(
+  config: QuantTradingConfig,
+): Promise<Record<string, unknown>> {
+  const store = await loadPortfolioStore(config);
+  const portfolios = Object.values(store.portfolios).map((p) => ({
+    id: p.id,
+    name: p.name,
+    cash: p.cash,
+    totalValue: p.totalValue,
+    positionCount: p.positions.length,
+    isDefault: p.id === store.defaultId,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  }));
+
+  const totalCash = Object.values(store.portfolios).reduce((s, p) => s + p.cash, 0);
+  const totalValue = Object.values(store.portfolios).reduce((s, p) => s + p.totalValue, 0);
+  const totalPositions = Object.values(store.portfolios).reduce(
+    (s, p) => s + p.positions.length,
+    0,
+  );
+
+  return {
+    status: "ok",
+    data: {
+      defaultId: store.defaultId,
+      portfolios,
+      aggregate: { totalCash, totalValue, totalPositions },
+    },
+  };
+}
+
+/**
+ * GET /quant/api/portfolio?portfolioId=xxx — returns specific portfolio snapshot.
+ * Supports multi-portfolio by portfolio ID.
+ */
+export async function handlePortfolioByIdApi(
+  config: QuantTradingConfig,
+  portfolioId: string,
+  getEngine?: () => LiveEngine | null,
+): Promise<Record<string, unknown>> {
+  const store = await loadPortfolioStore(config);
+  const portfolio = store.portfolios[portfolioId];
+  if (!portfolio) {
+    return { status: "error", message: `组合 '${portfolioId}' 不存在` };
+  }
+  return { status: "ok", source: "paper", data: portfolio };
 }
 
 // ── Mode-specific file readers (for cross-mode queries) ──────────

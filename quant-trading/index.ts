@@ -86,6 +86,7 @@ import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
+import { AuctionMonitor } from "./src/services/auction-monitor.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
 import { ComposedStrategyStore } from "./src/services/composed-strategy-store.js";
 import { ConditionalOrderService } from "./src/services/conditional-order.js";
@@ -426,6 +427,38 @@ const quantTradingPlugin = {
     });
     breakoutMonitor.start();
 
+    // ── Auction Monitor (集合竞价异动监控) ─────────────────────
+    const auctionMonitor = new AuctionMonitor({
+      pollIntervalMs: 5_000,
+      highOpenPct: 3,
+      lowOpenPct: -3,
+      volumeSurgeRatio: 3.0,
+      lateWithdrawalDropRatio: 0.5,
+      dataDir: config.dataDir ?? null,
+    });
+    auctionMonitor.setQuoteFn(async (symbol: string) => {
+      const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
+      const market = detectMarketFromSymbol(symbol);
+      const quote = await dataProviderForAlerts.getQuote(symbol, market as never);
+      if (!quote) return null;
+      return {
+        symbol,
+        name: quote.symbol?.name,
+        price: quote.price,
+        prevClose: quote.prevClose,
+        volume: quote.volume,
+        changePct: quote.changePct,
+      };
+    });
+    auctionMonitor.setNotifyFn((m: string) => tryNotify(api, m));
+    auctionMonitor.setPositionSymbolsFn(async () => {
+      const positions = liveEngine.getPositions();
+      return positions.map((p: { symbol: string }) => p.symbol);
+    });
+    auctionMonitor.setFavoritesSymbolsFn(() => {
+      return favoritesStore.listFavorites().map((f) => f.code);
+    });
+
     // ── Data Warehouse (persistent K-line cache) ─────────────────
     const storage = new InMemoryStorage(
       config.dataDir ? `${config.dataDir}/quant-storage.json` : null,
@@ -756,6 +789,12 @@ const quantTradingPlugin = {
         if (!template) return null;
         return async () => template.generate(executeToolByName, config);
       }
+      if (meta.toolName === "__auction_monitor_start") {
+        return async () => {
+          auctionMonitor.start();
+          return "集合竞价监控已启动，将在 09:25 自动结束";
+        };
+      }
       if (meta.toolName) {
         const toolName = meta.toolName;
         const toolArgs = meta.toolArgs ?? {};
@@ -764,6 +803,47 @@ const quantTradingPlugin = {
       return null;
     });
     taskScheduler.loadFromDisk();
+
+    // ── Auction Monitor — auto-schedule for 09:15 CST each trading day ──
+    {
+      const scheduleNextAuctionMonitor = () => {
+        const now = new Date();
+        // Compute next 09:15 Shanghai time
+        const shanghaiNow = new Date(
+          now.toLocaleString("en-US", { timeZone: "Asia/Shanghai" }),
+        );
+        const target = new Date(shanghaiNow);
+        target.setHours(9, 15, 0, 0);
+
+        // If already past 09:15 today, schedule for tomorrow
+        if (shanghaiNow >= target) {
+          target.setDate(target.getDate() + 1);
+        }
+
+        // Skip weekends (Shanghai local day)
+        const day = target.getDay();
+        if (day === 0) target.setDate(target.getDate() + 1); // Sunday → Monday
+        if (day === 6) target.setDate(target.getDate() + 2); // Saturday → Monday
+
+        // Convert back to local time for delay calculation
+        const delayMs = target.getTime() - shanghaiNow.getTime();
+
+        taskScheduler.scheduleDelay(
+          "集合竞价异动监控 (09:15-09:25)",
+          Math.max(0, delayMs),
+          async () => {
+            auctionMonitor.start();
+            return "集合竞价监控已启动，将在 09:25 自动结束";
+          },
+          {
+            // Repeat daily (~24h). The run function will re-schedule precisely.
+            intervalMs: 24 * 60 * 60 * 1000,
+            meta: { toolName: "__auction_monitor_start" },
+          },
+        );
+      };
+      scheduleNextAuctionMonitor();
+    }
 
     // ── Price Alert Service (条件预警) ──────────────────────────────
     const priceAlertService = new PriceAlertService({
@@ -1193,6 +1273,7 @@ const quantTradingPlugin = {
         conditionalOrderService.stop();
         dcaScheduleService.destroy();
         breakoutMonitor.destroy();
+        auctionMonitor.destroy();
       },
     });
     // EquityHistory + InMemoryStorage lifecycle: flush dirty data on shutdown

@@ -17,9 +17,6 @@ importers:
       '@slack/web-api':
         specifier: ^7.15.0
         version: 7.15.0
-      xlsx:
-        specifier: ^0.18.5
-        version: 0.18.5
     devDependencies:
       typescript:
         specifier: ^5.8.0
@@ -29,6 +26,10 @@ importers:
         version: 3.2.4(@types/node@25.5.0)(jiti@2.6.1)(yaml@2.8.3)
 
   quant-trading:
+    dependencies:
+      xlsx:
+        specifier: ^0.18.5
+        version: 0.18.5
     devDependencies:
       openclaw:
         specifier: latest

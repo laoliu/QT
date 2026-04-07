@@ -57,21 +57,17 @@ describe("splitBasketOrder", () => {
       expect(result.strategy).toBe("equal");
       expect(result.totalAmount).toBe(300_000);
       expect(result.investableAmount).toBe(300_000);
-      expect(result.legs).toHaveLength(3);
-      expect(result.skipped).toHaveLength(0);
 
-      // Each leg gets 1/3 weight
+      // 600519: allocatedAmount = 300000 * (1/3) = 100000, 100000/1800 = 55.55
+      // roundToLot(55.55, 100) = 0 → skipped (too expensive for 1 lot)
+      expect(result.legs).toHaveLength(2);
+      expect(result.skipped).toHaveLength(1);
+      expect(result.skipped[0].symbol).toBe("600519");
+
       for (const leg of result.legs) {
         expect(leg.weight).toBeCloseTo(1 / 3, 5);
         expect(leg.side).toBe("buy");
       }
-
-      // 600519: 100000/1800 = 55.55 → floor to 0 lots of 100 = 0? No: 55.55 → 0 (floor of 55.55/100)*100 = 0
-      // Actually: roundToLot(55.55, 100) → Math.floor((55.55 + 1e-9) / 100) * 100 = 0
-      // So 600519 gets 0 shares and is skipped
-      // Wait — let me recalculate: allocatedAmount = 300000 * (1/3) = 100000
-      // 600519: 100000/1800 = 55.55 → roundToLot(55.55, 100) = 0
-      // This means expensive stocks with small allocation get skipped
     });
 
     it("rounds to lot size correctly", async () => {

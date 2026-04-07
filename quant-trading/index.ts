@@ -116,6 +116,7 @@ import { TaskScheduler } from "./src/services/task-scheduler.js";
 import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
+import { TradePlanStore } from "./src/services/trade-plan-store.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
@@ -163,6 +164,7 @@ import { createStrategyHealthTool } from "./src/tools/strategy-health.js";
 import { createStrategyOptimizerTool } from "./src/tools/strategy-optimizer.js";
 import { createStrategyRouterTool } from "./src/tools/strategy-router.js";
 import { createTechMoatTool } from "./src/tools/tech-moat.js";
+import { createTradePlanTool } from "./src/tools/trade-plan.js";
 import { createTradeJournalTool } from "./src/tools/trade-journal.js";
 import { createTradingSignalTool } from "./src/tools/trading-signal.js";
 import { createValueInvestingTool } from "./src/tools/value-investing.js";
@@ -332,6 +334,12 @@ const quantTradingPlugin = {
     // ── Trade Journal (复盘笔记) ─────────────────────────────────
     const tradeJournal = new TradeJournal({
       maxNotes: 2000,
+      dataDir: config.dataDir ?? null,
+    });
+
+    // ── Trade Plan Store (交易计划) ──────────────────────────────
+    const tradePlanStore = new TradePlanStore({
+      maxPlans: 2000,
       dataDir: config.dataDir ?? null,
     });
 
@@ -629,6 +637,7 @@ const quantTradingPlugin = {
       dca_schedule: createDcaScheduleTool(api, dcaScheduleService),
       breakout_monitor: createBreakoutMonitorTool(api, config, breakoutMonitor),
       trade_journal: createTradeJournalTool(api, tradeJournal),
+      trade_plan: createTradePlanTool(api, tradePlanStore),
       performance_attribution: createPerformanceAttributionTool(api, config),
       strategy_health: createStrategyHealthTool(api, config, strategyHealthMonitor),
       value_investing: createValueInvestingTool(api, config),
@@ -685,6 +694,7 @@ const quantTradingPlugin = {
       conditional_order: "条件单",
       dca_schedule: "定投计划",
       trade_journal: "交易笔记",
+      trade_plan: "交易计划",
       performance_attribution: "绩效归因",
       strategy_health: "策略健康",
       correlation_analysis: "相关性分析",

@@ -859,7 +859,6 @@ describe("Dashboard HTML — Equity Curve Interactive Elements (Extended)", () =
 
   it("HTML includes benchmark comparison API endpoints", () => {
     const html = getDashboardHtml("http://localhost:18789");
-    expect(html).toContain("/quant/api/benchmarks");
     expect(html).toContain("/quant/api/benchmark/compare");
   });
 

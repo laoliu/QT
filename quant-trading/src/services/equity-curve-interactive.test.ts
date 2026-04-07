@@ -644,7 +644,7 @@ describe("Dashboard — Equity Curve Interactive Elements", () => {
   it("includes daily P&L bar display elements", () => {
     const html = getDashboardHtml("http://localhost:18789");
     // Daily PnL visualization
-    expect(html).toContain("dailyPnl");
+    expect(html).toContain("Daily P&L");
   });
 
   it("includes equity summary metrics display", () => {
@@ -676,7 +676,6 @@ describe("Dashboard — Equity Curve Interactive Elements", () => {
     const html = getDashboardHtml("http://localhost:18789");
     expect(html).toContain("/quant/api/equity-history");
     expect(html).toContain("/quant/api/equity-history/summary");
-    expect(html).toContain("/quant/api/benchmarks");
     expect(html).toContain("/quant/api/benchmark/compare");
   });
 

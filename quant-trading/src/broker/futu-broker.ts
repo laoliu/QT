@@ -110,6 +110,32 @@ type RawPositionChange = {
   current: RawPosition | null;
 };
 
+type RawOrderBook = {
+  stock_code: string;
+  bids: Array<{ price: number; volume: number; order_count: number }>;
+  asks: Array<{ price: number; volume: number; order_count: number }>;
+  time: number;
+};
+
+type RawTicker = {
+  stock_code: string;
+  price: number;
+  volume: number;
+  turnover: number;
+  ticker_direction: string;
+  sequence: number;
+  time: string;
+};
+
+/** Subscription types supported by Futu OpenD. */
+export type FutuSubType = "QUOTE" | "ORDER_BOOK" | "TICKER";
+
+/** Order book depth callback. */
+export type OrderBookCallback = (code: string, bids: RawOrderBook["bids"], asks: RawOrderBook["asks"], time: number) => void;
+
+/** Tick-by-tick trade callback. */
+export type TickerCallback = (data: { code: string; price: number; volume: number; turnover: number; direction: string; sequence: number; time: string }) => void;
+
 // ── Futu order status mapping ───────────────────────────────────
 
 function mapFutuStatus(s: string): OrderStatus {
@@ -193,6 +219,8 @@ export class FutuBroker implements IBrokerAdapter {
   private fillCbs: FillCallback[] = [];
   private statusCbs: OrderStatusCallback[] = [];
   private quoteSubs: Map<string, QuoteCallback[]> = new Map();
+  private orderBookCbs: OrderBookCallback[] = [];
+  private tickerCbs: TickerCallback[] = [];
   private positionChangeCbs: Array<(code: string, pos: LivePosition | null) => void> = [];
 
   // local cache of orders (keyed by local orderId)
@@ -354,8 +382,16 @@ export class FutuBroker implements IBrokerAdapter {
   }
 
   subscribeQuote(symbols: string[], cb: QuoteCallback): () => void {
+    return this.subscribeQuoteEx(symbols, cb, ["QUOTE"]);
+  }
+
+  /**
+   * Extended quote subscription supporting multiple Futu sub types.
+   * @param subTypes Which data types to subscribe: "QUOTE", "ORDER_BOOK", "TICKER"
+   */
+  subscribeQuoteEx(symbols: string[], cb: QuoteCallback, subTypes: FutuSubType[] = ["QUOTE"]): () => void {
     const futuSymbols = symbols.map((s) => toFutuSymbol(s));
-    void this.proc.call("subscribe_quote", { stock_codes: futuSymbols }).catch((err) => {
+    void this.proc.call("subscribe_quote", { stock_codes: futuSymbols, sub_types: subTypes }).catch((err) => {
       console.warn(`[FutuBroker] subscribe_quote failed: ${(err as Error).message ?? err}`);
     });
     for (const sym of symbols) {
@@ -374,7 +410,7 @@ export class FutuBroker implements IBrokerAdapter {
           }
         }
       }
-      void this.proc.call("unsubscribe_quote", { stock_codes: futuSymbols }).catch((err) => {
+      void this.proc.call("unsubscribe_quote", { stock_codes: futuSymbols, sub_types: subTypes }).catch((err) => {
         console.warn(`[FutuBroker] unsubscribe_quote failed: ${(err as Error).message ?? err}`);
       });
     };
@@ -403,6 +439,41 @@ export class FutuBroker implements IBrokerAdapter {
     return () => {
       this.positionChangeCbs = this.positionChangeCbs.filter((fn) => fn !== cb);
     };
+  }
+
+  /**
+   * Subscribe to order book (depth) push notifications.
+   * Requires subscribeQuoteEx with "ORDER_BOOK" sub type.
+   */
+  subscribeOrderBook(cb: OrderBookCallback): () => void {
+    this.orderBookCbs.push(cb);
+    return () => {
+      this.orderBookCbs = this.orderBookCbs.filter((fn) => fn !== cb);
+    };
+  }
+
+  /**
+   * Subscribe to tick-by-tick trade push notifications.
+   * Requires subscribeQuoteEx with "TICKER" sub type.
+   */
+  subscribeTicker(cb: TickerCallback): () => void {
+    this.tickerCbs.push(cb);
+    return () => {
+      this.tickerCbs = this.tickerCbs.filter((fn) => fn !== cb);
+    };
+  }
+
+  /**
+   * Get quote snapshot for given symbols without subscribing to push.
+   * Useful for one-off price lookups.
+   */
+  async getQuoteSnapshot(symbols: string[]): Promise<QuoteSnapshot[]> {
+    const futuSymbols = symbols.map((s) => toFutuSymbol(s));
+    const raws = await this.proc.call<RawQuote[]>("get_quote_snapshot", { stock_codes: futuSymbols });
+    return raws.map((r) => {
+      const sym = fromFutuSymbol(r.stock_code);
+      return this.mapRawQuote(r, sym);
+    });
   }
 
   async isMarketOpen(market?: MarketType): Promise<boolean> {
@@ -453,6 +524,22 @@ export class FutuBroker implements IBrokerAdapter {
       const snapshot = this.mapRawQuote(raw, sym);
       const cbs = this.quoteSubs.get(sym);
       if (cbs) for (const cb of cbs) cb(snapshot);
+    } else if (event === "order_book") {
+      const raw = data as RawOrderBook;
+      const code = fromFutuSymbol(raw.stock_code);
+      for (const cb of this.orderBookCbs) cb(code, raw.bids, raw.asks, raw.time);
+    } else if (event === "ticker") {
+      const raw = data as RawTicker;
+      const code = fromFutuSymbol(raw.stock_code);
+      for (const cb of this.tickerCbs) cb({
+        code,
+        price: raw.price,
+        volume: raw.volume,
+        turnover: raw.turnover,
+        direction: raw.ticker_direction,
+        sequence: raw.sequence,
+        time: raw.time,
+      });
     } else if (event === "position_change") {
       const raw = data as RawPositionChange;
       const sym = fromFutuSymbol(raw.stock_code);

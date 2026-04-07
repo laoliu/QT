@@ -32,6 +32,8 @@ try:
         OrderStatus as FutuOrderStatus,
         SubType,
         StockQuoteHandlerBase,
+        OrderBookHandlerBase,
+        TickerHandlerBase,
         TradeOrderHandlerBase,
         TradeDealHandlerBase,
     )
@@ -75,6 +77,34 @@ class QuoteHandler(StockQuoteHandlerBase if HAS_FUTU else object):
         if ret != RET_OK:
             return ret, data
         for _, row in data.iterrows():
+            # Extract up to 10 levels of bid/ask from Futu push data
+            bid_prices = []
+            ask_prices = []
+            bid_vols = []
+            ask_vols = []
+            for i in range(1, 11):
+                bp = row.get(f"bid_price_{i}" if i > 1 else "bid_price", None)
+                ap = row.get(f"ask_price_{i}" if i > 1 else "ask_price", None)
+                bv = row.get(f"bid_vol_{i}" if i > 1 else "bid_vol", None)
+                av = row.get(f"ask_vol_{i}" if i > 1 else "ask_vol", None)
+                if bp is not None and float(bp) > 0:
+                    bid_prices.append(float(bp))
+                    bid_vols.append(int(bv) if bv is not None else 0)
+                if ap is not None and float(ap) > 0:
+                    ask_prices.append(float(ap))
+                    ask_vols.append(int(av) if av is not None else 0)
+            # Fallback: if no multi-level data, use single-level fields
+            if not bid_prices:
+                bp = row.get("bid_price", 0)
+                if bp and float(bp) > 0:
+                    bid_prices = [float(bp)]
+                    bid_vols = [int(row.get("bid_vol", 0))]
+            if not ask_prices:
+                ap = row.get("ask_price", 0)
+                if ap and float(ap) > 0:
+                    ask_prices = [float(ap)]
+                    ask_vols = [int(row.get("ask_vol", 0))]
+
             push_event("quote", {
                 "stock_code": row["code"],
                 "last_price": float(row.get("last_price", 0)),
@@ -84,11 +114,55 @@ class QuoteHandler(StockQuoteHandlerBase if HAS_FUTU else object):
                 "last_close": float(row.get("prev_close_price", 0)),
                 "volume": int(row.get("volume", 0)),
                 "amount": float(row.get("turnover", 0)),
-                "bid_price": [float(row.get(f"bid_price", 0))],
-                "ask_price": [float(row.get(f"ask_price", 0))],
-                "bid_vol": [int(row.get(f"bid_vol", 0))],
-                "ask_vol": [int(row.get(f"ask_vol", 0))],
+                "bid_price": bid_prices,
+                "ask_price": ask_prices,
+                "bid_vol": bid_vols,
+                "ask_vol": ask_vols,
                 "time": int(time.time() * 1000),
+            })
+        return ret, data
+
+
+class OrderBookHandler(OrderBookHandlerBase if HAS_FUTU else object):
+    """Receives order book (depth) pushes from Futu OpenD and forwards as NDJSON events."""
+
+    def on_recv_rsp(self, rsp_pb):
+        ret, data = super().on_recv_rsp(rsp_pb)
+        if ret != RET_OK:
+            return ret, data
+        code = data.get("code", "") if isinstance(data, dict) else ""
+        bids = []
+        asks = []
+        if isinstance(data, dict):
+            for item in data.get("Bid", []):
+                bids.append({"price": float(item[0]), "volume": int(item[1]), "order_count": int(item[2])})
+            for item in data.get("Ask", []):
+                asks.append({"price": float(item[0]), "volume": int(item[1]), "order_count": int(item[2])})
+        push_event("order_book", {
+            "stock_code": code,
+            "bids": bids,
+            "asks": asks,
+            "time": int(time.time() * 1000),
+        })
+        return ret, data
+
+
+class TickerHandler(TickerHandlerBase if HAS_FUTU else object):
+    """Receives tick-by-tick trade pushes from Futu OpenD and forwards as NDJSON events."""
+
+    def on_recv_rsp(self, rsp_pb):
+        ret, data = super().on_recv_rsp(rsp_pb)
+        if ret != RET_OK:
+            return ret, data
+        for _, row in data.iterrows():
+            push_event("ticker", {
+                "stock_code": row.get("code", ""),
+                "price": float(row.get("price", 0)),
+                "volume": int(row.get("volume", 0)),
+                "turnover": float(row.get("turnover", 0)),
+                "ticker_direction": str(row.get("ticker_direction", "")),
+                "sequence": int(row.get("sequence", 0)),
+                "time": row.get("time", ""),
             })
         return ret, data
 
@@ -209,6 +283,8 @@ class FutuBrokerBridge:
         self.trade_ctx: Optional[Any] = None
         self._subscribed_codes: Set[str] = set()
         self._quote_handler = QuoteHandler() if HAS_FUTU else None
+        self._order_book_handler = OrderBookHandler() if HAS_FUTU else None
+        self._ticker_handler = TickerHandler() if HAS_FUTU else None
         self._order_handler = OrderHandler() if HAS_FUTU else None
         self._deal_handler = DealHandler() if HAS_FUTU else None
         self._position_poll_thread: Optional[threading.Thread] = None
@@ -222,6 +298,8 @@ class FutuBrokerBridge:
         # Open quote context
         self.quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
         self.quote_ctx.set_handler(self._quote_handler)
+        self.quote_ctx.set_handler(self._order_book_handler)
+        self.quote_ctx.set_handler(self._ticker_handler)
 
         # Open trade context
         trd_env = _map_trd_env(self.trd_env_str)
@@ -370,10 +448,21 @@ class FutuBrokerBridge:
         if not self.quote_ctx:
             raise RuntimeError("Not connected")
         codes = params.get("stock_codes", [])
+        sub_types = params.get("sub_types", ["QUOTE"])
         new_codes = [c for c in codes if c not in self._subscribed_codes]
 
+        # Map sub_type strings to Futu SubType enums
+        type_map = {
+            "QUOTE": SubType.QUOTE,
+            "ORDER_BOOK": SubType.ORDER_BOOK,
+            "TICKER": SubType.TICKER,
+        }
+        futu_sub_types = [type_map[t] for t in sub_types if t in type_map]
+        if not futu_sub_types:
+            futu_sub_types = [SubType.QUOTE]
+
         for code in new_codes:
-            ret, data = self.quote_ctx.subscribe(code, [SubType.QUOTE], subscribe_push=True)
+            ret, data = self.quote_ctx.subscribe(code, futu_sub_types, subscribe_push=True)
             if ret != RET_OK:
                 log.warning("Failed to subscribe %s: %s", code, data)
             else:
@@ -385,10 +474,20 @@ class FutuBrokerBridge:
         if not self.quote_ctx:
             raise RuntimeError("Not connected")
         codes = params.get("stock_codes", [])
+        sub_types = params.get("sub_types", ["QUOTE"])
+
+        type_map = {
+            "QUOTE": SubType.QUOTE,
+            "ORDER_BOOK": SubType.ORDER_BOOK,
+            "TICKER": SubType.TICKER,
+        }
+        futu_sub_types = [type_map[t] for t in sub_types if t in type_map]
+        if not futu_sub_types:
+            futu_sub_types = [SubType.QUOTE]
 
         for code in codes:
             if code in self._subscribed_codes:
-                ret, data = self.quote_ctx.unsubscribe(code, [SubType.QUOTE])
+                ret, data = self.quote_ctx.unsubscribe(code, futu_sub_types)
                 if ret == RET_OK:
                     self._subscribed_codes.discard(code)
                 else:
@@ -397,6 +496,37 @@ class FutuBrokerBridge:
         return {"subscribed": list(self._subscribed_codes)}
 
     # ── Position change polling (Futu doesn't have native position push) ──
+
+    def get_quote_snapshot(self, params: dict) -> list:
+        """Get current quote snapshot for given codes without subscribing to push."""
+        if not self.quote_ctx:
+            raise RuntimeError("Not connected")
+        codes = params.get("stock_codes", [])
+        if not codes:
+            return []
+
+        ret, data = self.quote_ctx.get_market_snapshot(codes)
+        if ret != RET_OK:
+            raise RuntimeError(f"get_market_snapshot failed: {data}")
+
+        result = []
+        for _, row in data.iterrows():
+            result.append({
+                "stock_code": row.get("code", ""),
+                "last_price": float(row.get("last_price", 0)),
+                "open": float(row.get("open_price", 0)),
+                "high": float(row.get("high_price", 0)),
+                "low": float(row.get("low_price", 0)),
+                "last_close": float(row.get("prev_close_price", 0)),
+                "volume": int(row.get("volume", 0)),
+                "amount": float(row.get("turnover", 0)),
+                "bid_price": [float(row.get("bid_price", 0))],
+                "ask_price": [float(row.get("ask_price", 0))],
+                "bid_vol": [int(row.get("bid_vol", 0))],
+                "ask_vol": [int(row.get("ask_vol", 0))],
+                "time": int(time.time() * 1000),
+            })
+        return result
 
     def _start_position_poll(self):
         """Start a background thread that polls positions every 5s and emits change events."""
@@ -500,6 +630,7 @@ METHODS = {
     "query_account": "query_account",
     "subscribe_quote": "subscribe_quote",
     "unsubscribe_quote": "unsubscribe_quote",
+    "get_quote_snapshot": "get_quote_snapshot",
 }
 
 

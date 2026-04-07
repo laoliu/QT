@@ -98,6 +98,7 @@ import { EquityHistory } from "./src/services/equity-history.js";
 import { EventBus } from "./src/services/event-bus.js";
 import { ExplorationHistoryStore } from "./src/services/exploration-history-store.js";
 import { FavoritesStore } from "./src/services/favorites-store.js";
+import { FutuEventBridge } from "./src/services/futu-event-bridge.js";
 import { LogStore, wrapLoggerWithStore } from "./src/services/log-store.js";
 import { tryNotify } from "./src/services/notify-helper.js";
 import { OptimizationStore } from "./src/services/optimization-store.js";
@@ -468,8 +469,18 @@ const quantTradingPlugin = {
     });
 
     // Wire LiveEngine status changes to the event bus
+    // Also start/stop FutuEventBridge when the Futu broker connects/disconnects
+    let futuEventBridge: FutuEventBridge | null = null;
     liveEngine.setStatusChangeCallback((prev, next) => {
       eventBus.emit("engine", { prev, next, timestamp: Date.now() });
+
+      if (next === "running" && liveEngine.broker?.brokerType === "futu") {
+        futuEventBridge = new FutuEventBridge(liveEngine.broker, eventBus);
+        futuEventBridge.start();
+      } else if (next === "stopped" && futuEventBridge) {
+        futuEventBridge.stop();
+        futuEventBridge = null;
+      }
     });
 
     // Wire LiveEngine signals to the event bus

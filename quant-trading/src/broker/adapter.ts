@@ -47,6 +47,13 @@ export type ModifyOrderRequest = {
   stopPrice?: number;
 };
 
+export type BatchOrderResult = {
+  ok: boolean;
+  order?: Order;
+  error?: string;
+  symbol: string;
+};
+
 export type OrderFilter = {
   symbol?: string;
   status?: OrderStatus[];
@@ -156,6 +163,15 @@ export interface IBrokerAdapter {
    * Default: not implemented (falls back to queryAccount in health check).
    */
   ping?(): Promise<boolean>;
+
+  /**
+   * Place multiple orders in batch. Default implementation falls back to
+   * sequential placeOrder calls. Brokers that support native batch APIs
+   * should override for better performance.
+   *
+   * Returns results in the same order as the input requests.
+   */
+  placeBatchOrders?(reqs: OrderRequest[]): Promise<BatchOrderResult[]>;
 
   // ── Optional: option-specific methods ─────────────────────────
   // Brokers that support option trading should implement these.

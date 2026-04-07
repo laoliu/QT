@@ -35,6 +35,7 @@ import type {
   FillCallback,
   OrderStatusCallback,
   ModifyOrderRequest,
+  BatchOrderResult,
 } from "./adapter.js";
 
 // Per-file mutexes to serialize portfolio/orders I/O
@@ -318,6 +319,19 @@ export class PaperBroker implements IBrokerAdapter {
     // Remove from pending limit queue
     this.pendingLimitOrders = this.pendingLimitOrders.filter((p) => p.orderId !== orderId);
     for (const cb of this.statusCbs) cb(orderId, "cancelled", o);
+  }
+
+  async placeBatchOrders(reqs: OrderRequest[]): Promise<BatchOrderResult[]> {
+    const results: BatchOrderResult[] = [];
+    for (const req of reqs) {
+      try {
+        const order = await this.placeOrder(req);
+        results.push({ ok: true, order, symbol: req.symbol });
+      } catch (err) {
+        results.push({ ok: false, error: (err as Error).message, symbol: req.symbol });
+      }
+    }
+    return results;
   }
 
   async modifyOrder(orderId: string, update: ModifyOrderRequest): Promise<Order> {

@@ -446,6 +446,173 @@ describe("live_trading tool", () => {
     });
   });
 
+  describe("batch_order", () => {
+    it("submits multiple orders in batch", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "batch_order",
+        orders: [
+          { symbol: "600519", side: "buy", quantity: 100, price: 1850, order_type: "limit" },
+          { symbol: "000858", side: "buy", quantity: 200, price: 150, order_type: "limit" },
+        ],
+      })) as any;
+
+      expect(result.success).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(result.details).toHaveLength(2);
+      expect(engine.orderManager!.submit).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns error when orders array is empty", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({ action: "batch_order", orders: [] })) as any;
+      expect(result.error).toContain("orders");
+    });
+
+    it("returns error when orders is not provided", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({ action: "batch_order" })) as any;
+      expect(result.error).toContain("orders");
+    });
+
+    it("handles partial failures in batch", async () => {
+      let callCount = 0;
+      const mockOrderMgr = {
+        submit: vi.fn().mockImplementation(() => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.resolve({ ok: true, order: { orderId: "o1", status: "submitted" } });
+          }
+          return Promise.resolve({ ok: false, reason: "超过单笔限额" });
+        }),
+        cancel: vi.fn(),
+        cancelAll: vi.fn(),
+        getDailyPnl: vi.fn().mockResolvedValue(0),
+        confirmationManager: { listPending: vi.fn().mockResolvedValue([]) },
+      } as unknown as OrderManager;
+
+      const engine = makeMockEngine({ orderManager: mockOrderMgr } as any);
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "batch_order",
+        orders: [
+          { symbol: "600519", side: "buy", quantity: 100, price: 1850, order_type: "limit" },
+          { symbol: "000858", side: "buy", quantity: 200, price: 150, order_type: "limit" },
+        ],
+      })) as any;
+
+      expect(result.success).toBe(1);
+      expect(result.failed).toBe(1);
+    });
+
+    it("processes sell orders before buy orders", async () => {
+      const callOrder: string[] = [];
+      const mockOrderMgr = {
+        submit: vi.fn().mockImplementation((req: any) => {
+          callOrder.push(`${req.side}_${req.symbol}`);
+          return Promise.resolve({ ok: true, order: { orderId: "o1", status: "submitted" } });
+        }),
+        cancel: vi.fn(),
+        cancelAll: vi.fn(),
+        getDailyPnl: vi.fn().mockResolvedValue(0),
+        confirmationManager: { listPending: vi.fn().mockResolvedValue([]) },
+      } as unknown as OrderManager;
+
+      const engine = makeMockEngine({ orderManager: mockOrderMgr } as any);
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      await tool.execute({
+        action: "batch_order",
+        orders: [
+          { symbol: "600519", side: "buy", quantity: 100, price: 1850, order_type: "limit" },
+          { symbol: "000858", side: "sell", quantity: 200, price: 150, order_type: "limit" },
+        ],
+      });
+
+      expect(callOrder[0]).toBe("sell_000858");
+      expect(callOrder[1]).toBe("buy_600519");
+    });
+
+    it("validates limit orders require price", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "batch_order",
+        orders: [
+          { symbol: "600519", side: "buy", quantity: 100, order_type: "limit" },
+        ],
+      })) as any;
+
+      expect(result.failed).toBe(1);
+      expect(result.details[0].error).toContain("price");
+    });
+
+    it("returns error when engine is null", async () => {
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => null);
+      const result = (await tool.execute({
+        action: "batch_order",
+        orders: [{ symbol: "600519", side: "buy", quantity: 100, price: 1850 }],
+      })) as any;
+      expect(result.error).toContain("未初始化");
+    });
+  });
+
+  describe("execute_rebalance", () => {
+    it("returns error when engine is null", async () => {
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => null);
+      const result = (await tool.execute({
+        action: "execute_rebalance",
+        targets: [{ symbol: "600519", weight: 50 }],
+      })) as any;
+      expect(result.error).toContain("未初始化");
+    });
+
+    it("returns error when targets is empty", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "execute_rebalance",
+        targets: [],
+      })) as any;
+      expect(result.error).toContain("targets");
+    });
+
+    it("returns error when targets not provided", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({ action: "execute_rebalance" })) as any;
+      expect(result.error).toContain("targets");
+    });
+
+    it("rejects weights that don't sum to ~100%", async () => {
+      const mockBroker = {
+        queryAccount: vi.fn().mockResolvedValue({ totalAssets: 1_000_000, cash: 500_000 }),
+        queryPositions: vi.fn().mockResolvedValue([]),
+      };
+      const mockOrderMgr = {
+        submit: vi.fn(),
+        cancel: vi.fn(),
+        cancelAll: vi.fn(),
+        getDailyPnl: vi.fn().mockResolvedValue(0),
+        broker: mockBroker,
+        confirmationManager: { listPending: vi.fn().mockResolvedValue([]) },
+      } as unknown as OrderManager;
+
+      const engine = makeMockEngine({ orderManager: mockOrderMgr } as any);
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "execute_rebalance",
+        targets: [
+          { symbol: "600519", weight: 30 },
+          { symbol: "000858", weight: 20 },
+        ],
+      })) as any;
+      expect(result.error).toContain("权重总和");
+    });
+  });
+
   describe("unknown action", () => {
     it("returns error for unrecognized action", async () => {
       const engine = makeMockEngine();

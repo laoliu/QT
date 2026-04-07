@@ -84,6 +84,7 @@ import {
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
+import { createAuctionMonitorService } from "./src/services/auction-monitor.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
@@ -932,6 +933,12 @@ const quantTradingPlugin = {
         reportId: "monthly_report",
         description: "立即生成月度绩效报告",
       },
+      {
+        name: "/竞价",
+        aliases: ["/auction", "/auction_brief"],
+        reportId: "auction_brief",
+        description: "立即扫描集合竞价异动",
+      },
     ];
     for (const sc of reportShortcuts) {
       const template = findReportTemplate(sc.reportId);
@@ -1089,6 +1096,9 @@ const quantTradingPlugin = {
 
     // Register Options Monitor as a service for option position monitoring
     api.registerService(createOptionsMonitorService(api, config, () => liveEngine.getPositions()));
+
+    // Register Auction Monitor as a service for pre-market auction anomaly detection
+    api.registerService(createAuctionMonitorService(api, config, eventBus));
 
     const tickEnabled = config.tickData?.enabled !== false;
     const tickSource = config.tickData?.source ?? "qmt-bridge";

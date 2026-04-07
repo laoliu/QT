@@ -14,6 +14,7 @@ import {
  *   daily_scan       — Daily strategy screening with auto-compare vs previous run
  */
 import type { QuantTradingConfig } from "../types.js";
+import { generateAuctionBrief } from "./auction-monitor.js";
 
 export type ReportTemplateId =
   | "morning_brief"
@@ -23,7 +24,8 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
-  | "monthly_report";
+  | "monthly_report"
+  | "auction_brief";
 
 export interface ReportTemplate {
   id: ReportTemplateId;
@@ -1229,6 +1231,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "月度报告：整体盈亏+策略分析+标的分析+信号命中率+风控指标",
     defaultIntervalMinutes: 0,
     generate: generateMonthlyReport,
+  },
+  {
+    id: "auction_brief",
+    name: "竞价异动",
+    description: "集合竞价异动扫描：自选股+持仓股高开/低开/量能异动检测与操作建议",
+    defaultIntervalMinutes: 0,
+    generate: generateAuctionBrief,
   },
 ];
 

@@ -195,12 +195,13 @@ function wrapTool(
 }
 
 /** Collect all valid command names (primary + aliases) that pass SDK validation.
- *  SDK validates with /^[a-z][a-z0-9_-]*$/ — only ASCII letters, digits, hyphens, underscores. */
+ *  SDK validates with /^[a-z][a-z0-9_-]*$/ — only ASCII letters, digits, hyphens, underscores.
+ *  Chinese command names (e.g. /简报, /收盘) are also accepted since the gateway supports them. */
 function resolveAllValidCommandNames(cmd: { name: string; aliases?: string[] }): string[] {
   return [cmd.name, ...(cmd.aliases ?? [])]
     .map((s) => s.replace(/^\//, "").trim().toLowerCase())
     .filter(Boolean)
-    .filter((s) => /^[a-z][a-z0-9_-]*$/.test(s));
+    .filter((s) => /^[a-z\u4e00-\u9fff][a-z0-9_\u4e00-\u9fff-]*$/.test(s));
 }
 
 /** Append a signal to signals.json for the trading_signal tool. */

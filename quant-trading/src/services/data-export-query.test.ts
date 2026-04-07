@@ -2205,3 +2205,678 @@ describe("UsMover topMovers formatting", () => {
     expect(result[0]!.topMovers).toBe("MSFT(+0.0%)");
   });
 });
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: dateInRange Edge Cases ──────────────
+// ════════════════════════════════════════════════════════════════
+
+describe("dateInRange edge cases", () => {
+  it("includes item when dateStr is undefined (passes through)", async () => {
+    const orders = [
+      makeOrder({ orderId: "o-1", createdAt: undefined as unknown as string }),
+    ];
+    setFileData("orders-paper.json", orders);
+
+    // dateInRange returns true when dateStr is undefined
+    const result = await queryExportableOrders(cfg, { from: "2025-01-01", to: "2025-01-31" });
+    expect(result).toHaveLength(1);
+  });
+
+  it("only from filter (no to)", async () => {
+    const orders = [
+      makeOrder({ orderId: "o-1", createdAt: "2024-12-31T23:59:59Z" }),
+      makeOrder({ orderId: "o-2", createdAt: "2025-01-01T00:00:00Z" }),
+      makeOrder({ orderId: "o-3", createdAt: "2025-06-01T00:00:00Z" }),
+    ];
+    setFileData("orders-paper.json", orders);
+
+    const result = await queryExportableOrders(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.orderId)).toEqual(["o-2", "o-3"]);
+  });
+
+  it("only to filter (no from)", async () => {
+    const orders = [
+      makeOrder({ orderId: "o-1", createdAt: "2024-06-01T00:00:00Z" }),
+      makeOrder({ orderId: "o-2", createdAt: "2025-01-15T00:00:00Z" }),
+      makeOrder({ orderId: "o-3", createdAt: "2025-02-01T00:00:00Z" }),
+    ];
+    setFileData("orders-paper.json", orders);
+
+    const result = await queryExportableOrders(cfg, { to: "2025-01-15" });
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.orderId)).toEqual(["o-1", "o-2"]);
+  });
+
+  it("same from and to date matches exact date", async () => {
+    const orders = [
+      makeOrder({ orderId: "o-1", createdAt: "2025-01-10T00:00:00Z" }),
+      makeOrder({ orderId: "o-2", createdAt: "2025-01-10T23:59:59Z" }),
+      makeOrder({ orderId: "o-3", createdAt: "2025-01-11T00:00:00Z" }),
+    ];
+    setFileData("orders-paper.json", orders);
+
+    const result = await queryExportableOrders(cfg, { from: "2025-01-10", to: "2025-01-10" });
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.orderId)).toEqual(["o-1", "o-2"]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: dataDir default fallback ────────────
+// ════════════════════════════════════════════════════════════════
+
+describe("dataDir resolution", () => {
+  it("falls back to ~/.openclaw/quant-trading when dataDir not set", async () => {
+    const cfgNoDir: QuantTradingConfig = {};
+    // readFile will be called with the default path
+    const result = await queryExportableOrders(cfgNoDir);
+    expect(result).toEqual([]);
+
+    // Verify that readFile was called with the homedir-based path
+    const calledPath = mockedFs.readFile.mock.calls[0]?.[0] as string;
+    expect(calledPath).toContain(path.join(os.homedir(), ".openclaw", "quant-trading"));
+    expect(calledPath).toContain("orders-paper.json");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Account Summary Edge Cases ──────────
+// ════════════════════════════════════════════════════════════════
+
+describe("Account summary edge cases", () => {
+  it("handles single equity snapshot (no drawdown, zero return)", async () => {
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-10", equity: 1000000, cash: 500000, marketValue: 500000, dailyPnl: 0 }),
+    ];
+    setFileData("equity-history-paper.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    const summary = ds.accountSummary;
+    expect(summary).not.toBeNull();
+    expect(summary!.totalReturn).toBe(0);
+    expect(summary!.totalReturnPct).toBe(0);
+    expect(summary!.maxDrawdown).toBe(0);
+    expect(summary!.maxDrawdownPct).toBe(0);
+  });
+
+  it("handles monotonically increasing equity (no drawdown)", async () => {
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-01", equity: 1000000, dailyPnl: 0 }),
+      makeEquitySnapshot({ date: "2025-01-02", equity: 1010000, dailyPnl: 10000 }),
+      makeEquitySnapshot({ date: "2025-01-03", equity: 1030000, dailyPnl: 20000 }),
+    ];
+    setFileData("equity-history-paper.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    const summary = ds.accountSummary;
+    expect(summary!.maxDrawdown).toBe(0);
+    expect(summary!.maxDrawdownPct).toBe(0);
+    expect(summary!.totalReturn).toBe(30000);
+  });
+
+  it("winRate is null when all dailyPnl are zero", async () => {
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-01", equity: 1000000, dailyPnl: 0 }),
+      makeEquitySnapshot({ date: "2025-01-02", equity: 1000000, dailyPnl: 0 }),
+    ];
+    setFileData("equity-history-paper.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    expect(ds.accountSummary!.winRate).toBeNull();
+  });
+
+  it("handles zero initial equity (no division error)", async () => {
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-01", equity: 0, cash: 0, marketValue: 0, dailyPnl: 0 }),
+      makeEquitySnapshot({ date: "2025-01-02", equity: 10000, cash: 10000, marketValue: 0, dailyPnl: 10000 }),
+    ];
+    setFileData("equity-history-paper.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    const summary = ds.accountSummary;
+    expect(summary!.totalReturn).toBe(10000);
+    expect(summary!.totalReturnPct).toBe(0); // 0 initial equity → 0%
+  });
+
+  it("sorts equity snapshots by date for correct computation", async () => {
+    // Provide out-of-order snapshots
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-15", equity: 1050000, cash: 750000, marketValue: 300000, dailyPnl: 20000 }),
+      makeEquitySnapshot({ date: "2025-01-01", equity: 1000000, cash: 800000, marketValue: 200000, dailyPnl: 0 }),
+      makeEquitySnapshot({ date: "2025-01-10", equity: 980000, cash: 780000, marketValue: 200000, dailyPnl: -20000 }),
+    ];
+    setFileData("equity-history-paper.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    const summary = ds.accountSummary;
+    // First should be 2025-01-01 (equity=1000000), last should be 2025-01-15 (equity=1050000)
+    expect(summary!.totalReturn).toBe(50000);
+    expect(summary!.totalAssets).toBe(1050000);
+    expect(summary!.snapshotDate).toBe("2025-01-15");
+  });
+
+  it("paper mode falls back to portfolio when no equity history, with missing updatedAt", async () => {
+    const pf = makePortfolio({ updatedAt: undefined });
+    setFileData("portfolio-paper.json", pf);
+
+    const ds = await queryExportDataset(cfg, { sections: ["account"] });
+    const summary = ds.accountSummary;
+    expect(summary).not.toBeNull();
+    // Should use current date when updatedAt is undefined
+    expect(summary!.snapshotDate).toBeTruthy();
+    expect(summary!.snapshotDate).toHaveLength(10); // YYYY-MM-DD format
+  });
+
+  it("live mode builds summary from equity history", async () => {
+    const snapshots = [
+      makeEquitySnapshot({ date: "2025-01-01", equity: 500000, cash: 200000, marketValue: 300000, dailyPnl: 0, positionCount: 2 }),
+      makeEquitySnapshot({ date: "2025-01-10", equity: 520000, cash: 200000, marketValue: 320000, dailyPnl: 20000, positionCount: 2 }),
+    ];
+    setFileData("equity-history-live.json", snapshots);
+
+    const ds = await queryExportDataset(cfg, { mode: "live", sections: ["account"] });
+    const summary = ds.accountSummary;
+    expect(summary).not.toBeNull();
+    expect(summary!.mode).toBe("live");
+    expect(summary!.accountId).toBe("live");
+    expect(summary!.totalAssets).toBe(520000);
+    expect(summary!.totalReturn).toBe(20000);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Filter Combinations ─────────────────
+// ════════════════════════════════════════════════════════════════
+
+describe("Filter combinations - DCA plans", () => {
+  it("filters by date range", async () => {
+    const plans = [
+      makeDcaPlan({ id: "d-1", createdAt: "2024-06-01T10:00:00Z" }),
+      makeDcaPlan({ id: "d-2", createdAt: "2025-01-10T10:00:00Z" }),
+    ];
+    setFileData("dca-plans.json", { plans });
+
+    const result = await queryExportableDcaPlans(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("d-2");
+  });
+
+  it("filters by symbol", async () => {
+    const plans = [
+      makeDcaPlan({ id: "d-1", symbol: "600519" }),
+      makeDcaPlan({ id: "d-2", symbol: "000858" }),
+    ];
+    setFileData("dca-plans.json", { plans });
+
+    const result = await queryExportableDcaPlans(cfg, { symbols: ["000858"] });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("d-2");
+  });
+});
+
+describe("Filter combinations - Breakout setups", () => {
+  it("filters by date range", async () => {
+    const setups = [
+      makeBreakoutSetup({ id: "b-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makeBreakoutSetup({ id: "b-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData("breakout-setups.json", { setups });
+
+    const result = await queryExportableBreakoutSetups(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("b-2");
+  });
+
+  it("filters by symbol", async () => {
+    const setups = [
+      makeBreakoutSetup({ id: "b-1", symbol: "600519" }),
+      makeBreakoutSetup({ id: "b-2", symbol: "000858" }),
+    ];
+    setFileData("breakout-setups.json", { setups });
+
+    const result = await queryExportableBreakoutSetups(cfg, { symbols: ["600519"] });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("b-1");
+  });
+});
+
+describe("Filter combinations - Signal records", () => {
+  it("filters by date range (using signalTimestamp)", async () => {
+    const records = [
+      makeSignalRecord({ signalTimestamp: new Date("2024-12-01T09:30:00Z").getTime(), symbol: "600519" }),
+      makeSignalRecord({ signalTimestamp: new Date("2025-01-10T09:30:00Z").getTime(), symbol: "600519" }),
+    ];
+    setFileData("signal-hitrate.json", records);
+
+    const result = await queryExportableSignalRecords(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+  });
+});
+
+describe("Filter combinations - Institution activity", () => {
+  it("filters by date range", async () => {
+    const entries = [
+      makeInstitutionActivity({ id: "i-1", timestamp: "2024-12-01T09:00:00Z" }),
+      makeInstitutionActivity({ id: "i-2", timestamp: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData("institution-activity-history.json", entries);
+
+    const result = await queryExportableInstitutionActivity(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("i-2");
+  });
+});
+
+describe("Filter combinations - Daily picks", () => {
+  it("filters by date range (using date field)", async () => {
+    const entries = [
+      makeDailyPick({ id: "p-1", date: "2024-12-01" }),
+      makeDailyPick({ id: "p-2", date: "2025-01-10" }),
+    ];
+    setFileData("scan-history.json", entries);
+
+    const result = await queryExportableDailyPicks(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("p-2");
+  });
+});
+
+describe("Filter combinations - US movers", () => {
+  it("filters by date range (using date field)", async () => {
+    const entries = [
+      makeUsMover({ id: "u-1", date: "2024-12-01" }),
+      makeUsMover({ id: "u-2", date: "2025-01-10" }),
+    ];
+    setFileData("us-mover-history.json", entries);
+
+    const result = await queryExportableUsMovers(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("u-2");
+  });
+});
+
+describe("Filter combinations - PBT history", () => {
+  it("filters by date range", async () => {
+    const entries = [
+      makePbtEntry({ id: "p-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makePbtEntry({ id: "p-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData("pbt-history.json", entries);
+
+    const result = await queryExportablePbtHistory(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("p-2");
+  });
+});
+
+describe("Filter combinations - Price alerts", () => {
+  it("filters by date range", async () => {
+    const alerts = [
+      makePriceAlert({ id: "pa-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makePriceAlert({ id: "pa-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData("price-alerts.json", { alerts });
+
+    const result = await queryExportablePriceAlerts(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("pa-2");
+  });
+});
+
+describe("Filter combinations - Conditional orders", () => {
+  it("filters by date range", async () => {
+    const orders = [
+      makeConditionalOrder({ id: "co-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makeConditionalOrder({ id: "co-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData("conditional-orders.json", { orders });
+
+    const result = await queryExportableConditionalOrders(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("co-2");
+  });
+});
+
+describe("Filter combinations - Scan history", () => {
+  it("filters by date range", async () => {
+    const entries = [
+      makeScanIndex({ id: "s-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makeScanIndex({ id: "s-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData(path.join("scans", "_index.json"), entries);
+
+    const result = await queryExportableScanHistory(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("s-2");
+  });
+});
+
+describe("Filter combinations - Optimization history", () => {
+  it("filters by date range", async () => {
+    const entries = [
+      makeOptimizationIndex({ id: "o-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makeOptimizationIndex({ id: "o-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData(path.join("optimizations", "_index.json"), entries);
+
+    const result = await queryExportableOptimizationHistory(cfg, { from: "2025-01-01" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("o-2");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: queryExportDataset Section Combos ───
+// ════════════════════════════════════════════════════════════════
+
+describe("queryExportDataset section selection", () => {
+  it("fetches trades when only attribution section is requested", async () => {
+    setFileData("trades-paper.json", [makeTrade()]);
+
+    const ds = await queryExportDataset(cfg, { sections: ["attribution"] });
+    // Trades array should be empty (section not requested) but attribution should work
+    expect(ds.trades).toEqual([]);
+    expect(ds.attributionSummary).not.toBeNull();
+  });
+
+  it("fetches both trades and attribution when both requested", async () => {
+    setFileData("trades-paper.json", [makeTrade()]);
+
+    const ds = await queryExportDataset(cfg, { sections: ["trades", "attribution"] });
+    expect(ds.trades).toHaveLength(1);
+    expect(ds.attributionSummary).not.toBeNull();
+  });
+
+  it("applies filters across all sections in dataset query", async () => {
+    setFileData("orders-paper.json", [
+      makeOrder({ orderId: "o-1", symbol: "600519", createdAt: "2025-01-10T09:30:00Z" }),
+      makeOrder({ orderId: "o-2", symbol: "000858", createdAt: "2025-01-10T09:30:00Z" }),
+    ]);
+    setFileData("trades-paper.json", [
+      makeTrade({ tradeId: "t-1", symbol: "600519", entryTime: "2025-01-10T09:30:00Z" }),
+      makeTrade({ tradeId: "t-2", symbol: "000858", entryTime: "2025-01-10T09:30:00Z" }),
+    ]);
+
+    const ds = await queryExportDataset(cfg, {
+      symbols: ["600519"],
+      sections: ["orders", "trades"],
+    });
+    expect(ds.orders).toHaveLength(1);
+    expect(ds.orders[0]!.symbol).toBe("600519");
+    expect(ds.trades).toHaveLength(1);
+    expect(ds.trades[0]!.symbol).toBe("600519");
+  });
+
+  it("handles requesting a single non-default section", async () => {
+    setFileData("favorites.json", [makeFavorite()]);
+    setFileData("orders-paper.json", [makeOrder()]);
+
+    const ds = await queryExportDataset(cfg, { sections: ["favorites"] });
+    expect(ds.favorites).toHaveLength(1);
+    expect(ds.orders).toEqual([]);
+    expect(ds.trades).toEqual([]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Transformation Edge Cases ───────────
+// ════════════════════════════════════════════════════════════════
+
+describe("Transformation edge cases", () => {
+  it("transformTradeNote joins empty tags array to empty string", async () => {
+    const note = makeTradeNote({ tags: [] });
+    setFileData("trade-journal.json", [note]);
+
+    const ds = await queryExportDataset(cfg, { sections: ["notes"] });
+    expect(ds.tradeNotes[0]!.tags).toBe("");
+  });
+
+  it("transformFavorite handles empty tags array", async () => {
+    const fav = makeFavorite({ tags: [] });
+    setFileData("favorites.json", [fav]);
+
+    const result = await queryExportableFavorites(cfg);
+    expect(result[0]!.tags).toBe("");
+  });
+
+  it("transformBacktestEntry handles empty symbols array", async () => {
+    const entry = makeBacktestEntry({ symbols: [], tags: [] });
+    setFileData(path.join("backtests", "index.json"), [entry]);
+
+    const result = await queryExportableBacktestHistory(cfg);
+    expect(result[0]!.symbols).toBe("");
+    expect(result[0]!.tags).toBe("");
+  });
+
+  it("transformScanIndex handles empty topCodes and tags", async () => {
+    const entry = makeScanIndex({ topCodes: [], tags: [], notes: undefined });
+    setFileData(path.join("scans", "_index.json"), [entry]);
+
+    const result = await queryExportableScanHistory(cfg);
+    expect(result[0]!.topCodes).toBe("");
+    expect(result[0]!.tags).toBe("");
+    expect(result[0]!.notes).toBe("");
+  });
+
+  it("transformOptimizationIndex handles empty tags", async () => {
+    const entry = makeOptimizationIndex({ tags: [] });
+    setFileData(path.join("optimizations", "_index.json"), [entry]);
+
+    const result = await queryExportableOptimizationHistory(cfg);
+    expect(result[0]!.tags).toBe("");
+  });
+
+  it("transformInstitutionActivity handles empty arrays", async () => {
+    const entry = makeInstitutionActivity({
+      candidateSymbols: [],
+      leaderSymbols: [],
+      baitSymbols: [],
+      topLeaders: [],
+    });
+    setFileData("institution-activity-history.json", [entry]);
+
+    const result = await queryExportableInstitutionActivity(cfg);
+    expect(result[0]!.candidateSymbols).toBe("");
+    expect(result[0]!.leaderSymbols).toBe("");
+    expect(result[0]!.baitSymbols).toBe("");
+    expect(result[0]!.topLeaderSymbols).toBe("");
+  });
+
+  it("transformDailyPick handles empty picks and triggeredUS", async () => {
+    const entry = makeDailyPick({
+      picks: [],
+      triggeredUS: [],
+    });
+    setFileData("scan-history.json", [entry]);
+
+    const result = await queryExportableDailyPicks(cfg);
+    expect(result[0]!.topPicks).toBe("");
+    expect(result[0]!.triggeredUSSymbols).toBe("");
+  });
+
+  it("transformUsMover handles empty movers array", async () => {
+    setFileData("us-mover-history.json", [makeUsMover({ movers: [] })]);
+
+    const result = await queryExportableUsMovers(cfg);
+    expect(result[0]!.topMovers).toBe("");
+  });
+
+  it("transformPbtEntry handles empty symbols array and null bestStrategy", async () => {
+    const entry = makePbtEntry({ symbols: [], bestStrategy: null });
+    setFileData("pbt-history.json", [entry]);
+
+    const result = await queryExportablePbtHistory(cfg);
+    expect(result[0]!.symbols).toBe("");
+    expect(result[0]!.bestStrategy).toBe("");
+  });
+
+  it("transformConditionalOrder handles all tiers triggered", async () => {
+    const order = makeConditionalOrder({
+      tiers: [
+        { gainPct: 5, sellRatio: 0.5, triggered: true, triggerPrice: 1890, quantity: 50 },
+        { gainPct: 10, sellRatio: 0.5, triggered: true, triggerPrice: 1980, quantity: 50 },
+      ],
+    });
+    setFileData("conditional-orders.json", { orders: [order] });
+
+    const result = await queryExportableConditionalOrders(cfg);
+    expect(result[0]!.tiersCount).toBe(2);
+    expect(result[0]!.tiersTriggered).toBe(2);
+  });
+
+  it("transformStrategyHealth handles all losses", async () => {
+    const health = makeStrategyHealth({
+      recentResults: [
+        { netPnl: -1000, exitTime: "2025-01-10T14:30:00Z" },
+        { netPnl: -2000, exitTime: "2025-01-11T14:30:00Z" },
+      ],
+    });
+    setFileData("strategy-health.json", { strategies: [health] });
+
+    const result = await queryExportableStrategyHealth(cfg);
+    expect(result[0]!.recentWins).toBe(0);
+    expect(result[0]!.recentLosses).toBe(2);
+    expect(result[0]!.recentWinRate).toBe(0);
+    expect(result[0]!.recentNetPnl).toBe(-3000);
+  });
+
+  it("transformPriceAlert with lastTriggeredAt present", async () => {
+    const alert = makePriceAlert({
+      triggered: true,
+      lastTriggeredAt: "2025-01-15T10:00:00Z",
+      repeating: true,
+      orderAction: {
+        side: "sell",
+        orderType: "limit",
+        quantity: 50,
+        limitPrice: 2100,
+        submitted: true,
+      },
+    });
+    setFileData("price-alerts.json", { alerts: [alert] });
+
+    const result = await queryExportablePriceAlerts(cfg);
+    expect(result[0]!.triggered).toBe(true);
+    expect(result[0]!.lastTriggeredAt).toBe("2025-01-15T10:00:00Z");
+    expect(result[0]!.repeating).toBe(true);
+    expect(result[0]!.orderSide).toBe("sell");
+    expect(result[0]!.orderType).toBe("limit");
+    expect(result[0]!.orderQuantity).toBe(50);
+    expect(result[0]!.orderLimitPrice).toBe(2100);
+    expect(result[0]!.orderSubmitted).toBe(true);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Large Dataset / Multiple Items ──────
+// ════════════════════════════════════════════════════════════════
+
+describe("Multiple items and ordering", () => {
+  it("preserves order of multiple orders after transformation", async () => {
+    const orders = [
+      makeOrder({ orderId: "o-1", createdAt: "2025-01-10T09:00:00Z" }),
+      makeOrder({ orderId: "o-2", createdAt: "2025-01-11T09:00:00Z" }),
+      makeOrder({ orderId: "o-3", createdAt: "2025-01-12T09:00:00Z" }),
+    ];
+    setFileData("orders-paper.json", orders);
+
+    const result = await queryExportableOrders(cfg);
+    expect(result.map((r) => r.orderId)).toEqual(["o-1", "o-2", "o-3"]);
+  });
+
+  it("handles multiple sections independently in dataset", async () => {
+    setFileData("orders-paper.json", [makeOrder(), makeOrder({ orderId: "o-2" })]);
+    setFileData("favorites.json", [makeFavorite()]);
+    setFileData("alerts.json", [makeAlert(), makeAlert({ id: "alert-2" }), makeAlert({ id: "alert-3" })]);
+
+    const ds = await queryExportDataset(cfg, { sections: ["orders", "favorites", "alerts"] });
+    expect(ds.orders).toHaveLength(2);
+    expect(ds.favorites).toHaveLength(1);
+    expect(ds.alerts).toHaveLength(3);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: readJson error handling ─────────────
+// ════════════════════════════════════════════════════════════════
+
+describe("readJson error handling", () => {
+  it("handles file read permission error gracefully", async () => {
+    mockedFs.readFile.mockRejectedValue(new Error("EACCES: permission denied"));
+
+    const result = await queryExportableOrders(cfg);
+    expect(result).toEqual([]);
+  });
+
+  it("handles wrapped object formats (price-alerts, conditional-orders, etc.)", async () => {
+    // When the JSON file has a wrapper object but the inner array is missing
+    setFileData("price-alerts.json", {});
+    const priceAlerts = await queryExportablePriceAlerts(cfg);
+    expect(priceAlerts).toEqual([]);
+
+    setFileData("conditional-orders.json", {});
+    const condOrders = await queryExportableConditionalOrders(cfg);
+    expect(condOrders).toEqual([]);
+
+    setFileData("dca-plans.json", {});
+    const dcaPlans = await queryExportableDcaPlans(cfg);
+    expect(dcaPlans).toEqual([]);
+
+    setFileData("breakout-setups.json", {});
+    const breakouts = await queryExportableBreakoutSetups(cfg);
+    expect(breakouts).toEqual([]);
+
+    setFileData("strategy-health.json", {});
+    const health = await queryExportableStrategyHealth(cfg);
+    expect(health).toEqual([]);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Trade Notes filter by symbol ────────
+// ════════════════════════════════════════════════════════════════
+
+describe("Trade notes filtering", () => {
+  it("filters by symbol", async () => {
+    const notes = [
+      makeTradeNote({ id: "n-1", symbol: "600519" }),
+      makeTradeNote({ id: "n-2", symbol: "000858" }),
+    ];
+    setFileData("trade-journal.json", notes);
+
+    const ds = await queryExportDataset(cfg, { sections: ["notes"], symbols: ["600519"] });
+    expect(ds.tradeNotes).toHaveLength(1);
+    expect(ds.tradeNotes[0]!.symbol).toBe("600519");
+  });
+
+  it("filters by date range", async () => {
+    const notes = [
+      makeTradeNote({ id: "n-1", date: "2025-01-05" }),
+      makeTradeNote({ id: "n-2", date: "2025-01-15" }),
+    ];
+    setFileData("trade-journal.json", notes);
+
+    const ds = await queryExportDataset(cfg, { sections: ["notes"], from: "2025-01-10" });
+    expect(ds.tradeNotes).toHaveLength(1);
+    expect(ds.tradeNotes[0]!.id).toBe("n-2");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// ── Additional Coverage: Backtest filter by date range ───────
+// ════════════════════════════════════════════════════════════════
+
+describe("Backtest history date filtering", () => {
+  it("filters by date range (createdAt)", async () => {
+    const entries = [
+      makeBacktestEntry({ id: "bt-1", createdAt: "2024-12-01T09:00:00Z" }),
+      makeBacktestEntry({ id: "bt-2", createdAt: "2025-01-10T09:00:00Z" }),
+    ];
+    setFileData(path.join("backtests", "index.json"), entries);
+
+    const result = await queryExportableBacktestHistory(cfg, { from: "2025-01-01", to: "2025-01-31" });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("bt-2");
+  });
+});

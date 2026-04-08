@@ -71,29 +71,38 @@ function fmtVal(v){
   if(typeof v==='string')return v;
   return JSON.stringify(v);
 }
+function fmtYi(v){
+  if(v==null)return'-';
+  if(typeof v==='number')return v.toFixed(2)+'亿';
+  return String(v);
+}
+function fmtPct(v){
+  if(v==null)return'-';
+  return Number(v).toFixed(2)+'%';
+}
 var LABELS={
   advancers:'上涨家数',decliners:'下跌家数',unchanged:'平盘',total:'总数',
   advanceRatio:'上涨比例',limitUp:'涨停',limitDown:'跌停',
   realLimitUp:'真实涨停',realLimitDown:'真实跌停',
   suspended:'停牌',activity:'活跃度',
-  avgChange:'平均涨幅%',medianChange:'中位数涨幅%',
-  balance:'融资余额',buyAmount:'融资买入额',repayAmount:'融资偿还额',
-  shortBalance:'融券余额',shortVolume:'融券余量',shortSellVolume:'融券卖出量',
-  stockCount:'标的数量',
+  balance:'融资余额',buyAmount:'融资买入额',shortBalance:'融券余额',
+  shortSellAmount:'融券卖出额',collateralValue:'担保物总价值',
+  avgGuaranteeRatio:'平均维持担保比例',investors:'负债投资者数',
+  tradingInvestors:'参与交易投资者数',brokerCount:'证券公司数',
   date:'日期',action:'',historyCount:''
 };
 function renderBreadth(el,d){
   if(d.error){el.innerHTML='<div class="error">'+d.error+'</div>';return;}
   var keys=['advancers','decliners','unchanged','limitUp','realLimitUp','limitDown','realLimitDown','advanceRatio','activity','suspended','total'];
-  var html='<div style="display:flex;gap:12px;flex-wrap:wrap">';
+  var html='<div style="margin-bottom:8px;font-size:12px;color:var(--text-dim)">'+( d.date||'')+'</div>';
+  html+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   keys.forEach(function(k){
     if(d[k]==null)return;
     var v=d[k];
     var color='';
-    if(k==='advancers'||k==='limitUp')color='color:var(--red)';
-    if(k==='decliners'||k==='limitDown')color='color:var(--green)';
+    if(k==='advancers'||k==='limitUp'||k==='realLimitUp')color='color:var(--red)';
+    if(k==='decliners'||k==='limitDown'||k==='realLimitDown')color='color:var(--green)';
     if(k==='advanceRatio')v=(v*100).toFixed(1)+'%';
-    if(k==='avgChange'||k==='medianChange')v=Number(v).toFixed(2)+'%';
     html+='<div style="background:var(--bg3);border-radius:6px;padding:10px 14px;min-width:100px"><div style="font-size:11px;color:var(--text-dim)">'+(LABELS[k]||k)+'</div><div class="kpi" style="font-size:20px;'+color+'">'+v+'</div></div>';
   });
   html+='</div>';
@@ -101,31 +110,70 @@ function renderBreadth(el,d){
 }
 function renderMargin(el,d){
   if(d.error){el.innerHTML='<div class="error">'+d.error+'</div>';return;}
-  var keys=['date','balance','buyAmount','repayAmount','shortVolume','shortSellVolume','stockCount'];
+  var rows=[
+    ['日期', d.date],
+    ['融资余额', fmtYi(d.balance)],
+    ['融资买入额', fmtYi(d.buyAmount)],
+    ['融券余额', fmtYi(d.shortBalance)],
+    ['融券卖出额', fmtYi(d.shortSellAmount)],
+    ['担保物总价值', fmtYi(d.collateralValue)],
+    ['平均维持担保比例', d.avgGuaranteeRatio!=null?fmtPct(d.avgGuaranteeRatio):'-'],
+    ['负债投资者数', fmtVal(d.investors)],
+    ['券商数量', d.brokerCount||'-'],
+  ];
   var html='<table>';
-  keys.forEach(function(k){if(d[k]!=null)html+='<tr><th>'+(LABELS[k]||k)+'</th><td>'+fmtVal(d[k])+'</td></tr>';});
+  rows.forEach(function(r){if(r[1]!=null&&r[1]!=='-'&&r[1]!=='')html+='<tr><th>'+r[0]+'</th><td>'+r[1]+'</td></tr>';});
   html+='</table>';
+  // Trend table
+  var hist=d.history||[];
+  if(hist.length>1){
+    html+='<div style="margin-top:14px;font-size:12px;color:var(--text-dim)">近期趋势</div>';
+    html+='<table><thead><tr><th>日期</th><th>融资余额(亿)</th><th>融资买入(亿)</th><th>维保比例%</th></tr></thead><tbody>';
+    hist.forEach(function(r){
+      html+='<tr><td>'+r.date+'</td><td>'+fmtYi(r.balance)+'</td><td>'+fmtYi(r.buyAmount)+'</td><td>'+(r.avgGuaranteeRatio!=null?fmtPct(r.avgGuaranteeRatio):'-')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+  }
   el.innerHTML=html;
 }
 function renderNorthbound(el,d){
   if(d.error){el.innerHTML='<div class="error">'+d.error+'</div>';return;}
   var rt=d.realtime||{};
-  var html='<div style="margin-bottom:12px"><strong>'+( rt.date||'')+ ' '+(rt.time||'')+'</strong></div>';
+  var html='<div style="margin-bottom:8px;font-size:12px;color:var(--text-dim)">'+( rt.date||'')+' 北向 (单位: 亿元)</div>';
   html+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
   [{k:'hk2sh',n:'沪股通'},{k:'hk2sz',n:'深股通'},{k:'northTotal',n:'北向合计'}].forEach(function(item){
     var v=rt[item.k];
     if(v==null)v=0;
-    var color=v>=0?'color:var(--red)':'color:var(--green)';
-    html+='<div style="background:var(--bg3);border-radius:6px;padding:10px 14px;min-width:120px"><div style="font-size:11px;color:var(--text-dim)">'+item.n+'</div><div class="kpi" style="font-size:18px;'+color+'">'+fmtVal(v)+'</div></div>';
+    var color=v>0?'color:var(--red)':v<0?'color:var(--green)':'';
+    html+='<div style="background:var(--bg3);border-radius:6px;padding:10px 14px;min-width:120px"><div style="font-size:11px;color:var(--text-dim)">'+item.n+'</div><div class="kpi" style="font-size:18px;'+color+'">'+fmtYi(v)+'</div></div>';
   });
   html+='</div>';
+  // Note about data policy
+  if(d.note){html+='<div style="margin-top:8px;padding:8px 12px;background:var(--bg3);border-radius:4px;font-size:12px;color:var(--yellow)">⚠️ '+d.note+'</div>';}
+  // Southbound
+  var sb=d.southbound;
+  if(sb){
+    html+='<div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">';
+    [{k:'sh2hk',n:'港股通(沪)'},{k:'sz2hk',n:'港股通(深)'},{k:'southTotal',n:'南向合计'}].forEach(function(item){
+      var v=sb[item.k];if(v==null)v=0;
+      var color=v>0?'color:var(--red)':v<0?'color:var(--green)':'';
+      html+='<div style="background:var(--bg3);border-radius:6px;padding:8px 12px;min-width:110px"><div style="font-size:11px;color:var(--text-dim)">'+item.n+'</div><div style="font-size:16px;font-weight:600;'+color+'">'+fmtYi(v)+'</div></div>';
+    });
+    html+='</div>';
+  }
+  // History: market fund flow
   var hist=d.history||[];
   if(hist.length){
-    html+='<table style="margin-top:12px"><thead><tr><th>日期</th><th>北向净流入</th><th>沪股通</th><th>深股通</th></tr></thead><tbody>';
-    hist.slice(0,10).forEach(function(r){
+    var htype=d.historyType==='market_fund_flow'?'市场主力资金流向':'北向历史';
+    html+='<div style="margin-top:14px;font-size:12px;color:var(--text-dim)">'+htype+' (近'+hist.length+'日)</div>';
+    html+='<table><thead><tr><th>日期</th><th>上证</th><th>涨跌%</th><th>主力净流入</th><th>净占比</th><th>超大单净流入</th></tr></thead><tbody>';
+    hist.forEach(function(r){
       if(!r.date)return;
-      var net=r.northNetIn||0;
-      html+='<tr><td>'+r.date+'</td><td style="color:'+(net>=0?'var(--red)':'var(--green)')+'">'+fmtVal(net)+'</td><td>'+fmtVal(r.hk2sh)+'</td><td>'+fmtVal(r.hk2sz)+'</td></tr>';
+      var mainV=r.mainNetIn||0;
+      var mc=mainV>0?'color:var(--red)':mainV<0?'color:var(--green)':'';
+      html+='<tr><td>'+r.date+'</td><td>'+(r.shIndex||'-')+'</td><td>'+(r.shChg!=null?r.shChg.toFixed(2)+'%':'-')+'</td>';
+      html+='<td style="'+mc+'">'+fmtVal(mainV)+'</td><td>'+(r.mainPct!=null?r.mainPct.toFixed(2)+'%':'-')+'</td>';
+      html+='<td>'+fmtVal(r.bigNetIn||0)+'</td></tr>';
     });
     html+='</tbody></table>';
   }

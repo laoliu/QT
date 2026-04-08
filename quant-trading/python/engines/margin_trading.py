@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 # Bypass proxy for all requests — required in proxy-enabled environments
@@ -90,7 +90,11 @@ def _market_breadth() -> dict:
 
 
 def _margin_summary() -> dict:
-    """Get margin trading (两融) summary data via akshare stock_margin_detail_sse."""
+    """Get margin trading (两融) summary via akshare stock_margin_account_info.
+
+    This API provides market-wide daily data (融资余额, 融券余额, 融资买入额,
+    担保物总价值, 平均维持担保比例 etc.) with full history.
+    """
     try:
         import akshare as ak
     except ImportError:
@@ -99,39 +103,34 @@ def _margin_summary() -> dict:
     result: dict[str, Any] = {"action": "summary"}
 
     try:
-        # Try recent trading days (today might not have data yet)
-        df = None
-        for days_back in range(0, 5):
-            date_str = (datetime.now() - timedelta(days=days_back)).strftime("%Y%m%d")
-            try:
-                df = ak.stock_margin_detail_sse(date=date_str)
-                if df is not None and not df.empty:
-                    result["date"] = date_str[:4] + "-" + date_str[4:6] + "-" + date_str[6:]
-                    break
-            except Exception:
-                continue
-
-        if df is not None and not df.empty:
-            # Aggregate across all stocks for market-wide summary
-            rz_col = "融资余额" if "融资余额" in df.columns else None
-            rz_buy_col = "融资买入额" if "融资买入额" in df.columns else None
-            rz_repay_col = "融资偿还额" if "融资偿还额" in df.columns else None
-            rq_vol_col = "融券余量" if "融券余量" in df.columns else None
-            rq_sell_col = "融券卖出量" if "融券卖出量" in df.columns else None
-
-            if rz_col:
-                result["balance"] = _safe_float(df[rz_col].astype(float).sum())
-            if rz_buy_col:
-                result["buyAmount"] = _safe_float(df[rz_buy_col].astype(float).sum())
-            if rz_repay_col:
-                result["repayAmount"] = _safe_float(df[rz_repay_col].astype(float).sum())
-            if rq_vol_col:
-                result["shortVolume"] = _safe_float(df[rq_vol_col].astype(float).sum())
-            if rq_sell_col:
-                result["shortSellVolume"] = _safe_float(df[rq_sell_col].astype(float).sum())
-            result["stockCount"] = len(df)
-        else:
+        df = ak.stock_margin_account_info()
+        if df is None or df.empty:
             result["error"] = "暂无两融数据"
+            return result
+
+        latest = df.iloc[-1]
+        result["date"] = str(latest["日期"])[:10]
+        result["balance"] = _safe_float(latest.get("融资余额"))          # 亿
+        result["shortBalance"] = _safe_float(latest.get("融券余额"))     # 亿
+        result["buyAmount"] = _safe_float(latest.get("融资买入额"))      # 亿
+        result["shortSellAmount"] = _safe_float(latest.get("融券卖出额"))# 亿
+        result["collateralValue"] = _safe_float(latest.get("担保物总价值"))
+        result["avgGuaranteeRatio"] = _safe_float(latest.get("平均维持担保比例"))
+        result["investors"] = _safe_float(latest.get("有融资融券负债的投资者数量"))
+        result["tradingInvestors"] = _safe_float(latest.get("参与交易的投资者数量"))
+        result["brokerCount"] = int(latest.get("证券公司数量", 0))
+
+        # Recent 10-day history for trend
+        history = []
+        for _, row in df.tail(10).iterrows():
+            history.append({
+                "date": str(row["日期"])[:10],
+                "balance": _safe_float(row.get("融资余额")),
+                "shortBalance": _safe_float(row.get("融券余额")),
+                "buyAmount": _safe_float(row.get("融资买入额")),
+                "avgGuaranteeRatio": _safe_float(row.get("平均维持担保比例")),
+            })
+        result["history"] = history
 
     except Exception as e:
         result["error"] = f"两融数据查询失败: {e}"

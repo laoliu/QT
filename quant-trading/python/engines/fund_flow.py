@@ -163,7 +163,15 @@ def _fund_flow_rank(limit: int, errors: list[str]) -> dict:
 
 
 def _northbound_flow(errors: list[str]) -> dict:
-    """Get northbound (沪深港通) fund flow data."""
+    """Get northbound (沪深港通) fund flow data.
+
+    Note: since 2024-08-19 HKEX stopped disclosing real-time northbound
+    flow data.  The summary API (stock_hsgt_fund_flow_summary_em) may
+    still return partial data for some channels.  Historical daily flow
+    from stock_hsgt_hist_em is NaN after 2024-08-16.
+    We fall back to the market-wide fund flow (stock_market_fund_flow)
+    for recent history (主力/超大单/大单 净流入).
+    """
     try:
         import akshare as ak
     except ImportError:
@@ -171,68 +179,80 @@ def _northbound_flow(errors: list[str]) -> dict:
 
     result: dict[str, Any] = {"action": "northbound"}
 
-    # Today's northbound summary
+    # ── Today's northbound summary ────────────────────────────────
     try:
         df = ak.stock_hsgt_fund_flow_summary_em()
         if df is not None and not df.empty:
             north = df[df["资金方向"] == "北向"]
+            south = df[df["资金方向"] == "南向"]
             if not north.empty:
                 hk2sh_row = north[north["板块"] == "沪股通"]
                 hk2sz_row = north[north["板块"] == "深股通"]
 
                 hk2sh_net = _safe_float(hk2sh_row["资金净流入"].iloc[0]) if not hk2sh_row.empty else None
                 hk2sz_net = _safe_float(hk2sz_row["资金净流入"].iloc[0]) if not hk2sz_row.empty else None
-                hk2sh_buy = _safe_float(hk2sh_row["成交净买额"].iloc[0]) if not hk2sh_row.empty else None
-                hk2sz_buy = _safe_float(hk2sz_row["成交净买额"].iloc[0]) if not hk2sz_row.empty else None
+                hk2sh_bal = _safe_float(hk2sh_row["当日资金余额"].iloc[0]) if not hk2sh_row.empty else None
+                hk2sz_bal = _safe_float(hk2sz_row["当日资金余额"].iloc[0]) if not hk2sz_row.empty else None
 
-                total_net = 0.0
-                if hk2sh_net is not None:
-                    total_net += hk2sh_net
-                if hk2sz_net is not None:
-                    total_net += hk2sz_net
-
+                total_net = (hk2sh_net or 0) + (hk2sz_net or 0)
                 date_str = str(north["交易日"].iloc[0])[:10] if "交易日" in north.columns else ""
+
                 result["realtime"] = {
                     "date": date_str,
                     "hk2sh": hk2sh_net,
                     "hk2sz": hk2sz_net,
-                    "hk2shBuy": hk2sh_buy,
-                    "hk2szBuy": hk2sz_buy,
+                    "hk2shBalance": hk2sh_bal,
+                    "hk2szBalance": hk2sz_bal,
                     "northTotal": round(total_net, 4),
                 }
+
+                # Market stats from the same rows
+                if not hk2sh_row.empty:
+                    result["realtime"]["shUp"] = int(hk2sh_row["上涨数"].iloc[0])
+                    result["realtime"]["shDown"] = int(hk2sh_row["下跌数"].iloc[0])
+                if not hk2sz_row.empty:
+                    result["realtime"]["szUp"] = int(hk2sz_row["上涨数"].iloc[0])
+                    result["realtime"]["szDown"] = int(hk2sz_row["下跌数"].iloc[0])
+
+            # Southbound summary
+            if not south.empty:
+                sh2hk_row = south[south["板块"].str.contains("沪")]
+                sz2hk_row = south[south["板块"].str.contains("深")]
+                sh2hk_net = _safe_float(sh2hk_row["资金净流入"].iloc[0]) if not sh2hk_row.empty else None
+                sz2hk_net = _safe_float(sz2hk_row["资金净流入"].iloc[0]) if not sz2hk_row.empty else None
+                result["southbound"] = {
+                    "sh2hk": sh2hk_net,
+                    "sz2hk": sz2hk_net,
+                    "southTotal": round((sh2hk_net or 0) + (sz2hk_net or 0), 4),
+                }
+
+            # Note about data policy
+            if hk2sh_net == 0 and hk2sh_bal == 0:
+                result["note"] = "2024年8月19日起港交所不再披露沪股通实时资金流向，沪股通数据可能为0"
+
     except Exception as e:
         errors.append(f"北向资金实时数据获取失败: {e}")
 
-    # Historical daily flow (last 10 non-NaN trading days)
+    # ── Recent market fund flow (主力/大单) as proxy ──────────────
     try:
-        df_sh = ak.stock_hsgt_hist_em(symbol="沪股通")
-        df_sz = ak.stock_hsgt_hist_em(symbol="深股通")
-
-        sh_good = df_sh[df_sh["当日成交净买额"].notna()].tail(10) if df_sh is not None else None
-        sz_good = df_sz[df_sz["当日成交净买额"].notna()].tail(10) if df_sz is not None else None
-
-        if sh_good is not None and not sh_good.empty:
+        df_mf = ak.stock_market_fund_flow()
+        if df_mf is not None and not df_mf.empty:
             history = []
-            for _, sh_row in sh_good.iterrows():
-                date = str(sh_row["日期"])[:10]
-                sz_match = sz_good[sz_good["日期"].astype(str).str[:10] == date] if sz_good is not None else None
-                sz_net = _safe_float(sz_match["当日成交净买额"].iloc[0]) if sz_match is not None and not sz_match.empty else None
-                sh_net = _safe_float(sh_row["当日成交净买额"])
-                total = 0.0
-                if sh_net is not None:
-                    total += sh_net
-                if sz_net is not None:
-                    total += sz_net
+            for _, row in df_mf.tail(10).iterrows():
                 history.append({
-                    "date": date,
-                    "northNetIn": round(total, 4),
-                    "hk2sh": sh_net,
-                    "hk2sz": sz_net,
+                    "date": str(row["日期"])[:10],
+                    "shIndex": _safe_float(row.get("上证-收盘价")),
+                    "shChg": _safe_float(row.get("上证-涨跌幅")),
+                    "mainNetIn": _safe_float(row.get("主力净流入-净额")),
+                    "mainPct": _safe_float(row.get("主力净流入-净占比")),
+                    "bigNetIn": _safe_float(row.get("超大单净流入-净额")),
+                    "bigPct": _safe_float(row.get("超大单净流入-净占比")),
                 })
             result["history"] = history
             result["historyCount"] = len(history)
+            result["historyType"] = "market_fund_flow"
     except Exception as e:
-        errors.append(f"北向资金历史数据获取失败: {e}")
+        errors.append(f"市场资金流向获取失败: {e}")
 
     if errors:
         result["errors"] = errors

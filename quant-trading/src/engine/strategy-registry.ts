@@ -64,10 +64,76 @@ import {
   t0EnhancedStrategy,
   trendComboStrategy,
   volumeConfirmation,
+  // Extended basic strategies
+  trixMomentum,
+  mfiOscillator,
+  aroonTrend,
+  cmfDivergence,
+  elderRayStrategy,
+  supertrendStrategy,
+  hullMaCrossover,
+  demaCrossover,
+  tripleMaCrossover,
+  maEnvelopeStrategy,
+  connorsRsiStrategy,
+  kamaStrategy,
+  demarkerStrategy,
+  // Extended CTA strategies
+  ctaAwesomeOscillator,
+  ctaElderForceIndex,
+  ctaDemarkerCta,
+  ctaUltimateOscillatorStrategy,
+  ctaAdxBreakout,
+  ctaTrixTrend,
+  ctaHullMaTrend,
+  ctaMassIndex,
+  ctaChaikinOscillator,
+  ctaCoppock,
+  ctaRsiDivergence,
+  ctaVolumeBreakout,
+  ctaAdaptiveMa,
+  ctaMaEnvelope,
+  ctaConnorsRsi,
+  ctaAroonOscillator,
+  ctaMfiTrend,
+  ctaDemaCrossover,
+  ctaTripleMa,
+  ctaSupertrendCta,
 } from "./builtin-engine.js";
 import type { BuiltinStrategy } from "./builtin-engine.js";
 
 type StrategyFactory = (params?: Record<string, unknown>) => BuiltinStrategy;
+
+/** Fallback: vnpy strategy → builtin equivalent (used when vnpy is not installed). */
+const vnpyBuiltinFallback: Record<
+  string,
+  { id: string; mapParams: (p: Record<string, unknown>) => Record<string, unknown> }
+> = {
+  "vnpy-turtle": {
+    id: "turtle-breakout",
+    mapParams: (p) => ({ entryPeriod: p.entry_window ?? 20, exitPeriod: p.exit_window ?? 10 }),
+  },
+  "vnpy-double-ma": {
+    id: "dual-ma-crossover",
+    mapParams: (p) => ({ fastPeriod: p.fast_window ?? 10, slowPeriod: p.slow_window ?? 30 }),
+  },
+  "vnpy-boll-channel": {
+    id: "bollinger-breakout",
+    mapParams: (p) => ({ period: p.boll_window ?? 18, stdDevMultiplier: p.boll_dev ?? 3.4 }),
+  },
+  "vnpy-king-keltner": {
+    id: "keltner-channel",
+    mapParams: (p) => ({ emaPeriod: p.kk_period ?? 40, atrMultiplier: p.kk_dev ?? 2.0 }),
+  },
+  "vnpy-atr-rsi": {
+    id: "rsi-reversal",
+    mapParams: (p) => ({ period: p.rsi_period ?? 5, oversold: p.rsi_entry ?? 16, overbought: 84 }),
+  },
+  "vnpy-multi-timeframe": {
+    id: "cta-trend",
+    mapParams: (p) => ({ trendPeriod: p.slow_period ?? 20 }),
+  },
+};
 
 /** Map from strategy ID → factory function that creates the strategy with params. */
 const strategyMap = new Map<string, StrategyFactory>([
@@ -479,6 +545,214 @@ const strategyMap = new Map<string, StrategyFactory>([
         (p?.minVotes as number) ?? 2,
       ),
   ],
+  // ── Extended Basic Strategies ──────────────────────────────────
+  [
+    "trix-momentum",
+    (p) => trixMomentum((p?.period as number) ?? 15, (p?.signalPeriod as number) ?? 9),
+  ],
+  [
+    "mfi-oscillator",
+    (p) =>
+      mfiOscillator(
+        (p?.period as number) ?? 14,
+        (p?.oversold as number) ?? 20,
+        (p?.overbought as number) ?? 80,
+      ),
+  ],
+  ["aroon-trend", (p) => aroonTrend((p?.period as number) ?? 25)],
+  [
+    "cmf-divergence",
+    (p) => cmfDivergence((p?.period as number) ?? 20, (p?.threshold as number) ?? 0.05),
+  ],
+  ["elder-ray", (p) => elderRayStrategy((p?.emaPeriod as number) ?? 13)],
+  [
+    "supertrend",
+    (p) =>
+      supertrendStrategy((p?.atrPeriod as number) ?? 10, (p?.multiplier as number) ?? 3.0),
+  ],
+  [
+    "hull-ma-crossover",
+    (p) =>
+      hullMaCrossover((p?.fastPeriod as number) ?? 9, (p?.slowPeriod as number) ?? 21),
+  ],
+  [
+    "dema-crossover",
+    (p) =>
+      demaCrossover((p?.fastPeriod as number) ?? 10, (p?.slowPeriod as number) ?? 30),
+  ],
+  [
+    "triple-ma-crossover",
+    (p) =>
+      tripleMaCrossover(
+        (p?.shortPeriod as number) ?? 5,
+        (p?.midPeriod as number) ?? 20,
+        (p?.longPeriod as number) ?? 60,
+      ),
+  ],
+  [
+    "ma-envelope",
+    (p) => maEnvelopeStrategy((p?.period as number) ?? 20, (p?.percent as number) ?? 3),
+  ],
+  [
+    "connors-rsi",
+    (p) =>
+      connorsRsiStrategy(
+        (p?.rsiPeriod as number) ?? 3,
+        (p?.streakPeriod as number) ?? 2,
+        (p?.percentRankPeriod as number) ?? 100,
+        (p?.oversold as number) ?? 15,
+        (p?.overbought as number) ?? 85,
+      ),
+  ],
+  [
+    "kama-trend",
+    (p) =>
+      kamaStrategy(
+        (p?.period as number) ?? 10,
+        (p?.fastPeriod as number) ?? 2,
+        (p?.slowPeriod as number) ?? 30,
+      ),
+  ],
+  [
+    "demarker",
+    (p) =>
+      demarkerStrategy(
+        (p?.period as number) ?? 14,
+        (p?.oversold as number) ?? 0.3,
+        (p?.overbought as number) ?? 0.7,
+      ),
+  ],
+  // ── Extended CTA Strategies ────────────────────────────────────
+  [
+    "cta-awesome-oscillator",
+    (p) =>
+      ctaAwesomeOscillator((p?.fastPeriod as number) ?? 5, (p?.slowPeriod as number) ?? 34),
+  ],
+  ["cta-elder-force", (p) => ctaElderForceIndex((p?.emaPeriod as number) ?? 13)],
+  [
+    "cta-demarker",
+    (p) =>
+      ctaDemarkerCta(
+        (p?.period as number) ?? 14,
+        (p?.oversold as number) ?? 0.3,
+        (p?.overbought as number) ?? 0.7,
+      ),
+  ],
+  [
+    "cta-ultimate-oscillator",
+    (p) =>
+      ctaUltimateOscillatorStrategy(
+        (p?.period1 as number) ?? 7,
+        (p?.period2 as number) ?? 14,
+        (p?.period3 as number) ?? 28,
+        (p?.oversold as number) ?? 30,
+        (p?.overbought as number) ?? 70,
+      ),
+  ],
+  [
+    "cta-adx-breakout",
+    (p) =>
+      ctaAdxBreakout(
+        (p?.period as number) ?? 14,
+        (p?.adxThreshold as number) ?? 25,
+        (p?.diThreshold as number) ?? 20,
+      ),
+  ],
+  [
+    "cta-trix-trend",
+    (p) => ctaTrixTrend((p?.period as number) ?? 12, (p?.signalPeriod as number) ?? 9),
+  ],
+  ["cta-hull-ma-trend", (p) => ctaHullMaTrend((p?.period as number) ?? 16)],
+  [
+    "cta-mass-index",
+    (p) => ctaMassIndex((p?.emaPeriod as number) ?? 9, (p?.threshold as number) ?? 27),
+  ],
+  [
+    "cta-chaikin-oscillator",
+    (p) =>
+      ctaChaikinOscillator((p?.fastPeriod as number) ?? 3, (p?.slowPeriod as number) ?? 10),
+  ],
+  [
+    "cta-coppock",
+    (p) =>
+      ctaCoppock(
+        (p?.longRoc as number) ?? 14,
+        (p?.shortRoc as number) ?? 11,
+        (p?.wmaPeriod as number) ?? 10,
+      ),
+  ],
+  [
+    "cta-rsi-divergence",
+    (p) =>
+      ctaRsiDivergence(
+        (p?.rsiPeriod as number) ?? 14,
+        (p?.lookback as number) ?? 20,
+        (p?.oversold as number) ?? 30,
+        (p?.overbought as number) ?? 70,
+      ),
+  ],
+  [
+    "cta-volume-breakout",
+    (p) =>
+      ctaVolumeBreakout(
+        (p?.maPeriod as number) ?? 20,
+        (p?.volMultiplier as number) ?? 2.0,
+        (p?.lookback as number) ?? 20,
+      ),
+  ],
+  [
+    "cta-adaptive-ma",
+    (p) =>
+      ctaAdaptiveMa(
+        (p?.period as number) ?? 10,
+        (p?.fastPeriod as number) ?? 2,
+        (p?.slowPeriod as number) ?? 30,
+      ),
+  ],
+  [
+    "cta-ma-envelope",
+    (p) => ctaMaEnvelope((p?.period as number) ?? 20, (p?.percent as number) ?? 2.5),
+  ],
+  [
+    "cta-connors-rsi",
+    (p) =>
+      ctaConnorsRsi(
+        (p?.rsiPeriod as number) ?? 3,
+        (p?.streakPeriod as number) ?? 2,
+        (p?.percentRankPeriod as number) ?? 100,
+        (p?.oversold as number) ?? 10,
+        (p?.overbought as number) ?? 90,
+      ),
+  ],
+  ["cta-aroon-oscillator", (p) => ctaAroonOscillator((p?.period as number) ?? 25)],
+  [
+    "cta-mfi-trend",
+    (p) =>
+      ctaMfiTrend(
+        (p?.period as number) ?? 14,
+        (p?.oversold as number) ?? 20,
+        (p?.overbought as number) ?? 80,
+      ),
+  ],
+  [
+    "cta-dema-crossover",
+    (p) =>
+      ctaDemaCrossover((p?.fastPeriod as number) ?? 10, (p?.slowPeriod as number) ?? 30),
+  ],
+  [
+    "cta-triple-ma",
+    (p) =>
+      ctaTripleMa(
+        (p?.shortPeriod as number) ?? 5,
+        (p?.midPeriod as number) ?? 20,
+        (p?.longPeriod as number) ?? 60,
+      ),
+  ],
+  [
+    "cta-supertrend",
+    (p) =>
+      ctaSupertrendCta((p?.atrPeriod as number) ?? 10, (p?.multiplier as number) ?? 3.0),
+  ],
 ]);
 import {
   composeStrategy,
@@ -626,7 +900,20 @@ export async function runBacktest(
   }
 
   if (engine === "vnpy" || strategy?.engine === "vnpy") {
-    return runVnpyBacktest(request, config);
+    const fallback = vnpyBuiltinFallback[request.strategyId];
+    try {
+      return await runVnpyBacktest(request, config);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("not installed") || !fallback) throw err;
+      // vnpy unavailable — fallback to builtin equivalent
+      const mappedParams = fallback.mapParams(request.parameters ?? {});
+      const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
+      if (request.symbols.length > 1) {
+        return runPortfolioBacktest(builtinStrategy, request, config, sharedProvider);
+      }
+      return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
+    }
   }
 
   // Builtin engine

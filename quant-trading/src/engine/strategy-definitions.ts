@@ -864,6 +864,203 @@ const builtinTsStrategies: StrategyDefinition[] = [
       },
     ],
   },
+  // ── Extended Basic Strategies ────────────────────────────────────
+  {
+    id: "trix-momentum",
+    name: "TRIX动量 (TRIX Momentum)",
+    description:
+      "三重指数平滑(TRIX)指标策略：TRIX上穿信号线买入，下穿卖出。" +
+      "TRIX是三次EMA平滑后的变动率，能过滤短期波动噪音，捕捉真正的趋势动量变化。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 15, description: "TRIX周期", min: 5, max: 50 },
+      { name: "signalPeriod", type: "number", default: 9, description: "信号线周期", min: 3, max: 20 },
+    ],
+  },
+  {
+    id: "mfi-oscillator",
+    name: "资金流量指标 (MFI Oscillator)",
+    description:
+      "Money Flow Index(MFI)策略：被称为成交量加权RSI。" +
+      "MFI进入超卖区(低于20)买入反弹，进入超买区(高于80)卖出。" +
+      "比RSI多了成交量维度，信号更可靠。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "MFI周期", min: 5, max: 50 },
+      { name: "oversold", type: "number", default: 20, description: "超卖阈值", min: 5, max: 35, step: 5 },
+      { name: "overbought", type: "number", default: 80, description: "超买阈值", min: 65, max: 95, step: 5 },
+    ],
+  },
+  {
+    id: "aroon-trend",
+    name: "Aroon趋势指标 (Aroon Trend)",
+    description:
+      "Aroon指标策略：Aroon Up上穿Aroon Down买入（上升趋势开始），" +
+      "Down上穿Up卖出（下降趋势开始）。衡量最近高/低点距今时间，" +
+      "判断趋势的新鲜程度和强度。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 25, description: "Aroon周期", min: 10, max: 60 },
+    ],
+  },
+  {
+    id: "cmf-divergence",
+    name: "蔡金资金流 (CMF Divergence)",
+    description:
+      "Chaikin Money Flow(CMF)策略：CMF突破正阈值买入（资金持续流入），" +
+      "跌破负阈值卖出（资金持续流出）。综合价格和成交量判断资金方向。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "CMF周期", min: 5, max: 60 },
+      { name: "threshold", type: "number", default: 0.05, description: "信号阈值", min: 0.01, max: 0.2, step: 0.01 },
+    ],
+  },
+  {
+    id: "elder-ray",
+    name: "艾尔德射线 (Elder Ray)",
+    description:
+      "Elder Ray策略：用Bull Power(高-EMA)和Bear Power(低-EMA)衡量多空力量。" +
+      "EMA上升+Bear Power回升买入，EMA下降+Bull Power衰退卖出。" +
+      "经典的趋势+力量分析框架。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "emaPeriod", type: "number", default: 13, description: "EMA周期", min: 5, max: 50 },
+    ],
+  },
+  {
+    id: "supertrend",
+    name: "超级趋势 (Supertrend)",
+    description:
+      "Supertrend策略：基于ATR动态计算支撑/阻力线。" +
+      "趋势线在价格下方为多头，在上方为空头，翻转时自动切换方向。" +
+      "比固定均线更贴近价格，止损更精确。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "atrPeriod", type: "number", default: 10, description: "ATR周期", min: 5, max: 30 },
+      { name: "multiplier", type: "number", default: 3.0, description: "ATR倍数", min: 1.0, max: 6.0, step: 0.5 },
+    ],
+  },
+  {
+    id: "hull-ma-crossover",
+    name: "Hull均线交叉 (Hull MA Crossover)",
+    description:
+      "Hull Moving Average交叉策略：使用WMA构造的低延迟均线。" +
+      "快速HMA上穿慢速HMA买入，下穿卖出。" +
+      "信号比SMA/EMA更及时，适合中短线趋势跟踪。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "fastPeriod", type: "number", default: 9, description: "快速HMA周期", min: 4, max: 30 },
+      { name: "slowPeriod", type: "number", default: 21, description: "慢速HMA周期", min: 10, max: 60 },
+    ],
+  },
+  {
+    id: "dema-crossover",
+    name: "DEMA交叉 (DEMA Crossover)",
+    description:
+      "双重指数移动平均线交叉策略：DEMA = 2×EMA - EMA(EMA)，" +
+      "消除传统EMA的固有滞后。快速DEMA上穿慢速DEMA买入，下穿卖出。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "fastPeriod", type: "number", default: 10, description: "快速DEMA周期", min: 3, max: 30 },
+      { name: "slowPeriod", type: "number", default: 30, description: "慢速DEMA周期", min: 10, max: 120 },
+    ],
+  },
+  {
+    id: "triple-ma-crossover",
+    name: "三均线系统 (Triple MA)",
+    description:
+      "三均线排列策略：短/中/长三条均线形成多头排列(短>中>长)且价格站上短线买入，" +
+      "形成空头排列(短<中<长)且价格跌破短线卖出。经典的趋势确认系统。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "shortPeriod", type: "number", default: 5, description: "短期均线", min: 2, max: 30 },
+      { name: "midPeriod", type: "number", default: 20, description: "中期均线", min: 10, max: 60 },
+      { name: "longPeriod", type: "number", default: 60, description: "长期均线", min: 20, max: 200 },
+    ],
+  },
+  {
+    id: "ma-envelope",
+    name: "均线信封 (MA Envelope)",
+    description:
+      "均线信封策略：在移动平均线上下各画一条固定百分比的通道线。" +
+      "价格跌破下轨买入（超跌回归），突破上轨卖出（超涨回落）。" +
+      "适合震荡市的均值回归交易。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "均线周期", min: 5, max: 120 },
+      { name: "percent", type: "number", default: 3, description: "信封宽度(%)", min: 0.5, max: 10, step: 0.5 },
+    ],
+  },
+  {
+    id: "connors-rsi",
+    name: "Connors RSI (复合RSI)",
+    description:
+      "Connors RSI策略：结合三个组件的复合RSI。" +
+      "1) RSI(收盘价) 2) RSI(连涨/跌天数) 3) ROC百分位排名。" +
+      "三者平均后得到更稳健的超买超卖信号，适合短期均值回归。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "rsiPeriod", type: "number", default: 3, description: "RSI周期", min: 2, max: 14 },
+      { name: "streakPeriod", type: "number", default: 2, description: "连续天数RSI周期", min: 2, max: 10 },
+      { name: "percentRankPeriod", type: "number", default: 100, description: "百分位排名周期", min: 20, max: 200 },
+      { name: "oversold", type: "number", default: 15, description: "超卖阈值", min: 5, max: 30 },
+      { name: "overbought", type: "number", default: 85, description: "超买阈值", min: 70, max: 95 },
+    ],
+  },
+  {
+    id: "kama-trend",
+    name: "自适应均线 (KAMA Trend)",
+    description:
+      "Kaufman自适应移动平均线策略：根据价格效率比动态调整平滑速度。" +
+      "趋势明确时KAMA灵敏跟随，横盘时KAMA变慢过滤噪音。" +
+      "价格上穿KAMA买入，下穿卖出。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 10, description: "KAMA效率比周期", min: 5, max: 50 },
+      { name: "fastPeriod", type: "number", default: 2, description: "快速常数", min: 2, max: 10 },
+      { name: "slowPeriod", type: "number", default: 30, description: "慢速常数", min: 10, max: 50 },
+    ],
+  },
+  {
+    id: "demarker",
+    name: "DeMarker指标 (DeMarker)",
+    description:
+      "DeMarker振荡器策略：衡量当前最高价/最低价相对前一根的扩展程度。" +
+      "DM<0.3超卖买入，DM>0.7超买卖出。" +
+      "与RSI类似但计算方式不同，使用高低价而非收盘价，信号更早。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "DeMarker周期", min: 5, max: 50 },
+      { name: "oversold", type: "number", default: 0.3, description: "超卖阈值", min: 0.1, max: 0.4, step: 0.05 },
+      { name: "overbought", type: "number", default: 0.7, description: "超买阈值", min: 0.6, max: 0.9, step: 0.05 },
+    ],
+  },
 ];
 
 // ── Backtrader (Python) Strategies ───────────────────────────────
@@ -2958,6 +3155,327 @@ const ctaStrategies: StrategyDefinition[] = [
         max: 0.5,
         step: 0.05,
       },
+    ],
+    markets: ["futures"],
+  },
+  // ── Extended CTA Strategies ───────────────────────────────────────
+  {
+    id: "cta-awesome-oscillator",
+    name: "AO动量震荡 (Awesome Oscillator)",
+    description:
+      "Awesome Oscillator策略：5周期中间价MA减34周期中间价MA。" +
+      "AO上穿零轴做多，下穿零轴做空。反映市场中间价的动量趋势。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "fastPeriod", type: "number", default: 5, description: "快速MA周期", min: 3, max: 15 },
+      { name: "slowPeriod", type: "number", default: 34, description: "慢速MA周期", min: 15, max: 60 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-elder-force",
+    name: "艾尔德力量指数 (Elder Force Index)",
+    description:
+      "Elder Force Index：(当日收盘-昨日收盘)×成交量，再EMA平滑。" +
+      "力量指数由负转正做多，由正转负做空。结合价格变化和成交量，量化多空力量。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "emaPeriod", type: "number", default: 13, description: "EMA平滑周期", min: 5, max: 30 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-demarker",
+    name: "DeMarker CTA (DeMarker Oscillator)",
+    description:
+      "DeMarker振荡器CTA版：衡量当日高低相对昨日的扩展程度。" +
+      "DM从超卖回升做多，从超买回落做空。使用高低价计算，比RSI更早捕捉转折。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "DeMarker周期", min: 5, max: 50 },
+      { name: "oversold", type: "number", default: 0.3, description: "超卖阈值", min: 0.1, max: 0.4, step: 0.05 },
+      { name: "overbought", type: "number", default: 0.7, description: "超买阈值", min: 0.6, max: 0.9, step: 0.05 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-ultimate-oscillator",
+    name: "终极震荡指标 (Ultimate Oscillator)",
+    description:
+      "Ultimate Oscillator：综合3个周期(7/14/28)的买入压力比率，加权平均。" +
+      "从超卖回升做多，从超买回落做空。多周期加权避免单一周期的假信号。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period1", type: "number", default: 7, description: "短周期", min: 3, max: 14 },
+      { name: "period2", type: "number", default: 14, description: "中周期", min: 7, max: 28 },
+      { name: "period3", type: "number", default: 28, description: "长周期", min: 14, max: 56 },
+      { name: "oversold", type: "number", default: 30, description: "超卖阈值", min: 10, max: 40 },
+      { name: "overbought", type: "number", default: 70, description: "超买阈值", min: 60, max: 90 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-adx-breakout",
+    name: "ADX方向突破 (ADX Directional Breakout)",
+    description:
+      "ADX+DI方向系统：ADX>阈值确认趋势存在后，" +
+      "+DI上穿-DI做多，-DI上穿+DI做空。" +
+      "比简单DMI策略增加了DI绝对值门槛过滤弱信号。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "ADX/DI周期", min: 5, max: 50 },
+      { name: "adxThreshold", type: "number", default: 25, description: "ADX趋势门槛", min: 15, max: 50 },
+      { name: "diThreshold", type: "number", default: 20, description: "DI绝对值门槛", min: 10, max: 40 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-trix-trend",
+    name: "TRIX趋势 (TRIX Trend)",
+    description:
+      "TRIX三重指数平滑趋势策略：TRIX上穿信号线做多，下穿做空。" +
+      "三重平滑极好地消除短期噪音，适合中长期趋势跟踪。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 12, description: "TRIX周期", min: 5, max: 50 },
+      { name: "signalPeriod", type: "number", default: 9, description: "信号线周期", min: 3, max: 20 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-hull-ma-trend",
+    name: "Hull均线趋势 (Hull MA Trend)",
+    description:
+      "Hull Moving Average CTA版：监测HMA方向变化。" +
+      "HMA从下降转为上升做多，从上升转为下降做空。" +
+      "极低延迟的趋势信号，适合快速反应的CTA策略。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 16, description: "Hull MA周期", min: 4, max: 50 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-mass-index",
+    name: "梅斯指数 (Mass Index)",
+    description:
+      "Mass Index反转策略：通过EMA(高-低)/EMA(EMA(高-低))的25日累加和，" +
+      "检测价格区间膨胀后收缩（reversal bulge），预判趋势反转。" +
+      "指标超过阈值后回落，结合均线方向判断做多/做空。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "emaPeriod", type: "number", default: 9, description: "EMA平滑周期", min: 5, max: 20 },
+      { name: "threshold", type: "number", default: 27, description: "膨胀阈值", min: 25, max: 30 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-chaikin-oscillator",
+    name: "蔡金震荡器 (Chaikin Oscillator)",
+    description:
+      "Chaikin Oscillator = EMA(3,ADL) - EMA(10,ADL)。" +
+      "上穿零轴做多（资金加速流入），下穿零轴做空（资金加速流出）。" +
+      "比AD线本身更灵敏，能更早捕捉资金流向变化。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "fastPeriod", type: "number", default: 3, description: "快速EMA周期", min: 2, max: 10 },
+      { name: "slowPeriod", type: "number", default: 10, description: "慢速EMA周期", min: 5, max: 30 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-coppock",
+    name: "Coppock曲线 (Coppock Curve)",
+    description:
+      "Coppock Curve = WMA(ROC(14)+ROC(11), 10)。" +
+      "经典长期买入信号：Coppock从负值上穿零轴做多，下穿零轴做空。" +
+      "最初用于月线图的长期买点识别，也可用于日线。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "longRoc", type: "number", default: 14, description: "长ROC周期", min: 10, max: 20 },
+      { name: "shortRoc", type: "number", default: 11, description: "短ROC周期", min: 5, max: 15 },
+      { name: "wmaPeriod", type: "number", default: 10, description: "WMA平滑周期", min: 5, max: 20 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-rsi-divergence",
+    name: "RSI背离策略 (RSI Divergence)",
+    description:
+      "RSI与价格走势的背离检测策略。" +
+      "底背离（价格新低但RSI未新低）做多，顶背离（价格新高但RSI未新高）做空。" +
+      "背离是最强烈的反转信号之一，信号少但准确率高。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "rsiPeriod", type: "number", default: 14, description: "RSI周期", min: 5, max: 50 },
+      { name: "lookback", type: "number", default: 20, description: "背离回看窗口", min: 10, max: 60 },
+      { name: "oversold", type: "number", default: 30, description: "超卖区阈值", min: 10, max: 40 },
+      { name: "overbought", type: "number", default: 70, description: "超买区阈值", min: 60, max: 90 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-volume-breakout",
+    name: "量价突破 (Volume Breakout)",
+    description:
+      "量价协同突破策略：当成交量放大超过均量N倍，" +
+      "且价格突破近期高/低点时入场，抓住放量启动的趋势。" +
+      "单纯价格突破可能是假突破，配合放量确认可靠性大幅提升。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "maPeriod", type: "number", default: 20, description: "均线/均量周期", min: 5, max: 60 },
+      { name: "volMultiplier", type: "number", default: 2.0, description: "放量倍数", min: 1.3, max: 5.0, step: 0.1 },
+      { name: "lookback", type: "number", default: 20, description: "价格突破回看", min: 5, max: 60 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-adaptive-ma",
+    name: "自适应均线CTA (Adaptive MA)",
+    description:
+      "Kaufman KAMA自适应均线CTA版：根据效率比自动调节灵敏度。" +
+      "价格上穿KAMA做多，下穿做空。趋势市快速跟随，震荡市减少噪音。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 10, description: "效率比周期", min: 5, max: 50 },
+      { name: "fastPeriod", type: "number", default: 2, description: "快速常数", min: 2, max: 10 },
+      { name: "slowPeriod", type: "number", default: 30, description: "慢速常数", min: 10, max: 50 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-ma-envelope",
+    name: "MA信封CTA (MA Envelope)",
+    description:
+      "均线信封CTA版：MA±N%构成上下轨，突破上轨做多（动量型），" +
+      "跌破下轨做空。CTA版使用突破逻辑而非回归逻辑。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "均线周期", min: 5, max: 120 },
+      { name: "percent", type: "number", default: 2.5, description: "信封宽度(%)", min: 0.5, max: 10, step: 0.5 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-connors-rsi",
+    name: "ConnorsRSI CTA (Connors RSI)",
+    description:
+      "Connors RSI CTA版：三组件复合RSI(价格RSI+连涨跌RSI+ROC百分位)。" +
+      "超卖做多，超买做空。CTA版使用更极端的阈值(10/90)减少交易频率。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "rsiPeriod", type: "number", default: 3, description: "RSI周期", min: 2, max: 14 },
+      { name: "streakPeriod", type: "number", default: 2, description: "连续天数RSI周期", min: 2, max: 10 },
+      { name: "percentRankPeriod", type: "number", default: 100, description: "百分位排名周期", min: 20, max: 200 },
+      { name: "oversold", type: "number", default: 10, description: "超卖阈值", min: 5, max: 25 },
+      { name: "overbought", type: "number", default: 90, description: "超买阈值", min: 75, max: 95 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-aroon-oscillator",
+    name: "Aroon震荡器 (Aroon Oscillator)",
+    description:
+      "Aroon Oscillator = Aroon Up - Aroon Down。" +
+      "振荡器突破+50做多（强上升趋势），跌破-50做空（强下降趋势）。" +
+      "与Aroon指标交叉逻辑不同，使用绝对阈值更准确。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 25, description: "Aroon周期", min: 10, max: 60 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-mfi-trend",
+    name: "MFI趋势 (MFI Trend)",
+    description:
+      "MFI+趋势过滤CTA策略：MFI从超卖反弹时若价格在均线之上做多，" +
+      "从超买回落时若价格在均线之下做空。资金流+趋势双重确认。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "MFI周期", min: 5, max: 50 },
+      { name: "oversold", type: "number", default: 20, description: "超卖阈值", min: 5, max: 35 },
+      { name: "overbought", type: "number", default: 80, description: "超买阈值", min: 65, max: 95 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-dema-crossover",
+    name: "DEMA交叉CTA (DEMA Crossover)",
+    description:
+      "DEMA双重指数均线交叉CTA版：快速DEMA上穿慢速DEMA做多，下穿做空。" +
+      "DEMA消除EMA固有滞后，信号比传统均线交叉提前1-3根K线。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "fastPeriod", type: "number", default: 10, description: "快速DEMA周期", min: 3, max: 30 },
+      { name: "slowPeriod", type: "number", default: 30, description: "慢速DEMA周期", min: 10, max: 120 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-triple-ma",
+    name: "三均线CTA (Triple MA CTA)",
+    description:
+      "三均线排列CTA版：短/中/长均线形成多头排列做多，空头排列做空。" +
+      "只在排列状态刚切换时交易，避免频繁进出。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "shortPeriod", type: "number", default: 5, description: "短期均线", min: 2, max: 30 },
+      { name: "midPeriod", type: "number", default: 20, description: "中期均线", min: 10, max: 60 },
+      { name: "longPeriod", type: "number", default: 60, description: "长期均线", min: 20, max: 200 },
+    ],
+    markets: ["futures"],
+  },
+  {
+    id: "cta-supertrend",
+    name: "超级趋势CTA (Supertrend CTA)",
+    description:
+      "Supertrend CTA版：ATR动态支撑阻力线，翻多做多翻空做空。" +
+      "支持多空双向，自带动态止损特性，是CTA最常用的趋势跟踪工具之一。",
+    version: "1.0.0",
+    engine: "builtin",
+    entryFile: "",
+    parameters: [
+      { name: "atrPeriod", type: "number", default: 10, description: "ATR周期", min: 5, max: 30 },
+      { name: "multiplier", type: "number", default: 3.0, description: "ATR倍数", min: 1.0, max: 6.0, step: 0.5 },
     ],
     markets: ["futures"],
   },

@@ -107,6 +107,7 @@ import { PriceAlertService } from "./src/services/price-alert.js";
 import { ReceiverService } from "./src/services/receiver-service.js";
 import { findReportTemplate } from "./src/services/report-templates.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
+import { RecommendationTracker } from "./src/services/recommendation-tracker.js";
 import { SignalHitRateTracker } from "./src/services/signal-hitrate.js";
 import { createSignalMonitorService } from "./src/services/signal-monitor.js";
 import { InMemoryStorage } from "./src/services/sqlite-storage.js";
@@ -156,6 +157,7 @@ import { createSectorSynergyTool } from "./src/tools/sector-synergy.js";
 import { createSocialSentimentTool } from "./src/tools/social-sentiment.js";
 import { createStochasticPricingTool } from "./src/tools/stochastic-pricing.js";
 import { createStockRecommendTool } from "./src/tools/stock-recommend.js";
+import { createRecommendTrackerTool } from "./src/tools/recommend-tracker.js";
 import { createStockScreenTool } from "./src/tools/stock-screen.js";
 import { createStrategyComposerTool } from "./src/tools/strategy-composer.js";
 import { createStrategyExplorerTool } from "./src/tools/strategy-explorer.js";
@@ -547,6 +549,14 @@ const quantTradingPlugin = {
       scanHistoryStore.start();
     }
 
+    // ── Recommendation Tracker (RE-8: 推荐追踪与复盘) ─────────────
+    const recommendationTracker = new RecommendationTracker({
+      dataDir: config.dataDir ?? undefined,
+      maxRecords: 500,
+    });
+    recommendationTracker.setNotify((m: string) => tryNotify(api, m));
+    recommendationTracker.start();
+
     // ── Optimization Store (寻优 history) ────────────────────────
     const optimizationStore = new OptimizationStore({
       dataDir: config.dataDir ? `${config.dataDir}/optimizations` : undefined,
@@ -642,7 +652,8 @@ const quantTradingPlugin = {
       institutional_flow: createInstitutionalFlowTool(api, config),
       social_sentiment: createSocialSentimentTool(api, config),
       chip_accumulation: createChipAccumulationTool(api, config),
-      stock_recommend: createStockRecommendTool(api, config, scanHistoryStore),
+      stock_recommend: createStockRecommendTool(api, config, scanHistoryStore, () => createDataProvider(config), recommendationTracker),
+      recommend_tracker: createRecommendTrackerTool(api, recommendationTracker, () => createDataProvider(config)),
       correlation_analysis: createCorrelationTool(api, config, async (symbol) => {
         try {
           const end = new Date().toISOString().slice(0, 10);
@@ -701,6 +712,7 @@ const quantTradingPlugin = {
       social_sentiment: "舆情分析",
       chip_accumulation: "主力吸筹",
       stock_recommend: "智能选股推荐",
+      recommend_tracker: "推荐追踪复盘",
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",

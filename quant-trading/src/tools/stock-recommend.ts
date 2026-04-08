@@ -8,6 +8,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { MarketDataProvider } from "../data/market-data-provider.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
+import type { RecommendationTracker } from "../services/recommendation-tracker.js";
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import { computeStopAdvice } from "../services/stop-advisor.js";
 import type { KlineBar, QuantTradingConfig } from "../types.js";
@@ -65,6 +66,7 @@ export function createStockRecommendTool(
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
   getDataProvider?: () => MarketDataProvider,
+  recommendationTracker?: RecommendationTracker,
 ) {
   return {
     name: "stock_recommend",
@@ -164,6 +166,7 @@ export function createStockRecommendTool(
           config,
           scanHistoryStore,
           getDataProvider,
+          recommendationTracker,
         );
       }
 
@@ -278,6 +281,32 @@ export function createStockRecommendTool(
         );
       }
 
+      // ── Step 5: Record to recommendation tracker ──────────────
+      if (recommendationTracker) {
+        const batchId = `batch_${Date.now()}_${screenerId}`;
+        for (const r of recommended) {
+          const stopAdv = stopAdviceMap.get(r.symbol);
+          const price = await getLatestPrice(r.symbol, getDataProvider);
+          if (price) {
+            void recommendationTracker.record({
+              symbol: r.symbol,
+              name: r.name,
+              mode: "classic",
+              screenerId,
+              rank: recommended.indexOf(r) + 1,
+              score: compositeScore(r.backtest),
+              priceAtRecommend: price,
+              horizon: "mid",
+              stopLoss: stopAdv ? parseFloat(stopAdv.stopLoss.replace("¥", "")) : undefined,
+              takeProfit: stopAdv ? parseFloat(stopAdv.takeProfit.replace("¥", "")) : undefined,
+              backtestMetrics: r.backtest,
+              strategy: r.strategy?.name,
+              batchId,
+            });
+          }
+        }
+      }
+
       return {
         ok: true,
         pipeline: `stock_screen(${screenerId}, ${screenResult.universe}) → strategy_router(profile_route_backtest) → rank`,
@@ -346,6 +375,7 @@ async function runPredictiveRecommend(
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
   getDataProvider?: () => MarketDataProvider,
+  recommendationTracker?: RecommendationTracker,
 ): Promise<Record<string, unknown>> {
   const limit = Math.max(count * 5, 20);
 
@@ -571,6 +601,31 @@ async function runPredictiveRecommend(
     );
   }
 
+  // ── Step 8: Record to recommendation tracker ──────────────────
+  if (recommendationTracker) {
+    const batchId = `batch_${Date.now()}_predictive`;
+    for (const r of recommended) {
+      const stopAdv = stopAdviceMap.get(r.symbol);
+      const price = await getLatestPrice(r.symbol, getDataProvider);
+      if (price) {
+        void recommendationTracker.record({
+          symbol: r.symbol,
+          name: r.name,
+          mode: "predictive",
+          screenerId: "volume_price",
+          rank: recommended.indexOf(r) + 1,
+          score: r.predictiveScore,
+          priceAtRecommend: price,
+          horizon: r.horizon,
+          stopLoss: stopAdv ? parseFloat(stopAdv.stopLoss.replace("¥", "")) : undefined,
+          takeProfit: stopAdv ? parseFloat(stopAdv.takeProfit.replace("¥", "")) : undefined,
+          strategy: "predictive_composite",
+          batchId,
+        });
+      }
+    }
+  }
+
   return {
     ok: true,
     mode: "predictive",
@@ -787,4 +842,19 @@ function getOneYearAgo(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
   return d.toISOString().slice(0, 10);
+}
+
+async function getLatestPrice(
+  symbol: string,
+  getDataProvider?: () => MarketDataProvider,
+): Promise<number | null> {
+  if (!getDataProvider) return null;
+  try {
+    const provider = getDataProvider();
+    const market = detectMarketFromSymbol(symbol);
+    const quote = await provider.getQuote(symbol, market);
+    return quote?.price ?? null;
+  } catch {
+    return null;
+  }
 }

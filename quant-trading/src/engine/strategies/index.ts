@@ -18,6 +18,16 @@ export {
   roc,
   ichimoku,
   stochastic,
+  wma,
+  dema,
+  hullMa,
+  trix,
+  mfi,
+  aroon,
+  cmf,
+  kama,
+  demarker,
+  ultimateOscillator,
 } from "./indicators.js";
 export type { IchimokuResult, StochasticResult } from "./indicators.js";
 export {
@@ -42,6 +52,21 @@ export {
   t0EnhancedStrategy,
 } from "./advanced.js";
 export type { MarketRegime } from "./advanced.js";
+export {
+  trixMomentum,
+  mfiOscillator,
+  aroonTrend,
+  cmfDivergence,
+  elderRayStrategy,
+  supertrendStrategy,
+  hullMaCrossover,
+  demaCrossover,
+  tripleMaCrossover,
+  maEnvelopeStrategy,
+  connorsRsiStrategy,
+  kamaStrategy,
+  demarkerStrategy,
+} from "./extended.js";
 export {
   ctaTrendFollowing,
   ctaDualThrust,
@@ -79,3 +104,25 @@ export {
   ctaMacdHistogramReversal,
   ctaBollingerBandwidth,
 } from "./cta.js";
+export {
+  ctaAwesomeOscillator,
+  ctaElderForceIndex,
+  ctaDemarkerCta,
+  ctaUltimateOscillatorStrategy,
+  ctaAdxBreakout,
+  ctaTrixTrend,
+  ctaHullMaTrend,
+  ctaMassIndex,
+  ctaChaikinOscillator,
+  ctaCoppock,
+  ctaRsiDivergence,
+  ctaVolumeBreakout,
+  ctaAdaptiveMa,
+  ctaMaEnvelope,
+  ctaConnorsRsi,
+  ctaAroonOscillator,
+  ctaMfiTrend,
+  ctaDemaCrossover,
+  ctaTripleMa,
+  ctaSupertrendCta,
+} from "./cta-extended.js";

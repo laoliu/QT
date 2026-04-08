@@ -769,3 +769,210 @@ export function stochastic(
 
   return { k, d, j };
 }
+
+// ── Extended Indicators ──────────────────────────────────────────
+
+/** Weighted Moving Average. Recent values have higher weight. */
+export function wma(data: number[], period: number): number[] {
+  const n = data.length;
+  const result = new Array<number>(n).fill(NaN);
+  const denom = (period * (period + 1)) / 2;
+  for (let i = period - 1; i < n; i++) {
+    let sum = 0;
+    for (let j = 0; j < period; j++) sum += data[i - period + 1 + j]! * (j + 1);
+    result[i] = sum / denom;
+  }
+  return result;
+}
+
+/** Double EMA: 2×EMA(data) − EMA(EMA(data)). Less lag than EMA. */
+export function dema(data: number[], period: number): number[] {
+  const e1 = ema(data, period);
+  const e2 = ema(e1, period);
+  const n = data.length;
+  const result = new Array<number>(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    if (!Number.isNaN(e1[i]!) && !Number.isNaN(e2[i]!)) result[i] = 2 * e1[i]! - e2[i]!;
+  }
+  return result;
+}
+
+/** Hull Moving Average: WMA(2×WMA(n/2) − WMA(n), √n). Minimal lag. */
+export function hullMa(data: number[], period: number): number[] {
+  const halfPeriod = Math.max(2, Math.round(period / 2));
+  const sqrtPeriod = Math.max(2, Math.round(Math.sqrt(period)));
+  const wmaHalf = wma(data, halfPeriod);
+  const wmaFull = wma(data, period);
+  const n = data.length;
+  const diff = new Array<number>(n).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    if (!Number.isNaN(wmaHalf[i]!) && !Number.isNaN(wmaFull[i]!))
+      diff[i] = 2 * wmaHalf[i]! - wmaFull[i]!;
+  }
+  return wma(diff, sqrtPeriod);
+}
+
+/** TRIX: 1-period ROC of triple-smoothed EMA. Returns % change. */
+export function trix(data: number[], period: number): number[] {
+  const e1 = ema(data, period);
+  const e2 = ema(e1, period);
+  const e3 = ema(e2, period);
+  const n = data.length;
+  const result = new Array<number>(n).fill(NaN);
+  for (let i = 1; i < n; i++) {
+    if (!Number.isNaN(e3[i]!) && !Number.isNaN(e3[i - 1]!) && e3[i - 1]! !== 0)
+      result[i] = ((e3[i]! - e3[i - 1]!) / e3[i - 1]!) * 100;
+  }
+  return result;
+}
+
+/**
+ * Money Flow Index — volume-weighted RSI.
+ * Returns values 0–100 (NaN for warmup).
+ */
+export function mfi(bars: KlineBar[], period: number): number[] {
+  const n = bars.length;
+  const result = new Array<number>(n).fill(NaN);
+  if (n < 2) return result;
+  const posFlow = new Array<number>(n).fill(0);
+  const negFlow = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const tp = (bars[i]!.high + bars[i]!.low + bars[i]!.close) / 3;
+    const prevTp = (bars[i - 1]!.high + bars[i - 1]!.low + bars[i - 1]!.close) / 3;
+    const rawFlow = tp * bars[i]!.volume;
+    if (tp > prevTp) posFlow[i] = rawFlow;
+    else if (tp < prevTp) negFlow[i] = rawFlow;
+  }
+  for (let i = period; i < n; i++) {
+    let pf = 0,
+      nf = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      pf += posFlow[j]!;
+      nf += negFlow[j]!;
+    }
+    result[i] = nf === 0 ? 100 : 100 - 100 / (1 + pf / nf);
+  }
+  return result;
+}
+
+/** Aroon Up / Down (0–100). */
+export function aroon(
+  bars: KlineBar[],
+  period: number,
+): { up: number[]; down: number[] } {
+  const n = bars.length;
+  const up = new Array<number>(n).fill(NaN);
+  const down = new Array<number>(n).fill(NaN);
+  for (let i = period; i < n; i++) {
+    let highIdx = i,
+      lowIdx = i;
+    for (let j = i - period; j <= i; j++) {
+      if (bars[j]!.high >= bars[highIdx]!.high) highIdx = j;
+      if (bars[j]!.low <= bars[lowIdx]!.low) lowIdx = j;
+    }
+    up[i] = ((period - (i - highIdx)) / period) * 100;
+    down[i] = ((period - (i - lowIdx)) / period) * 100;
+  }
+  return { up, down };
+}
+
+/** Chaikin Money Flow over N periods. Returns –1…+1 range. */
+export function cmf(bars: KlineBar[], period: number): number[] {
+  const n = bars.length;
+  const result = new Array<number>(n).fill(NaN);
+  for (let i = period - 1; i < n; i++) {
+    let sumMfv = 0,
+      sumVol = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const b = bars[j]!;
+      const range = b.high - b.low;
+      const mfv = range === 0 ? 0 : ((b.close - b.low - (b.high - b.close)) / range) * b.volume;
+      sumMfv += mfv;
+      sumVol += b.volume;
+    }
+    result[i] = sumVol === 0 ? 0 : sumMfv / sumVol;
+  }
+  return result;
+}
+
+/**
+ * Kaufman Adaptive Moving Average (KAMA).
+ * Adapts smoothing speed to market efficiency.
+ */
+export function kama(data: number[], period: number, fastPeriod = 2, slowPeriod = 30): number[] {
+  const n = data.length;
+  const result = new Array<number>(n).fill(NaN);
+  const fastSc = 2 / (fastPeriod + 1);
+  const slowSc = 2 / (slowPeriod + 1);
+  if (n <= period) return result;
+  result[period - 1] = data[period - 1]!;
+  for (let i = period; i < n; i++) {
+    const direction = Math.abs(data[i]! - data[i - period]!);
+    let volatility = 0;
+    for (let j = i - period + 1; j <= i; j++) volatility += Math.abs(data[j]! - data[j - 1]!);
+    const er = volatility === 0 ? 0 : direction / volatility;
+    const sc = (er * (fastSc - slowSc) + slowSc) ** 2;
+    result[i] = result[i - 1]! + sc * (data[i]! - result[i - 1]!);
+  }
+  return result;
+}
+
+/** DeMarker oscillator (0–1). Values < 0.3 oversold, > 0.7 overbought. */
+export function demarker(bars: KlineBar[], period: number): number[] {
+  const n = bars.length;
+  const result = new Array<number>(n).fill(NaN);
+  const deMax = new Array<number>(n).fill(0);
+  const deMin = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    deMax[i] = bars[i]!.high > bars[i - 1]!.high ? bars[i]!.high - bars[i - 1]!.high : 0;
+    deMin[i] = bars[i]!.low < bars[i - 1]!.low ? bars[i - 1]!.low - bars[i]!.low : 0;
+  }
+  for (let i = period; i < n; i++) {
+    let sumMax = 0,
+      sumMin = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      sumMax += deMax[j]!;
+      sumMin += deMin[j]!;
+    }
+    const total = sumMax + sumMin;
+    result[i] = total === 0 ? 0.5 : sumMax / total;
+  }
+  return result;
+}
+
+/**
+ * Ultimate Oscillator — multi-period buying pressure.
+ * Combines 3 timeframes (default 7/14/28).
+ */
+export function ultimateOscillator(
+  bars: KlineBar[],
+  period1 = 7,
+  period2 = 14,
+  period3 = 28,
+): number[] {
+  const n = bars.length;
+  const result = new Array<number>(n).fill(NaN);
+  const bp = new Array<number>(n).fill(0);
+  const tr = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const prevClose = bars[i - 1]!.close;
+    const low = Math.min(bars[i]!.low, prevClose);
+    const high = Math.max(bars[i]!.high, prevClose);
+    bp[i] = bars[i]!.close - low;
+    tr[i] = high - low;
+  }
+  const maxPeriod = Math.max(period1, period2, period3);
+  for (let i = maxPeriod; i < n; i++) {
+    const avg = (period: number) => {
+      let sb = 0,
+        st = 0;
+      for (let j = i - period + 1; j <= i; j++) {
+        sb += bp[j]!;
+        st += tr[j]!;
+      }
+      return st === 0 ? 0 : sb / st;
+    };
+    result[i] = (100 * (4 * avg(period1) + 2 * avg(period2) + avg(period3))) / 7;
+  }
+  return result;
+}

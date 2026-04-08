@@ -135,6 +135,53 @@ const vnpyBuiltinFallback: Record<
   },
 };
 
+/** Fallback: backtrader strategy → builtin equivalent (used when backtrader is not installed). */
+const backtraderBuiltinFallback: Record<
+  string,
+  { id: string; mapParams: (p: Record<string, unknown>) => Record<string, unknown> }
+> = {
+  "macd": {
+    id: "macd-trend",
+    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 12, slowPeriod: p.slow_period ?? 26, signalPeriod: p.signal_period ?? 9 }),
+  },
+  "rsi": {
+    id: "rsi-reversal",
+    mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 30, overbought: p.overbought ?? 70 }),
+  },
+  "kdj": {
+    id: "rsi-reversal",
+    mapParams: (p) => ({ period: p.period ?? 9, oversold: p.oversold ?? 20, overbought: p.overbought ?? 80 }),
+  },
+  "turtle": {
+    id: "turtle-breakout",
+    mapParams: (p) => ({ entryPeriod: p.entry_period ?? 20, exitPeriod: p.exit_period ?? 10 }),
+  },
+  "grid": {
+    id: "grid-trading",
+    mapParams: (p) => ({ gridSize: p.grid_size ?? 5, numGrids: p.num_grids ?? 4 }),
+  },
+  "pair-trading": {
+    id: "mean-reversion-zscore",
+    mapParams: (p) => ({ lookback: p.lookback ?? 60, entryZ: p.entry_z ?? 2.0, exitZ: p.exit_z ?? 0.5 }),
+  },
+  "auction": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.lookback ?? 20 }),
+  },
+  "dragon-return": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.lookback ?? 10 }),
+  },
+  "mean-reversion-cn": {
+    id: "mean-reversion",
+    mapParams: (p) => ({ period: p.period ?? 20, stdDev: p.std_dev ?? 2 }),
+  },
+  "multi-factor": {
+    id: "scored",
+    mapParams: (p) => ({ ...p }),
+  },
+};
+
 /** Map from strategy ID → factory function that creates the strategy with params. */
 const strategyMap = new Map<string, StrategyFactory>([
   [
@@ -754,6 +801,25 @@ const strategyMap = new Map<string, StrategyFactory>([
       ctaSupertrendCta((p?.atrPeriod as number) ?? 10, (p?.multiplier as number) ?? 3.0),
   ],
 ]);
+
+// ── Register vnpy/backtrader strategy aliases → builtin equivalents ───
+// So composed strategies can reference vnpy-*/backtrader IDs as sub-strategies.
+for (const [id, fb] of [
+  ...Object.entries(vnpyBuiltinFallback),
+  ...Object.entries(backtraderBuiltinFallback),
+]) {
+  if (!strategyMap.has(id)) {
+    const builtinId = fb.id;
+    const mapParams = fb.mapParams;
+    strategyMap.set(id, (p) => {
+      const mapped = mapParams(p ?? {});
+      const factory = strategyMap.get(builtinId);
+      if (!factory) throw new Error(`Builtin fallback ${builtinId} not registered`);
+      return factory(mapped);
+    });
+  }
+}
+
 import {
   composeStrategy,
   type CompositionConfig,
@@ -896,7 +962,19 @@ export async function runBacktest(
   const engine = request.engine ?? strategy?.engine ?? config.backtestEngine ?? "builtin";
 
   if (engine === "backtrader" || strategy?.engine === "backtrader") {
-    return runBacktraderBacktest(request, config);
+    const fallback = backtraderBuiltinFallback[request.strategyId];
+    try {
+      return await runBacktraderBacktest(request, config);
+    } catch (err: unknown) {
+      if (!fallback) throw err;
+      // backtrader unavailable — fallback to builtin equivalent
+      const mappedParams = fallback.mapParams(request.parameters ?? {});
+      const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
+      if (request.symbols.length > 1) {
+        return runPortfolioBacktest(builtinStrategy, request, config, sharedProvider);
+      }
+      return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
+    }
   }
 
   if (engine === "vnpy" || strategy?.engine === "vnpy") {
@@ -904,9 +982,8 @@ export async function runBacktest(
     try {
       return await runVnpyBacktest(request, config);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes("not installed") || !fallback) throw err;
-      // vnpy unavailable — fallback to builtin equivalent
+      if (!fallback) throw err;
+      // vnpy unavailable or failed — fallback to builtin equivalent
       const mappedParams = fallback.mapParams(request.parameters ?? {});
       const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
       if (request.symbols.length > 1) {

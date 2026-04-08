@@ -16,7 +16,7 @@ export async function runVnpyBacktest(
     );
   }
 
-  const result = await runPythonScript<BacktestResult>(
+  const result = await runPythonScript<BacktestResult & { ok?: boolean; error?: string }>(
     "engines/vnpy_engine.py",
     {
       strategyId: request.strategyId,
@@ -36,5 +36,11 @@ export async function runVnpyBacktest(
     throw new Error(`VN.py backtest failed: ${result.error ?? "unknown error"}`);
   }
 
-  return result.data;
+  // Python script may return {ok: false, error: "..."} with exit code 0
+  const data = result.data;
+  if (data.ok === false) {
+    throw new Error(`VN.py backtest failed: ${data.error ?? "unknown error"}`);
+  }
+
+  return data;
 }

@@ -201,7 +201,7 @@ a:hover{text-decoration:underline}
     </div>
     <div class="form-row">
       <div style="flex:3"><label>\u7b56\u7565 (\u591a\u9009)</label>
-        <select id="batch-strategies" multiple style="height:120px"></select>
+        <select id="batch-strategies" multiple style="height:320px"></select>
       </div>
     </div>
     <button class="btn btn-primary" id="btn-batch" onclick="runBatchBacktest()">\u{1f680} \u8fd0\u884c\u6279\u91cf\u56de\u6d4b</button>
@@ -594,12 +594,56 @@ function runBatchBacktest(){
   api('/quant/admin/api/batch-backtest',{method:'POST',body:JSON.stringify(body)}).then(function(data){
     btn.disabled = false;
     btn.textContent = '\u{1f680} \u8fd0\u884c\u6279\u91cf\u56de\u6d4b';
-    renderExploreResults(data);
-    document.getElementById('batch-results').innerHTML = document.getElementById('explore-results')?.innerHTML || '';
+    renderBatchResults(data);
   }).catch(function(){
     btn.disabled = false;
     btn.textContent = '\u{1f680} \u8fd0\u884c\u6279\u91cf\u56de\u6d4b';
   });
+}
+
+function renderBatchResults(data){
+  var el = document.getElementById('batch-results');
+  if(!data.ok){
+    el.innerHTML = '<div class="card"><div style="color:var(--red)">'+(data.error||'\u6279\u91cf\u56de\u6d4b\u5931\u8d25')+'</div></div>';
+    return;
+  }
+  var ranked = data.ranked || [];
+  var failedRuns = (data.results || []).filter(function(r){ return !r.ok; });
+  if(ranked.length===0){
+    var failHtml = '<div class="card"><div class="empty">\u672a\u627e\u5230\u6709\u6548\u7ed3\u679c</div>';
+    if(failedRuns.length > 0){
+      failHtml += '<div style="margin-top:12px;font-size:12px;color:var(--text-dim)">\u5931\u8d25\u8be6\u60c5 ('+failedRuns.length+' \u6761):<ul style="text-align:left;margin:4px 0">';
+      failedRuns.slice(0,5).forEach(function(r){ failHtml += '<li>'+r.label+': '+(r.error||'\u672a\u77e5\u9519\u8bef')+'</li>'; });
+      if(failedRuns.length > 5) failHtml += '<li>\u2026\u53e6\u6709 '+(failedRuns.length-5)+' \u6761</li>';
+      failHtml += '</ul></div>';
+    }
+    failHtml += '</div>';
+    el.innerHTML = failHtml;
+    return;
+  }
+  var html = '<div class="card"><h3>\u{1f3c6} \u6279\u91cf\u56de\u6d4b\u7ed3\u679c (\u6210\u529f '+data.successCount+'/'+data.totalRuns+')</h3>';
+  html += '<table><thead><tr><th>\u6392\u540d</th><th>\u7b56\u7565</th><th>\u603b\u6536\u76ca</th><th>\u5e74\u5316</th><th>\u6700\u5927\u56de\u64a4</th><th>\u590f\u666e</th><th>\u80dc\u7387</th><th>\u4ea4\u6613\u6570</th></tr></thead><tbody>';
+  ranked.forEach(function(r,i){
+    var rankClass = i<3?'rank-'+(i+1):'';
+    html += '<tr>';
+    html += '<td><span class="result-rank '+rankClass+'">'+(i+1)+'</span></td>';
+    html += '<td><strong>'+r.label+'</strong></td>';
+    html += '<td class="'+((r.totalReturn||0)>0?'metric-good':'metric-bad')+'">'+(r.totalReturn||0).toFixed(2)+'%</td>';
+    html += '<td>'+(r.annualizedReturn||0).toFixed(2)+'%</td>';
+    html += '<td class="metric-bad">-'+(r.maxDrawdown||0).toFixed(2)+'%</td>';
+    html += '<td class="'+((r.sharpeRatio||0)>1?'metric-good':(r.sharpeRatio||0)>0?'metric-ok':'metric-bad')+'">'+(r.sharpeRatio||0).toFixed(2)+'</td>';
+    html += '<td>'+(r.winRate||0).toFixed(1)+'%</td>';
+    html += '<td>'+(r.totalTrades||0)+'</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  if(failedRuns.length > 0){
+    html += '<div style="margin-top:12px;font-size:12px;color:var(--text-dim)">\u5931\u8d25 ('+failedRuns.length+' \u6761): ';
+    failedRuns.forEach(function(r){ html += r.label+': '+(r.error||'\u672a\u77e5\u9519\u8bef')+'; '; });
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // ── Explore History ──

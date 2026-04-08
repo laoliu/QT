@@ -3565,6 +3565,111 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   // Strategy Routing (extracted to routes/strategy-routing.ts)
   registerStrategyRoutingRoutes(deps);
 
+  // ── Auction Sniper (竞价抢筹狙击) Page ──────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/auction-sniper",
+    handler: securePublic(async (_req, res) => {
+      const { getAuctionSniperPageHtml } = await import("./pages/auction-sniper-page.js");
+      const html = getAuctionSniperPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Auction Sniper API ──────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/auction-sniper",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const action = params.get("action") || "scan";
+
+      try {
+        if (action === "scan") {
+          const minScore = toNumberOrDefault(params.get("min_score"), 35);
+          const symbolsRaw = params.get("symbols") || "";
+          const symbols = symbolsRaw ? symbolsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+          const result = await runPythonScript(
+            "engines/auction_sniper.py",
+            { action: "scan", symbols, min_score: minScore },
+            config,
+          );
+          json(res, result.ok ? { signals: result.data?.signals ?? [], count: result.data?.count ?? 0 } : { error: result.error ?? "扫描失败" });
+        } else if (action === "snapshot") {
+          const symbolsRaw = params.get("symbols") || "";
+          const symbols = symbolsRaw ? symbolsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+          const result = await runPythonScript(
+            "engines/auction_sniper.py",
+            { action: "snapshot", symbols },
+            config,
+          );
+          json(res, result.ok ? result.data : { error: result.error ?? "快照失败" });
+        } else {
+          json(res, { error: "未知 action: " + action }, 400);
+        }
+      } catch (err) {
+        json(res, { error: `操作失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
+    }),
+  });
+
+  // ── ST Restructuring Tracking (ST重整跟踪) Page ─────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/st-restructuring",
+    handler: securePublic(async (_req, res) => {
+      const { getSTRestructuringPageHtml } = await import("./pages/st-restructuring-page.js");
+      const html = getSTRestructuringPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── ST Restructuring API ────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/st-restructuring",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const action = params.get("action") || "status";
+
+      try {
+        if (action === "scan") {
+          const days = toNumberOrDefault(params.get("days"), 90);
+          const force = params.get("force") === "1";
+          const result = await runPythonScript(
+            "engines/st_restructuring.py",
+            { action: "scan_all", days, force_refresh: force },
+            config,
+          );
+          json(res, result.ok ? result.data : { error: result.error ?? "扫描失败" });
+        } else if (action === "track") {
+          const symbol = params.get("symbol") || "";
+          if (!symbol) { json(res, { error: "缺少 symbol 参数" }, 400); return; }
+          const days = toNumberOrDefault(params.get("days"), 365);
+          const result = await runPythonScript(
+            "engines/st_restructuring.py",
+            { action: "track_stock", symbol, days },
+            config,
+          );
+          json(res, result.ok ? result.data : { error: result.error ?? "查询失败" });
+        } else if (action === "status") {
+          const result = await runPythonScript(
+            "engines/st_restructuring.py",
+            { action: "status" },
+            config,
+          );
+          json(res, result.ok ? result.data : { error: result.error ?? "查询失败" });
+        } else {
+          json(res, { error: "未知 action: " + action }, 400);
+        }
+      } catch (err) {
+        json(res, { error: `操作失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
+    }),
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   /** Simplify a ScheduledTask for JSON output (strip non-serializable `run` fn). */

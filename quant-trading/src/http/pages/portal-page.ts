@@ -60,6 +60,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-risk::before{background:linear-gradient(90deg,var(--red),var(--yellow))}
 .nav-card.card-trades::before{background:linear-gradient(90deg,var(--orange),var(--accent))}
 .nav-card.card-compare::before{background:linear-gradient(90deg,var(--purple),var(--green))}
+.nav-card.card-strestructure::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -196,6 +197,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">晋级率</span><span class="tag">情绪</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/auction-sniper" class="nav-card card-sniper" style="color:inherit;text-decoration:none">
+    <div class="icon">🎯</div>
+    <h3>竞价抢筹狙击</h3>
+    <p>集合竞价（9:15-9:25）主力异动量大单抢筹检测，尾部跳涨+成交额骤增+开盘点火确认</p>
+    <div class="tags">
+      <span class="tag">竞价检测</span><span class="tag">大单抢筹</span><span class="tag">尾部跳涨</span>
+      <span class="tag">点火确认</span><span class="tag">四维评分</span>
+    </div>
+  </a>
   <a href="${b}/quant/admin/event-catalyst" class="nav-card card-catalyst" style="color:inherit;text-decoration:none">
     <div class="icon">⚡</div>
     <h3>事件催化</h3>
@@ -203,6 +213,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">美股异动</span><span class="tag">对标映射</span><span class="tag">资金验证</span>
       <span class="tag">稀缺性</span><span class="tag">事件驱动</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/st-restructuring" class="nav-card card-strestructure" style="color:inherit;text-decoration:none">
+    <div class="icon">🏗️</div>
+    <h3>ST重整跟踪</h3>
+    <p>跟踪ST股票破产重整全生命周期，预重整→正式重整→执行完毕→摘帽，公告自动分类</p>
+    <div class="tags">
+      <span class="tag">重整阶段</span><span class="tag">执行中</span><span class="tag">执行完毕</span>
+      <span class="tag">公告跟踪</span><span class="tag">摘帽候选</span>
     </div>
   </a>
   <a href="${b}/quant/admin/datahub" class="nav-card card-datahub" style="color:inherit;text-decoration:none">
@@ -311,6 +330,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/planner</span><span class="api-desc">投资规划</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/lianban</span><span class="api-desc">连板分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/event-catalyst</span><span class="api-desc">事件催化分析</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/st-restructuring</span><span class="api-desc">ST重整跟踪</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/datahub</span><span class="api-desc">金融数据中心</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/sentiment-dashboard</span><span class="api-desc">市场情绪面板</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/market-overview</span><span class="api-desc">大盘分析</span></div>

@@ -991,7 +991,11 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
   const isRemoteQmt = config.tradingAccount?.broker === "remote-qmt";
 
   let inner: MarketDataProvider;
-  if (config.dataProvider === "jqdata" || config.dataProviders?.jqdata?.enabled) {
+  if (isRemoteQmt) {
+    // QMT bridge as primary for CN stocks, with SmartProvider fallback for
+    // search, HK/US, and when QMT bridge times out
+    inner = new QMTFallbackProvider(config);
+  } else if (config.dataProvider === "jqdata" || config.dataProviders?.jqdata?.enabled) {
     inner = new JQDataProvider(config);
   } else if (config.dataProvider === "tushare" || config.dataProviders?.tushare?.enabled) {
     inner = new TushareProvider(config);
@@ -999,10 +1003,6 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
     inner = new YFinanceProvider(config);
   } else if (config.dataProvider === "akshare") {
     inner = new AKShareProvider(config);
-  } else if (isRemoteQmt) {
-    // QMT bridge as primary for CN stocks, with SmartProvider fallback for
-    // search, HK/US, and when QMT bridge times out
-    inner = new QMTFallbackProvider(config);
   } else {
     inner = new SmartProvider(config);
   }

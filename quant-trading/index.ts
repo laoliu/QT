@@ -86,6 +86,7 @@ import { registerQuantRoutes } from "./src/http/routes.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
+import { TradePlanStoreImpl } from "./src/services/trade-plan-store.js";
 import { BreakoutMonitor } from "./src/services/breakout-monitor.js";
 import { ComposedStrategyStore } from "./src/services/composed-strategy-store.js";
 import { ConditionalOrderService } from "./src/services/conditional-order.js";
@@ -1256,6 +1257,10 @@ const quantTradingPlugin = {
     const securePublic = (handler: HttpHandler): HttpHandler =>
       withRateLimit(config, withCors(config, handler), rateLimiter);
 
+    const tradePlanStore = new TradePlanStoreImpl({
+      persistPath: config.dataDir ? `${config.dataDir}/trade-plans.json` : null,
+    });
+
     registerQuantRoutes({
       api,
       config,
@@ -1275,6 +1280,7 @@ const quantTradingPlugin = {
       taskScheduler,
       secure,
       securePublic,
+      tradePlanStore,
     });
 
     registerAdminRoutes({

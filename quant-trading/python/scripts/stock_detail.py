@@ -381,6 +381,12 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
     """Fetch comprehensive stock detail."""
     import akshare as ak
 
+    # Normalize: strip SH/SZ/sh/sz prefix (e.g. "SZ002131" → "002131")
+    import re as _re
+    _m = _re.match(r"^(?:SH|SZ|sh|sz)(\d{6})$", symbol)
+    if _m:
+        symbol = _m.group(1)
+
     result: dict = {"symbol": symbol, "market": market}
 
     # ── 1. Real-time quote: bridge → Sina + Tencent (complementary) ──

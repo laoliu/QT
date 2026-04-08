@@ -66,7 +66,7 @@ Promise.all(INDICES.map(function(s){
   results.forEach(function(d,i){
     if(d.error){html+='<div class="index-item"><div class="index-name">'+NAMES[INDICES[i]]+'</div><div class="error">暂无数据</div></div>';return;}
     var price=d.price||d.close||0;
-    var chg=d.changePercent||d.change_pct||0;
+    var chg=d.changePct||d.changePercent||d.change_pct||0;
     var cls=chg>=0?"up":"down";
     html+='<div class="index-item"><div class="index-name">'+(NAMES[INDICES[i]]||INDICES[i])+'</div><div class="index-val '+cls+'">'+Number(price).toFixed(2)+'</div><div class="'+cls+'">'+(chg>=0?"+":"")+Number(chg).toFixed(2)+'%</div></div>';
   });

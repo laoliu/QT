@@ -171,6 +171,9 @@ function arr(v){return Array.isArray(v)?v:[]}
 function loadDetail(){
   var sym=document.getElementById('sym-input').value.trim();
   if(!sym)return;
+  // Normalize: strip SH/SZ/sh/sz prefix (e.g. "SZ002131" → "002131")
+  var m=sym.match(/^(?:SH|SZ|sh|sz)(\d{6})$/);
+  if(m){sym=m[1];document.getElementById('sym-input').value=sym}
   currentSymbol=sym;
   document.getElementById('bc-stock').textContent='📈 '+sym;
   document.getElementById('main-content').innerHTML='<div class="loading">⏳ 加载中…</div>';

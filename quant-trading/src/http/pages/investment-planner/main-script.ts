@@ -61,5 +61,7 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getEngineJs(),
     getAccScanJs(),
     getPortfolioBacktestJs(),
+    `/* auto-load today plan on page init */
+try{loadTodayPlan();}catch(e){console.warn('[init] loadTodayPlan',e);}`,
   ].join("\n");
 }

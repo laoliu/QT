@@ -22,7 +22,7 @@ function _onTabDataLoad(tabName){
     if(tabName==='milestones')loadMilestones();
     if(tabName==='screen'){loadScreenerHistory();restoreScreenResults();}
     if(tabName==='institution'){ensureInstitutionDefaults();loadInstitutionHistory();}
-    if(tabName==='plan'){loadPlanHistory();restoreCachedPlan();}
+    if(tabName==='plan'){loadTodayPlan();loadPlanHistory();restoreCachedPlan();}
     if(tabName==='recommend'){loadDailyPickHistory();loadOptHistory();}
     if(tabName==='rebalance'||tabName==='recommend')refreshGlobalMode();
   }catch(e){console.error('[tab-data-load]',e)}

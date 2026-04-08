@@ -324,7 +324,7 @@ async function loadLadder() {
         '<span class="ladder-level">' + level + '板</span>' +
         '<div style="flex:1;display:flex;align-items:center;gap:8px">' +
           '<div class="ladder-bar" style="width:' + pct + '%;background:' + (Number(level) >= 3 ? 'var(--red)' : Number(level) >= 2 ? 'var(--orange)' : 'var(--accent)') + '"></div>' +
-          '<span class="ladder-count">' + count + '只</span>' +
+          '<span class="ladder-count">' + count + 'ֻ</span>' +
         '</div>' +
         (names ? '<span class="ladder-stocks" title="' + esc(names) + '">' + esc(names) + '</span>' : '') +
       '</div>';
@@ -624,10 +624,10 @@ async function loadZhaban() {
       kpiHtml("涨停总数", d.total_zt || 0, ""),
       kpiHtml("已炸板", d.total_zbgc || 0, "", "var(--red)"),
       kpiHtml("炸板率", ((d.env_failure_rate || 0) * 100).toFixed(1) + "%", "", d.env_failure_rate < 0.3 ? "var(--green)" : "var(--red)"),
-      kpiHtml("极高风险", rs["极高"] || 0, "只", "var(--red)"),
-      kpiHtml("高风险", rs["高"] || 0, "只", "var(--orange)"),
-      kpiHtml("中风险", rs["中"] || 0, "只", "var(--yellow)"),
-      kpiHtml("低风险", rs["低"] || 0, "只", "var(--green)"),
+      kpiHtml("极高风险", rs["极高"] || 0, "ֻ", "var(--red)"),
+      kpiHtml("高风险", rs["高"] || 0, "ֻ", "var(--orange)"),
+      kpiHtml("中风险", rs["中"] || 0, "ֻ", "var(--yellow)"),
+      kpiHtml("低风险", rs["低"] || 0, "ֻ", "var(--green)"),
     ].join("");
 
     // Pattern Insights

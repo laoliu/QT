@@ -14,17 +14,20 @@ export function createSectorAnalysisTool(_api: OpenClawPluginApi, config: QuantT
   return {
     name: "sector_analysis",
     description:
-      "板块/行业分析工具。查看行业板块排名、板块成分股、板块历史走势。\n" +
+      "板块/行业分析工具。查看行业板块排名、板块成分股、板块历史走势、板块轮动分析、热点板块识别。\n" +
       "• action=ranking — 今日行业板块涨跌排名（默认前20）\n" +
       "• action=detail — 查看某板块成分股详情（需指定sector）\n" +
-      "• action=history — 查看板块历史K线走势（需指定sector）",
+      "• action=history — 查看板块历史K线走势（需指定sector）\n" +
+      "• action=rotation — 板块轮动分析（N日涨跌对比、加速/减速板块）\n" +
+      "• action=momentum — 板块动量评分（价格+量能+趋势一致性）\n" +
+      "• action=hot — 今日热点板块识别（涨幅+换手+上涨家数）",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["ranking", "detail", "history"],
-          description: "操作类型: ranking=板块涨跌排名, detail=板块成分股, history=板块历史走势",
+          enum: ["ranking", "detail", "history", "rotation", "momentum", "hot"],
+          description: "操作类型: ranking=板块排名, detail=成分股, history=历史走势, rotation=板块轮动, momentum=动量评分, hot=热点识别",
         },
         sector: {
           type: "string",
@@ -36,7 +39,7 @@ export function createSectorAnalysisTool(_api: OpenClawPluginApi, config: QuantT
         },
         days: {
           type: "number",
-          description: "历史天数（仅action=history），默认20",
+          description: "分析天数（action=history/rotation/momentum），默认20",
         },
       },
       required: ["action"],

@@ -7,7 +7,7 @@ Fetches option chain, quotes, contracts, IV surface from AKShare.
 Supported markets:
   - ETF options   (上证50ETF, 沪深300ETF, etc.) — SSE, SZSE
   - Index options (沪深300股指期权, 中证1000股指期权) — CFFEX
-  - Commodity options (豆粕, 白糖, 铜, etc.) — DCE, CZCE, SHFE, GFEX
+  - Commodity options (豆粕, 白糖, ͭ, etc.) — DCE, CZCE, SHFE, GFEX
 
 Input: JSON via stdin or QUANT_CONFIG env var.
 Output: JSON to stdout.
@@ -80,10 +80,10 @@ COMMODITY_OPTION_UNDERLYINGS = {
     "RM": {"name": "菜粕", "exchange": "CZCE", "multiplier": 10},
     "PK": {"name": "花生", "exchange": "CZCE", "multiplier": 5},
     # 上期所 SHFE
-    "cu": {"name": "铜", "exchange": "SHFE", "multiplier": 5},
+    "cu": {"name": "ͭ", "exchange": "SHFE", "multiplier": 5},
     "au": {"name": "黄金", "exchange": "SHFE", "multiplier": 1000},
     "al": {"name": "铝", "exchange": "SHFE", "multiplier": 5},
-    "zn": {"name": "锌", "exchange": "SHFE", "multiplier": 5},
+    "zn": {"name": "п", "exchange": "SHFE", "multiplier": 5},
     "ru": {"name": "天然橡胶", "exchange": "SHFE", "multiplier": 10},
     # 广期所 GFEX
     "si": {"name": "工业硅", "exchange": "GFEX", "multiplier": 5},

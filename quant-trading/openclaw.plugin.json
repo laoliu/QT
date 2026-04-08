@@ -237,6 +237,48 @@
           "riskAlerts": { "type": "boolean", "description": "Alert on risk threshold breaches" }
         }
       },
+      "pushChannels": {
+        "type": "object",
+        "description": "Multi-channel push notification service (企业微信/钉钉/Bark/Server酱/PushPlus). Messages are routed by event severity.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable push service (default: true when channels are configured)"
+          },
+          "channels": {
+            "type": "array",
+            "description": "Push channel configurations",
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["wework", "dingtalk", "bark", "serverchan"],
+                  "description": "Channel type: wework=企业微信Webhook, dingtalk=钉钉机器人, bark=iOS Bark, serverchan=Server酱/PushPlus"
+                },
+                "webhookUrl": {
+                  "type": "string",
+                  "description": "Webhook URL (for wework/dingtalk/serverchan)"
+                },
+                "serverUrl": {
+                  "type": "string",
+                  "description": "Bark server URL (for bark type, e.g. https://api.day.app/your-key)"
+                },
+                "secret": {
+                  "type": "string",
+                  "description": "Signing secret (for dingtalk HMAC-SHA256 verification)"
+                },
+                "levels": {
+                  "type": "array",
+                  "items": { "type": "string", "enum": ["info", "warning", "critical"] },
+                  "description": "Event severity levels routed to this channel (default: all levels)"
+                }
+              }
+            }
+          }
+        }
+      },
       "signalWebhook": {
         "type": "object",
         "description": "Signal webhook configuration for receiving trading signals from external systems (e.g. QMT)",

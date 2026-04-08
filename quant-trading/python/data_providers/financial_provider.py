@@ -301,13 +301,13 @@ def _fetch_cn_financials(code: str) -> FinancialSnapshot:
             snap.debt_ratio = _safe_float(latest.get("资产负债率(%)"))
 
             # EPS
-            snap.eps = _safe_float(latest.get("摊薄每股收益(元)"))
+            snap.eps = _safe_float(latest.get("摊薄每股收益(Ԫ)"))
 
             # PE/PB computed from available data
             if snap.price and snap.eps and snap.eps > 0:
                 snap.pe = round(snap.price / snap.eps, 2)
                 snap.pe_ttm = snap.pe
-            bvps = _safe_float(latest.get("每股净资产_调整后(元)"))
+            bvps = _safe_float(latest.get("每股净资产_调整后(Ԫ)"))
             if snap.price and bvps and bvps > 0:
                 snap.pb = round(snap.price / bvps, 2)
 
@@ -332,8 +332,8 @@ def _fetch_cn_financials(code: str) -> FinancialSnapshot:
             # 3-year revenue CAGR from historical data
             if len(df_ind) >= 13:
                 try:
-                    rev_latest = _safe_float(latest.get("主营业务利润(元)"))
-                    rev_3y = _safe_float(df_ind.iloc[12].get("主营业务利润(元)"))
+                    rev_latest = _safe_float(latest.get("主营业务利润(Ԫ)"))
+                    rev_3y = _safe_float(df_ind.iloc[12].get("主营业务利润(Ԫ)"))
                     if rev_latest and rev_3y and rev_3y > 0:
                         snap.revenue_growth_3y_cagr = round(
                             ((rev_latest / rev_3y) ** (1 / 3) - 1) * 100, 2

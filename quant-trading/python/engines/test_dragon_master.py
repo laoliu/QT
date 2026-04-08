@@ -151,7 +151,7 @@ class TestClassifySealStrength:
         assert _classify_seal_strength(12e8) == "极强"
 
     def test_strong(self):
-        assert _classify_seal_strength(6e8) == "强"
+        assert _classify_seal_strength(6e8) == "ǿ"
 
     def test_medium(self):
         assert _classify_seal_strength(3e8) == "中"
@@ -194,8 +194,8 @@ class TestCheckVolumeSignal:
         assert _check_volume_signal(klines) == "平量"
 
     def test_insufficient_data(self):
-        assert _check_volume_signal([{"volume": 100}]) == "未知"
-        assert _check_volume_signal(None) == "未知"
+        assert _check_volume_signal([{"volume": 100}]) == "δ֪"
+        assert _check_volume_signal(None) == "δ֪"
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

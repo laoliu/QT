@@ -1,5 +1,5 @@
 /**
- * QMTBroker — 迅投 miniQMT / xtquant broker adapter.
+ * QMTBroker — ѸͶ miniQMT / xtquant broker adapter.
  *
  * Communicates with `python/brokers/qmt_broker.py` via PersistentPythonProcess
  * (NDJSON over stdin/stdout). The Python side uses xtquant.xttrader to place
@@ -8,7 +8,7 @@
  * Supported markets: CN stock, CN futures (via QMT).
  *
  * Setup:
- *   1. Install miniQMT from 迅投 (requires a qualifying brokerage account).
+ *   1. Install miniQMT from ѸͶ (requires a qualifying brokerage account).
  *   2. Keep miniQMT running in the background.
  *   3. Set config.tradingAccount.qmt.miniQmtPath pointing to the data directory.
  *   4. pip install xtquant  (bundled with miniQMT, but also on PyPI)
@@ -36,6 +36,7 @@ import type {
   FillCallback,
   OrderStatusCallback,
   ModifyOrderRequest,
+  BatchOrderResult,
 } from "./adapter.js";
 import { isCnMarketOpen } from "./paper-broker.js";
 
@@ -347,6 +348,19 @@ export class QMTBroker implements IBrokerAdapter {
     order.status = "cancelled";
     order.updatedAt = new Date().toISOString();
     for (const cb of this.statusCbs) cb(orderId, "cancelled", order);
+  }
+
+  async placeBatchOrders(reqs: OrderRequest[]): Promise<BatchOrderResult[]> {
+    const results: BatchOrderResult[] = [];
+    for (const req of reqs) {
+      try {
+        const order = await this.placeOrder(req);
+        results.push({ ok: true, order, symbol: req.symbol });
+      } catch (err) {
+        results.push({ ok: false, error: (err as Error).message, symbol: req.symbol });
+      }
+    }
+    return results;
   }
 
   async modifyOrder(orderId: string, update: ModifyOrderRequest): Promise<Order> {

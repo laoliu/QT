@@ -435,7 +435,7 @@ def _fetch_cn_stock_data() -> tuple[dict[str, dict[str, Any]], list[str]]:
         cache = get_cache()
         cached = cache.get_stock_list()
         if cached:
-            print(f"[选股] 命中缓存 ({len(cached)} 只)", file=sys.stderr)
+            print(f"[选股] 命中缓存 ({len(cached)} ֻ)", file=sys.stderr)
             return cached, ["(数据来自本地缓存)"]
     except Exception as e:
         print(f"[选股] 缓存读取失败: {e}", file=sys.stderr)
@@ -747,7 +747,7 @@ def _enrich_names_from_tdx(stock_data: dict[str, dict[str, Any]]) -> None:
         for code in to_remove:
             del stock_data[code]
         if enriched:
-            print(f"[选股] TDX 补充名称: {enriched} 只, 过滤ST: {len(to_remove)} 只", file=sys.stderr)
+            print(f"[选股] TDX 补充名称: {enriched} ֻ, 过滤ST: {len(to_remove)} ֻ", file=sys.stderr)
     except Exception:
         try:
             api.disconnect()
@@ -845,7 +845,7 @@ def _fetch_tushare_stocks() -> tuple[dict[str, dict[str, Any]], list[str]]:
                     except (ValueError, TypeError):
                         pass
 
-        print(f"[选股] Tushare Pro: {len(stock_data)} 只 A 股", file=sys.stderr)
+        print(f"[选股] Tushare Pro: {len(stock_data)} ֻ A 股", file=sys.stderr)
         return stock_data, []
 
     except Exception as e:
@@ -930,7 +930,7 @@ def _fetch_tdx_stocks() -> tuple[dict[str, dict[str, Any]], list[str]]:
             api.disconnect()
             return {}, []
 
-        print(f"[选股] 通达信获取股票列表: {len(code_name_map)} 只", file=sys.stderr)
+        print(f"[选股] 通达信获取股票列表: {len(code_name_map)} ֻ", file=sys.stderr)
 
         # Phase 2: Batch-fetch real-time quotes (80 per call)
         stock_data: dict[str, dict[str, Any]] = {}
@@ -1011,10 +1011,10 @@ def _fetch_eastmoney_stocks() -> tuple[dict[str, dict[str, Any]], list[str]]:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     # East Money field mapping:
-    # f2=price, f3=change_pct, f4=change_amt, f5=vol(手), f6=turnover(元),
+    # f2=price, f3=change_pct, f4=change_amt, f5=vol(手), f6=turnover(Ԫ),
     # f8=turnover_ratio, f9=PE, f12=code, f13=market(0=SZ,1=SH),
     # f14=name, f15=high, f16=low, f17=open, f18=prev_close,
-    # f20=total_mktcap(元), f21=circ_mktcap(元), f23=PB
+    # f20=total_mktcap(Ԫ), f21=circ_mktcap(Ԫ), f23=PB
 
     _EM_FIELDS = "f2,f3,f4,f5,f6,f8,f9,f12,f13,f14,f15,f16,f17,f18,f20,f21,f23"
     _EM_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
@@ -1245,7 +1245,7 @@ def _fetch_sina_vip_direct(
 
     total = len(stock_data)
     if total > 0:
-        print(f"[选股] Sina VIP 获取完成: {total} 只股票 ({pages_fetched} 页)", file=sys.stderr)
+        print(f"[选股] Sina VIP 获取完成: {total} 只股票 ({pages_fetched} ҳ)", file=sys.stderr)
     return stock_data, errors
 
 
@@ -1315,7 +1315,7 @@ def _enrich_with_xueqiu(
             if cache_hits > 0:
                 print(
                     f"[缓存] 命中 {cache_hits} 只股票基本面缓存，"
-                    f"还需从雪球获取 {len(actually_fetch)} 只",
+                    f"还需从雪球获取 {len(actually_fetch)} ֻ",
                     file=sys.stderr,
                 )
     except Exception as e:
@@ -1350,9 +1350,9 @@ def _enrich_with_xueqiu(
     if enriched > 0 or cache_hits > 0:
         parts = []
         if cache_hits > 0:
-            parts.append(f"缓存命中 {cache_hits} 只")
+            parts.append(f"缓存命中 {cache_hits} ֻ")
         if enriched > 0:
-            parts.append(f"雪球新获取 {enriched} 只")
+            parts.append(f"雪球新获取 {enriched} ֻ")
         errors.insert(0, f"PE/PB/EPS 数据: {'，'.join(parts)}")
 
     return errors

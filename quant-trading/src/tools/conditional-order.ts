@@ -22,7 +22,7 @@ export function createConditionalOrderTool(
   return {
     name: "conditional_order",
     description:
-      "管理条件单（止损/止盈/跟踪止损/ATR跟踪止损/移动止盈/分批止盈/均线止损）。" +
+      "管理条件单（止损/ֹӯ/跟踪止损/ATR跟踪止损/移动止盈/分批止盈/均线止损）。" +
       "action=add_stop_loss 设置止损, action=add_take_profit 设置止盈, " +
       "action=add_trailing_stop 设置跟踪止损(百分比), action=add_trailing_atr 设置ATR跟踪止损, " +
       "action=add_trailing_tp 设置移动止盈(涨到激活价后跟踪回撤卖出), " +
@@ -57,7 +57,7 @@ export function createConditionalOrderTool(
         },
         atr_value: {
           type: "number",
-          description: "ATR值 (add_trailing_atr, 可从 market_data indicators 获取 atr14)",
+          description: "ATRֵ (add_trailing_atr, 可从 market_data indicators 获取 atr14)",
         },
         atr_multiplier: {
           type: "number",

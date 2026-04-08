@@ -278,9 +278,9 @@ function renderDailyCompositePick(d){
   document.getElementById('dp-kpis').innerHTML=
     kpiHtml(esc(bestLabel),'最佳策略')+
     kpiHtml(bestScore,'策略综合分')+
-    kpiHtml(finalSymbols.length+'只','最终入围')+
+    kpiHtml(finalSymbols.length+'ֻ','最终入围')+
     kpiHtml(selected.length+'个','入围策略')+
-    kpiHtml(okStockBt+'只','单股可回测');
+    kpiHtml(okStockBt+'ֻ','单股可回测');
 
   // Strategy ranking table
   var stBody=document.querySelector('#dp-strategy-table tbody');
@@ -575,7 +575,7 @@ function executeRecommend(dryRun,forcePremarket){
         failHtml='<div style="margin-top:8px;font-size:12px;color:var(--orange)">失败明细：'+exec.failures.map(function(f){return esc(f.code+':'+f.reason)}).join('；')+'</div>';
       }
       resultEl.innerHTML='<div class="card" style="padding:10px">'+
-        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
+        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>״̬</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
         failHtml+
         '</div>';
       toast(rejected>0?'⚠️ 已执行，存在部分失败':'✅ 建仓委托已提交，正在等待成交确认…');
@@ -780,7 +780,7 @@ function stopFillPolling(){
 
 function renderFillTable(orders){
   var tbody=document.querySelector('#fill-confirm-table tbody');
-  var statusLabels={pending:'⏳ 待提交',submitted:'📤 已提交',partial:'🔄 部分成交',filled:'✅ 已成交',cancelled:'❌ 已撤单',rejected:'🚫 被拒绝',expired:'⌛ 已过期',unknown:'❓ 未知'};
+  var statusLabels={pending:'⏳ 待提交',submitted:'📤 已提交',partial:'🔄 部分成交',filled:'✅ 已成交',cancelled:'❌ 已撤单',rejected:'🚫 被拒绝',expired:'⌛ 已过期',unknown:'❓ δ֪'};
   tbody.innerHTML=orders.map(function(o){
     var filled=o.status==='filled'||o.hasPosition;
     var rowStyle=filled?'background:rgba(63,185,80,.06)':'';

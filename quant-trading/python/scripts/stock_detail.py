@@ -163,7 +163,7 @@ def _fetch_sina_quote(symbol: str) -> dict | None:
     Returns parsed dict or None on failure.
     Sina response format (comma-separated):
       0:名称, 1:今开, 2:昨收, 3:最新价, 4:最高, 5:最低,
-      6:买一价, 7:卖一价, 8:成交量(股), 9:成交额(元),
+      6:买一价, 7:卖一价, 8:成交量(股), 9:成交额(Ԫ),
       10-19: 买一量/价 ~ 买五量/价, 20-29: 卖一量/价 ~ 卖五量/价,
       30:日期, 31:时间
     """
@@ -814,7 +814,7 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
                 items = []
                 for _, row in global_df.iterrows():
                     title = str(row.get("标题", ""))
-                    content = str(row.get("摘要", str(row.get("内容", ""))))
+                    content = str(row.get("ժҪ", str(row.get("内容", ""))))
                     if stock_name in title or stock_name in content or symbol in title:
                         items.append({
                             "title": title,

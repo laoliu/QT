@@ -238,7 +238,7 @@ export function getDashboardHtml(baseUrl: string): string {
         <button class="btn btn-primary" onclick="engineAction('start')" id="btnStart" disabled>启动</button>
         <button class="btn" onclick="engineAction('pause')" id="btnPause" disabled>暂停</button>
         <button class="btn" onclick="engineAction('resume')" id="btnResume" disabled>恢复</button>
-        <button class="btn btn-danger" onclick="engineAction('stop')" id="btnStop" disabled>停止</button>
+        <button class="btn btn-danger" onclick="engineAction('stop')" id="btnStop" disabled>ֹͣ</button>
       </div>
       <button class="btn" onclick="refreshAll()">刷新</button>
       <span class="status" id="sseStatus" title="SSE 连接状态">
@@ -260,7 +260,7 @@ export function getDashboardHtml(baseUrl: string): string {
   <div class="grid">
     <!-- Portfolio -->
     <div class="card span-3" id="portfolioCard">
-      <h2>投资组合</h2>
+      <h2>投资组合 <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="exportCSV('portfolio')" title="导出持仓明细CSV">导出CSV</button></h2>
       <div class="stats" id="portfolioStats">
         <div class="stat"><span class="value">--</span><span class="label">总资产</span></div>
       </div>
@@ -332,7 +332,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     <!-- Backtest History -->
     <div class="card">
-      <h2>回测记录</h2>
+      <h2>回测记录 <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="exportCSV('journal')" title="导出交易日志CSV">导出日志</button></h2>
       <div id="backtestHistoryPanel"><div class="empty">暂无回测记录</div></div>
     </div>
   </div>
@@ -461,7 +461,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const el = document.getElementById('sseStatus');
         if (!el) return;
         if (state === 'connected') {
-          el.innerHTML = '<span class="dot dot-green"></span>实时';
+          el.innerHTML = '<span class="dot dot-green"></span>ʵʱ';
           el.title = 'SSE 实时连接正常';
         } else {
           el.innerHTML = '<span class="dot dot-orange"></span>轮询';
@@ -486,7 +486,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Engine controls ─────────────────────────────────────
     async function engineAction(action) {
-      var labels={start:'启动',stop:'停止',pause:'暂停',resume:'恢复'};
+      var labels={start:'启动',stop:'ֹͣ',pause:'暂停',resume:'恢复'};
       var el=document.getElementById('btn'+action.charAt(0).toUpperCase()+action.slice(1));
       if(el)el.disabled=true;
       try{
@@ -528,7 +528,7 @@ export function getDashboardHtml(baseUrl: string): string {
     async function loadOrders() {
       const r = await api('/quant/api/orders' + modeParam(false)); const orders=r?.data??[];
       if(!orders.length){document.getElementById('ordersTable').innerHTML='<div class="empty">暂无委托</div>';return;}
-      let h='<table><tr><th>时间</th><th>代码</th><th>方向</th><th>数量</th><th>价格</th><th>状态</th></tr>';
+      let h='<table><tr><th>时间</th><th>代码</th><th>方向</th><th>数量</th><th>价格</th><th>״̬</th></tr>';
       for(const o of orders.slice(-20)){
         const side=o.side==='buy'?'<span class="badge badge-buy">买入</span>':'<span class="badge badge-sell">卖出</span>';
         const st=o.status==='filled'?'<span class="badge badge-filled">已成</span>':'<span class="badge badge-pending">'+esc(o.status??'待处理')+'</span>';
@@ -741,14 +741,14 @@ export function getDashboardHtml(baseUrl: string): string {
       if (!d) { document.getElementById('dataHealth').innerHTML='<span class="dot dot-red"></span>数据: N/A'; return; }
       const dc = d.overallStatus==='fresh'?'dot-green':d.overallStatus==='warning'?'dot-yellow':d.overallStatus==='critical'?'dot-red':'dot-orange';
       const lb = {fresh:'正常',warning:'延迟',critical:'中断',no_data:'无数据'}[d.overallStatus]??d.overallStatus;
-      document.getElementById('dataHealth').innerHTML='<span class="dot '+dc+'"></span>数据: '+lb+' ('+d.totalSymbols+'只)';
+      document.getElementById('dataHealth').innerHTML='<span class="dot '+dc+'"></span>数据: '+lb+' ('+d.totalSymbols+'ֻ)';
 
       // Staleness table
       if (!d.symbols || !d.symbols.length) {
         document.getElementById('stalenessTable').innerHTML='<div class="empty">暂无订阅</div>';
         return;
       }
-      let h='<table><tr><th>标的</th><th>状态</th><th>延迟</th></tr>';
+      let h='<table><tr><th>标的</th><th>״̬</th><th>延迟</th></tr>';
       for (const s of d.symbols) {
         const cls = 'badge-'+s.status;
         const lb2 = {fresh:'正常',warning:'延迟',critical:'中断'}[s.status]??s.status;
@@ -881,7 +881,7 @@ export function getDashboardHtml(baseUrl: string): string {
       const alerts = r?.data ?? [];
       if (!alerts.length) { document.getElementById('priceAlertsPanel').innerHTML='<div class="empty">暂无预警</div>'; return; }
       const active = alerts.filter(a => !a.triggered || a.repeating);
-      let h='<table><tr><th>标的</th><th>条件</th><th>状态</th></tr>';
+      let h='<table><tr><th>标的</th><th>条件</th><th>״̬</th></tr>';
       for (const a of alerts.slice(0, 20)) {
         const st = a.triggered && !a.repeating ? '<span class="badge badge-filled">已触发</span>' : '<span class="badge badge-pending">监控中</span>';
         h += '<tr><td>'+(a.symbol??'')+'</td><td>'+(a.description??a.type+' '+a.threshold)+'</td><td>'+st+'</td></tr>';
@@ -897,7 +897,7 @@ export function getDashboardHtml(baseUrl: string): string {
       const tasks = r?.data ?? [];
       if (!tasks.length) { document.getElementById('scheduledTasksPanel').innerHTML='<div class="empty">暂无定时任务</div>'; return; }
       const icons = {pending:'⏳',completed:'✅',failed:'❌',cancelled:'🚫'};
-      let h='<table><tr><th>状态</th><th>描述</th><th>计划时间</th></tr>';
+      let h='<table><tr><th>״̬</th><th>描述</th><th>计划时间</th></tr>';
       for (const t of tasks.slice(0, 20)) {
         const icon = icons[t.status] ?? '•';
         const sched = t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
@@ -911,14 +911,27 @@ export function getDashboardHtml(baseUrl: string): string {
       const r = await api('/quant/api/backtests?limit=10');
       const runs = r?.data ?? [];
       if (!runs.length) { document.getElementById('backtestHistoryPanel').innerHTML='<div class="empty">暂无回测记录</div>'; return; }
-      let h='<table><tr><th>策略</th><th>标的</th><th>收益</th><th>日期</th></tr>';
+      let h='<table><tr><th>策略</th><th>标的</th><th>收益</th><th>日期</th><th></th></tr>';
       for (const b of runs) {
         const ret = b.returnPct != null ? (b.returnPct*100).toFixed(1)+'%' : '--';
         const cls = pctClass(b.returnPct??0);
         const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN') : '--';
-        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td></tr>';
+        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\'backtest\',\''+esc(b.id)+'\')">CSV</button></td></tr>';
       }
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';
+    }
+
+    // ── CSV Export ───────────────────────────────────────────
+    function exportCSV(type, backtestId) {
+      let url = BASE + '/quant/export/' + type;
+      if (type === 'backtest' && backtestId) url += '?id=' + encodeURIComponent(backtestId);
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast('正在下载 ' + type + ' CSV...');
     }
 
     // ── Refresh all ─────────────────────────────────────────
@@ -977,6 +990,9 @@ export function handleDashboardRequest(): Record<string, unknown> {
       "POST /quant/api/alerts/acknowledge",
       "GET  /quant/api/events (SSE stream, ?filter=signal,order,...)",
       "GET  /quant/api/events/recent[?category=&limit=]",
+      "GET  /quant/export/portfolio",
+      "GET  /quant/export/journal",
+      "GET  /quant/export/backtest[?id=]",
     ],
   };
 }

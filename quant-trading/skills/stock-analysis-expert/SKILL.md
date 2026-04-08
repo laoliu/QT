@@ -255,6 +255,45 @@ correlation_analysis → 持仓标的间相关性（避免过度集中）
 4. trading_signal(action=hitrate)      → 信号准确率追踪
 ```
 
+### 5.5 个股对比决策流程
+
+```
+1. stock_compare(action=compare)       → 多维度并排对比（PE/PB/ROE/增速等）
+2. stock_compare(action=performance)   → 区间涨跌幅+最大回撤对比
+3. stock_compare(action=technical)     → 技术面信号对比
+4. dividend_tracker(action=analysis)   → 分红能力对比
+→ 综合评判选择最优标的
+```
+
+### 5.6 持仓每日体检流程
+
+```
+1. position_diagnosis(action=diagnose)  → 全持仓健康评级（A/B/C/D）
+2. position_diagnosis(action=risk_check) → 风险扫描（仓位集中度/止损检查）
+3. position_diagnosis(action=action_plan) → 操作建议清单（持有/减仓/清仓）
+4. market_calendar(action=events)       → 检查持仓股即将发生的事件
+5. trade_cost_calculator(action=round_trip) → 计算调仓交易成本
+```
+
+### 5.7 交易成本规划
+
+```
+1. trade_cost_calculator(action=breakeven) → 计算保本卖出价
+2. trade_cost_calculator(action=round_trip) → 一买一卖全部费用
+3. trade_cost_calculator(action=compare)   → 不同价位/数量的费用对比
+→ 确保预期利润覆盖交易成本
+```
+
+### 5.8 分红收益策略
+
+```
+1. dividend_tracker(action=yield_rank)    → 高股息率排行
+2. dividend_tracker(action=analysis)      → 分红连续性和稳定性分析
+3. market_calendar(action=events, event_types=dividend) → 近期除权除息日
+4. stock_compare(action=valuation)        → 高分红股估值对比
+→ 选择分红稳定+估值合理的标的
+```
+
 ---
 
 ## 六、回答规范

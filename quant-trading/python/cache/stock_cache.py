@@ -600,7 +600,7 @@ class StockCache:
                     stock_data[sym] = {"stock_id": sym, "name": "", "exchange": ex}
                 self.save_stock_list(stock_data)
                 populated["stock_list"] = len(stock_data)
-                print(f"[缓存] 从K线数据自动填充股票列表: {len(stock_data)} 只", file=sys.stderr)
+                print(f"[缓存] 从K线数据自动填充股票列表: {len(stock_data)} ֻ", file=sys.stderr)
 
         # Populate code_name_map via AKShare if empty
         cn_count = conn.execute("SELECT COUNT(*) FROM stock_code_name").fetchone()[0]
@@ -638,7 +638,7 @@ class StockCache:
                     new_count = conn.execute("SELECT COUNT(DISTINCT code) FROM stock_fundamentals").fetchone()[0]
                     if new_count:
                         populated["fundamentals"] = new_count
-                        print(f"[缓存] 从雪球自动填充基本面数据: {new_count} 只", file=sys.stderr)
+                        print(f"[缓存] 从雪球自动填充基本面数据: {new_count} ֻ", file=sys.stderr)
             except Exception as e:
                 print(f"[缓存] 基本面数据获取失败: {e}", file=sys.stderr)
 

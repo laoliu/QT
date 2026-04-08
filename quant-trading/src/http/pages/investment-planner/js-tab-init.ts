@@ -35,7 +35,7 @@ function loadComposedStrategies(){
   api('/quant/admin/api/compositions').then(function(d){
     var comps=(d&&d.compositions)||[];
     if(!comps.length)return;
-    var methodLabels={voting:'投票',weighted:'加权',gated:'门控',scored:'评分',cascade:'级联'};
+    var methodLabels={voting:'ͶƱ',weighted:'加权',gated:'门控',scored:'评分',cascade:'级联'};
     // Append to strategy-pref (investment plan) dropdown
     var prefSel=document.getElementById('strategy-pref');
     if(prefSel){

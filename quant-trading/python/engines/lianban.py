@@ -214,7 +214,7 @@ def get_board_history(
                 bar_date = ""
         boards.append({
             "date": bar_date,
-            "board_type": classify_board_type(curr, prev_close, symbol) or "未知",
+            "board_type": classify_board_type(curr, prev_close, symbol) or "δ֪",
             "turnover_rate": _safe_float(curr.get("turnover_rate")),
             "volume": _safe_float(curr.get("volume")),
             "amount": _safe_float(curr.get("amount")),
@@ -264,7 +264,7 @@ def board_quality_score(
     warnings: list[str] = []
 
     # ── Factor 1: Board type score (30 points max) ──
-    type_scores = {"换手板": 10, "T字板": 7, "一字板": 3, "未知": 5}
+    type_scores = {"换手板": 10, "T字板": 7, "一字板": 3, "δ֪": 5}
     type_total = sum(type_scores.get(b["board_type"], 5) for b in boards)
     board_type_score = min(type_total / board_count, 10) * 3  # normalize to 30
 

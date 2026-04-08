@@ -291,7 +291,7 @@ def _score_technicals(techs: dict) -> tuple[float, list[str]]:
             reasons.append("RSI健康区间")
         elif 60 < rsi <= 70:
             score += 4
-            reasons.append("RSI偏强")
+            reasons.append("RSIƫǿ")
 
     # ── Momentum (max +10, min -6) ──
     m20 = techs.get("momentum_20d", 0)
@@ -618,7 +618,7 @@ def _enrich_decision_fields(
             "batch3": {"price": entry_3, "pct": 15, "label": f"回调-5%{'(筹码支撑)' if support > 0 and abs(entry_3 - support) / price < 0.04 else ''}补仓15%"},
         }
 
-        # ── Exit targets (止盈/止损) ──
+        # ── Exit targets (ֹӯ/止损) ──
         sl_price = round(price * (1 - sl_pct), 2)
         tp1 = round(price * 1.10, 2)
         tp2 = round(price * 1.20, 2)
@@ -626,8 +626,8 @@ def _enrich_decision_fields(
         tp_chip = round(resistance, 2) if resistance > price else 0
         a["exitTargets"] = {
             "stopLoss": {"price": sl_price, "pct": round(-sl_pct * 100, 1), "label": "止损"},
-            "takeProfit1": {"price": tp1, "pct": 10.0, "label": "止盈1(+10%)"},
-            "takeProfit2": {"price": tp2, "pct": 20.0, "label": "止盈2(+20%)"},
+            "takeProfit1": {"price": tp1, "pct": 10.0, "label": "ֹӯ1(+10%)"},
+            "takeProfit2": {"price": tp2, "pct": 20.0, "label": "ֹӯ2(+20%)"},
         }
         if tp_chip > 0 and tp_chip != tp1 and tp_chip != tp2:
             a["exitTargets"]["chipResistance"] = {
@@ -990,7 +990,7 @@ def recommend(
     cash_reserve = capital * cash_reserve_pct
     invest_capital = capital - cash_reserve
 
-    # Handle expensive stocks (e.g. 茅台 1400+/share)
+    # Handle expensive stocks (e.g. ę́ 1400+/share)
     expensive = [s for s in scored if s["price"] * 100 > invest_capital * 0.30 and s["score"] >= 50]
     # Keep all stocks from the user's pool (they were explicitly selected);
     # only apply the score >= 15 floor to extra/fallback stocks.
@@ -1116,7 +1116,7 @@ def recommend(
             "分批建仓: 先买入60%核心仓位,剩余40%等回调2-3%时补仓",
             "止损纪律: 单只亏损超过8%坚决止损",
             "止盈策略: 盈利超过20%后分批减仓(每涨5%减仓20%)",
-            f"调仓复盘: 每{rebalance_days}个交易日,参考策略信号调整持仓",
+            f"调仓复盘: ÿ{rebalance_days}个交易日,参考策略信号调整持仓",
             f"现金储备: 保持约{remaining_cash/10000:.0f}万现金,用于补仓或突发机会",
             "大盘风控: 如沪指跌破重要支撑位,减仓至50%以下",
         ],

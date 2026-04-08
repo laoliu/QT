@@ -110,7 +110,7 @@ def generate_candidates() -> list[dict]:
         for cat2 in cats[i+1:]:
             for s1, l1 in STRATEGIES[cat1]:
                 for s2, l2 in STRATEGIES[cat2]:
-                    _add(f"投票 {l1}+{l2}",
+                    _add(f"ͶƱ {l1}+{l2}",
                          "voting",
                          [{"strategyId": s1, "weight": 1},
                           {"strategyId": s2, "weight": 1}],

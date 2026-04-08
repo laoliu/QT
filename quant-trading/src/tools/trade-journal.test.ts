@@ -155,6 +155,6 @@ describe("trade_journal tool", () => {
 
   it("returns error for unknown action", async () => {
     const res = (await tool.execute({ action: "invalid" })) as Record<string, unknown>;
-    expect(res.error).toContain("未知");
+    expect(res.error).toContain("δ֪");
   });
 });

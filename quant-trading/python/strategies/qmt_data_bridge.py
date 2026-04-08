@@ -117,9 +117,9 @@ def _find_qmt_path():
         r"C:\*QMT*",
         r"D:\*QMT*",
         r"E:\*QMT*",
-        r"C:\*迅投*",
-        r"D:\*迅投*",
-        r"E:\*迅投*",
+        r"C:\*ѸͶ*",
+        r"D:\*ѸͶ*",
+        r"E:\*ѸͶ*",
         r"C:\Program Files\*QMT*",
         r"D:\Program Files\*QMT*",
         r"C:\Program Files (x86)\*QMT*",
@@ -410,7 +410,7 @@ def _fetch_klines_xtdata(codes, period, count):
 
     Returns:
         dict 格式: {"600519": [{date, open, high, low, close, volume}, ...]}
-        key 使用 6 位 stock_id（去掉 .SH/.SZ 后缀），与 screener_engine 保持一致。
+        key 使用 6 λ stock_id（去掉 .SH/.SZ 后缀），与 screener_engine 保持一致。
     """
     try:
         import xtquant.xtdata as xtdata
@@ -436,7 +436,7 @@ def _fetch_klines_xtdata(codes, period, count):
         fetch_period = "1d"
     fetch_count = max(req_count * 7, req_count + 20) if use_weekly_agg else req_count
 
-    _log("拉取K线: %d 只, period=%s, count=%d" % (len(codes), period, count))
+    _log("拉取K线: %d ֻ, period=%s, count=%d" % (len(codes), period, count))
 
     # 确保本地有历史数据缓存（pip 版 xtquant 需要先 download）
     if hasattr(xtdata, "download_history_data"):
@@ -474,7 +474,7 @@ def _fetch_klines_xtdata(codes, period, count):
         if df is None or (hasattr(df, "empty") and df.empty):
             continue
 
-        # 6 位 stock_id（去 .SH/.SZ）
+        # 6 λ stock_id（去 .SH/.SZ）
         stock_id = qmt_code.split(".")[0]
 
         bars = []

@@ -52,7 +52,7 @@ describe("Dashboard", () => {
     });
 
     it("contains SVG chart renderer function", () => {
-      expect(html).toContain("renderSvgChart");
+      expect(html).toContain("renderInteractiveSvgChart");
       expect(html).toContain("viewBox");
     });
 
@@ -118,7 +118,7 @@ describe("Dashboard", () => {
 
     it("shows SSE connection status indicator", () => {
       expect(html).toContain('id="sseStatus"');
-      expect(html).toContain("实时");
+      expect(html).toContain("ʵʱ");
       expect(html).toContain("轮询");
     });
 

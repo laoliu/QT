@@ -12,7 +12,7 @@
  *   clear     — Clear all favorites
  *
  * Example:
- *   action=add, codes=["600519"], name="茅台", category="blue-chip", priority=5
+ *   action=add, codes=["600519"], name="ę́", category="blue-chip", priority=5
  *   action=update, codes=["600519"], notes="看好长期", tags=["consumer","blue-chip"]
  *   action=list, category="blue-chip"
  */
@@ -53,7 +53,7 @@ export function createFavoritesTool(_api: OpenClawPluginApi, config: QuantTradin
         },
         name: {
           type: "string",
-          description: "股票名称（add/update时使用），如 '茅台'",
+          description: "股票名称（add/update时使用），如 'ę́'",
         },
         notes: {
           type: "string",

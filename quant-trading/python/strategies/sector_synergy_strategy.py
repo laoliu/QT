@@ -79,7 +79,7 @@ LARGE_ORDER_THRESHOLD = 1e6  # 大单定义: 单 tick ≥ 100万
 SWEEP_VOLUME = 1_000_000     # 扫单: 单 tick ≥ 100万股 (1万手)
 SWEEP_CHANGE_LOW = 0.08      # 扫单涨幅下限 8%
 SWEEP_CHANGE_HIGH = 0.09     # 扫单涨幅上限 9%
-BUY_AMOUNT = 300_000         # 每只股票买入金额 (元)
+BUY_AMOUNT = 300_000         # 每只股票买入金额 (Ԫ)
 
 # 卖出参数
 SELL_PROFIT_FULL = 0.10      # 盈利 ≥ 10% 全卖
@@ -422,7 +422,7 @@ def init(C):
 
     _S.inited = True
     print(f"[{STRATEGY_ID}] 初始化完成: {len(_S.stock_list)} 只预选股, "
-          f"流通股本 {len(_S.free_float_map)} 只, 板块 {len(_S.sector_map)} 只")
+          f"流通股本 {len(_S.free_float_map)} ֻ, 板块 {len(_S.sector_map)} ֻ")
 
 
 def handlebar(C):
@@ -556,7 +556,7 @@ def handlebar(C):
         turnover_pct = (cur_volume / free_float * 100) if free_float > 0 else 0
         reason = (
             f"板块协同买入: 涨幅{change*100:.1f}% | "
-            f"板块[{sector}]涨停{sector_count}只 | "
+            f"板块[{sector}]涨停{sector_count}ֻ | "
             f"换手{turnover_pct:.1f}% | "
             f"斜率{slope_angle:.0f}° | "
             f"大单净额{flow_result.main_net/1e4:.0f}万"
@@ -601,7 +601,7 @@ def _check_sell(C, stock: str, state: StockState, cur_price: float,
     # Rule 1: Profit >= 10% → sell all
     if profit >= SELL_PROFIT_FULL:
         _sell_all(C, stock, state, cur_price, bar_datetime,
-                  f"盈利{profit*100:.1f}%≥10%止盈")
+                  f"盈利{profit*100:.1f}%≥10%ֹӯ")
         return True
 
     # Rule 3: Loss >= 3% → sell all (priority over half-sell)
@@ -690,7 +690,7 @@ def _parse_tick(all_tick: dict, stock: str) -> dict | None:
             break
     info.setdefault("volume", 0)
 
-    # amount (cumulative, 元)
+    # amount (cumulative, Ԫ)
     info["amount"] = float(row["amount"]) if "amount" in cols else 0.0
 
     # bidPrice1

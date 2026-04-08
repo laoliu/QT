@@ -68,15 +68,65 @@ export function getPlannerBodyHtml(b: string): string {
 
 <!-- ═══ Plan Tab ═══ -->
 <div class="tab-content active" id="tab-plan">
+  <!-- 今日交易计划面板 -->
+  <div class="card" id="today-plan-card" style="margin-bottom:16px;border-left:3px solid #f0b429">
+    <h3>📋 今日交易计划 <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="loadTodayPlan()">🔄 刷新</button>
+      <button class="btn btn-sm btn-primary" onclick="showCreatePlanModal()">➕ 新建计划</button>
+    </h3>
+    <div id="today-plan-content">
+      <p style="color:var(--text-dim)">加载中...</p>
+    </div>
+  </div>
+
+  <!-- 新建/编辑计划弹窗 -->
+  <div id="trade-plan-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+    <div style="max-width:800px;margin:40px auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 id="trade-plan-modal-title">📋 新建交易计划</h3>
+        <button class="btn btn-sm" onclick="closeTradePlanModal()">✕ 关闭</button>
+      </div>
+      <div class="form-row">
+        <label>日期</label>
+        <input type="date" id="tp-date" style="width:160px">
+      </div>
+      <div class="form-row">
+        <label>仓位预算(Ԫ)</label>
+        <input type="number" id="tp-budget" value="100000" style="width:160px">
+      </div>
+      <div class="form-row">
+        <label>备注</label>
+        <input type="text" id="tp-notes" style="width:100%" placeholder="今日交易思路...">
+      </div>
+      <h4 style="margin:12px 0 8px">目标股票</h4>
+      <div id="tp-stocks-list"></div>
+      <button class="btn btn-sm" onclick="addTpStockRow()" style="margin-top:8px">➕ 添加股票</button>
+      <div class="btn-group" style="margin-top:16px">
+        <button class="btn btn-primary" onclick="submitTradePlan()">✅ 保存计划</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 偏差报告弹窗 -->
+  <div id="deviation-report-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+    <div style="max-width:700px;margin:40px auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3>📊 执行偏差报告</h3>
+        <button class="btn btn-sm" onclick="closeDeviationModal()">✕ 关闭</button>
+      </div>
+      <div id="deviation-report-content"></div>
+    </div>
+  </div>
+
   <div class="cards">
     <div class="card">
       <h3>💰 投资目标设定</h3>
       <div class="form-row">
-        <label>初始资金(元)</label>
+        <label>初始资金(Ԫ)</label>
         <input type="number" id="initial-capital" value="500000" style="width:140px">
       </div>
       <div class="form-row">
-        <label>目标资金(元)</label>
+        <label>目标资金(Ԫ)</label>
         <input type="number" id="target-capital" value="1000000" style="width:140px">
       </div>
       <div class="form-row">
@@ -118,7 +168,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="card" style="margin-bottom:14px">
       <h3>📊 资金分配方案 <span id="plan-version-badge" style="font-size:12px;margin-left:8px"></span></h3>
       <div style="overflow-x:auto"><table id="allocation-table">
-        <thead><tr><th>代码</th><th>名称</th><th>评分</th><th style="min-width:320px">选入理由</th><th>现价</th><th>股数</th><th>金额</th><th>仓位%</th><th>分批入场</th><th>止损</th><th>止盈</th></tr></thead>
+        <thead><tr><th>代码</th><th>名称</th><th>评分</th><th style="min-width:320px">选入理由</th><th>现价</th><th>股数</th><th>金额</th><th>仓位%</th><th>分批入场</th><th>止损</th><th>ֹӯ</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -166,7 +216,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div id="plan-detail-meta" style="margin-bottom:12px"></div>
       <div id="plan-detail-kpis" class="kpi-row" style="margin-bottom:12px"></div>
       <div style="overflow-x:auto"><table id="plan-detail-table">
-        <thead><tr><th>代码</th><th>名称</th><th>评分</th><th>理由</th><th>现价</th><th>股数</th><th>金额</th><th>仓位%</th><th>止损</th><th>止盈</th></tr></thead>
+        <thead><tr><th>代码</th><th>名称</th><th>评分</th><th>理由</th><th>现价</th><th>股数</th><th>金额</th><th>仓位%</th><th>止损</th><th>ֹӯ</th></tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="btn-group" style="margin-top:14px">
@@ -187,7 +237,7 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="btn btn-sm" onclick="refreshPortfolio()">🔄 刷新行情</button>
     </h3>
     <div style="overflow-x:auto"><table id="portfolio-table">
-      <thead><tr><th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>现价</th><th>市值</th><th>盈亏</th><th>盈亏%</th><th>今日%</th><th>止损</th><th>止盈</th><th>状态</th></tr></thead>
+      <thead><tr><th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>现价</th><th>市值</th><th>盈亏</th><th>盈亏%</th><th>今日%</th><th>止损</th><th>ֹӯ</th><th>״̬</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </div>
@@ -205,7 +255,7 @@ export function getPlannerBodyHtml(b: string): string {
       </div>
       <div id="pf-cond-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
       <div style="overflow-x:auto"><table id="pf-cond-table" style="font-size:12px">
-        <thead><tr><th>代码</th><th>类型</th><th>入场价</th><th>触发价/比例</th><th>当前止损价</th><th>峰值价</th><th>数量</th><th>创建时间</th><th>状态</th><th>触发结果</th></tr></thead>
+        <thead><tr><th>代码</th><th>类型</th><th>入场价</th><th>触发价/比例</th><th>当前止损价</th><th>峰值价</th><th>数量</th><th>创建时间</th><th>״̬</th><th>触发结果</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -249,7 +299,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="screen-results" style="display:none">
     <div class="kpi-row" id="screen-enrichment-kpis" style="margin-top:12px"></div>
     <div class="card" style="margin-top:12px">
-      <h3>📋 筛选结果 (<span id="screen-count">0</span> 只)</h3>
+      <h3>📋 筛选结果 (<span id="screen-count">0</span> ֻ)</h3>
       <div style="overflow-x:auto"><table id="screen-table">
         <thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>PE</th><th>PB</th><th>市值(亿)</th><th>换手率</th><th>量比</th><th>评分</th><th>标签</th><th>理由</th><th>操作</th></tr></thead>
         <tbody></tbody>
@@ -480,7 +530,7 @@ export function getPlannerBodyHtml(b: string): string {
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h3>🏆 今日可观察候选 (<span id="inst-candidate-count">0</span> 只)</h3>
+      <h3>🏆 今日可观察候选 (<span id="inst-candidate-count">0</span> ֻ)</h3>
       <div style="overflow-x:auto"><table id="inst-table">
         <thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>建仓分</th><th>钓鱼分</th><th>派发分</th><th>置信度</th><th>净判断</th><th>跟随窗口</th><th>动作</th><th style="min-width:260px">正证据</th><th style="min-width:220px">反证据</th><th>操作</th></tr></thead>
         <tbody></tbody>
@@ -565,7 +615,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div class="card" style="margin-top:12px">
     <h3>📅 里程碑明细</h3>
     <div style="overflow-x:auto"><table id="milestone-table">
-      <thead><tr><th>月份</th><th>目标资金</th><th>目标收益率</th><th>实际资金</th><th>实际收益率</th><th>状态</th></tr></thead>
+      <thead><tr><th>月份</th><th>目标资金</th><th>目标收益率</th><th>实际资金</th><th>实际收益率</th><th>״̬</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </div>
@@ -659,7 +709,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="acc-scan-results" style="display:none;margin-top:12px">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <h3 style="margin:0">🧲 吸筹候选 (<span id="acc-scan-count">0</span> 只)</h3>
+        <h3 style="margin:0">🧲 吸筹候选 (<span id="acc-scan-count">0</span> ֻ)</h3>
         <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap">
           <label style="min-width:auto">总分≥</label>
           <input type="number" id="acc-scan-filter-total" value="0" min="0" max="100" step="5" style="width:58px" onchange="onAccumulationScanFilterChange()">
@@ -681,7 +731,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="acc-top3-results" style="display:none;margin-top:12px">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <h3 style="margin:0">🏆 复合条件前三 (<span id="acc-top3-count">0</span> 只)</h3>
+        <h3 style="margin:0">🏆 复合条件前三 (<span id="acc-top3-count">0</span> ֻ)</h3>
         <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap">
           <label style="min-width:auto">入选主因</label>
           <select id="acc-top3-reason-filter" onchange="onAccumulationTop3ReasonFilterChange()" style="width:170px">
@@ -865,7 +915,7 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="margin-left:18px">
           <input type="checkbox" id="opt-auto-screen" checked style="vertical-align:middle;margin-right:4px">
           <strong>🌐 全市场自动筛选</strong>
-          <span style="font-size:11px;color:var(--text-dim)">(从~2000+只 A股中自动构建股票池)</span>
+          <span style="font-size:11px;color:var(--text-dim)">(从~2000+ֻ A股中自动构建股票池)</span>
         </label>
       </div>
       <div id="opt-screen-hint" style="font-size:11px;color:var(--accent);margin:4px 0 8px 0">
@@ -914,7 +964,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div id="opt-history-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px">暂无历史</div>
     <div id="opt-history-panel" style="display:none">
       <div style="overflow-x:auto"><table id="opt-history-table" style="font-size:12px">
-        <thead><tr><th>#</th><th>时间</th><th>资金</th><th>起始日</th><th>轮次</th><th>筛选</th><th>最优股票池</th><th>最优策略</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>股票数</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>时间</th><th>资金</th><th>起始日</th><th>轮次</th><th>ɸѡ</th><th>最优股票池</th><th>最优策略</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>股票数</th><th>操作</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -1042,7 +1092,7 @@ export function getPlannerBodyHtml(b: string): string {
       <p style="color:var(--text-dim);font-size:12px;margin:4px 0 10px">自动运行多策略，选出前 2-3 个强势策略，合并候选池并筛出不超过 8 只股票，再进行收益/回撤/胜率排行，作为每日总和选股清单。</p>
       <div class="form-row">
         <label>策略池</label>
-        <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">全选</button>
+        <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">ȫѡ</button>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=false)" style="padding:2px 8px;font-size:11px">全不选</button>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="momentum" checked style="vertical-align:middle;margin-right:4px">趋势动量</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="value" checked style="vertical-align:middle;margin-right:4px">价值投资</label>
@@ -1102,7 +1152,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div class="card" style="margin-bottom:12px">
         <h3>🏆 策略回测排行 <span style="font-size:11px;font-weight:normal;color:var(--text-dim);margin-left:8px">💡 点击策略行查看详细计算过程</span></h3>
         <div style="overflow-x:auto"><table id="dp-strategy-table">
-          <thead><tr><th>排名</th><th>策略</th><th>候选数</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>利润因子</th><th>综合分</th><th>状态</th></tr></thead>
+          <thead><tr><th>排名</th><th>策略</th><th>候选数</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>利润因子</th><th>综合分</th><th>״̬</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1110,7 +1160,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div class="card" style="margin-bottom:12px">
         <h3>📋 综合候选列表（含策略来源）<span style="font-size:11px;font-weight:normal;color:var(--text-dim);margin-left:8px">💡 点击行查看该股票详细评分过程</span></h3>
         <div style="overflow-x:auto"><table id="dp-combined-table">
-          <thead><tr><th>排名</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>综合分</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>胜率%</th><th>入选次数</th><th>来源策略</th><th>自适应路由</th><th style="min-width:260px">来源明细</th><th>状态</th></tr></thead>
+          <thead><tr><th>排名</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>综合分</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>胜率%</th><th>入选次数</th><th>来源策略</th><th>自适应路由</th><th style="min-width:260px">来源明细</th><th>״̬</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1118,7 +1168,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div class="card" style="margin-bottom:12px">
         <h3>🧪 入围股票单股回测排行</h3>
         <div style="overflow-x:auto"><table id="dp-stock-bt-table">
-          <thead><tr><th>排名</th><th>代码</th><th>名称</th><th>回测策略</th><th>来源策略</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>综合分</th><th>状态</th></tr></thead>
+          <thead><tr><th>排名</th><th>代码</th><th>名称</th><th>回测策略</th><th>来源策略</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>综合分</th><th>״̬</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1126,7 +1176,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div class="card">
         <h3>📈 入围股票池策略排行</h3>
         <div style="overflow-x:auto"><table id="dp-pool-bt-table">
-          <thead><tr><th>排名</th><th>策略</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>利润因子</th><th>综合分</th><th>状态</th></tr></thead>
+          <thead><tr><th>排名</th><th>策略</th><th>收益%</th><th>回撤%</th><th>胜率%</th><th>夏普</th><th>利润因子</th><th>综合分</th><th>״̬</th></tr></thead>
           <tbody></tbody>
         </table></div>
       </div>
@@ -1218,7 +1268,7 @@ export function getPlannerBodyHtml(b: string): string {
       <h3>⏳ 成交确认</h3>
       <div id="fill-confirm-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px">正在等待订单成交…</div>
       <div id="fill-confirm-table-wrap" style="overflow-x:auto"><table id="fill-confirm-table" style="font-size:12px">
-        <thead><tr><th>代码</th><th>委托数量</th><th>已成交</th><th>均价</th><th>持仓确认</th><th>状态</th></tr></thead>
+        <thead><tr><th>代码</th><th>委托数量</th><th>已成交</th><th>均价</th><th>持仓确认</th><th>״̬</th></tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="btn-group" style="margin-top:10px;gap:8px">
@@ -1236,7 +1286,7 @@ export function getPlannerBodyHtml(b: string): string {
       <h3>🎯 建仓推荐明细</h3>
       <div style="overflow-x:auto">
         <table id="rec-table">
-          <thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>建议股数</th><th>建议金额</th><th>权重%</th><th>分批入场</th><th>止盈/止损</th><th>持有天数</th><th>预期收益</th><th>目标贡献</th><th>评分</th><th>类别</th><th style="min-width:280px">推荐理由</th></tr></thead>
+          <thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>建议股数</th><th>建议金额</th><th>权重%</th><th>分批入场</th><th>ֹӯ/止损</th><th>持有天数</th><th>预期收益</th><th>目标贡献</th><th>评分</th><th>类别</th><th style="min-width:280px">推荐理由</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1253,7 +1303,7 @@ export function getPlannerBodyHtml(b: string): string {
 
     <!-- All stocks in pool -->
     <div class="card" style="margin-top:14px">
-      <h3>📊 股池实时行情 (<span id="rec-pool-count">0</span> 只)</h3>
+      <h3>📊 股池实时行情 (<span id="rec-pool-count">0</span> ֻ)</h3>
       <div style="overflow-x:auto">
         <table id="rec-pool-table">
           <thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>PE</th><th>PB</th><th>市值(亿)</th><th>换手率%</th><th>评分</th><th>技术面</th><th>回测持仓</th></tr></thead>
@@ -1293,7 +1343,7 @@ export function getPlannerBodyHtml(b: string): string {
         </div>
         <div style="overflow-x:auto">
           <table id="engine-pending-table">
-            <thead><tr><th>订单号</th><th>代码</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成</th><th>状态</th><th>券商</th><th>策略</th><th>时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>订单号</th><th>代码</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成</th><th>״̬</th><th>券商</th><th>策略</th><th>时间</th><th>操作</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -1309,7 +1359,7 @@ export function getPlannerBodyHtml(b: string): string {
       <!-- Active conditional orders -->
       <div style="overflow-x:auto">
         <table id="cond-order-table">
-          <thead><tr><th>ID</th><th>代码</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>代码</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>״̬</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1322,7 +1372,7 @@ export function getPlannerBodyHtml(b: string): string {
           <label>类型</label>
           <select id="cond-add-type" onchange="updateCondAddFields()">
             <option value="stop_loss">止损</option>
-            <option value="take_profit">止盈</option>
+            <option value="take_profit">ֹӯ</option>
             <option value="trailing_stop">跟踪止损</option>
           </select>
           <label>入场价</label><input type="number" id="cond-add-entry" style="width:100px" placeholder="100.00">
@@ -1347,7 +1397,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div id="bo-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
       <div style="overflow-x:auto">
         <table id="bo-table">
-          <thead><tr><th>ID</th><th>代码</th><th>触发价</th><th>缓冲%</th><th>数量</th><th>状态</th><th>描述</th><th>创建时间</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>代码</th><th>触发价</th><th>缓冲%</th><th>数量</th><th>״̬</th><th>描述</th><th>创建时间</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1355,7 +1405,7 @@ export function getPlannerBodyHtml(b: string): string {
         <h4 style="font-size:13px;margin:0 0 8px">📉 EOD 退出规则</h4>
         <div style="overflow-x:auto">
           <table id="eod-table">
-            <thead><tr><th>ID</th><th>代码</th><th>均线</th><th>类型</th><th>退出动作</th><th>描述</th><th>状态</th></tr></thead>
+            <thead><tr><th>ID</th><th>代码</th><th>均线</th><th>类型</th><th>退出动作</th><th>描述</th><th>״̬</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -1409,7 +1459,7 @@ export function getPlannerBodyHtml(b: string): string {
 
     <div class="pbt-actions">
       <button class="btn btn-primary" id="btn-pbt-run" onclick="runPortfolioBacktest()">🚀 开始回测</button>
-      <button class="btn btn-sm" onclick="pbtSelectAll()">全选</button>
+      <button class="btn btn-sm" onclick="pbtSelectAll()">ȫѡ</button>
       <button class="btn btn-sm" onclick="pbtClearAll()">清除</button>
       <button class="btn btn-sm" onclick="pbtSelectRecommended()">⭐ 推荐组合</button>
       <span id="pbt-selected-count" style="font-size:11px;color:var(--text-dim)"></span>

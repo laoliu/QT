@@ -72,7 +72,7 @@ class BridgeCallback(XtQuantTraderCallback if HAS_XTQUANT else object):
 
     def on_stock_trade(self, trade):
         """Fill / execution report."""
-        # Estimate commission: A-share 万0.5双向 + 千1印花税（卖）
+        # Estimate commission: A-share 万0.5双向 + ǧ1印花税（卖）
         value = trade.traded_price * trade.traded_volume
         commission = round(value * 0.0005, 4)
         push_event("fill", {

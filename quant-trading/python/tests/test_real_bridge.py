@@ -41,7 +41,7 @@ except Exception as e:
     sys.exit(1)
 
 # 2. K-lines - single stock
-print("\n=== 2. POST /klines (茅台 600519 近5日) ===")
+print("\n=== 2. POST /klines (ę́ 600519 近5日) ===")
 try:
     d = post("/klines", {"codes": ["600519.SH"], "period": "1d", "count": 5})
     bars = d.get("data", {}).get("600519", [])
@@ -78,7 +78,7 @@ except Exception as e:
     failed += 1
 
 # 4. Quote
-print("\n=== 4. POST /quote (茅台+平安) ===")
+print("\n=== 4. POST /quote (ę́+平安) ===")
 try:
     d = post("/quote", {"codes": ["600519.SH", "000001.SZ"]})
     print("count: %d" % d.get("count", 0))

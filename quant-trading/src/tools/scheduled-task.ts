@@ -3,7 +3,7 @@
  *
  * Allows the AI to:
  * - Schedule a retry of a failed operation (e.g., "retry in 15 minutes")
- * - Set up periodic reports (e.g., "每30分钟推送一次行情")
+ * - Set up periodic reports (e.g., "ÿ30分钟推送一次行情")
  * - List/cancel pending tasks
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
@@ -27,7 +27,7 @@ export function createScheduledTaskTool(
       "action=list 查看所有任务，\n" +
       "action=cancel 取消指定任务。\n" +
       "报告模板: morning_brief(早盘简报), market_close(收盘总结), " +
-      "weekly_review(周度回顾), watchlist_update(自选股行情), daily_scan(每日选股), institutional_top3(机构行为Top3), daily_journal(交易日志), monthly_report(月度绩效)",
+      "weekly_review(周度回顾), watchlist_update(自选股行情), daily_scan(每日选股), institutional_top3(机构行为Top3), daily_journal(交易日志), monthly_report(月度绩效), after_market_review(收盘自动复盘)",
     parameters: {
       type: "object" as const,
       properties: {
@@ -73,11 +73,12 @@ export function createScheduledTaskTool(
             "institutional_top3",
             "daily_journal",
             "monthly_report",
+            "after_market_review",
           ],
           description:
             "报告模板ID（action=report 时使用）：" +
             "morning_brief=早盘简报, market_close=收盘总结, weekly_review=周度回顾, " +
-            "watchlist_update=自选股行情, daily_scan=每日选股, institutional_top3=机构行为Top3, daily_journal=交易日志, monthly_report=月度绩效",
+            "watchlist_update=自选股行情, daily_scan=每日选股, institutional_top3=机构行为Top3, daily_journal=交易日志, monthly_report=月度绩效, after_market_review=收盘自动复盘",
         },
       },
       required: ["action"],

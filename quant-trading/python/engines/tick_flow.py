@@ -67,7 +67,7 @@ class TickFlowTracker:
     """Track tick-level large order flow for multiple stocks.
 
     Parameters:
-        large_order_threshold: minimum tick amount (元) to classify as large order.
+        large_order_threshold: minimum tick amount (Ԫ) to classify as large order.
             Default 1_000_000 (100万).
         sweep_volume_threshold: minimum tick volume (股) for sweep detection.
             Default 1_000_000 (100万股 = 1万手 for A-share lots).
@@ -118,7 +118,7 @@ class TickFlowTracker:
             stock: stock code (e.g. "600519.SH")
             cur_price: latest price
             cur_volume: cumulative volume (股) up to this tick
-            cur_amount: cumulative amount (元) up to this tick
+            cur_amount: cumulative amount (Ԫ) up to this tick
             pre_close: previous close price
             bid_price: best bid (买一价), 0 if unavailable
             ask_price: best ask (卖一价), 0 if unavailable

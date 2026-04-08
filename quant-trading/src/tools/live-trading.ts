@@ -40,6 +40,8 @@ export function createLiveTradingTool(
       "action=stop_engine 停止引擎, action=pause_engine 暂停, action=resume_engine 恢复, " +
       "action=add_strategy 添加策略, action=remove_strategy 移除策略, " +
       "action=list_strategies 列出策略, action=force_order 强制下单, " +
+      "action=batch_order 批量下单, action=close_position 平仓(一键卖出), " +
+      "action=modify_order 修改挂单, " +
       "action=cancel_order 撤单, action=cancel_all_orders 全撤, " +
       "action=get_risk_snapshot 风控快照, action=list_confirmations 待确认列表。",
     parameters: {
@@ -57,6 +59,9 @@ export function createLiveTradingTool(
             "remove_strategy",
             "list_strategies",
             "force_order",
+            "batch_order",
+            "close_position",
+            "modify_order",
             "cancel_order",
             "cancel_all_orders",
             "get_risk_snapshot",
@@ -128,6 +133,25 @@ export function createLiveTradingTool(
         },
         // For cancel_order
         order_id: { type: "string", description: "订单ID" },
+        // For modify_order
+        new_price: { type: "number", description: "新价格（modify_order）" },
+        new_quantity: { type: "number", description: "新数量（modify_order）" },
+        // For batch_order
+        orders: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              symbol: { type: "string" },
+              side: { type: "string", enum: ["buy", "sell"] },
+              order_type: { type: "string", enum: ["market", "limit"] },
+              quantity: { type: "number" },
+              price: { type: "number" },
+            },
+          },
+          description:
+            "批量订单列表（batch_order），每个元素包含 symbol, side, order_type, quantity, price",
+        },
       },
       required: ["action"],
     },
@@ -291,6 +315,162 @@ export function createLiveTradingTool(
           return result.ok
             ? { message: "下单成功", orderId: result.order.orderId, status: result.order.status }
             : { error: result.reason, ruleId: result.ruleId };
+        }
+
+        case "batch_order": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化，请先启动引擎" };
+
+          const orderList = args.orders as
+            | Array<{
+                symbol: string;
+                side: "buy" | "sell";
+                order_type?: "market" | "limit";
+                quantity: number;
+                price?: number;
+              }>
+            | undefined;
+          if (!orderList || orderList.length === 0) {
+            return { error: "请提供 orders 数组" };
+          }
+          if (orderList.length > 20) {
+            return { error: "单次批量下单最多 20 笔" };
+          }
+
+          const results: Array<{
+            symbol: string;
+            side: string;
+            success: boolean;
+            orderId?: string;
+            error?: string;
+          }> = [];
+
+          for (const item of orderList) {
+            if (!item.symbol || !item.side || !item.quantity) {
+              results.push({
+                symbol: item.symbol ?? "?",
+                side: item.side ?? "?",
+                success: false,
+                error: "缺少 symbol/side/quantity",
+              });
+              continue;
+            }
+            const orderType = item.order_type ?? "limit";
+            if (orderType === "limit" && !item.price) {
+              results.push({
+                symbol: item.symbol,
+                side: item.side,
+                success: false,
+                error: "限价单需提供 price",
+              });
+              continue;
+            }
+
+            const req: OrderRequest = {
+              symbol: item.symbol,
+              market: detectMarketFromSymbol(item.symbol),
+              side: item.side,
+              orderType,
+              quantity: item.quantity,
+              price: item.price,
+              strategyId: "batch-manual",
+            };
+            const r = await mgr.submit(req);
+            results.push({
+              symbol: item.symbol,
+              side: item.side,
+              success: r.ok,
+              orderId: r.ok ? r.order.orderId : undefined,
+              error: r.ok ? undefined : r.reason,
+            });
+          }
+
+          const succeeded = results.filter((r) => r.success).length;
+          return {
+            message: `批量下单完成: ${succeeded}/${results.length} 笔成功`,
+            results,
+          };
+        }
+
+        case "close_position": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化，请先启动引擎" };
+
+          const symbol = args.symbol as string;
+          if (!symbol) return { error: "请提供 symbol" };
+
+          // Look up the current position
+          const positions = engine.getPositions();
+          const pos = positions.find((p) => p.symbol === symbol);
+          if (!pos || pos.quantity <= 0) {
+            return { error: `没有 ${symbol} 的多头持仓` };
+          }
+
+          const sellQty = pos.availableQty;
+          if (sellQty <= 0) {
+            return {
+              error: `${symbol} 当前无可卖数量（可能受T+1限制，今日买入 ${pos.todayBuyQty ?? 0} 股不可卖出）`,
+            };
+          }
+
+          const orderType = (args.order_type as "market" | "limit") ?? "market";
+          const price = args.price as number | undefined;
+          if (orderType === "limit" && !price) {
+            return { error: "限价平仓请提供 price" };
+          }
+
+          const req: OrderRequest = {
+            symbol,
+            market: detectMarketFromSymbol(symbol),
+            side: "sell",
+            orderType,
+            quantity: sellQty,
+            price,
+            strategyId: "close-position",
+          };
+          const result = await mgr.submit(req);
+          return result.ok
+            ? {
+                message: `平仓下单成功: 卖出 ${symbol} ${sellQty}股${orderType === "market" ? " (市价)" : ` @ ¥${price}`}`,
+                orderId: result.order.orderId,
+              }
+            : { error: result.reason, ruleId: result.ruleId };
+        }
+
+        case "modify_order": {
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const mgr = engine.orderManager;
+          if (!mgr) return { error: "OrderManager 未初始化" };
+
+          const orderId = args.order_id as string;
+          if (!orderId) return { error: "请提供 order_id" };
+
+          const newPrice = args.new_price as number | undefined;
+          const newQty = args.new_quantity as number | undefined;
+          if (newPrice == null && newQty == null) {
+            return { error: "请提供 new_price 或 new_quantity" };
+          }
+
+          try {
+            const updated = await mgr.broker.modifyOrder(orderId, {
+              price: newPrice,
+              quantity: newQty,
+            });
+            return {
+              message: `订单已修改: ${orderId.slice(0, 8)}`,
+              orderId: updated.orderId,
+              price: updated.price,
+              quantity: updated.quantity,
+              status: updated.status,
+            };
+          } catch (e) {
+            return { error: `修改失败: ${(e as Error).message}` };
+          }
         }
 
         case "cancel_order": {

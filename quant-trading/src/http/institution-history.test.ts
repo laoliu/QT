@@ -94,7 +94,7 @@ describe("Institution activity history", () => {
             netConviction: 8,
             buildScore: 8,
             techMoatScore: 7.2,
-            techMoatGrade: "强",
+            techMoatGrade: "ǿ",
             decisionScore: 28.6,
           },
           {

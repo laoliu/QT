@@ -142,6 +142,6 @@ describe("performance_attribution tool", () => {
   it("returns error for unknown action", async () => {
     const tool = createTool([makeTrade()]);
     const res = (await tool.execute({ action: "unknown" })) as Record<string, unknown>;
-    expect(res.error).toContain("未知");
+    expect(res.error).toContain("δ֪");
   });
 });

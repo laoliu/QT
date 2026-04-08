@@ -108,11 +108,11 @@ def identify_major_theme(
     yesterday_sectors: dict[str, list[dict]] = {}
 
     for s in today_stocks:
-        ind = s.get("industry", "") or "未知"
+        ind = s.get("industry", "") or "δ֪"
         today_sectors.setdefault(ind, []).append(s)
 
     for s in yesterday_stocks:
-        ind = s.get("industry", "") or "未知"
+        ind = s.get("industry", "") or "δ֪"
         yesterday_sectors.setdefault(ind, []).append(s)
 
     # Evaluate each sector
@@ -548,7 +548,7 @@ def evaluate_buy_timing(
             "confidence": float,     # 0-100
             "board_number": int,     # 当前第几板
             "is_best_timing": bool,  # 是否3板最佳时机
-            "volume_signal": str,    # "放量" | "缩量" | "平量" | "未知"
+            "volume_signal": str,    # "放量" | "缩量" | "平量" | "δ֪"
             "buy_method": str,       # 打板方法说明
             "risk_level": str,       # "low" | "medium" | "high"
         }
@@ -562,7 +562,7 @@ def evaluate_buy_timing(
     result: dict[str, Any] = {
         "board_number": lian_ban,
         "is_best_timing": False,
-        "volume_signal": "未知",
+        "volume_signal": "δ֪",
         "buy_method": "",
         "risk_level": "high",
     }
@@ -598,7 +598,7 @@ def evaluate_buy_timing(
 
     # ── 3板: 最佳买入时机! ──
     if lian_ban == 3:
-        vol_signal = _check_volume_signal(klines) if klines else "未知"
+        vol_signal = _check_volume_signal(klines) if klines else "δ֪"
         result["volume_signal"] = vol_signal
 
         if vol_signal == "放量":
@@ -661,18 +661,18 @@ def _check_volume_signal(klines: list[dict[str, Any]]) -> str:
     平量: otherwise
     """
     if not klines or len(klines) < 3:
-        return "未知"
+        return "δ֪"
 
     volumes = [_safe_float(k.get("volume")) for k in klines[-4:]]
     volumes = [v for v in volumes if v > 0]
     if len(volumes) < 3:
-        return "未知"
+        return "δ֪"
 
     latest = volumes[-1]
     prev_avg = sum(volumes[:-1]) / len(volumes[:-1])
 
     if prev_avg <= 0:
-        return "未知"
+        return "δ֪"
 
     ratio = latest / prev_avg
     if ratio >= 1.5:
@@ -744,7 +744,7 @@ def generate_board_buy_signal(
         {
             "ready": bool,           # 是否满足打板条件
             "signal": str,           # "板上封稳" | "冲板中" | "开板" | "未涨停"
-            "seal_strength": str,    # "极强" | "强" | "中" | "弱"
+            "seal_strength": str,    # "极强" | "ǿ" | "中" | "弱"
             "seal_amount_yi": float, # 实时封单金额(亿)
             "advice": str,
         }
@@ -822,7 +822,7 @@ def generate_board_buy_signal(
 
     # Sealed at limit!
     result["signal"] = "板上封稳"
-    result["ready"] = strength in ("极强", "强")
+    result["ready"] = strength in ("极强", "ǿ")
 
     if result["ready"]:
         result["advice"] = (
@@ -842,7 +842,7 @@ def _classify_seal_strength(seal_amount: float) -> str:
     if seal_amount >= 10e8:
         return "极强"
     elif seal_amount >= 5e8:
-        return "强"
+        return "ǿ"
     elif seal_amount >= 2e8:
         return "中"
     elif seal_amount >= 1e8:
@@ -890,7 +890,7 @@ def _score_realtime(
             factors["rt_seal_yi"] = round(rt_seal / 1e8, 2)
             if rt_seal >= 5e8:
                 rt_seal_bonus = 5
-                signals.append(f"实时封单{rt_seal/1e8:.1f}亿(强)")
+                signals.append(f"实时封单{rt_seal/1e8:.1f}亿(ǿ)")
             elif rt_seal >= 2e8:
                 rt_seal_bonus = 3
                 signals.append(f"实时封单{rt_seal/1e8:.1f}亿")

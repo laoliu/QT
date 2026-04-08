@@ -64,7 +64,7 @@ describe("config-validator", () => {
     });
 
     it("warns on unimplemented broker", () => {
-      const issues = validateConfig({ tradingAccount: { broker: "futu" } });
+      const issues = validateConfig({ tradingAccount: { broker: "ib" } });
       const warnings = issues.filter(
         (i) => i.path === "tradingAccount.broker" && i.severity === "warning",
       );

@@ -58,7 +58,7 @@ def run_earnings_calendar(config: dict) -> dict:
             return {"error": "symbol is required for analyst_ratings"}
         return _analyst_ratings(symbol, market, config.get("limit", 20))
     else:
-        return {"error": f"未知 action: {action}"}
+        return {"error": f"δ֪ action: {action}"}
 
 
 # ── Upcoming earnings ─────────────────────────────────────────────────────────

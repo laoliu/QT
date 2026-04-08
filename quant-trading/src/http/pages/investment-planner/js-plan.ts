@@ -81,7 +81,7 @@ function renderPlan(d){
     kpiHtml(p.monthlyReturnNeeded.toFixed(2)+'%','月均收益'),
     kpiHtml('<span class="badge badge-blue">'+esc(p.strategyLabel)+'</span>','推荐策略'),
     kpiHtml(esc(p.tradeFrequency),'交易频率'),
-    kpiHtml(s.totalPositions+'只','持仓数'),
+    kpiHtml(s.totalPositions+'ֻ','持仓数'),
     kpiHtml(s.cashReservePct+'%','现金比例'),
   ].join('');
 
@@ -219,7 +219,7 @@ function loadPlanHistory(){
         '<td>'+esc(e.strategy||'-')+'</td>'+
         '<td>¥'+numInt(e.initialCapital)+'</td>'+
         '<td>¥'+numInt(e.targetCapital)+'</td>'+
-        '<td>'+e.stockCount+'只</td>'+
+        '<td>'+e.stockCount+'ֻ</td>'+
         '<td><span class="badge '+riskBadge+'">'+esc(String(sm.riskLevel||'-'))+'</span></td>'+
         '<td>'+esc(String(sm.feasibility||'-'))+'</td>'+
         '<td style="font-size:11px;max-width:200px"><div style="display:flex;flex-wrap:wrap;gap:2px">'+

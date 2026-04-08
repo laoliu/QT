@@ -20,6 +20,7 @@ import type { PriceAlertService } from "../services/price-alert.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
+import type { TradePlanStore } from "../services/trade-plan-store.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
@@ -63,6 +64,7 @@ export interface RouteDeps {
   getEngine: () => LiveEngine;
   priceAlertService: PriceAlertService;
   taskScheduler: TaskScheduler;
+  tradePlanStore?: TradePlanStore;
   /** Full security stack (auth + CORS + rate-limit). */
   secure: (handler: HttpHandler) => HttpHandler;
   /** Public route: CORS + rate-limit only. */
@@ -538,6 +540,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Trade Plans API ──────────────────────────────────────────
+  registerTradePlanRoutes(deps);
 }
 
 // ── Alert sub-routes ─────────────────────────────────────────────
@@ -1525,6 +1530,117 @@ function registerScheduledTaskRoutes({ api, taskScheduler, secure }: RouteDeps):
           status: ok ? "ok" : "error",
           message: ok ? undefined : "无法取消（可能已完成或不存在）",
         });
+        return;
+      }
+
+      methodNotAllowed(res);
+    }),
+  });
+}
+
+// ── Trade Plans sub-routes ──────────────────────────────────────
+
+function registerTradePlanRoutes({ api, tradePlanStore, secure }: RouteDeps): void {
+  if (!tradePlanStore) return;
+  const tpStore = tradePlanStore;
+
+  // GET  /quant/trade-plans          — list plans (?date=&status=&limit=)
+  // POST /quant/trade-plans          — create plan
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/trade-plans",
+    handler: secure(async (req, res) => {
+      if (req.method === "GET") {
+        const p = urlParams(req);
+        const plans = tpStore.listPlans({
+          date: p.get("date") ?? undefined,
+          status: (p.get("status") as "open" | "closed") ?? undefined,
+          limit: p.get("limit") ? Number(p.get("limit")) : undefined,
+        });
+        json(res, { status: "ok", plans });
+        return;
+      }
+
+      if (req.method === "POST") {
+        const body = (await parseJsonBody(req)) as Record<string, unknown>;
+        if (!body.stocks || !body.budget) {
+          json(res, { status: "error", message: "需要 stocks 和 budget" }, 400);
+          return;
+        }
+        const id = tpStore.createPlan({
+          date: (body.date as string) ?? new Date().toISOString().slice(0, 10),
+          stocks: body.stocks as never,
+          budget: body.budget as number,
+          notes: body.notes as string | undefined,
+        });
+        json(res, { status: "ok", id });
+        return;
+      }
+
+      methodNotAllowed(res);
+    }),
+  });
+
+  // GET /quant/trade-plans/today     — today's plan
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/trade-plans/today",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") { methodNotAllowed(res); return; }
+      const plan = tpStore.getTodayPlan();
+      json(res, { status: "ok", plan: plan ?? null });
+    }),
+  });
+
+  // GET    /quant/trade-plans/detail?id=&action=  — get/update/close/mark
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/trade-plans/detail",
+    handler: secure(async (req, res) => {
+      const p = urlParams(req);
+      const planId = p.get("id");
+      if (!planId) { json(res, { status: "error", message: "缺少 ?id=" }, 400); return; }
+      const action = p.get("action");
+
+      if (req.method === "GET") {
+        const plan = tpStore.getPlan(planId);
+        if (!plan) { json(res, { status: "error", message: "未找到" }, 404); return; }
+        json(res, { status: "ok", plan });
+        return;
+      }
+
+      if (req.method === "PUT" || req.method === "POST") {
+        const body = (await parseJsonBody(req)) as Record<string, unknown>;
+
+        if (action === "close") {
+          const report = tpStore.closePlan(planId);
+          if (!report) { json(res, { status: "error", message: "未找到" }, 404); return; }
+          json(res, { status: "ok", report });
+          return;
+        }
+
+        if (action === "mark") {
+          const code = body.code as string;
+          if (!code) { json(res, { status: "error", message: "缺少 code" }, 400); return; }
+          const ok = tpStore.markExecution(planId, code, {
+            executed: body.executed as boolean,
+            actualEntryPrice: body.actual_entry_price as number | undefined,
+            actualExitPrice: body.actual_exit_price as number | undefined,
+            executionNote: body.execution_note as string | undefined,
+          });
+          if (!ok) { json(res, { status: "error", message: "未找到" }, 404); return; }
+          json(res, { status: "ok" });
+          return;
+        }
+
+        // Default PUT: update plan
+        const ok = tpStore.updatePlan(planId, {
+          notes: body.notes as string | undefined,
+          budget: body.budget as number | undefined,
+          stocks: body.stocks as never,
+        });
+        if (!ok) { json(res, { status: "error", message: "未找到" }, 404); return; }
+        json(res, { status: "ok" });
         return;
       }
 

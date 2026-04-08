@@ -147,6 +147,27 @@ async function saveOrders(orders: Order[], cfg: QuantTradingConfig): Promise<voi
   await fs.writeFile(ordersPath(cfg), JSON.stringify(pruned, null, 2));
 }
 
+// ── T+1 helpers (A-share: today's buy cannot be sold today) ─────
+
+/** Get today's date string in CST (YYYY-MM-DD). */
+function todayCST(): string {
+  const now = new Date();
+  const cst = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return cst.toISOString().slice(0, 10);
+}
+
+/**
+ * Compute the sellable quantity for an A-share position, respecting T+1.
+ * todayBuyQty shares bought today are frozen until next trading day.
+ */
+function computeAvailableQty(pos: PortfolioPosition): number {
+  // Only enforce T+1 for A-share stock (cn_stock). Other markets are T+0.
+  if (pos.market !== "cn_stock") return Math.abs(pos.quantity);
+  const today = todayCST();
+  const todayBuy = pos.lastBuyDate === today ? (pos.todayBuyQty ?? 0) : 0;
+  return Math.max(0, Math.abs(pos.quantity) - todayBuy);
+}
+
 // ── Commission model (A-share defaults) ──────────────────────────
 
 const CN_BUY_COMMISSION = 0.00025;
@@ -634,13 +655,24 @@ export class PaperBroker implements IBrokerAdapter {
               const { multiplier, marginRate } = this.getFuturesSpec(order.symbol);
               pos.frozenMargin = pos.avgCost * total * multiplier * marginRate;
             }
+            // T+1 tracking: accumulate today's buy quantity
+            const today = todayCST();
+            if (pos.lastBuyDate === today) {
+              pos.todayBuyQty = (pos.todayBuyQty ?? 0) + qty;
+            } else {
+              pos.todayBuyQty = qty;
+              pos.lastBuyDate = today;
+            }
           } else {
+            const today = todayCST();
             const newPos: PortfolioPosition = {
               symbol: order.symbol,
               market: order.market,
               quantity: qty,
               avgCost: fillPrice,
               currentPrice: fillPrice,
+              todayBuyQty: qty,
+              lastBuyDate: today,
               // Propagate option metadata from order
               strike: order.strike,
               expiry: order.expiry,
@@ -716,8 +748,17 @@ export class PaperBroker implements IBrokerAdapter {
           );
           return;
         }
-        // Clamp qty to available position to prevent over-selling
-        const clampedQty = Math.min(qty, pos.quantity);
+        // T+1 enforcement for A-share: clamp to available (non-frozen) shares
+        const availableForSell = computeAvailableQty(pos);
+        if (availableForSell <= 0 && order.market === "cn_stock") {
+          console.warn(
+            `[PaperBroker] ${order.side} rejected: T+1 rule — all ${pos.quantity} shares of ${order.symbol} were bought today and cannot be sold until next trading day`,
+          );
+          return;
+        }
+        // Clamp qty to available position (respecting T+1 for A-share)
+        const maxSellQty = order.market === "cn_stock" ? availableForSell : pos.quantity;
+        const clampedQty = Math.min(qty, maxSellQty);
         const tax = fill.tax ?? 0;
         if (isFutures) {
           // Futures sell_close: release margin + realize P&L
@@ -1030,14 +1071,17 @@ export class PaperBroker implements IBrokerAdapter {
   }
 
   private paperPositionToLive(pos: PortfolioPosition, now: string): LivePosition {
+    const available = computeAvailableQty(pos);
+    const today = todayCST();
+    const todayBuy = pos.lastBuyDate === today ? (pos.todayBuyQty ?? 0) : 0;
     return {
       symbol: pos.symbol,
       name: pos.name,
       market: pos.market,
       quantity: pos.quantity,
-      availableQty: Math.abs(pos.quantity), // paper: all available (abs for shorts)
-      frozenQty: 0,
-      todayBuyQty: 0,
+      availableQty: available,
+      frozenQty: Math.abs(pos.quantity) - available,
+      todayBuyQty: todayBuy,
       avgCost: pos.avgCost,
       currentPrice: pos.currentPrice,
       marketValue: pos.marketValue,

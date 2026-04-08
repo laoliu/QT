@@ -39,7 +39,7 @@ class MagicFormulaScreener(BaseScreener):
     }
 
     # Industries to exclude (financials, utilities)
-    _EXCLUDED_INDUSTRIES = {"银行", "保险", "证券", "多元金融", "电力", "公用事业",
+    _EXCLUDED_INDUSTRIES = {"银行", "保险", "֤ȯ", "多元金融", "电力", "公用事业",
                             "Financial", "Banks", "Insurance", "Utilities"}
 
     def screen(

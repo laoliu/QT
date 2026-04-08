@@ -24,7 +24,7 @@ import { createBrokerAdapter } from "../broker/index.js";
 import { DataStalenessMonitor } from "../services/data-staleness-monitor.js";
 import type { StalenessAlertCallback } from "../services/data-staleness-monitor.js";
 import { isCnMarketOpen } from "../broker/paper-broker.js";
-import { tryNotify } from "../services/notify-helper.js";
+import { tryNotify, tryNotifyWithPush } from "../services/notify-helper.js";
 import { OrderManager } from "../services/order-manager.js";
 import type {
   ActiveLiveStrategy,
@@ -433,12 +433,12 @@ export class LiveEngine implements OpenClawPluginService {
         this.log(
           `📉 策略 ${ls.strategyId} (${ls.id}) 因市场环境 "${regime}" 不匹配自动暂停 (允许: ${ls.regimes.join(",")})`,
         );
-        void tryNotify(this.api, `📉 策略 ${ls.strategyId} 因市场环境 "${regime}" 自动暂停`);
+        void tryNotifyWithPush(this.api, `📉 策略 ${ls.strategyId} 因市场环境 "${regime}" 自动暂停`, "warning", "策略暂停");
       } else if (matches && ls.regimePaused) {
         // Resume: regime matches again
         ls.regimePaused = false;
         this.log(`📈 策略 ${ls.strategyId} (${ls.id}) 因市场环境 "${regime}" 匹配已自动恢复`);
-        void tryNotify(this.api, `📈 策略 ${ls.strategyId} 因市场环境 "${regime}" 自动恢复运行`);
+        void tryNotifyWithPush(this.api, `📈 策略 ${ls.strategyId} 因市场环境 "${regime}" 自动恢复运行`, "info", "策略恢复");
       }
     }
   }
@@ -561,7 +561,7 @@ export class LiveEngine implements OpenClawPluginService {
         this.setStatus("running");
         const msg = "Broker connection recovered — 引擎已自动恢复运行";
         this.log(msg);
-        void tryNotify(this.api, `🟢 ${msg}`);
+        void tryNotifyWithPush(this.api, `🟢 ${msg}`, "info", "连接恢复");
         this.connectionAlertCb?.("resolved", msg);
       }
     } catch (err) {
@@ -573,7 +573,7 @@ export class LiveEngine implements OpenClawPluginService {
       if (this.consecutiveFailures === this.degradedThreshold) {
         const msg = "Broker connection degraded — 连续同步失败";
         this.log("Broker connection degraded — multiple sync failures", "warn");
-        void tryNotify(this.api, `⚠️ ${msg}`);
+        void tryNotifyWithPush(this.api, `⚠️ ${msg}`, "warning", "连接异常");
         this.connectionAlertCb?.("warning", msg);
       }
 
@@ -594,7 +594,7 @@ export class LiveEngine implements OpenClawPluginService {
         this.setStatus("error");
         const msg = "Broker connection lost — 引擎已进入错误状态";
         this.log("Broker connection lost — engine set to error state", "error");
-        void tryNotify(this.api, `🔴 ${msg}`);
+        void tryNotifyWithPush(this.api, `🔴 ${msg}`, "critical", "连接中断");
         this.connectionAlertCb?.("critical", msg);
       }
 

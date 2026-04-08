@@ -227,21 +227,21 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
     ) if len(syms) >= 5 else None
 
     _add("auto_mega",     "全市场·大盘龙头",
-         f"市值前60筛选PE<40，共{len(mega_pool)}只", mega_pool)
+         f"市值前60ɸѡPE<40，共{len(mega_pool)}ֻ", mega_pool)
     _add("auto_value",    "全市场·低估价值",
-         f"PE<20+市值>200亿+PB<3，共{len(value_pool)}只", value_pool)
+         f"PE<20+市值>200亿+PB<3，共{len(value_pool)}ֻ", value_pool)
     _add("auto_growth",   "全市场·活跃成长",
-         f"PE 20-60+高换手+上涨，共{len(growth_pool)}只", growth_pool)
+         f"PE 20-60+高换手+上涨，共{len(growth_pool)}ֻ", growth_pool)
     _add("auto_momentum", "全市场·强势动量",
-         f"今日涨幅>1%+大成交额，共{len(momentum_pool)}只", momentum_pool)
+         f"今日涨幅>1%+大成交额，共{len(momentum_pool)}ֻ", momentum_pool)
     _add("auto_tech",     "全市场·科创精选",
-         f"创业板/科创板+市值>200亿，共{len(tech_pool)}只", tech_pool)
+         f"创业板/科创板+市值>200亿，共{len(tech_pool)}ֻ", tech_pool)
     _add("auto_dip",      "全市场·回调低吸",
-         f"今日下跌+大盘低PE，共{len(dip_pool)}只", dip_pool)
+         f"今日下跌+大盘低PE，共{len(dip_pool)}ֻ", dip_pool)
     _add("auto_mixed",    "全市场·综合最优",
-         f"多维评分Top15，共{len(mixed_pool)}只", mixed_pool)
+         f"多维评分Top15，共{len(mixed_pool)}ֻ", mixed_pool)
     _add("auto_hybrid",   "全市场·蓝筹科技混合",
-         f"大盘龙头+科创龙头，共{len(hybrid_pool)}只", hybrid_pool)
+         f"大盘龙头+科创龙头，共{len(hybrid_pool)}ֻ", hybrid_pool)
 
     return pools
 
@@ -275,7 +275,7 @@ POOLS = {
     },
     "wide": {
         "label": "宽基覆盖",
-        "desc": "消费+金融+科技+新能源+医药",
+        "desc": "消费+金融+科技+新能源+ҽҩ",
         "symbols": [
             "600519", "000858", "601318", "000333", "300750",
             "002594", "688981", "002230", "600276", "000651",
@@ -292,7 +292,7 @@ POOLS = {
     },
     "consumer_plus": {
         "label": "大消费+",
-        "desc": "白酒+家电+食品+医药+消费电子",
+        "desc": "白酒+家电+ʳƷ+ҽҩ+消费电子",
         "symbols": [
             "600519", "000858", "000333", "000651", "600887",
             "603288", "300059", "002475", "601888", "000568",

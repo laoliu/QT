@@ -101,7 +101,7 @@ export function createBreakoutMonitorTool(
         },
         expires_hours: {
           type: "number",
-          description: "过期时间 (小时)，超过后自动失效",
+          description: "过期时间 (Сʱ)，超过后自动失效",
         },
         description: {
           type: "string",

@@ -238,11 +238,11 @@ def compute_zhaban_risk(
         f5_score = 6
     else:
         f5_score = 10
-        neg_signals.append(f"题材孤立({industry or '未知'}，仅{peers}只)")
+        neg_signals.append(f"题材孤立({industry or 'δ֪'}，仅{peers}ֻ)")
 
     factors["industry_isolation"] = {
         "score": f5_score, "max": 10,
-        "detail": f"{industry or '未知'}({peers}只同行业涨停)",
+        "detail": f"{industry or 'δ֪'}({peers}只同行业涨停)",
     }
 
     # ────────────────────────────────────────────────────────────

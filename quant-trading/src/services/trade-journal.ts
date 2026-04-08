@@ -163,6 +163,11 @@ export class TradeJournal {
       .slice(-limit);
   }
 
+  /** Get notes within a date range (inclusive). */
+  getByDateRange(startDate: string, endDate: string): TradeNote[] {
+    return this.notes.filter((n) => n.date >= startDate && n.date <= endDate);
+  }
+
   /** Get recent notes (newest first). */
   getRecent(limit = 20): TradeNote[] {
     return this.notes.slice(-limit).reverse();

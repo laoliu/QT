@@ -21,7 +21,7 @@ function renderRecommend(d){
     kpiHtml(numInt(sm.investedAmount),'建议投入')+
     kpiHtml(numInt(sm.cashReserve),'现金储备')+
     kpiHtml(sm.cashReservePct+'%','现金比例')+
-    kpiHtml(sm.positionCount+'只','持仓数');
+    kpiHtml(sm.positionCount+'ֻ','持仓数');
 
   // Allocation table with decision fields
   var tbody=document.querySelector('#rec-table tbody');
@@ -277,7 +277,7 @@ function loadEngineStatus(){
       if(mode==='starting'){
         toggleBtn='<span style="margin-left:6px;font-size:10px;color:orange">⏳</span>';
       }else if(d.isRunning){
-        toggleBtn='<button onclick="toggleEngine(false)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--red);color:var(--red);background:transparent;cursor:pointer">停止</button>';
+        toggleBtn='<button onclick="toggleEngine(false)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--red);color:var(--red);background:transparent;cursor:pointer">ֹͣ</button>';
       }else{
         toggleBtn='<button onclick="toggleEngine(true)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--green);color:var(--green);background:transparent;cursor:pointer">启动</button>';
       }
@@ -325,7 +325,7 @@ function loadEngineStatus(){
 
 function toggleEngine(start){
   var endpoint=start?'/quant/api/engine/start':'/quant/api/engine/stop';
-  var label=start?'启动':'停止';
+  var label=start?'启动':'ֹͣ';
   api(endpoint,{method:'POST'}).then(function(r){
     toast('⏳ '+(r&&r.message?r.message:label+'中…'));
     setTimeout(loadEngineStatus,600);
@@ -440,7 +440,7 @@ function loadConditionalOrders(){
       var rows='';
       orders.forEach(function(o){
         var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
-          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">ֹӯ</span>':
           '<span class="badge badge-blue">跟踪止损</span>';
         var triggerDisplay;
         if(o.type==='trailing_stop'){

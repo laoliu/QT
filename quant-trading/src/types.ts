@@ -250,6 +250,12 @@ export type PortfolioPosition = {
   unrealizedPnlPct?: number;
   weight?: number; // % of total portfolio
 
+  // ── T+1 tracking (A-share: today's buy cannot be sold today) ──
+  /** Shares bought today (reset daily at market open). */
+  todayBuyQty?: number;
+  /** Date string (YYYY-MM-DD) of the last buy, used for T+1 daily reset. */
+  lastBuyDate?: string;
+
   // ── Option-specific fields (persisted for option positions) ──
   strike?: number;
   expiry?: string;

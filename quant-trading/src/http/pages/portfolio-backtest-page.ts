@@ -92,7 +92,7 @@ canvas{width:100%!important;height:100%!important}
 
   <div class="form-row" style="margin-top:16px">
     <button class="btn btn-primary" id="run-btn" onclick="runBacktest()">🚀 开始回测</button>
-    <button class="btn btn-sm" onclick="selectAllStrategies()">全选</button>
+    <button class="btn btn-sm" onclick="selectAllStrategies()">ȫѡ</button>
     <button class="btn btn-sm" onclick="clearAllStrategies()">清除</button>
     <button class="btn btn-sm" onclick="selectRecommended()">推荐组合</button>
     <span id="status-text" style="font-size:12px;color:var(--text-dim)"></span>

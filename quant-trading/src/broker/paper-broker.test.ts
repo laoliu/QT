@@ -483,6 +483,18 @@ describe("PaperBroker", () => {
       });
       await new Promise((r) => setTimeout(r, 50));
 
+      // Clear T+1 lock to simulate a prior-day buy (T+1 blocks same-day sells)
+      const fsP = await import("node:fs/promises");
+      const pathP = await import("node:path");
+      const pfPath = pathP.join(makeConfig().dataDir!, "portfolio-paper.json");
+      const pf = JSON.parse(await fsP.readFile(pfPath, "utf-8"));
+      const pos = pf.positions.find((p: { symbol: string }) => p.symbol === "600519");
+      if (pos) {
+        pos.todayBuyQty = 0;
+        pos.todayBuyDate = "2020-01-01";
+      }
+      await fsP.writeFile(pfPath, JSON.stringify(pf, null, 2));
+
       const fills: Fill[] = [];
       broker.subscribeFills((fill) => fills.push(fill));
 
@@ -499,8 +511,8 @@ describe("PaperBroker", () => {
 
       // Sell commission (excluding stamp duty): 110 * 100 * 0.00025 = 2.75
       expect(fills[0].commission).toBeCloseTo(2.75);
-      // Stamp duty: 110 * 100 * 0.001 = 11
-      expect(fills[0].tax).toBeCloseTo(11);
+      // Stamp duty: 110 * 100 * 0.0005 = 5.5 (post-Aug 2023 rate)
+      expect(fills[0].tax).toBeCloseTo(5.5);
 
       await broker.disconnect();
     });

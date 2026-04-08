@@ -125,17 +125,17 @@ function loadServices(){
     var c=document.getElementById('svc-cards');c.innerHTML='';
     if(!d||!d.gateway){c.innerHTML='<div style="color:var(--text-dim)">⚠️ 服务数据异常</div>';return;}
     var gw=d.gateway;
-    c.innerHTML+=card('🌐 网关服务',infoList({'状态':dotSt(gw.running),'PID':gw.pid,'端口':gw.port,'版本':gw.version,'运行时间':gw.uptime}));
+    c.innerHTML+=card('🌐 网关服务',infoList({'״̬':dotSt(gw.running),'PID':gw.pid,'端口':gw.port,'版本':gw.version,'运行时间':gw.uptime}));
     var rc=d.receiver;
-    c.innerHTML+=card('📡 RECEIVER 桥接',infoList({'状态':dotSt(rc.running),'PID':rc.pid||'-','端口':rc.port,'主机':esc(rc.host),'重启次数':rc.restartCount,'启动':rc.startedAt?fmtTime(rc.startedAt):'-'})+
-      btnGrp([['btn-primary','svcAction("receiver","start")','▶ 启动',rc.running],['btn-danger','svcAction("receiver","stop")','⏹ 停止',!rc.running],['','svcAction("receiver","restart")','🔄 重启',!rc.running]]));
+    c.innerHTML+=card('📡 RECEIVER 桥接',infoList({'״̬':dotSt(rc.running),'PID':rc.pid||'-','端口':rc.port,'主机':esc(rc.host),'重启次数':rc.restartCount,'启动':rc.startedAt?fmtTime(rc.startedAt):'-'})+
+      btnGrp([['btn-primary','svcAction("receiver","start")','▶ 启动',rc.running],['btn-danger','svcAction("receiver","stop")','⏹ ֹͣ',!rc.running],['','svcAction("receiver","restart")','🔄 重启',!rc.running]]));
     if(d.bridgeHealth){var bh=d.bridgeHealth;
       c.innerHTML+=card('🔗 桥接状态',infoList({'连接':dotSt(bh.bridge_connected),'待处理':bh.pending_requests,'上次轮询':bh.bridge_last_poll_age!=null?bh.bridge_last_poll_age.toFixed(1)+'s':'-'}));}
     var eng=d.engine;
     var eRun=eng.status==='running',ePause=eng.status==='paused',eStop=eng.status==='stopped';
-    c.innerHTML+=card('🤖 实盘引擎',infoList({'状态':'<span class="badge '+(eRun?'badge-green':ePause?'badge-yellow':'badge-red')+'">'+esc(eng.status)+'</span>','活跃策略':eng.activeStrategies,'持仓数':eng.positions})+
-      btnGrp([['btn-primary','svcAction("engine","start")','▶ 启动',eRun||ePause],['btn-danger','svcAction("engine","stop")','⏹ 停止',eStop],['','svcAction("engine","pause")','⏸ 暂停',!eRun],['','svcAction("engine","resume")','▶️ 恢复',!ePause]]));
-    (d.services||[]).forEach(function(svc){c.innerHTML+=card('📌 '+esc(svc.id),infoList({'服务ID':svc.id,'状态':'<span class="dot dot-green"></span>已注册'}));});
+    c.innerHTML+=card('🤖 实盘引擎',infoList({'״̬':'<span class="badge '+(eRun?'badge-green':ePause?'badge-yellow':'badge-red')+'">'+esc(eng.status)+'</span>','活跃策略':eng.activeStrategies,'持仓数':eng.positions})+
+      btnGrp([['btn-primary','svcAction("engine","start")','▶ 启动',eRun||ePause],['btn-danger','svcAction("engine","stop")','⏹ ֹͣ',eStop],['','svcAction("engine","pause")','⏸ 暂停',!eRun],['','svcAction("engine","resume")','▶️ 恢复',!ePause]]));
+    (d.services||[]).forEach(function(svc){c.innerHTML+=card('📌 '+esc(svc.id),infoList({'服务ID':svc.id,'״̬':'<span class="dot dot-green"></span>已注册'}));});
   }).catch(function(){document.getElementById('svc-cards').innerHTML='<div style="color:var(--text-dim)">⚠️ 服务信息加载失败</div>'});
 }
 function svcAction(service,action){
@@ -150,15 +150,15 @@ function loadData(){
   api('/quant/admin/api/data').then(function(d){
     var c=document.getElementById('data-cards');c.innerHTML='';
     c.innerHTML+=card('🔌 数据源',infoList({'当前数据源':'<span class="badge badge-blue">'+esc(d.provider)+'</span>','Python':'<span style="font-size:11px;word-break:break-all">'+esc(d.pythonPath)+'</span>'})+
-      '<table style="margin-top:8px"><thead><tr><th>数据源</th><th>说明</th><th>状态</th></tr></thead><tbody>'+
+      '<table style="margin-top:8px"><thead><tr><th>数据源</th><th>说明</th><th>״̬</th></tr></thead><tbody>'+
       d.availableProviders.map(function(p){return '<tr><td>'+esc(p.id)+'</td><td style="font-size:11px">'+esc(p.description)+'</td><td>'+(p.id===d.provider?'<span class="badge badge-green">使用中</span>':'<span class="badge badge-yellow">可用</span>')+'</td></tr>'}).join('')+'</tbody></table>');
     var pc=d.pythonCache||{};var kl=pc.klines||{};
     c.innerHTML+=card('💾 缓存概览 (SQLite)',infoList({
       '数据库大小':(pc.db_size_mb||0)+' MB',
       'K线总量':(kl.total_bars||0).toLocaleString(),
       '品种数':kl.unique_symbols||0,
-      '股票列表':((pc.stock_list||{}).unique_stocks||0)+' 只',
-      '基本面':((pc.fundamentals||{}).unique_stocks||0)+' 只',
+      '股票列表':((pc.stock_list||{}).unique_stocks||0)+' ֻ',
+      '基本面':((pc.fundamentals||{}).unique_stocks||0)+' ֻ',
       '代码名称映射':((pc.code_name_map||{}).entries||0)+' 条'
     })+btnGrp([['','refreshWarehouseStats()','🔄 刷新统计']]));
     c.innerHTML+=card('🌉 QMT 桥接配置',infoList({'RECEIVER端口':d.receiverPort,'主机':d.receiverHost,'自动启动':d.receiverEnabled?'✅ 是':'❌ 否'}));
@@ -190,7 +190,7 @@ function checkSync(){
     var b=r.bridge||{};
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span> '+esc(b.url||''):'<span class="badge badge-red">离线</span>');
     var html='<div>📊 总品种: <b>'+r.total+'</b>  ✅ 已最新: <b>'+r.fresh+'</b>  ⏳ 过期: <b>'+r.stale+'</b>  🆕 无缓存: <b>'+r.no_cache+'</b></div>';
-    html+='<div>需同步: <b>'+r.need_fetch+'</b> 只</div>';
+    html+='<div>需同步: <b>'+r.need_fetch+'</b> ֻ</div>';
     el.innerHTML=html;
     if(r.need_fetch===0)toast('✅ 所有数据已是最新');
   });
@@ -503,7 +503,7 @@ function viewSectorMembers(sector){
   document.getElementById('sector-members-title').textContent=sector+' 成员列表';
   api('/quant/admin/api/sector-index?action=sector_members&sector='+encodeURIComponent(sector)).then(function(d){
     var members=d.members||[];
-    document.getElementById('sector-members-title').textContent=sector+' ('+members.length+' 只)';
+    document.getElementById('sector-members-title').textContent=sector+' ('+members.length+' ֻ)';
     var tb=document.querySelector('#sector-members-table tbody');
     tb.innerHTML=members.map(function(m){
       var mv=(m.free_float_mv/1e8).toFixed(2);

@@ -17,6 +17,23 @@
 #   GET  /health        <- Health check
 #   GET  /status        <- Show all requests and their status
 #
+# Trading shortcuts (proxy to gateway, convenience for stock traders):
+#   POST /buy           <- Quick buy order {code, volume, price?}
+#   POST /sell          <- Quick sell order {code, volume, price?}
+#   POST /cancel        <- Cancel order {order_id}
+#   GET  /positions     <- Query current positions
+#   GET  /account       <- Query account summary
+#   GET  /orders        <- Query today's orders
+#   GET  /quote/<code>  <- Real-time quote for a single stock
+#   POST /quotes        <- Batch quotes {codes: ["600519", "000001"]}
+#   GET  /trades        <- Query recent trades/fills
+#   GET  /pnl           <- Query P&L summary
+#
+# Data bridge proxy (relay to gateway for Windows bridge polling):
+#   GET/POST /quant/api/data-request    <- Data bridge request relay
+#   GET/POST /quant/api/data-response   <- Data bridge response relay
+#   GET/POST /quant/api/stocklist       <- Stock list management
+#
 
 import json
 import os
@@ -162,6 +179,8 @@ def _proxy_to_gateway(method, path, body=None, timeout=15):
     url = GATEWAY_URL + path
     try:
         if body is not None:
+            if isinstance(body, str):
+                body = body.encode("utf-8")
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
         else:
             req = urllib.request.Request(url)
@@ -199,11 +218,20 @@ class BridgeHandler(BaseHTTPRequestHandler):
             return b""
         return self.rfile.read(length)
 
+    def _proxy_response(self, status, body):
+        """Send a raw proxy response back to the client."""
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self):
         """Handle CORS preflight."""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -276,17 +304,95 @@ class BridgeHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # Proxy /quant/api/trading-* to local gateway
-        if path.startswith("/quant/api/trading"):
+        # ── Trading shortcuts: GET endpoints ──────────────────────
+
+        # GET /positions — query current positions
+        if path == "/positions":
+            status, body = _proxy_to_gateway("GET", "/quant/api/portfolio")
+            self._proxy_response(status, body)
+            return
+
+        # GET /account — query account summary
+        if path == "/account":
+            status, body = _proxy_to_gateway("GET", "/quant/api/portfolio")
+            self._proxy_response(status, body)
+            return
+
+        # GET /orders — query today's orders
+        if path == "/orders":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/orders"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("GET", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # GET /trades — query recent trades/fills
+        if path == "/trades":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/trades"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("GET", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # GET /pnl — query P&L summary
+        if path == "/pnl":
+            status, body = _proxy_to_gateway("GET", "/quant/api/pnl")
+            self._proxy_response(status, body)
+            return
+
+        # GET /quote/<code> — real-time quote for a single stock
+        if path.startswith("/quote/"):
+            code = path[len("/quote/"):]
+            if not code:
+                self._send_json(400, {"error": "missing stock code"})
+                return
+            proxy_path = "/quant/api/quote?symbol=%s" % code
+            status, body = _proxy_to_gateway("GET", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # GET /signals — query recent strategy signals
+        if path == "/signals":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/signals"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("GET", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # GET /alerts — query active price alerts
+        if path == "/alerts":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/price-alerts"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("GET", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # GET /confirmations — pending order confirmations
+        if path == "/confirmations":
+            status, body = _proxy_to_gateway("GET", "/quant/api/confirmations")
+            self._proxy_response(status, body)
+            return
+
+        # GET /engine/status — live engine status
+        if path == "/engine/status":
+            status, body = _proxy_to_gateway("GET", "/quant/api/live/status")
+            self._proxy_response(status, body)
+            return
+
+        # Proxy /quant/api/* to local gateway (trading, data-bridge, stocklist, etc.)
+        if path.startswith("/quant/api/"):
             qs = urlparse(self.path).query
             proxy_path = path + ("?" + qs if qs else "")
             status, body = _proxy_to_gateway("GET", proxy_path)
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(body)
+            self._proxy_response(status, body)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -403,15 +509,191 @@ class BridgeHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # Proxy /quant/api/trading-* to local gateway
-        if path.startswith("/quant/api/trading"):
+        # ── Trading shortcuts: POST endpoints ─────────────────────
+
+        # POST /buy — quick buy order
+        if path == "/buy":
+            self._handle_quick_order(body, "buy")
+            return
+
+        # POST /sell — quick sell order
+        if path == "/sell":
+            self._handle_quick_order(body, "sell")
+            return
+
+        # POST /cancel — cancel order
+        if path == "/cancel":
+            if not body:
+                self._send_json(400, {"error": "empty body"})
+                return
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": "JSON parse error: %s" % e})
+                return
+            order_id = data.get("order_id", "")
+            if not order_id:
+                self._send_json(400, {"error": "order_id required"})
+                return
+            # Proxy cancel to gateway
+            cancel_body = json.dumps({
+                "action": "cancel",
+                "orderId": order_id,
+            }).encode("utf-8")
+            status, resp_body = _proxy_to_gateway("DELETE",
+                "/quant/api/orders?id=%s" % order_id)
+            self._proxy_response(status, resp_body)
+            return
+
+        # POST /quotes — batch quotes for multiple stocks
+        if path == "/quotes":
+            if not body:
+                self._send_json(400, {"error": "empty body"})
+                return
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": "JSON parse error: %s" % e})
+                return
+            codes = data.get("codes", [])
+            if not codes or not isinstance(codes, list):
+                self._send_json(400, {"error": "codes required (list of stock codes)"})
+                return
+            # Fetch quotes in parallel via threads
+            quotes = {}
+            errors = {}
+            threads = []
+            results_lock = threading.Lock()
+
+            def _fetch_quote(code):
+                try:
+                    proxy_path = "/quant/api/quote?symbol=%s" % code
+                    st, bd = _proxy_to_gateway("GET", proxy_path, timeout=10)
+                    if st == 200:
+                        parsed = json.loads(bd.decode("utf-8"))
+                        with results_lock:
+                            quotes[code] = parsed.get("data", parsed)
+                    else:
+                        with results_lock:
+                            errors[code] = "HTTP %d" % st
+                except Exception as e:
+                    with results_lock:
+                        errors[code] = str(e)
+
+            for code in codes[:50]:  # limit to 50 codes per batch
+                t = threading.Thread(target=_fetch_quote, args=(code,))
+                t.start()
+                threads.append(t)
+            for t in threads:
+                t.join(timeout=15)
+
+            self._send_json(200, {
+                "status": "ok",
+                "quotes": quotes,
+                "errors": errors if errors else None,
+                "count": len(quotes),
+            })
+            return
+
+        # POST /alert — set a price alert
+        if path == "/alert":
+            if not body:
+                self._send_json(400, {"error": "empty body"})
+                return
+            status, resp_body = _proxy_to_gateway("POST",
+                "/quant/api/price-alerts", body=body)
+            self._proxy_response(status, resp_body)
+            return
+
+        # POST /engine/<action> — engine control (start/stop/pause/resume)
+        if path.startswith("/engine/"):
+            action = path[len("/engine/"):]
+            if action not in ("start", "stop", "pause", "resume"):
+                self._send_json(400, {"error": "invalid engine action: %s" % action})
+                return
+            status, resp_body = _proxy_to_gateway("POST",
+                "/quant/api/engine/%s" % action, body=body or None)
+            self._proxy_response(status, resp_body)
+            return
+
+        # Proxy /quant/api/* to local gateway (trading, data-bridge, stocklist, etc.)
+        if path.startswith("/quant/api/"):
             status, resp_body = _proxy_to_gateway("POST", path, body=body)
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(resp_body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(resp_body)
+            self._proxy_response(status, resp_body)
+            return
+
+        self._send_json(404, {"error": "not found"})
+
+    def _handle_quick_order(self, body, side):
+        """Handle quick buy/sell order via gateway proxy."""
+        if not body:
+            self._send_json(400, {"error": "empty body"})
+            return
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception as e:
+            self._send_json(400, {"error": "JSON parse error: %s" % e})
+            return
+
+        code = data.get("code", "") or data.get("symbol", "")
+        volume = int(data.get("volume", 0) or data.get("quantity", 0))
+        price = data.get("price")
+        order_type = "limit" if price else "market"
+
+        if not code:
+            self._send_json(400, {"error": "code/symbol required"})
+            return
+        if volume <= 0:
+            self._send_json(400, {"error": "volume/quantity must be positive"})
+            return
+
+        # Build order payload for the gateway
+        order_payload = {
+            "symbol": code,
+            "side": side,
+            "orderType": order_type,
+            "quantity": volume,
+        }
+        if price:
+            order_payload["price"] = float(price)
+
+        order_body = json.dumps(order_payload).encode("utf-8")
+        print("[receiver] quick %s: %s x%d @ %s"
+              % (side, code, volume, price or "market"))
+        status, resp_body = _proxy_to_gateway("POST",
+            "/quant/api/orders", body=order_body)
+        self._proxy_response(status, resp_body)
+
+    def do_DELETE(self):
+        """Handle DELETE requests (order cancellation, alert deletion)."""
+        path = urlparse(self.path).path
+
+        # DELETE /orders?id=xxx — cancel order
+        if path == "/orders":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/orders"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("DELETE", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # DELETE /alerts?id=xxx — delete price alert
+        if path == "/alerts":
+            qs = urlparse(self.path).query
+            proxy_path = "/quant/api/price-alerts"
+            if qs:
+                proxy_path += "?" + qs
+            status, body = _proxy_to_gateway("DELETE", proxy_path)
+            self._proxy_response(status, body)
+            return
+
+        # Proxy DELETE /quant/api/* to gateway
+        if path.startswith("/quant/api/"):
+            qs = urlparse(self.path).query
+            proxy_path = path + ("?" + qs if qs else "")
+            status, body = _proxy_to_gateway("DELETE", proxy_path)
+            self._proxy_response(status, body)
             return
 
         self._send_json(404, {"error": "not found"})
@@ -443,9 +725,28 @@ def main():
     print("  QMT Data Bridge Receiver (Push Mode) [THREADED]")
     print("  Listening on http://%s:%d" % (args.host, args.port))
     print("")
+    print("  === Data Bridge (Windows QMT) ===")
     print("  Windows QMT polls:  GET  /pending")
     print("  Windows QMT pushes: POST /result/<id>")
     print("  Mac requests:       POST /request  or  POST /klines")
+    print("")
+    print("  === Trading Shortcuts ===")
+    print("  Quick buy:      POST /buy   {code, volume, price?}")
+    print("  Quick sell:     POST /sell  {code, volume, price?}")
+    print("  Cancel order:   POST /cancel {order_id}")
+    print("  Positions:      GET  /positions")
+    print("  Account:        GET  /account")
+    print("  Orders:         GET  /orders")
+    print("  Trades:         GET  /trades")
+    print("  P&L:            GET  /pnl")
+    print("  Single quote:   GET  /quote/<code>")
+    print("  Batch quotes:   POST /quotes {codes: [...]}")
+    print("  Signals:        GET  /signals")
+    print("  Alerts:         GET  /alerts")
+    print("  Engine status:  GET  /engine/status")
+    print("")
+    print("  === Gateway Proxy ===")
+    print("  All /quant/api/* routes proxied to gateway (%s)" % GATEWAY_URL)
     print("=" * 60)
     print("")
 

@@ -120,7 +120,7 @@ function loadPortfolioConditionals(){
       var rows='';
       orders.forEach(function(o){
         var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
-          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">ֹӯ</span>':
           o.type==='trailing_stop'?'<span class="badge badge-blue">跟踪止损</span>':
           o.type==='trailing_atr'?'<span class="badge badge-blue">ATR止损</span>':
           o.type==='trailing_tp'?'<span class="badge badge-green">跟踪止盈</span>':
@@ -301,7 +301,7 @@ function renderScreenResults(d){
     var kpisEl=document.getElementById('screen-enrichment-kpis');
     if(kpisEl){
       var regimeLabel={'recovery':'🟢 复苏','overheating':'🟡 过热','stagflation':'🟠 滞胀','recession':'🔴 衰退'};
-      var regime=regimeLabel[d.macroRegime]||('⚪ '+(d.macroRegime||'未知'));
+      var regime=regimeLabel[d.macroRegime]||('⚪ '+(d.macroRegime||'δ֪'));
       var kpis=[kpiHtml(regime,'宏观周期')];
       if(d.lianbanPoolCount!=null)kpis.push(kpiHtml(String(d.lianbanPoolCount),'涨停池'));
       if(d.hotStocksCount!=null)kpis.push(kpiHtml(String(d.hotStocksCount),'热股池'));
@@ -488,7 +488,7 @@ function renderRebalance(d){
     var items=grouped[key]||[];
     if(!items.length)return;
     html+='<div class="card" style="margin-top:10px;border-left:3px solid '+groupColors[key]+'">';
-    html+='<h3>'+groupLabels[key]+' ('+items.length+'只)</h3>';
+    html+='<h3>'+groupLabels[key]+' ('+items.length+'ֻ)</h3>';
     html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
     items.forEach(function(a){
       html+='<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;min-width:180px">';

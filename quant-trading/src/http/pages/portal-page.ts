@@ -55,6 +55,11 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-datahub::before{background:linear-gradient(90deg,var(--green),var(--accent))}
 .nav-card.card-lab::before{background:linear-gradient(90deg,var(--accent),var(--yellow))}
 .nav-card.card-routing::before{background:linear-gradient(90deg,var(--purple),var(--accent))}
+.nav-card.card-sentiment::before{background:linear-gradient(90deg,var(--yellow),var(--green))}
+.nav-card.card-market::before{background:linear-gradient(90deg,var(--accent),var(--green))}
+.nav-card.card-risk::before{background:linear-gradient(90deg,var(--red),var(--yellow))}
+.nav-card.card-trades::before{background:linear-gradient(90deg,var(--orange),var(--accent))}
+.nav-card.card-compare::before{background:linear-gradient(90deg,var(--purple),var(--green))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -152,7 +157,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <p>实时投资组合概览，持仓与订单管理，权益曲线，交易信号，SSE 实时推送</p>
     <div class="tags">
       <span class="tag">持仓</span><span class="tag">订单</span><span class="tag">权益曲线</span>
-      <span class="tag">信号</span><span class="tag">引擎控制</span><span class="tag">实时</span>
+      <span class="tag">信号</span><span class="tag">引擎控制</span><span class="tag">ʵʱ</span>
     </div>
   </a>
   <a href="${b}/quant/admin/ui" class="nav-card card-admin" style="color:inherit;text-decoration:none">
@@ -215,7 +220,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <p>AI 驱动策略组合与探索 — 动态组合多策略、批量回测对比、自动寻优</p>
     <div class="tags">
       <span class="tag">策略组合</span><span class="tag">批量回测</span><span class="tag">AI 探索</span>
-      <span class="tag">权重优化</span><span class="tag">投票/评分/级联</span>
+      <span class="tag">权重优化</span><span class="tag">ͶƱ/评分/级联</span>
     </div>
   </a>
   <a href="${b}/quant/admin/strategy-routing" class="nav-card card-routing" style="color:inherit;text-decoration:none">
@@ -225,6 +230,50 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">股票画像</span><span class="tag">自适应路由</span><span class="tag">组合匹配</span>
       <span class="tag">数据驱动</span><span class="tag">规则路由</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/sentiment-dashboard" class="nav-card card-sentiment" style="color:inherit;text-decoration:none">
+    <div class="icon">🌡️</div>
+    <h3>市场情绪</h3>
+    <p>涨跌比、涨停跌停统计、两融余额、北向资金 — 综合市场情绪监控面板</p>
+    <div class="tags">
+      <span class="tag">涨跌比</span><span class="tag">涨停跌停</span><span class="tag">两融</span>
+      <span class="tag">北向资金</span><span class="tag">情绪评分</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/market-overview" class="nav-card card-market" style="color:inherit;text-decoration:none">
+    <div class="icon">📊</div>
+    <h3>大盘分析</h3>
+    <p>主要指数实时行情、板块热力图、领涨领跌板块、成交额统计</p>
+    <div class="tags">
+      <span class="tag">上证/深证/创业板</span><span class="tag">板块热力图</span><span class="tag">成交额</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/risk-dashboard" class="nav-card card-risk" style="color:inherit;text-decoration:none">
+    <div class="icon">🛡️</div>
+    <h3>风险管理</h3>
+    <p>回撤曲线、VaR/夏普比率、持仓集中度、风控规则状态、风控警报一览</p>
+    <div class="tags">
+      <span class="tag">回撤</span><span class="tag">VaR</span><span class="tag">集中度</span>
+      <span class="tag">风控规则</span><span class="tag">警报</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/trade-history" class="nav-card card-trades" style="color:inherit;text-decoration:none">
+    <div class="icon">📋</div>
+    <h3>交易记录</h3>
+    <p>完整历史交易记录查询，支持日期/代码/方向筛选，CSV导出</p>
+    <div class="tags">
+      <span class="tag">交易历史</span><span class="tag">ɸѡ</span><span class="tag">CSV导出</span>
+      <span class="tag">统计汇总</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/stock-compare" class="nav-card card-compare" style="color:inherit;text-decoration:none">
+    <div class="icon">⚖️</div>
+    <h3>股票对比</h3>
+    <p>多股涨跌幅叠加对比、基本面指标横向比较、技术指标对照</p>
+    <div class="tags">
+      <span class="tag">涨跌对比</span><span class="tag">基本面</span><span class="tag">技术指标</span>
+      <span class="tag">最多5ֻ</span>
     </div>
   </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">
@@ -263,6 +312,11 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/lianban</span><span class="api-desc">连板分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/event-catalyst</span><span class="api-desc">事件催化分析</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/datahub</span><span class="api-desc">金融数据中心</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/sentiment-dashboard</span><span class="api-desc">市场情绪面板</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/market-overview</span><span class="api-desc">大盘分析</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/risk-dashboard</span><span class="api-desc">风险管理仪表板</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/trade-history</span><span class="api-desc">交易记录</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/stock-compare</span><span class="api-desc">股票对比</span></div>
     </div>
 
     <div class="api-group">

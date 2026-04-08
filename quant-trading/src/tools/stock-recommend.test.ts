@@ -109,7 +109,7 @@ describe("stock_recommend tool", () => {
   it("description mentions predictive mode", () => {
     const tool = makeTool();
     expect(tool.description).toContain("predictive");
-    expect(tool.description).toContain("前瞻");
+    expect(tool.description).toContain("ǰհ");
   });
 
   describe("mode=classic (default)", () => {

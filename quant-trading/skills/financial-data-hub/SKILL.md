@@ -158,6 +158,16 @@ Schedule delayed tasks / retries → scheduled_task
 CFO-level statement analysis    → cfo_assistant
 ```
 
+### 🔧 Trading Assistance
+
+```
+Compare 2-5 stocks side-by-side     → stock_compare (action=compare/valuation/technical/performance)
+Dividend history & yield ranking     → dividend_tracker (action=history/upcoming/yield_rank/analysis)
+Transaction cost & breakeven price   → trade_cost_calculator (action=cost/round_trip/breakeven/compare)
+Trading calendar & market events     → market_calendar (action=trading_days/holidays/events/weekly)
+Position health check & diagnosis    → position_diagnosis (action=diagnose/single/risk_check/action_plan)
+```
+
 ## Cross-Tool Workflows
 
 ### 📋 Before Making a Trade Recommendation
@@ -275,6 +285,33 @@ CFO-level statement analysis    → cfo_assistant
 6. **backtest** — Validate macro-driven strategy
 7. **scheduled_task** — Rebalance when macro regime changes
 
+### 📊 Stock Comparison & Selection Workflow
+
+1. **stock_screen** — Screen candidates by fundamental/technical factors
+2. **stock_compare** (action=compare) — Compare top candidates side-by-side (PE/PB/ROE/margins)
+3. **stock_compare** (action=performance) — Compare historical returns & drawdowns
+4. **dividend_tracker** (action=analysis) — Compare dividend history for income preference
+5. **trade_cost_calculator** (action=breakeven) — Calculate breakeven for position sizing
+6. **position_sizing** — Determine allocation
+
+### 🏥 Daily Position Health Check Workflow
+
+1. **position_diagnosis** (action=diagnose) — Full portfolio health scan (A/B/C/D grades)
+2. **position_diagnosis** (action=risk_check) — Check concentration & stop-loss proximity
+3. **position_diagnosis** (action=action_plan) — Get hold/watch/reduce/exit action list
+4. **market_calendar** (action=events) — Check upcoming events affecting held stocks
+5. **trade_cost_calculator** (action=round_trip) — Calculate cost for planned trades
+6. **conditional_order** — Set/update stop-loss for positions needing attention
+
+### 💰 Dividend Income Strategy Workflow
+
+1. **dividend_tracker** (action=yield_rank) — Find highest dividend yield stocks
+2. **dividend_tracker** (action=analysis) — Analyze consistency & trend of dividends
+3. **stock_compare** (action=valuation) — Compare valuations of top dividend stocks
+4. **market_calendar** (action=events, event_types="dividend") — Upcoming ex-dividend dates
+5. **trade_cost_calculator** (action=round_trip) — Ensure dividend exceeds trading costs
+6. **portfolio** — Execute buy orders
+
 ## Chat Commands Quick Reference
 
 ### Core Data Commands
@@ -361,6 +398,19 @@ CFO-level statement analysis    → cfo_assistant
 | `/仓位计算`              | position_sizing     | Calculate position size for risk  |
 | `/定投`                  | dca_schedule        | Create DCA recurring buy plan     |
 | `/再平衡`                | portfolio_rebalance | Rebalance portfolio to targets    |
+
+### Comparison & Assistance
+
+| Command                             | Tool                  | Description                        |
+| ----------------------------------- | --------------------- | ---------------------------------- |
+| `/对比 600519,000858`               | stock_compare         | Side-by-side stock comparison      |
+| `/分红 600519`                      | dividend_tracker      | Dividend history & analysis        |
+| `/股息排行`                         | dividend_tracker      | Dividend yield ranking             |
+| `/费用 50 1000` or `/成本`          | trade_cost_calculator | Calculate trade costs & breakeven  |
+| `/保本价 50 1000`                   | trade_cost_calculator | Calculate breakeven sell price     |
+| `/日历` or `/交易日`                | market_calendar       | Trading calendar & events          |
+| `/诊断` or `/体检`                  | position_diagnosis    | Portfolio health check             |
+| `/操作建议`                         | position_diagnosis    | Action plan (hold/reduce/exit)     |
 
 ### Options & Risk
 
@@ -485,7 +535,7 @@ Steps:
 
 ---
 
-## 📊 Tool Inventory (47 Tools)
+## 📊 Tool Inventory (52 Tools)
 
 | Category                     | Count  | Tools                                                                                                                                   |
 | ---------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -499,7 +549,8 @@ Steps:
 | **Capital Flow & Sentiment** | 4      | fund_flow, sector_synergy, dragon_tiger, sector_analysis                                                                                |
 | **News & Market Intel**      | 3      | news_summary, polymarket_odds, cfo_assistant                                                                                            |
 | **Cross-cutting**            | 4      | data_analysis, data_cache, scheduled_task, tech_moat                                                                                    |
-| **TOTAL**                    | **47** | —                                                                                                                                       |
+| **Trading Assistance**       | 5      | stock_compare, dividend_tracker, trade_cost_calculator, market_calendar, position_diagnosis                                              |
+| **TOTAL**                    | **52** | —                                                                                                                                       |
 
 ---
 

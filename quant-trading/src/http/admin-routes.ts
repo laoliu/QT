@@ -579,7 +579,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             break;
           }
           default:
-            json(res, { error: `未知 action: ${action}` }, 400);
+            json(res, { error: `δ֪ action: ${action}` }, 400);
             return;
         }
         const result = await runPythonScript<Record<string, unknown>>(script, params, config);
@@ -3360,6 +3360,192 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Sentiment Dashboard (市场情绪面板) Page ──────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/sentiment-dashboard",
+    handler: securePublic(async (_req, res) => {
+      const { getSentimentDashboardHtml } = await import("./pages/sentiment-dashboard-page.js");
+      const html = getSentimentDashboardHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Sentiment Dashboard API ─────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/sentiment-dashboard",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const action = params.get("action") || "breadth";
+
+      if (action === "breadth") {
+        const result = await runPythonScript("engines/margin_trading.py", { action: "breadth" }, config);
+        json(res, result.ok && result.data ? result.data : { error: result.error || "breadth 查询失败" });
+      } else if (action === "margin") {
+        const result = await runPythonScript("engines/margin_trading.py", { action: "summary" }, config);
+        json(res, result.ok && result.data ? result.data : { error: result.error || "两融数据查询失败" });
+      } else if (action === "northbound") {
+        const result = await runPythonScript("engines/fund_flow.py", { action: "northbound" }, config);
+        json(res, result.ok && result.data ? result.data : { error: result.error || "北向资金查询失败" });
+      } else {
+        json(res, { error: "δ֪action: " + action }, 400);
+      }
+    }),
+  });
+
+  // ── Market Overview (大盘分析) Page ─────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/market-overview",
+    handler: securePublic(async (_req, res) => {
+      const { getMarketOverviewHtml } = await import("./pages/market-overview-page.js");
+      const html = getMarketOverviewHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Market Overview API ─────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/market-overview",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const action = params.get("action") || "index";
+
+      if (action === "index") {
+        const symbol = params.get("symbol") || "000001";
+        try {
+          const quote = await marketDataProvider.getQuote(symbol);
+          json(res, quote || { error: "无法获取指数数据" });
+        } catch (e: unknown) {
+          json(res, { error: String((e as Error).message || e) });
+        }
+      } else if (action === "sectors") {
+        const result = await runPythonScript("engines/sector_analysis.py", { action: "ranking", limit: 50 }, config);
+        json(res, result.ok && result.data ? result.data : { error: result.error || "板块数据查询失败" });
+      } else {
+        json(res, { error: "δ֪action: " + action }, 400);
+      }
+    }),
+  });
+
+  // ── Risk Dashboard (风险管理) Page ─────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/risk-dashboard",
+    handler: securePublic(async (_req, res) => {
+      const { getRiskDashboardHtml } = await import("./pages/risk-dashboard-page.js");
+      const html = getRiskDashboardHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Trade History (交易记录) Page ─────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/trade-history",
+    handler: securePublic(async (_req, res) => {
+      const { getTradeHistoryHtml } = await import("./pages/trade-history-page.js");
+      const html = getTradeHistoryHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Trade History API ──────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/trade-history",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const engine = getEngine();
+      let trades: unknown[] = [];
+      if (engine.orderManager) {
+        trades = await engine.orderManager.getTrades();
+      }
+
+      // Apply filters
+      const from = params.get("from");
+      const to = params.get("to");
+      const symbol = params.get("symbol");
+      const side = params.get("side");
+
+      let filtered = trades as Array<Record<string, unknown>>;
+      if (from) {
+        filtered = filtered.filter((t) => {
+          const d = String(t.time || t.timestamp || t.date || "");
+          return d >= from;
+        });
+      }
+      if (to) {
+        filtered = filtered.filter((t) => {
+          const d = String(t.time || t.timestamp || t.date || "");
+          return d <= to + "T23:59:59";
+        });
+      }
+      if (symbol) {
+        filtered = filtered.filter((t) => String(t.symbol || t.code || "").includes(symbol));
+      }
+      if (side) {
+        filtered = filtered.filter((t) => String(t.side || t.direction || "") === side);
+      }
+
+      json(res, { status: "ok", trades: filtered, count: filtered.length });
+    }),
+  });
+
+  // ── Stock Comparison (股票对比) Page ────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/stock-compare",
+    handler: securePublic(async (_req, res) => {
+      const { getStockCompareHtml } = await import("./pages/stock-compare-page.js");
+      const html = getStockCompareHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Stock Comparison API ─────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/stock-compare",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+      const action = params.get("action") || "quote";
+      const symbol = params.get("symbol") || "";
+
+      if (!symbol) {
+        json(res, { error: "缺少 symbol 参数" }, 400);
+        return;
+      }
+
+      if (action === "quote") {
+        try {
+          const quote = await marketDataProvider.getQuote(symbol);
+          json(res, quote || { error: "无法获取行情" });
+        } catch (e: unknown) {
+          json(res, { error: String((e as Error).message || e) });
+        }
+      } else if (action === "klines") {
+        const limit = Number(params.get("limit") || 250);
+        try {
+          const market = detectMarketFromSymbol(symbol);
+          const klines = await marketDataProvider.getKlines(symbol, "daily", limit, market);
+          json(res, { klines: klines || [] });
+        } catch (e: unknown) {
+          json(res, { error: String((e as Error).message || e) });
+        }
+      } else {
+        json(res, { error: "δ֪action: " + action }, 400);
+      }
+    }),
+  });
+
   // Strategy Lab (extracted to routes/strategy-lab.ts)
   registerStrategyLabRoutes(deps);
 
@@ -3409,7 +3595,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     const s = Math.floor(seconds % 60);
     const parts: string[] = [];
     if (d > 0) parts.push(`${d}天`);
-    if (h > 0) parts.push(`${h}时`);
+    if (h > 0) parts.push(`${h}ʱ`);
     if (m > 0) parts.push(`${m}分`);
     parts.push(`${s}秒`);
     return parts.join("");

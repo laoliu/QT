@@ -37,7 +37,7 @@ export function createDcaScheduleTool(_api: OpenClawPluginApi, dcaService: DcaSc
         },
         // create params
         symbol: { type: "string", description: "股票代码 (create)" },
-        amount: { type: "number", description: "每次买入金额(元) (create)" },
+        amount: { type: "number", description: "每次买入金额(Ԫ) (create)" },
         frequency: {
           type: "string",
           enum: ["daily", "weekly", "biweekly", "monthly"],

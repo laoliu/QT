@@ -31,7 +31,7 @@ export function createStochasticPricingTool(api: OpenClawPluginApi, config: Quan
       "engine=binomial_tree:\n" +
       "  action=price CRR二叉树定价（欧式/美式）\n" +
       "  action=convergence 收敛性分析\n" +
-      "  action=compare 欧式vs美式对比\n\n" +
+      "  action=compare ŷʽvs美式对比\n\n" +
       "engine=delta_hedge:\n" +
       "  action=simulate 单路径Delta对冲模拟\n" +
       "  action=ensemble 多路径P&L分布分析\n" +
@@ -141,7 +141,7 @@ export function createStochasticPricingTool(api: OpenClawPluginApi, config: Quan
         },
         hedgeFreq: {
           type: "number",
-          description: "每N步对冲一次（1=每步，5=每周）",
+          description: "ÿN步对冲一次（1=每步，5=每周）",
         },
         transactionCost: {
           type: "number",

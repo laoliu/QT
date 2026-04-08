@@ -8,7 +8,7 @@ Markets: A-shares (CN)
   - 3板打板买入（首选），2板换手板次选
   - 只做涨停打板（close 必须涨停）
   - 排除一字板（无法买入）
-  - 需要放量信号（volume > 1.5x 前3日均量）
+  - 需要放量信号（volume > 1.5x ǰ3日均量）
   - 多层退出：跌停→止损→时间→晋级持有→止盈→均线追踪
 
 注意：
@@ -64,7 +64,7 @@ class DragonMasterStrategy(BaseStrategy):
             StrategyParameter("take_profit_pct", "number", 0.15,
                               "分步止盈阈值", min=0.05, max=0.30, step=0.05),
             StrategyParameter("volume_mult", "number", 1.5,
-                              "放量倍数(vs前3日均量)", min=1.0, max=3.0, step=0.1),
+                              "放量倍数(vsǰ3日均量)", min=1.0, max=3.0, step=0.1),
             StrategyParameter("min_turnover", "number", 3.0,
                               "最低换手率(%)", min=1.0, max=10.0, step=0.5),
         ],

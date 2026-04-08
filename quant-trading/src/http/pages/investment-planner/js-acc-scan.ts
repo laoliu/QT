@@ -125,7 +125,7 @@ function renderAccResult(d){
     var pct=Math.round(v/20*100);
     var sharePct=score>0?Math.round(v/score*100):0;
     var barColor=v>=14?'var(--green)':v>=8?'#d29922':'var(--red)';
-    dimHtml+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+dimLabels[k]+'</span><span style="color:'+barColor+'">'+v.toFixed(1)+'/20<span style="color:var(--text-dim);font-size:11px"> · 占'+sharePct+'%</span></span></div>';
+    dimHtml+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+dimLabels[k]+'</span><span style="color:'+barColor+'">'+v.toFixed(1)+'/20<span style="color:var(--text-dim);font-size:11px"> · ռ'+sharePct+'%</span></span></div>';
     dimHtml+='<div style="background:var(--card-bg);border-radius:4px;height:8px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+barColor+';border-radius:4px;transition:width .3s"></div></div></div>';
   });
   document.getElementById('acc-dimensions').innerHTML=dimHtml;

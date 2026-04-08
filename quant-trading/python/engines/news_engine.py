@@ -191,7 +191,7 @@ def _events(config: dict) -> dict:
                             "event": str(row.get("事件", "")),
                             "country": str(row.get("国家", "")),
                             "importance": str(row.get("重要性", "")),
-                            "previous": str(row.get("前值", "")),
+                            "previous": str(row.get("ǰֵ", "")),
                             "forecast": str(row.get("预测值", "")),
                             "actual": str(row.get("公布值", "")),
                         })
@@ -242,7 +242,7 @@ def _get_cn_news(limit: int, keyword: str) -> list[dict]:
                         continue
                     items.append({
                         "title": title,
-                        "content": str(row.get("摘要", str(row.get("内容", ""))))[:200],
+                        "content": str(row.get("ժҪ", str(row.get("内容", ""))))[:200],
                         "source": "东方财富",
                         "time": str(row.get("发布时间", "")),
                     })
@@ -272,7 +272,7 @@ def _get_us_news(limit: int, keyword: str) -> list[dict]:
                         continue
                     items.append({
                         "title": title,
-                        "content": str(row.get("摘要", ""))[:200],
+                        "content": str(row.get("ժҪ", ""))[:200],
                         "source": "Global",
                         "time": str(row.get("发布时间", "")),
                     })
@@ -331,7 +331,7 @@ def _us_tech_events(config: dict) -> dict:
     event_keywords = {
         "AI": ["ai", "artificial intelligence", "machine learning", "neural", "llm",
                "gpt", "large language model", "generative", "copilot"],
-        "芯片": ["chip", "semiconductor", "gpu", "cpu", "processor", "silicon",
+        "оƬ": ["chip", "semiconductor", "gpu", "cpu", "processor", "silicon",
                  "wafer", "foundry", "lithography", "asic"],
         "自动驾驶": ["autonomous", "self-driving", "autopilot", "fsd", "robotaxi"],
         "机器人": ["robot", "humanoid", "optimus"],

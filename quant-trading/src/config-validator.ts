@@ -25,7 +25,7 @@ const VALID_MARKETS: MarketType[] = [
 ];
 const VALID_MODES = ["paper", "live"] as const;
 const VALID_BROKERS = ["paper", "qmt", "remote-qmt", "futu", "ib"] as const;
-const VALID_DATA_PROVIDERS = ["demo", "akshare", "tushare", "yfinance", "smart"] as const;
+const VALID_DATA_PROVIDERS = ["demo", "akshare", "tushare", "yfinance", "jqdata", "smart"] as const;
 const VALID_BACKTEST_ENGINES: BacktestEngine[] = ["builtin", "backtrader", "vnpy"];
 
 /**

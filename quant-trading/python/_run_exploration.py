@@ -263,7 +263,7 @@ def run_exploration():
         print(f"{r['rank']:>4} {r['compositeScore']:>6.3f} {r['method']:<16} {r['name']:<35} {r['combinedSignalCount']:>4} {r['bestSubReturn']:>7.1f}% {r['bestSubSharpe']:>6.2f} {r['bestSubMaxDD']:>5.1f}%")
 
     print(f"\n{'='*70}")
-    print(f"  前 3 名详细信息")
+    print(f"  ǰ 3 名详细信息")
     print(f"{'='*70}")
     for r in results[:3]:
         print(f"\n  #{r['rank']} {r['name']}")

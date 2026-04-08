@@ -71,7 +71,7 @@ describe("conditional_order tool", () => {
       target_price: 2000,
       quantity: 100,
     })) as Record<string, unknown>;
-    expect(res.message).toContain("止盈");
+    expect(res.message).toContain("ֹӯ");
     expect(res.id).toBeDefined();
   });
 
@@ -160,6 +160,6 @@ describe("conditional_order tool", () => {
 
   it("returns error for unknown action", async () => {
     const res = (await tool.execute({ action: "invalid" })) as Record<string, unknown>;
-    expect(res.error).toContain("未知");
+    expect(res.error).toContain("δ֪");
   });
 });

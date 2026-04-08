@@ -79,18 +79,18 @@ def _get_cn_fundamentals(symbol: str) -> dict[str, Any]:
             fin = ak.stock_financial_abstract_ths(symbol=symbol, indicator="按年度")
             if fin is not None and not fin.empty:
                 latest = fin.iloc[0]
-                result["eps"] = _parse_float(latest.get("基本每股收益(元)", 0))
-                result["bvps"] = _parse_float(latest.get("每股净资产(元)", 0))
+                result["eps"] = _parse_float(latest.get("基本每股收益(Ԫ)", 0))
+                result["bvps"] = _parse_float(latest.get("每股净资产(Ԫ)", 0))
                 result["roe"] = _parse_float(latest.get("净资产收益率(%)", 0))
-                result["revenue"] = _parse_float(latest.get("营业总收入(元)", 0))
-                result["netProfit"] = _parse_float(latest.get("净利润(元)", 0))
-                result["operatingCashFlow"] = _parse_float(latest.get("经营活动产生的现金流量净额(元)", 0))
+                result["revenue"] = _parse_float(latest.get("营业总收入(Ԫ)", 0))
+                result["netProfit"] = _parse_float(latest.get("净利润(Ԫ)", 0))
+                result["operatingCashFlow"] = _parse_float(latest.get("经营活动产生的现金流量净额(Ԫ)", 0))
 
                 # Multi-year data for growth/stability
                 if len(fin) >= 3:
                     roe_list = [_parse_float(r.get("净资产收益率(%)", 0)) for _, r in fin.head(5).iterrows()]
-                    eps_list = [_parse_float(r.get("基本每股收益(元)", 0)) for _, r in fin.head(5).iterrows()]
-                    rev_list = [_parse_float(r.get("营业总收入(元)", 0)) for _, r in fin.head(5).iterrows()]
+                    eps_list = [_parse_float(r.get("基本每股收益(Ԫ)", 0)) for _, r in fin.head(5).iterrows()]
+                    rev_list = [_parse_float(r.get("营业总收入(Ԫ)", 0)) for _, r in fin.head(5).iterrows()]
                     result["roeHistory"] = roe_list
                     result["epsHistory"] = eps_list
                     result["revenueHistory"] = rev_list

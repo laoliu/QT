@@ -140,7 +140,7 @@ export function createTickMomentumImbalanceStrategy(
       state.inPosition = false;
       const reason =
         pnlPct >= takeProfitPct
-          ? `Tick止盈: ${pnlPct.toFixed(3)}%`
+          ? `Tickֹӯ: ${pnlPct.toFixed(3)}%`
           : pnlPct <= -stopLossPct
             ? `Tick止损: ${pnlPct.toFixed(3)}%`
             : `Tick动量衰减: 短动量 ${features.shortMomentumPct.toFixed(3)}%, 盘口失衡 ${imbalance.toFixed(2)}`;
@@ -364,7 +364,7 @@ function createTickMomentum1mConfirmStrategy(
       state.inPosition = false;
       const reason =
         pnlPct >= takeProfitPct
-          ? `Tick+1m止盈: ${pnlPct.toFixed(3)}%`
+          ? `Tick+1mֹӯ: ${pnlPct.toFixed(3)}%`
           : pnlPct <= -stopLossPct
             ? `Tick+1m止损: ${pnlPct.toFixed(3)}%`
             : `Tick动量衰减退出: ${features.shortMomentumPct.toFixed(3)}%`;

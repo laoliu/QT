@@ -229,7 +229,7 @@ function renderDetail(d){
   var intervalLabels={'1d':'日线','1w':'周线','1M':'月线','1Q':'季线','6M':'半年线','1Y':'年线'};
   var intervalLabel=intervalLabels[currentInterval]||'日线';
   html+='<div class="card"><h3>📈 K 线图 ('+intervalLabel+')';
-  if(d.klineSource==='bridge') html+=' <span style="font-size:11px;padding:2px 6px;background:rgba(88,166,255,.15);color:var(--accent);border-radius:4px;margin-left:6px">⚡ 迅投</span>';
+  if(d.klineSource==='bridge') html+=' <span style="font-size:11px;padding:2px 6px;background:rgba(88,166,255,.15);color:var(--accent);border-radius:4px;margin-left:6px">⚡ ѸͶ</span>';
   html+='</h3><canvas id="kline-canvas" width="800" height="300"></canvas>';
   html+='<div class="ma-legend">';
   var maConfigs=[
@@ -351,7 +351,7 @@ function renderDetail(d){
     if(ci.market) html+='<dt>所属市场</dt><dd>'+esc(ci.market)+'</dd>';
     if(ci.listDate) html+='<dt>上市日期</dt><dd>'+esc(ci.listDate)+'</dd>';
     if(ci.legalRep) html+='<dt>法人代表</dt><dd>'+esc(ci.legalRep)+'</dd>';
-    if(ci.regCapital) html+='<dt>注册资金</dt><dd>'+fmtVol(ci.regCapital*10000)+'元</dd>';
+    if(ci.regCapital) html+='<dt>注册资金</dt><dd>'+fmtVol(ci.regCapital*10000)+'Ԫ</dd>';
     if(ci.website) html+='<dt>官方网站</dt><dd>'+esc(ci.website)+'</dd>';
     html+='</div>';
     if(ci.mainBiz) html+='<div style="margin-top:8px;font-size:12px"><span style="color:var(--text-dim)">主营业务：</span>'+esc(ci.mainBiz)+'</div>';
@@ -480,7 +480,7 @@ function renderDetail(d){
     }
     // Right: Research reports
     if(research.length){
-      html+='<div class="card"><h3>📊 机构研报 <span style="font-size:11px;color:var(--text-dim);font-weight:400">('+research.length+'篇)</span></h3>';
+      html+='<div class="card"><h3>📊 机构研报 <span style="font-size:11px;color:var(--text-dim);font-weight:400">('+research.length+'ƪ)</span></h3>';
       research.forEach(function(r){
         var ratingCls='rpt-hold';
         if(r.rating&&(r.rating.indexOf('买')>=0||r.rating.indexOf('增')>=0)) ratingCls='rpt-buy';

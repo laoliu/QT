@@ -219,8 +219,11 @@ def run_sector_analysis(config: dict) -> dict:
             return {"error": "请提供板块名称 (sector)"}
         days = config.get("days", 20)
         return _sector_history(sector, days, errors)
+    elif action in ("rotation", "momentum", "hot"):
+        from .sector_rotation import run_sector_rotation
+        return run_sector_rotation(config)
     else:
-        return {"error": f"未知action: {action}"}
+        return {"error": f"δ֪action: {action}"}
 
 
 def _sector_ranking(limit: int, errors: list[str]) -> dict:
@@ -363,8 +366,93 @@ def _xq_sector_detail(sector_name: str, errors: list[str]) -> dict:
 
 
 def _sector_history(sector_name: str, days: int, errors: list[str]) -> dict:
-    """Sector history is not available via Sina Finance free API."""
-    return {"error": f"板块历史数据暂不支持 (Sina)", "errors": errors}
+    """Get sector historical K-line data via akshare."""
+    try:
+        import akshare as ak
+    except ImportError:
+        return {"error": "akshare 未安装，无法获取板块历史数据"}
+
+    from datetime import datetime, timedelta
+
+    end_date = datetime.now().strftime("%Y%m%d")
+    start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
+
+    history: list[dict] = []
+
+    # Try industry board first
+    try:
+        df = ak.stock_board_industry_hist_em(
+            symbol=sector_name,
+            period="日k",
+            start_date=start_date,
+            end_date=end_date,
+            adjust="",
+        )
+        if df is not None and not df.empty:
+            df = df.sort_values("日期").tail(days)
+            for _, row in df.iterrows():
+                history.append({
+                    "date": str(row.get("日期", "")),
+                    "open": _safe_float(row.get("开盘")),
+                    "high": _safe_float(row.get("最高")),
+                    "low": _safe_float(row.get("最低")),
+                    "close": _safe_float(row.get("收盘")),
+                    "volume": _safe_float(row.get("成交量")),
+                    "amount": _safe_float(row.get("成交额")),
+                    "changePct": _safe_float(row.get("涨跌幅")),
+                })
+    except Exception as e:
+        errors.append(f"行业板块历史获取失败: {e}")
+
+    # If industry board not found, try concept board
+    if not history:
+        try:
+            df = ak.stock_board_concept_hist_em(
+                symbol=sector_name,
+                period="日k",
+                start_date=start_date,
+                end_date=end_date,
+                adjust="",
+            )
+            if df is not None and not df.empty:
+                df = df.sort_values("日期").tail(days)
+                for _, row in df.iterrows():
+                    history.append({
+                        "date": str(row.get("日期", "")),
+                        "open": _safe_float(row.get("开盘")),
+                        "high": _safe_float(row.get("最高")),
+                        "low": _safe_float(row.get("最低")),
+                        "close": _safe_float(row.get("收盘")),
+                        "volume": _safe_float(row.get("成交量")),
+                        "amount": _safe_float(row.get("成交额")),
+                        "changePct": _safe_float(row.get("涨跌幅")),
+                    })
+        except Exception as e:
+            errors.append(f"概念板块历史获取失败: {e}")
+
+    if not history:
+        return {
+            "error": f"未找到板块「{sector_name}」的历史数据，请确认板块名称是否准确",
+            "errors": errors,
+        }
+
+    # Calculate summary stats
+    changes = [h["changePct"] for h in history if h.get("changePct") is not None]
+    total_change = 0
+    if history and history[0].get("open") and history[-1].get("close"):
+        total_change = round((history[-1]["close"] / history[0]["open"] - 1) * 100, 2)
+
+    return {
+        "action": "history",
+        "sector": sector_name,
+        "days": len(history),
+        "totalChangePct": total_change,
+        "avgDailyChangePct": round(sum(changes) / len(changes), 2) if changes else 0,
+        "maxGain": round(max(changes), 2) if changes else 0,
+        "maxLoss": round(min(changes), 2) if changes else 0,
+        "history": history,
+        "errors": errors if errors else None,
+    }
 
 
 def _safe_float(val: Any) -> float | None:

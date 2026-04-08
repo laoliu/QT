@@ -200,6 +200,91 @@ export class ConfirmationManager {
     return this.respond(confirmId, "rejected", respondedBy);
   }
 
+  /**
+   * Send a stop-loss prompt to the user after a buy order fills when no
+   * autoStopLoss rule is configured. Returns true if the user confirms
+   * they want default stop-loss/take-profit orders created.
+   */
+  requestStopLossPrompt(order: {
+    symbol: string;
+    side: string;
+    quantity: number;
+    avgFillPrice: number;
+    orderId: string;
+  }): Promise<boolean> {
+    const timeoutSecs = this.cfg.tradingAccount?.riskLimits?.confirmationTimeoutSecs ?? 120;
+    const confirmId = shortId();
+    const fillPrice = order.avgFillPrice;
+    const defaultStopPct = 5;
+    const defaultTpPct = 15;
+    const stopPrice = fillPrice * (1 - defaultStopPct / 100);
+    const tpPrice = fillPrice * (1 + defaultTpPct / 100);
+
+    const message = [
+      `💡 止损止盈设置确认 #${confirmId}`,
+      `订单已成交: ${order.side === "buy" ? "买入" : order.side === "cover" ? "平空" : "买入开仓"} ${order.symbol} ${order.quantity}股 @ ¥${fillPrice.toFixed(2)}`,
+      `当前未配置自动止损止盈规则。`,
+      ``,
+      `是否按默认规则创建止损止盈？`,
+      `  止损: -${defaultStopPct}% @ ¥${stopPrice.toFixed(2)}`,
+      `  ֹӯ: +${defaultTpPct}% @ ¥${tpPrice.toFixed(2)}`,
+      ``,
+      `回复 /confirm ${confirmId} 确认创建 | /reject ${confirmId} 跳过`,
+      `(${timeoutSecs} 秒后自动跳过)`,
+    ].join("\n");
+
+    const expiresAt = new Date(Date.now() + timeoutSecs * 1000).toISOString();
+    const record: PendingConfirmation = {
+      confirmId,
+      orderId: order.orderId,
+      channel: this.cfg.tradingAccount?.confirmationChannel,
+      messageText: message,
+      expiresAt,
+      status: "waiting",
+    };
+
+    // Persist to disk
+    void (async () => {
+      const release = await confirmsMutex.acquire();
+      try {
+        const items = await loadConfirms(this.cfg);
+        items.push(record);
+        await saveConfirms(items, this.cfg);
+      } catch (e) {
+        const msg = `[ConfirmationManager] Failed to persist stop-loss prompt: ${e}`;
+        this.api ? this.api.logger.warn(msg) : console.warn(msg);
+      } finally {
+        release();
+      }
+    })();
+
+    // Send message
+    if (this.api) {
+      const webhookOrChannel = this.cfg.tradingAccount?.confirmationChannel;
+      if (webhookOrChannel?.startsWith("http")) {
+        void fetch(webhookOrChannel, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: message, confirmId, type: "quant_stoploss_prompt" }),
+        }).catch((e: Error) => {
+          this.api?.logger.warn(`[Confirm] Webhook delivery failed: ${e.message}`);
+        });
+      }
+      this.api.logger.info(`[STOPLOSS PROMPT]\n${message}`);
+    } else {
+      console.log(`\n${message}\n`);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        void this.expire(confirmId);
+        resolve(false);
+      }, timeoutSecs * 1000);
+
+      this.pending.set(confirmId, { resolve, timer });
+    });
+  }
+
   /** Returns all waiting confirmations (for status queries). */
   async listPending(): Promise<PendingConfirmation[]> {
     const items = await loadConfirms(this.cfg);

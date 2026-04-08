@@ -23,7 +23,7 @@
  *
  * KlineMap 格式:
  *   { "600519": [{date:"20260227", open:1900, high:1920, low:1890, close:1910, volume:12345678}] }
- *   key 为 6 位股票代码（与 stock_id 保持一致，方便 screener_engine 直接匹配）
+ *   key Ϊ 6 位股票代码（与 stock_id 保持一致，方便 screener_engine 直接匹配）
  */
 
 import crypto from "node:crypto";
@@ -73,7 +73,7 @@ const CACHE_FILE = path.join(CACHE_DIR, "kline-bridge-cache.json");
 
 // 磁盘缓存 TTL：当天交易日内有效（过期后下次会重新从 bridge 请求）
 // 历史 K 线不会日内变化，所以只需每天更新一次
-const DISK_CACHE_TTL_MS = 18 * 3600 * 1000; // 18 小时
+const DISK_CACHE_TTL_MS = 18 * 3600 * 1000; // 18 Сʱ
 
 type DiskCache = {
   savedAt: number;
@@ -129,7 +129,7 @@ export function handleDataBridgePostRequest(body: unknown): Record<string, unkno
   if (cached) {
     const requestId = crypto.randomUUID();
     _pendingResponses.set(requestId, { requestId, data: cached, receivedAt: Date.now() });
-    console.log(`[data-bridge] 使用磁盘缓存 (${Object.keys(cached).length} 只)，跳过 Windows 请求`);
+    console.log(`[data-bridge] 使用磁盘缓存 (${Object.keys(cached).length} ֻ)，跳过 Windows 请求`);
     return { status: "ok", requestId, cached: true };
   }
 

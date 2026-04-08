@@ -31,7 +31,7 @@ export function createCorrelationTool(
         action: {
           type: "string",
           enum: ["pair", "matrix", "find_pairs", "spread"],
-          description: "操作: pair=两两相关, matrix=相关矩阵, find_pairs=寻找配对, spread=价差Z值",
+          description: "操作: pair=两两相关, matrix=相关矩阵, find_pairs=寻找配对, spread=价差Zֵ",
         },
         symbolA: {
           type: "string",

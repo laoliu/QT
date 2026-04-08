@@ -105,7 +105,7 @@ def _fetch_via_bridge(codes: list[str]) -> dict[str, list[dict]]:
             with urllib.request.urlopen(req, timeout=TIMEOUT + 10) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 if resp_data.get("status") != "ok":
-                    print(f"  ✗ 批次 {batch_num}/{total_batches} 错误: {resp_data.get('error', '未知')}")
+                    print(f"  ✗ 批次 {batch_num}/{total_batches} 错误: {resp_data.get('error', 'δ֪')}")
                     failed_batches += 1
                     continue
                 data = resp_data.get("data", {})
@@ -129,7 +129,7 @@ def _fetch_via_bridge(codes: list[str]) -> dict[str, list[dict]]:
                         })
                     if converted:
                         result[plain] = converted
-                print(f"  ✓ 批次 {batch_num}/{total_batches}: {len(data)} 只 (累计 {len(result)}/{total})")
+                print(f"  ✓ 批次 {batch_num}/{total_batches}: {len(data)} ֻ (累计 {len(result)}/{total})")
         except urllib.error.URLError as e:
             reason = str(e).lower()
             if "connection refused" in reason or "timed out" in reason:
@@ -258,7 +258,7 @@ def main():
             print("✗ 无法获取股票列表")
             sys.exit(1)
 
-    print(f"股票列表: {len(stock_list)} 只")
+    print(f"股票列表: {len(stock_list)} ֻ")
 
     # Step 3: Check which stocks need K-line refresh (single SQL query)
     stale_cutoff = datetime.now() - timedelta(days=2)
@@ -300,7 +300,7 @@ def main():
         codes_need_fetch.append(qmt)
 
     print(f"已是最新: {codes_fresh}, 过期需刷新: {codes_stale}, 无缓存: {codes_no_cache}")
-    print(f"需要拉取: {len(codes_need_fetch)} 只")
+    print(f"需要拉取: {len(codes_need_fetch)} ֻ")
 
     if not codes_need_fetch:
         print("✓ 所有 K 线数据都是最新的")
@@ -308,7 +308,7 @@ def main():
 
     # Apply --max limit
     if max_stocks and len(codes_need_fetch) > max_stocks:
-        print(f"  --max {max_stocks}: 仅拉取前 {max_stocks} 只")
+        print(f"  --max {max_stocks}: 仅拉取前 {max_stocks} ֻ")
         codes_need_fetch = codes_need_fetch[:max_stocks]
 
     # Step 4: Fetch K-lines
@@ -341,9 +341,9 @@ def main():
     fresh_in_cache = sum(1 for _, latest, _ in verify_rows if latest >= stale_cutoff_date)
 
     print(f"\n=== 缓存状态 ===")
-    print(f"股票列表: {len(stock_list)} 只")
-    print(f"有 K 线数据: {total_in_cache} 只")
-    print(f"K 线最新(2天内): {fresh_in_cache} 只")
+    print(f"股票列表: {len(stock_list)} ֻ")
+    print(f"有 K 线数据: {total_in_cache} ֻ")
+    print(f"K 线最新(2天内): {fresh_in_cache} ֻ")
 
 
 if __name__ == "__main__":

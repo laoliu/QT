@@ -26,7 +26,7 @@ export function createStrategyComposerTool(
       "action=compose 创建组合策略，action=list 列出已有组合，" +
       "action=delete 删除组合，action=detail 查看组合详情。" +
       "组合后的策略 ID 可直接用于 backtest 工具进行回测。" +
-      "支持4种组合方法: voting(投票), weighted-score(加权), gated(门控), cascade(级联)。",
+      "支持4种组合方法: voting(ͶƱ), weighted-score(加权), gated(门控), cascade(级联)。",
     parameters: {
       type: "object" as const,
       properties: {

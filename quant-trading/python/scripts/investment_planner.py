@@ -2108,7 +2108,7 @@ def generate_plan(
         "stopLoss": f"单股止损 {profile['stop_loss_pct'] * 100:.0f}%，总账户回撤超 {profile['stop_loss_pct'] * 200:.0f}% 暂停交易",
         "takeProfit": f"单股止盈 {profile['take_profit_pct'] * 100:.0f}%，分批止盈(先卖1/3，再卖1/3)",
         "positionSize": f"单只股票不超过总资金 {profile['max_single_position_pct'] * 100:.0f}%",
-        "rebalance": f"每 {profile['rebalance_days']} 天重新审视持仓，必要时调仓",
+        "rebalance": f"ÿ {profile['rebalance_days']} 天重新审视持仓，必要时调仓",
         "cashReserve": "始终保留 10-20% 现金作为补仓/抄底资金",
         "entryRule": "均线多头排列 + 量能放大 + RSI不超买时介入",
         "exitRule": "跌破20日均线 + 缩量阴跌 + RSI低于30考虑减仓",

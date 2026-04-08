@@ -188,7 +188,7 @@ def run_chip_accumulation(config: dict) -> dict:
         symbols = [s.strip() for s in symbols_str.split(",") if s.strip()] if symbols_str else []
         return _scan_ambush_accumulation(symbols, lookback, min_confidence, config, as_of_date)
     else:
-        return {"error": f"未知 action: {action}"}
+        return {"error": f"δ֪ action: {action}"}
 
 
 # ── Single stock accumulation detection ───────────────────────────
@@ -221,7 +221,7 @@ def _detect_accumulation(symbol: str, lookback: int, as_of_date: str | None = No
         if net_err:
             return {
                 "error": f"网络连接失败，无法获取 {symbol} 的行情数据。"
-                         "请检查网络连接和代理设置 (如 Clash 需要开启 '系统代理' 或关闭 TUN 模式)。",
+                         "请检查网络连接和代理设置 (如 Clash 需要开启 '系统代理' 或关闭 TUN ģʽ)。",
                 "errors": errors,
             }
         return {"error": f"K线数据不足 (需要至少 {lookback} 日)", "errors": errors}

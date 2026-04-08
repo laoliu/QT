@@ -10,7 +10,7 @@ Input (JSON via stdin):
   {
     "action": "scan" | "check_us" | "map_event" | "catalyst_picks",
     "us_symbols": ["NVDA", "TSLA"],     // optional: specific US tickers
-    "themes": ["AI芯片", "光模块"],       // optional: filter by theme
+    "themes": ["AIоƬ", "光模块"],       // optional: filter by theme
     "min_change_pct": 3.0,               // US stock min move to trigger (%)
     "require_fund_flow": true,           // require positive capital flow
     "limit": 20,
@@ -318,7 +318,7 @@ def _get_a_share_quotes(codes: list[str]) -> dict[str, dict]:
 _EVENT_KEYWORDS = {
     "AI": ["ai", "artificial intelligence", "machine learning", "neural", "llm", "gpt",
            "large language model", "generative", "copilot", "deep learning"],
-    "芯片": ["chip", "semiconductor", "gpu", "cpu", "processor", "silicon", "wafer",
+    "оƬ": ["chip", "semiconductor", "gpu", "cpu", "processor", "silicon", "wafer",
              "foundry", "fab", "lithography", "asic", "fpga"],
     "自动驾驶": ["autonomous", "self-driving", "autopilot", "fsd", "robotaxi", "lidar",
                 "adas", "autonomous driving"],

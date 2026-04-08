@@ -697,7 +697,7 @@ function renderStockTimeline(containerId,symbol){
       rows+='<td style="font-size:10px">'+pt.strategies.map(function(s){return '<span class="badge badge-blue" style="margin:1px">'+esc(s)+'</span>';}).join(' ')+'</td>';
       rows+='</tr>';
     });
-    tableEl.innerHTML='<table style="font-size:12px;width:100%"><thead><tr><th>时间</th><th>价格</th><th>价格变化</th><th>综合分</th><th>分数变化</th><th>排名</th><th>状态</th><th>来源策略</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    tableEl.innerHTML='<table style="font-size:12px;width:100%"><thead><tr><th>时间</th><th>价格</th><th>价格变化</th><th>综合分</th><th>分数变化</th><th>排名</th><th>״̬</th><th>来源策略</th></tr></thead><tbody>'+rows+'</tbody></table>';
   }
 }
 

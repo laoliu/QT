@@ -48,7 +48,7 @@ class MeanReversionCNStrategy(BaseStrategy):
         description=(
             "A股乖离率均值回归策略：当BIAS（乖离率）低于买入阈值且出现放量确认时买入，"
             "BIAS高于卖出阈值或持仓超过最大天数时卖出。"
-            "专为A股市场设计，考虑T+1交割制度和涨跌停板特征。"
+            "רΪA股市场设计，考虑T+1交割制度和涨跌停板特征。"
             "适用于散户情绪驱动的超跌反弹行情。"
         ),
         category="oscillator",

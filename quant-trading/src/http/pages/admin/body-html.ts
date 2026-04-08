@@ -121,7 +121,7 @@ export function getAdminBodyHtml(b: string): string {
       <button class="btn btn-sm" onclick="ackAllAlerts()">✅ 全部确认</button>
       <button class="btn btn-sm btn-danger" onclick="clearAlerts()">🗑️ 清空</button>
     </h3>
-    <div style="overflow-x:auto"><table id="alert-table"><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>消息</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="alert-table"><thead><tr><th>时间</th><th>级别</th><th>来源</th><th>消息</th><th>״̬</th><th>操作</th></tr></thead><tbody></tbody></table></div>
   </div>
 </div>
 
@@ -132,7 +132,7 @@ export function getAdminBodyHtml(b: string): string {
     <div style="overflow-x:auto"><table id="positions-table"><thead><tr><th>代码</th><th>方向</th><th>数量</th><th>成本</th><th>现价</th><th>盈亏</th><th>盈亏%</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" style="margin-bottom:14px"><h3>📝 委托单</h3>
-    <div style="overflow-x:auto"><table id="orders-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="orders-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>״̬</th><th>操作</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" style="margin-top:4px"><h3>📈 信号日志</h3>
     <div style="overflow-x:auto"><table id="signals-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>策略</th><th>置信度</th><th>原因</th></tr></thead><tbody></tbody></table></div>
@@ -154,7 +154,7 @@ export function getAdminBodyHtml(b: string): string {
 <div class="tab-content" id="tab-tasks">
   <div class="cards">
     <div class="card"><h3>⏰ 定时任务</h3>
-      <div style="overflow-x:auto"><table id="tasks-table"><thead><tr><th>ID</th><th>描述</th><th>状态</th><th>计划时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow-x:auto"><table id="tasks-table"><thead><tr><th>ID</th><th>描述</th><th>״̬</th><th>计划时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </div>
     <div class="card">
       <h3>🔔 价格预警 (<span id="pa-count">0</span> 活跃)</h3>
@@ -164,7 +164,7 @@ export function getAdminBodyHtml(b: string): string {
         <input type="number" id="pa-threshold" placeholder="阈值" style="width:80px">
         <button class="btn btn-primary btn-sm" onclick="addPriceAlert()">+ 添加</button>
       </div>
-      <div style="overflow-x:auto;margin-top:8px"><table id="pa-table"><thead><tr><th>代码</th><th>条件</th><th>阈值</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow-x:auto;margin-top:8px"><table id="pa-table"><thead><tr><th>代码</th><th>条件</th><th>阈值</th><th>״̬</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </div>
   </div>
 </div>

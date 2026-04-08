@@ -88,7 +88,7 @@ describe("market_data tool", () => {
   });
 
   it("action=search should return matches", async () => {
-    const result = await tool.execute({ action: "search", keyword: "茅台" });
+    const result = await tool.execute({ action: "search", keyword: "ę́" });
     expect(result).toHaveProperty("results");
   });
 

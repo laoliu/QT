@@ -466,7 +466,7 @@ function renderInstitutionTop3(rows,sourceLabel,skipEnrich,onEnriched){
       '<td><button class="btn btn-sm" onclick="selectInstitutionTop3ForManual(\\''+symbolJs+'\\')">确认</button> <button class="btn btn-sm" onclick="loadInstitutionDetail(\\''+symbolJs+'\\')">详情</button> <button class="btn btn-sm" onclick="addInstitutionTop3ToFavorites(\\''+symbolJs+'\\',\\''+nameJs+'\\')">收藏</button></td>'+
     '</tr>';
   }).join('');
-  if(skipEnrich)statusEl.textContent=(sourceLabel||'当前结果')+' · 共 '+rows.length+' 只';
+  if(skipEnrich)statusEl.textContent=(sourceLabel||'当前结果')+' · 共 '+rows.length+' ֻ';
 }
 
 function renderInstitutionTop3History(entries){
@@ -504,7 +504,7 @@ function renderInstitutionTop3History(entries){
       '<td><span class="badge badge-blue">'+numInt(customerCount)+'</span></td>'+
       '<td><span class="badge badge-purple">'+numInt(patentCount)+'</span></td>'+
       '<td><span class="badge badge-green">'+numInt(restructureCount)+'</span></td>'+
-      '<td>'+esc(summary.marketTone||'未知')+'</td>'+
+      '<td>'+esc(summary.marketTone||'δ֪')+'</td>'+
     '</tr>';
   }).join('');
 }
@@ -678,7 +678,7 @@ function loadInstitutionHistory(){
       if(params.pre_accum_volume_ratio!=null)filters.push('吸筹放量≥'+num(params.pre_accum_volume_ratio)+'x');
       if(params.rush_change_pct!=null&&params.rush_volume_ratio!=null)filters.push('抢筹:涨≥'+num(params.rush_change_pct)+'% 量≥'+num(params.rush_volume_ratio)+'x');
       if(params.rush_turnover_pct!=null)filters.push('抢筹换手≥'+num(params.rush_turnover_pct)+'%');
-      if(params.symbols&&params.symbols.length)filters.push('自选'+numInt(params.symbols.length)+'只');
+      if(params.symbols&&params.symbols.length)filters.push('自选'+numInt(params.symbols.length)+'ֻ');
       return '<tr>'+
         '<td><span class="badge badge-blue">'+esc(item.version||'-')+'</span></td>'+
         '<td>'+esc(summary.asOfDate||'-')+'</td>'+
@@ -693,7 +693,7 @@ function loadInstitutionHistory(){
         '<td><span class="badge badge-blue">'+numInt(customerCount)+'</span></td>'+
         '<td><span class="badge badge-purple">'+numInt(patentCount)+'</span></td>'+
         '<td><span class="badge badge-green">'+numInt(restructureCount)+'</span></td>'+
-        '<td>'+esc(summary.marketTone||'未知')+'</td>'+
+        '<td>'+esc(summary.marketTone||'δ֪')+'</td>'+
         '<td>'+(filters.length?filters.map(function(x){return '<span class="badge badge-sim" style="margin:1px">'+esc(x)+'</span>'}).join(''):'<span style="color:var(--text-dim)">默认</span>')+'</td>'+
         '<td><button class="btn btn-sm" onclick="viewInstitutionHistory(\\''+esc(item.id)+'\\')">查看</button> <button class="btn btn-sm btn-danger" onclick="deleteInstitutionHistory(\\''+esc(item.id)+'\\')">删除</button></td>'+
         '</tr>';
@@ -871,7 +871,7 @@ function renderInstitutionScan(d){
       '<span class="badge badge-orange">大宗交易 '+numInt(ms.blockTradeCount||0)+'</span>'+
       '<span class="badge badge-sim">高管增减持 '+numInt(ms.managementChangeCount||0)+'</span>'+
       '<span class="badge badge-green">机构持仓 '+numInt(ms.institutionalHoldCount||0)+'</span>'+
-      '<span class="badge '+((ms.marketTone||'').indexOf('空')>=0?'badge-red':'badge-green')+'">市场基调 '+esc(ms.marketTone||'未知')+'</span>'+
+      '<span class="badge '+((ms.marketTone||'').indexOf('空')>=0?'badge-red':'badge-green')+'">市场基调 '+esc(ms.marketTone||'δ֪')+'</span>'+
     '</div>';
 
   var warnings=(d.warnings||[]).map(function(w){

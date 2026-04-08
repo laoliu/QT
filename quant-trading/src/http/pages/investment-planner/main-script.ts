@@ -35,6 +35,7 @@ import { getPortfolioBacktestJs } from "./js-portfolio-backtest.js";
 import { getScreeningJs } from "./js-screening.js";
 import { getStateJs } from "./js-state.js";
 import { getTabInitJs } from "./js-tab-init.js";
+import { getTradePlanJs } from "./js-trade-plan.js";
 import { getUtilsJs } from "./js-utils.js";
 
 /**
@@ -49,6 +50,7 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getUtilsJs(),
     getAccFormsJs(),
     getTabInitJs(),
+    getTradePlanJs(),
     getPlanJs(),
     getInstPresetsJs(),
     getInstitutionJs(),

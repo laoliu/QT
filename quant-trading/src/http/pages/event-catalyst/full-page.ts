@@ -27,6 +27,7 @@ var B = ${baseUrlJson};
 var API = B + "/quant/admin/api/event-catalyst";
 var SENT_API = B + "/quant/admin/api/sentiment-signal";
 var SCAN_HISTORY_API = B + "/quant/admin/api/scan-history";
+var CAL_API = B + "/quant/admin/api/stock-calendar";
 ${getEventCatalystMainScript()}
 </script>
 </body>

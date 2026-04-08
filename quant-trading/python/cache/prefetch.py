@@ -23,10 +23,10 @@ def prefetch_stock_list() -> dict[str, dict[str, Any]]:
     # Check if already cached and fresh
     cached = cache.get_stock_list()
     if cached:
-        print(f"[预取] 股票列表已有缓存 ({len(cached)} 只)，跳过")
+        print(f"[Ԥȡ] 股票列表已有缓存 ({len(cached)} ֻ)，跳过")
         return cached
 
-    print("[预取] 正在从 Sina 获取 A 股列表...")
+    print("[Ԥȡ] 正在从 Sina 获取 A 股列表...")
     t0 = time.time()
 
     try:
@@ -77,13 +77,13 @@ def prefetch_stock_list() -> dict[str, dict[str, Any]]:
             stock_data[code] = record
 
         elapsed = time.time() - t0
-        print(f"[预取] 获取到 {len(stock_data)} 只股票 ({elapsed:.1f}s)")
+        print(f"[Ԥȡ] 获取到 {len(stock_data)} 只股票 ({elapsed:.1f}s)")
 
         cache.save_stock_list(stock_data)
         return stock_data
 
     except Exception as e:
-        print(f"[预取] Sina 获取失败: {e}，尝试 fallback...", file=sys.stderr)
+        print(f"[Ԥȡ] Sina 获取失败: {e}，尝试 fallback...", file=sys.stderr)
         # Fallback to code-name list
         try:
             import akshare as ak
@@ -98,11 +98,11 @@ def prefetch_stock_list() -> dict[str, dict[str, Any]]:
                 stock_data[code] = {"stock_id": code, "name": name, "exchange": exchange}
 
             elapsed = time.time() - t0
-            print(f"[预取] Fallback: 获取到 {len(stock_data)} 只股票 ({elapsed:.1f}s)")
+            print(f"[Ԥȡ] Fallback: 获取到 {len(stock_data)} 只股票 ({elapsed:.1f}s)")
             cache.save_stock_list(stock_data)
             return stock_data
         except Exception as e2:
-            print(f"[预取] Fallback 也失败: {e2}", file=sys.stderr)
+            print(f"[Ԥȡ] Fallback 也失败: {e2}", file=sys.stderr)
             return {}
 
 
@@ -115,10 +115,10 @@ def prefetch_code_name_map():
     # Check if already cached
     existing = cache.get_code_name_map()
     if existing:
-        print(f"[预取] 代码名称映射已有缓存 ({len(existing)} 条)，跳过")
+        print(f"[Ԥȡ] 代码名称映射已有缓存 ({len(existing)} 条)，跳过")
         return
 
-    print("[预取] 正在获取代码名称映射...")
+    print("[Ԥȡ] 正在获取代码名称映射...")
     t0 = time.time()
 
     try:
@@ -126,10 +126,10 @@ def prefetch_code_name_map():
         df = ak.stock_info_a_code_name()
         mapping = {str(r["code"]): str(r["name"]) for _, r in df.iterrows()}
         elapsed = time.time() - t0
-        print(f"[预取] 获取到 {len(mapping)} 条映射 ({elapsed:.1f}s)")
+        print(f"[Ԥȡ] 获取到 {len(mapping)} 条映射 ({elapsed:.1f}s)")
         cache.save_code_name_map(mapping)
     except Exception as e:
-        print(f"[预取] 获取代码名称映射失败: {e}", file=sys.stderr)
+        print(f"[Ԥȡ] 获取代码名称映射失败: {e}", file=sys.stderr)
 
 
 def prefetch_fundamentals(stock_data: dict[str, dict[str, Any]], top_n: int = 500):
@@ -150,13 +150,13 @@ def prefetch_fundamentals(stock_data: dict[str, dict[str, Any]], top_n: int = 50
     # Check cache for existing fundamentals
     cached_data, missing = cache.get_fundamentals(candidates)
     if cached_data:
-        print(f"[预取] 基本面缓存命中 {len(cached_data)} 只，还需获取 {len(missing)} 只")
+        print(f"[Ԥȡ] 基本面缓存命中 {len(cached_data)} 只，还需获取 {len(missing)} ֻ")
 
     if not missing:
-        print("[预取] 基本面数据全部已缓存，跳过")
+        print("[Ԥȡ] 基本面数据全部已缓存，跳过")
         return
 
-    print(f"[预取] 正在从雪球获取 {len(missing)} 只股票的基本面数据 (PE/PB/EPS)...")
+    print(f"[Ԥȡ] 正在从雪球获取 {len(missing)} 只股票的基本面数据 (PE/PB/EPS)...")
     t0 = time.time()
 
     def _code_to_xq(code: str) -> str:
@@ -220,7 +220,7 @@ def prefetch_fundamentals(stock_data: dict[str, dict[str, Any]], top_n: int = 50
                 print(f"  ... {done}/{len(missing)} 完成 (成功 {len(fetched)}, 失败 {errors})")
 
     elapsed = time.time() - t0
-    print(f"[预取] 获取完成: {len(fetched)} 成功, {errors} 失败 ({elapsed:.1f}s)")
+    print(f"[Ԥȡ] 获取完成: {len(fetched)} 成功, {errors} 失败 ({elapsed:.1f}s)")
 
     if fetched:
         cache.save_fundamentals(fetched)
@@ -256,7 +256,7 @@ def main():
                         pass
             prefetch_fundamentals(stock_data, top_n=top_n)
         else:
-            print("[预取] 没有股票列表数据，无法获取基本面数据")
+            print("[Ԥȡ] 没有股票列表数据，无法获取基本面数据")
 
     # Final stats
     from cache.stock_cache import get_cache
@@ -264,9 +264,9 @@ def main():
     print("\n=== 缓存统计 ===")
     print(f"数据库: {stats['db_path']}")
     print(f"大小: {stats['db_size_mb']} MB")
-    print(f"股票列表: {stats['stock_list']['unique_stocks']} 只 / {stats['stock_list']['cached_dates']} 天")
-    print(f"基本面:   {stats['fundamentals']['unique_stocks']} 只")
-    print(f"K线:      {stats['klines']['total_bars']} 条 / {stats['klines']['unique_symbols']} 只")
+    print(f"股票列表: {stats['stock_list']['unique_stocks']} ֻ / {stats['stock_list']['cached_dates']} 天")
+    print(f"基本面:   {stats['fundamentals']['unique_stocks']} ֻ")
+    print(f"K线:      {stats['klines']['total_bars']} 条 / {stats['klines']['unique_symbols']} ֻ")
     print(f"代码映射: {stats['code_name_map']['entries']} 条")
 
 

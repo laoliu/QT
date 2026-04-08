@@ -43,7 +43,7 @@ import urllib.error
 
 # ── macOS 系统代理绕过（必须在 import requests/akshare 之前执行）──────────
 # ClashX 等代理工具通过 macOS 系统代理(scutil)被 Python urllib3 继承，
-# 导致连 eastmoney/xueqiu 等 CN 金融 API 时 RemoteDisconnected。
+# 导致连 eastmoney/xueqiu 等 CN 金融 API ʱ RemoteDisconnected。
 # 此进程只访问 CN 金融 API，安全地清除所有代理。
 for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
            "all_proxy", "ALL_PROXY"):
@@ -73,14 +73,14 @@ if _PYTHON_ROOT not in sys.path:
 SCREENER_ID = "technical"
 
 # 选股数量上限（最终推给 QMT 的股票数）
-# 50 只 → 技术面初筛更宽，给 6 个分类视图更多候选池，
+# 50 ֻ → 技术面初筛更宽，给 6 个分类视图更多候选池，
 # 避免少量强势股霸占所有分类。后续 TS 端每类只取 top 5/15 展示。
 SCREEN_TOP_N = 50
 
 # K 线天数（技术指标计算用）
 KLINE_DAYS = 120
 
-# 股票池（空字符串 = 全 A 股；可以用 "hs300"/"zz500"/"zz1000"/"cyb"/"kc50" 等）
+# 股票池（空字符串 = ȫ A 股；可以用 "hs300"/"zz500"/"zz1000"/"cyb"/"kc50" 等）
 UNIVERSE = ""
 
 # 推送到 OpenClaw 网关的 URL
@@ -108,7 +108,7 @@ BRIDGE_TIMEOUT = 90
 #
 WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
 # 直连模式超时（秒）— xtdata 本地数据一般 10~30s 返回
-# 直连超时：每批 100 只约 30-60s，留余量
+# 直连超时：每批 100 ֻԼ 30-60s，留余量
 DIRECT_PULL_TIMEOUT = int(os.environ.get("DIRECT_PULL_TIMEOUT", "90"))
 
 
@@ -117,7 +117,7 @@ DIRECT_PULL_TIMEOUT = int(os.environ.get("DIRECT_PULL_TIMEOUT", "90"))
 # 工具函数
 # =====================================================================
 
-# 预检缓存：同一次选股调用中只探测一次 bridge 状态
+# 预检缓存：同一次选股调用中只探测一次 bridge ״̬
 _bridge_probe_cache: dict[str, object] = {}
 
 def _to_qmt_code(stock_id: str, factors: dict | None = None) -> str | None:
@@ -311,7 +311,7 @@ def _fetch_klines_direct(codes_qmt: list[str], count_override: int | None = None
             with urllib.request.urlopen(req, timeout=DIRECT_PULL_TIMEOUT + 10) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 if result.get("status") != "ok":
-                    err_msg = result.get('error', '未知')
+                    err_msg = result.get('error', 'δ֪')
                     print(f"[direct] 批次 {batch_num}/{total_batches} 错误: {err_msg}")
                     # Windows bridge 超时/断连 → 中止后续批次
                     if "timeout" in err_msg.lower():
@@ -381,7 +381,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
         print(f"[screener] 请确认 {_PYTHON_ROOT} 目录结构完整")
         sys.exit(1)
 
-    print(f"[screener] 使用策略: {SCREENER_ID}, 股票池: {UNIVERSE or '全 A 股'}, "
+    print(f"[screener] 使用策略: {SCREENER_ID}, 股票池: {UNIVERSE or 'ȫ A 股'}, "
           f"K线: {KLINE_DAYS}天, 目标数量: {SCREEN_TOP_N}")
 
     if USE_QMT_BRIDGE and WINDOWS_XTDATA_URL:
@@ -424,7 +424,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
                 cached_stock_data = cache.get_stock_list()
                 if cached_stock_data:
                     stock_data = cached_stock_data
-                    print(f"[screener] 缓存股票池恢复成功: {len(stock_data)} 只")
+                    print(f"[screener] 缓存股票池恢复成功: {len(stock_data)} ֻ")
                 else:
                     print("[screener] 无法获取股票池，且缓存为空，退出")
                     return [], []
@@ -470,7 +470,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
                 codes_need_fetch.append(qmt)
 
         print(
-            f"[screener] 股票池 {len(stock_data)} 只: "
+            f"[screener] 股票池 {len(stock_data)} ֻ: "
             f"新鲜缓存 {len(klines_from_cache) - len(codes_need_incremental)}, "
             f"过期缓存(增量更新) {len(codes_need_incremental)}, "
             f"无缓存(全量拉取) {len(codes_need_fetch)}"
@@ -590,7 +590,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
 
     raw_results: list[dict] = result.get("results", [])
     total = result.get("totalScreened", 0)
-    print(f"[screener] 全市场 {total} 只 → 筛选出 {len(raw_results)} 只")
+    print(f"[screener] 全市场 {total} ֻ → 筛选出 {len(raw_results)} ֻ")
 
     # ── Step 2: Enrich screened stocks with F-Score / fundamental data ──
     # Technical screener only provides MA/MACD/RSI; we add PE/PB/ROE/F-Score
@@ -650,7 +650,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
                         if fd.get("name") and not item.get("name"):
                             item["name"] = fd["name"]
                         enriched_count += 1
-                print(f"[screener] 基本面补充完成: {enriched_count}/{len(winner_codes)} 只")
+                print(f"[screener] 基本面补充完成: {enriched_count}/{len(winner_codes)} ֻ")
             except Exception as e:
                 print(f"[screener] 基本面补充失败 (非致命): {e}", file=sys.stderr)
 
@@ -907,7 +907,7 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
                         pass  # Best-effort; already have financial data
                     _time.sleep(3)  # Respect Eastmoney rate limits
                 if filled:
-                    print(f"[screener] 行业分类补充: {filled}/{len(missing_industry)} 只")
+                    print(f"[screener] 行业分类补充: {filled}/{len(missing_industry)} ֻ")
 
     # 转换为 QMT 代码格式，同时构建 rich_results 保持 code↔name 对齐
     qmt_codes: list[str] = []

@@ -279,7 +279,7 @@ def _fetch_index_member_codes(universe: str, index_code: str, index_name: str) -
             if data.get("ts") and (_time.time() - data["ts"]) < 86400:
                 codes = data.get("codes", [])
                 if codes:
-                    print(f"[universe] {index_name} 成分股命中缓存 ({len(codes)} 只)", file=sys.stderr)
+                    print(f"[universe] {index_name} 成分股命中缓存 ({len(codes)} ֻ)", file=sys.stderr)
                     return codes
     except Exception:
         pass
@@ -680,7 +680,7 @@ def _enrich_financials_batch_akshare(
         enriched += 1
 
     elapsed = time.time() - t0
-    print(f"[financial] AKShare 批量完成: {enriched}/{len(codes)} 只 ({elapsed:.1f}s)", file=sys.stderr)
+    print(f"[financial] AKShare 批量完成: {enriched}/{len(codes)} ֻ ({elapsed:.1f}s)", file=sys.stderr)
     return enriched > 0
 
 
@@ -896,7 +896,7 @@ def _enrich_financials_jqdata(
         mktcap = _sf(val.get("market_cap"))
         if mktcap is not None:
             d["total_market_val_yi"] = mktcap
-            d["mktcap"] = mktcap * 1e8  # 亿 → 元
+            d["mktcap"] = mktcap * 1e8  # 亿 → Ԫ
 
         # Indicators
         roe = _sf(ind.get("roe"))
@@ -976,7 +976,7 @@ def _enrich_financials_jqdata(
         enriched += 1
 
     elapsed = time.time() - t0
-    print(f"[jqdata] 批量完成: {enriched}/{len(codes)} 只 ({elapsed:.1f}s)", file=sys.stderr)
+    print(f"[jqdata] 批量完成: {enriched}/{len(codes)} ֻ ({elapsed:.1f}s)", file=sys.stderr)
     return enriched > 0
 
 
@@ -1016,7 +1016,7 @@ def _enrich_financials_baostock(
     else:
         q_year, quarter = year - 1, 3
 
-    print(f"[baostock] 补充 {len(codes)} 只 ({q_year}Q{quarter}) ...", file=sys.stderr)
+    print(f"[baostock] 补充 {len(codes)} ֻ ({q_year}Q{quarter}) ...", file=sys.stderr)
     t0 = time.time()
 
     # Suppress baostock's print to stdout (corrupts JSON output)
@@ -1151,7 +1151,7 @@ def _enrich_financials_baostock(
         pass
 
     elapsed = time.time() - t0
-    print(f"[baostock] 补充完成: {enriched}/{len(codes)} 只 ({elapsed:.1f}s)", file=sys.stderr)
+    print(f"[baostock] 补充完成: {enriched}/{len(codes)} ֻ ({elapsed:.1f}s)", file=sys.stderr)
     return enriched
 
 

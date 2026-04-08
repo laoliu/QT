@@ -380,6 +380,10 @@ export function createOptionsTradingTool(
                   gamma: p.greeks.gamma?.toFixed(6),
                   theta: p.greeks.theta?.toFixed(4),
                   vega: p.greeks.vega?.toFixed(4),
+                  rho: p.greeks.rho?.toFixed(4),
+                  charm: p.greeks.charm?.toFixed(6),
+                  vanna: p.greeks.vanna?.toFixed(6),
+                  vomma: p.greeks.vomma?.toFixed(6),
                 };
               }
               return base;
@@ -480,6 +484,11 @@ export function createOptionsTradingTool(
             0,
           );
 
+          const totalRho = optionPositions.reduce(
+            (sum, p) => sum + (p.greeks?.rho ?? 0) * p.quantity,
+            0,
+          );
+
           // Count positions by type
           const callCount = optionPositions.filter((p) => p.optionType === "call").length;
           const putCount = optionPositions.filter((p) => p.optionType === "put").length;
@@ -517,6 +526,15 @@ export function createOptionsTradingTool(
                 `Vega暴露 ${totalVega.toFixed(2)} 超过限制 ±${riskLimits.maxVegaExposure}`,
               );
             }
+            if (
+              riskLimits.maxThetaExposure != null &&
+              riskLimits.maxThetaExposure > 0 &&
+              Math.abs(totalTheta) > riskLimits.maxThetaExposure
+            ) {
+              warnings.push(
+                `Theta暴露 ${totalTheta.toFixed(2)}/天 超过限制 ±${riskLimits.maxThetaExposure}`,
+              );
+            }
           }
 
           // Time decay warning: highlight positions expiring within 7 days
@@ -544,6 +562,7 @@ export function createOptionsTradingTool(
               gamma: totalGamma.toFixed(6),
               theta: `${totalTheta.toFixed(2)} (每天)`,
               vega: totalVega.toFixed(4),
+              rho: totalRho.toFixed(4),
             },
             expiringIn7Days: expiringPositions.length,
             warnings: warnings.length > 0 ? warnings : undefined,

@@ -504,7 +504,7 @@ export function formatCategoryOverview(results: StockResult[], totalCount: numbe
 
     const suffix = isFallback ? " ⚠️宽松" : "";
     lines.push(
-      `${cat.emoji} **${cat.name}** (${cat.desc}) [${String(qualifying.length)}只]${suffix}:`,
+      `${cat.emoji} **${cat.name}** (${cat.desc}) [${String(qualifying.length)}ֻ]${suffix}:`,
     );
     for (const { r, cs } of qualifying) {
       const isNew = !seenCodes.has(r.code);

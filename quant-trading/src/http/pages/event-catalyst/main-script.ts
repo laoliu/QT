@@ -162,7 +162,7 @@ function renderScan(d) {
         let cls = "signal-tag";
         if (s.includes("美股")) cls += " hot";
         else if (s.includes("资金")) cls += " flow";
-        else if (s.includes("稀缺")) cls += " scarcity";
+        else if (s.includes("ϡȱ")) cls += " scarcity";
         return '<span class="' + cls + '">' + esc(s) + '</span>';
       }).join("") + '</td>';
       html += '</tr>';
@@ -287,7 +287,7 @@ async function loadUS() {
 function renderUS(d) {
   const el = document.getElementById("us-content");
   const movers = d.allMovers || [];
-  let html = completionBanner("美股数据已加载 — " + movers.length + " 只");
+  let html = completionBanner("美股数据已加载 — " + movers.length + " ֻ");
   if (!movers.length) {
     html += '<div class="empty-state" style="border:1px solid var(--border);border-radius:8px;padding:24px"><div class="icon">😴</div><h3>暂无美股行情数据</h3></div>';
     el.innerHTML = html;
@@ -377,7 +377,7 @@ function autoMap(sym) {
     h += '<span style="font-size:12px;color:var(--text-dim)">主题: </span>';
     h += (d.usThemes || []).map(function(t) { return '<span class="badge badge-purple">' + _esc(t) + '</span>'; }).join(" ");
     if (d.filterThemes !== "all") {
-      h += ' <span style="font-size:12px;color:var(--text-dim)">· 筛选: </span>';
+      h += ' <span style="font-size:12px;color:var(--text-dim)">· ɸѡ: </span>';
       h += (d.filterThemes || []).map(function(t) { return '<span class="badge badge-orange">' + _esc(t) + '</span>'; }).join(" ");
     }
     h += ' <span style="font-size:12px;color:var(--text-dim)">· 共 ' + (d.candidateCount || 0) + ' 只标的</span>';
@@ -425,13 +425,13 @@ async function loadMapping() {
 function renderMapping(d) {
   const el = document.getElementById("map-content");
 
-  let html = completionBanner("映射完成 — " + esc(d.usSymbol || "") + " → " + (d.candidateCount || 0) + " 只A股");
+  let html = completionBanner("映射完成 — " + esc(d.usSymbol || "") + " → " + (d.candidateCount || 0) + " ֻA股");
   html += '<div class="card"><h3>🔗 ' + esc(d.usSymbol) + ' (' + esc(d.usName) + ') → A股对标</h3>';
   html += '<div style="margin-bottom:12px">';
   html += '<span style="font-size:12px;color:var(--text-dim)">主题: </span>';
   html += (d.usThemes || []).map(t => '<span class="badge badge-purple">' + esc(t) + '</span>').join(" ");
   if (d.filterThemes !== "all") {
-    html += ' <span style="font-size:12px;color:var(--text-dim)">· 筛选: </span>';
+    html += ' <span style="font-size:12px;color:var(--text-dim)">· ɸѡ: </span>';
     html += (d.filterThemes || []).map(t => '<span class="badge badge-orange">' + esc(t) + '</span>').join(" ");
   }
   html += ' <span style="font-size:12px;color:var(--text-dim)">· 共 ' + (d.candidateCount || 0) + ' 只标的</span>';
@@ -613,6 +613,193 @@ function renderSentiment(d) {
       html += '<td>' + substanceBadge(n.substance?.label || '') + '</td></tr>';
     }
     html += '</table></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+// ═══ Event Calendar ═══
+function toggleCalSymbolInput() {
+  var scope = document.getElementById("calScope").value;
+  document.getElementById("calSymbolWrap").style.display = scope === "stock" ? "" : "none";
+}
+
+async function calApiCall(action, extra) {
+  var body = Object.assign({ action: action }, extra || {});
+  var start = Date.now();
+  var ctrl = new AbortController();
+  var timer = setTimeout(function() { ctrl.abort(); }, 60000);
+  try {
+    var r = await fetch(CAL_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    var data = await r.json();
+    var elapsed = Date.now() - start;
+    if (elapsed < 600) await new Promise(function(ok) { setTimeout(ok, 600 - elapsed); });
+    return data;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("请求超时，请稍后重试");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadCalendar() {
+  showLoading("cal");
+  try {
+    var scope = document.getElementById("calScope").value;
+    var days = parseInt(document.getElementById("calDays").value) || 30;
+    var typeSel = document.getElementById("calTypes");
+    var selectedTypes = [];
+    for (var i = 0; i < typeSel.options.length; i++) {
+      if (typeSel.options[i].selected && typeSel.options[i].value !== "all") {
+        selectedTypes.push(typeSel.options[i].value);
+      }
+    }
+
+    var action = "upcoming_events";
+    var extra = { days: days };
+    if (selectedTypes.length > 0) extra.event_types = selectedTypes;
+
+    if (scope === "watchlist") {
+      action = "watchlist_events";
+    } else if (scope === "portfolio") {
+      action = "portfolio_events";
+    } else if (scope === "stock") {
+      var syms = document.getElementById("calSymbols").value.trim();
+      if (!syms) { showError("cal", "请输入股票代码"); return; }
+      action = "stock_events";
+      extra.symbols = syms.split(/[,，\\s]+/).filter(function(s) { return s; });
+    }
+
+    var data = await calApiCall(action, extra);
+    if (data.error) { showError("cal", data.error); return; }
+    renderCalendar(data, scope);
+    showContent("cal");
+  } catch (e) { showError("cal", "请求失败: " + e.message); }
+}
+
+function eventTypeBadge(type) {
+  var m = {
+    "unlock": { cls: "badge-red", icon: "🔓" },
+    "dividend": { cls: "badge-green", icon: "💰" },
+    "shareholder_meeting": { cls: "badge-blue", icon: "🏛️" },
+    "insider_increase": { cls: "badge-green", icon: "📈" },
+    "insider_decrease": { cls: "badge-red", icon: "📉" },
+    "earnings": { cls: "badge-yellow", icon: "📋" },
+    "repurchase": { cls: "badge-green", icon: "🔄" },
+    "allotment": { cls: "badge-yellow", icon: "📑" },
+    "placement": { cls: "badge-blue", icon: "💼" },
+  };
+  var info = m[type] || { cls: "badge-yellow", icon: "📌" };
+  return info;
+}
+
+function impactBadge(impact) {
+  if (impact === "positive") return '<span class="badge badge-green">利好</span>';
+  if (impact === "negative") return '<span class="badge badge-red">利空</span>';
+  return '<span class="badge badge-yellow">中性</span>';
+}
+
+function renderCalendar(d, scope) {
+  var el = document.getElementById("cal-content");
+  var scopeLabel = { upcoming: "全市场", watchlist: "自选股", portfolio: "持仓股", stock: "指定股票" };
+  var html = completionBanner("事件日历已加载 — " + (d.totalEvents || 0) + " 个事件 (" + (scopeLabel[scope] || scope) + ")");
+
+  // KPI row
+  html += '<div class="kpi-row">';
+  html += '<div class="kpi"><div class="label">事件总数</div><div class="value" style="color:var(--accent)">' + (d.totalEvents || 0) + '</div></div>';
+  if (d.alertCount > 0) {
+    html += '<div class="kpi"><div class="label">预警</div><div class="value" style="color:var(--red)">' + d.alertCount + '</div></div>';
+  }
+  if (d.watchlistCount) {
+    html += '<div class="kpi"><div class="label">自选股数</div><div class="value">' + d.watchlistCount + '</div></div>';
+  }
+  if (d.holdingCount) {
+    html += '<div class="kpi"><div class="label">持仓股数</div><div class="value">' + d.holdingCount + '</div></div>';
+  }
+  // Type counts
+  var tc = d.typeCounts || {};
+  for (var tkey in tc) {
+    var ti = eventTypeBadge(tkey);
+    html += '<div class="kpi"><div class="label">' + ti.icon + ' ' + esc(tkey) + '</div><div class="value">' + tc[tkey] + '</div></div>';
+  }
+  html += '</div>';
+
+  // Alerts section
+  var alerts = d.alerts || [];
+  if (alerts.length) {
+    html += '<div class="card" style="border-color:var(--red)">';
+    html += '<h3>⚠️ 事件预警 (' + alerts.length + ')</h3>';
+    for (var ai = 0; ai < alerts.length; ai++) {
+      var a = alerts[ai];
+      var alertColor = a.level === "danger" ? "var(--red)" : a.level === "warning" ? "var(--yellow)" : a.level === "positive" ? "var(--green)" : "var(--text-dim)";
+      html += '<div style="padding:8px 12px;margin-bottom:6px;background:var(--bg3);border-radius:6px;border-left:3px solid ' + alertColor + ';font-size:13px">';
+      html += '<a href="' + B + '/quant/admin/stock?symbol=' + encodeURIComponent(a.symbol) + '" target="_blank" class="stock-link" style="font-weight:700">' + esc(a.symbol) + '</a> ';
+      html += esc(a.message);
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Timeline view
+  var events = d.events || [];
+  if (events.length) {
+    html += '<div class="card"><h3>📅 事件时间线</h3>';
+    html += '<div class="timeline-container">';
+
+    var currentDate = "";
+    var today = new Date().toISOString().slice(0, 10);
+    for (var ei = 0; ei < events.length; ei++) {
+      var ev = events[ei];
+      if (ev.date !== currentDate) {
+        if (currentDate) html += '</div>'; // close previous day
+        currentDate = ev.date;
+        var isToday = ev.date === today;
+        var dayLabel = isToday ? "今天" : ev.date;
+        var isPast = ev.date < today;
+        html += '<div class="timeline-day" style="' + (isToday ? 'border-left-color:var(--accent)' : isPast ? 'border-left-color:var(--text-dim)' : '') + '">';
+        html += '<div class="timeline-date' + (isToday ? ' today' : '') + '">' + esc(dayLabel) + '</div>';
+      }
+
+      var typeInfo = eventTypeBadge(ev.type);
+      html += '<div class="timeline-event">';
+      html += '<span class="badge ' + typeInfo.cls + '">' + typeInfo.icon + ' ' + esc(ev.typeLabel || ev.type) + '</span> ';
+      html += '<a href="' + B + '/quant/admin/stock?symbol=' + encodeURIComponent(ev.symbol) + '" target="_blank" class="stock-link">' + esc(ev.symbol) + '</a> ';
+      html += '<strong>' + esc(ev.name) + '</strong> ';
+      html += '<span style="color:var(--text-dim);font-size:12px">' + esc(ev.summary) + '</span> ';
+      html += impactBadge(ev.impact);
+      html += '</div>';
+    }
+    if (currentDate) html += '</div>'; // close last day
+    html += '</div></div>';
+  }
+
+  // Table view
+  if (events.length) {
+    html += '<div class="card"><h3>📋 事件列表</h3><div class="table-scroll"><table>';
+    html += '<tr><th>日期</th><th>类型</th><th>代码</th><th>名称</th><th>ժҪ</th><th>影响</th></tr>';
+    for (var ti2 = 0; ti2 < events.length; ti2++) {
+      var e = events[ti2];
+      var typeI = eventTypeBadge(e.type);
+      html += '<tr>';
+      html += '<td>' + esc(e.date) + '</td>';
+      html += '<td><span class="badge ' + typeI.cls + '">' + typeI.icon + ' ' + esc(e.typeLabel || e.type) + '</span></td>';
+      html += '<td><a href="' + B + '/quant/admin/stock?symbol=' + encodeURIComponent(e.symbol) + '" target="_blank" class="stock-link">' + esc(e.symbol) + '</a></td>';
+      html += '<td>' + esc(e.name) + '</td>';
+      html += '<td style="white-space:normal;max-width:300px;font-size:12px">' + esc(e.summary) + '</td>';
+      html += '<td>' + impactBadge(e.impact) + '</td>';
+      html += '</tr>';
+    }
+    html += '</table></div></div>';
+  }
+
+  if (!events.length && !alerts.length) {
+    html += '<div class="empty-state" style="border:1px solid var(--border);border-radius:8px;padding:24px"><div class="icon">😴</div><h3>查询范围内无事件</h3></div>';
   }
 
   el.innerHTML = html;

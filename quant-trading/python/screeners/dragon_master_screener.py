@@ -189,7 +189,7 @@ class DragonMasterScreener(BaseScreener):
                 factors["buy_action"] = timing.get("action", "wait")
                 factors["board_number"] = timing.get("board_number", 0)
                 factors["is_best_timing"] = timing.get("is_best_timing", False)
-                factors["volume_signal"] = timing.get("volume_signal", "未知")
+                factors["volume_signal"] = timing.get("volume_signal", "δ֪")
 
                 if timing.get("is_best_timing"):
                     signals.append(f"★3板最佳买点({timing.get('volume_signal','')})")

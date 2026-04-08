@@ -34,7 +34,7 @@ const defaultStocks = [
   { code: "601601", name: "中国太保" },
   { code: "600030", name: "中信证券" },
   { code: "601688", name: "华泰证券" },
-  // 医药
+  // ҽҩ
   { code: "600276", name: "恒瑞医药" },
   { code: "300760", name: "迈瑞医疗" },
   { code: "000538", name: "云南白药" },
@@ -98,7 +98,7 @@ const defaultStocks = [
   { code: "002475", name: "立讯精密" },
   { code: "300661", name: "圣邦股份" },
   { code: "603986", name: "兆易创新" },
-  { code: "300782", name: "卓胜微" },
+  { code: "300782", name: "׿ʤ΢" },
   // 通信
   { code: "600031", name: "三一重工" },
   { code: "000963", name: "华东医药" },

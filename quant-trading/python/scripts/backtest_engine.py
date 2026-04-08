@@ -19,7 +19,7 @@ Input (JSON via stdin):
     "symbols": [],                // optional: specific stocks; [] = auto-select from universe
     "rebalance_days": 14,         // how often to rebalance portfolio
     "commission_rate": 0.0003,    // per-trade commission (default: 万三)
-    "stamp_tax": 0.001            // sell stamp tax (default: 千一)
+    "stamp_tax": 0.001            // sell stamp tax (default: ǧһ)
   }
 """
 

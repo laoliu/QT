@@ -13,6 +13,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { TradeJournal } from "../services/trade-journal.js";
+import { toCSV, type CsvColumn } from "../utils/csv-export.js";
 
 export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJournal) {
   return {
@@ -21,7 +22,8 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
       "交易笔记/复盘记录。记录每笔交易的思考和总结。" +
       "action=add_note 添加笔记, action=update_note 修改, action=delete_note 删除, " +
       "action=view 查看(按trade_id/symbol/date), action=search 搜索, " +
-      "action=recent 最近笔记, action=summary 统计概览, action=tags 标签列表。",
+      "action=recent 最近笔记, action=summary 统计概览, action=tags 标签列表, " +
+      "action=export 导出交易日志CSV。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -36,6 +38,7 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
             "recent",
             "summary",
             "tags",
+            "export",
           ],
           description: "操作类型",
         },
@@ -165,6 +168,47 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
 
         case "tags": {
           return { tags: journal.getAllTags() };
+        }
+
+        case "export": {
+          type NoteRow = Record<string, unknown>;
+          const columns: CsvColumn<NoteRow>[] = [
+            { label: "笔记ID", key: "id" },
+            { label: "日期", key: "date" },
+            { label: "代码", key: "symbol" },
+            { label: "方向", key: "direction" },
+            { label: "入场价", key: "entryPrice" },
+            { label: "出场价", key: "exitPrice" },
+            { label: "盈亏", key: "pnl" },
+            { label: "评分", key: "rating" },
+            { label: "标签", key: "tags" },
+            { label: "内容", key: "content" },
+            { label: "经验教训", key: "lesson" },
+            { label: "策略ID", key: "strategyId" },
+            { label: "创建时间", key: "createdAt" },
+          ];
+          const notes = journal.getRecent(9999);
+          const rows: NoteRow[] = notes.map((n) => ({
+            id: n.id,
+            date: n.date,
+            symbol: n.symbol,
+            direction: n.direction ?? "",
+            entryPrice: n.entryPrice != null ? n.entryPrice.toFixed(3) : "",
+            exitPrice: n.exitPrice != null ? n.exitPrice.toFixed(3) : "",
+            pnl: n.pnl != null ? n.pnl.toFixed(2) : "",
+            rating: n.rating ?? "",
+            tags: n.tags.join(";"),
+            content: n.content,
+            lesson: n.lesson ?? "",
+            strategyId: n.strategyId ?? "",
+            createdAt: n.createdAt,
+          }));
+          const csv = toCSV(rows, columns);
+          return {
+            csv,
+            filename: `trade_journal_${new Date().toISOString().slice(0, 10)}.csv`,
+            rows: rows.length,
+          };
         }
 
         default:

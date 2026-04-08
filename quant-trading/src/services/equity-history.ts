@@ -272,6 +272,37 @@ export class EquityHistory {
     };
   }
 
+  /**
+   * Compute the current cumulative max drawdown percentage.
+   * Returns a value between 0 and 100 (e.g. 15 means -15% from peak).
+   * If currentEquity is provided, it is used as the latest data point
+   * (for real-time checks before the next snapshot is recorded).
+   */
+  getMaxDrawdownPct(currentEquity?: number): number {
+    const sorted = this.getAll();
+    if (sorted.length === 0 && currentEquity == null) return 0;
+
+    let peak = -Infinity;
+    let maxDdPct = 0;
+
+    for (const s of sorted) {
+      if (s.equity > peak) peak = s.equity;
+      const dd = peak - s.equity;
+      const ddPct = peak > 0 ? (dd / peak) * 100 : 0;
+      if (ddPct > maxDdPct) maxDdPct = ddPct;
+    }
+
+    // Include current equity if provided (real-time update)
+    if (currentEquity != null) {
+      if (currentEquity > peak) peak = currentEquity;
+      const dd = peak - currentEquity;
+      const ddPct = peak > 0 ? (dd / peak) * 100 : 0;
+      if (ddPct > maxDdPct) maxDdPct = ddPct;
+    }
+
+    return maxDdPct;
+  }
+
   /** Close: stop auto-save and flush. */
   async close(): Promise<void> {
     this.stopAutoSave();

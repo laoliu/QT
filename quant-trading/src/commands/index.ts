@@ -169,7 +169,7 @@ export function createQuantCommands(
 
           if (results.length === 0) {
             const codeLines = stocks.map((s, i) => `${String(i + 1).padStart(2, " ")}. ${s}`);
-            return [`选股完成，共 ${String(stocks.length)} 只`, "", ...codeLines].join("\n");
+            return [`选股完成，共 ${String(stocks.length)} ֻ`, "", ...codeLines].join("\n");
           }
 
           // Category-based display: /选股 高成长, /选股 稳健, etc.
@@ -252,7 +252,7 @@ export function createQuantCommands(
           for (const t of d.themes ?? []) {
             const tag = t.is_super_theme ? "🔥超级主线" : "📊主线";
             lines.push(
-              `${tag}【${t.sector}】评分${t.theme_score.toFixed(0)} | 涨停${(t as Record<string, unknown>).today_zt_count ?? "?"}只`,
+              `${tag}【${t.sector}】评分${t.theme_score.toFixed(0)} | 涨停${(t as Record<string, unknown>).today_zt_count ?? "?"}ֻ`,
             );
 
             // Dragons
@@ -311,7 +311,7 @@ export function createQuantCommands(
       async execute(args: string) {
         let symbol = args.trim();
         if (!symbol)
-          return "用法: /quote <代码或名称>\n例如: /quote 600519, /quote HK0777, /quote AAPL\n     /quote 茅台, /quote 网龙 香港, /quote 比亚迪 港股\n提示: 港股用 HK0777 格式可避免飞书404预览";
+          return "用法: /quote <代码或名称>\n例如: /quote 600519, /quote HK0777, /quote AAPL\n     /quote ę́, /quote 网龙 香港, /quote 比亚迪 港股\n提示: 港股用 HK0777 格式可避免飞书404预览";
 
         // Feishu (and other IM clients) auto-link "0777.HK" into markdown or
         // plain-text URLs like "(http://0777.hk/)" or "http://0777.hk/".
@@ -406,7 +406,7 @@ export function createQuantCommands(
     },
     {
       name: "/screen",
-      aliases: ["/筛选"],
+      aliases: ["/ɸѡ"],
       description: "简单股票筛选。用法: /screen pe<20 roe>15",
       async execute(args: string) {
         if (!args.trim())
@@ -449,7 +449,7 @@ export function createQuantCommands(
             return `筛选条件: ${args}\n结果: 0 只符合条件\n${pyResult.error ? `错误: ${pyResult.error}` : ""}`;
           }
 
-          const lines = [`📋 **筛选结果** (${String(pyResult.data.count)} 只)`, ""];
+          const lines = [`📋 **筛选结果** (${String(pyResult.data.count)} ֻ)`, ""];
           for (const [i, s] of pyResult.data.results.slice(0, 20).entries()) {
             lines.push(`${String(i + 1).padStart(2, " ")}. ${s.code} ${s.name}`);
           }
@@ -880,7 +880,7 @@ export function createQuantCommands(
         }
 
         // Try to fetch real-time quotes for watchlist stocks
-        const lines = [`📋 **自选股** (${String(watchlist.length)} 只)`];
+        const lines = [`📋 **自选股** (${String(watchlist.length)} ֻ)`];
         try {
           const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
           for (const code of watchlist.slice(0, 30)) {
@@ -1179,7 +1179,7 @@ export function createQuantCommands(
               if (s.reason) lines.push(`    ${s.reason}`);
             }
             if (result.stocks.length > 20) {
-              lines.push(`  …共 ${String(result.stocks.length)} 只`);
+              lines.push(`  …共 ${String(result.stocks.length)} ֻ`);
             }
             return lines.join("\n");
           }
@@ -1281,7 +1281,7 @@ export function createQuantCommands(
                   `  • ${st.code} **${st.name}** ${st.industry} ${st.turnover_rate} ${st.amount_yi}`,
                 );
               }
-              if (stocks.length > 8) lines.push(`  ... 等 ${stocks.length} 只`);
+              if (stocks.length > 8) lines.push(`  ... 等 ${stocks.length} ֻ`);
               lines.push("");
             }
 
@@ -1376,7 +1376,7 @@ export function createQuantCommands(
 
           const label = `${minBoards}进${minBoards + 1}`;
           const lines = [
-            `🎯 **${label}候选** — ${r.total_candidates}只`,
+            `🎯 **${label}候选** — ${r.total_candidates}ֻ`,
             `市场情绪: ${env.score}/100 (${env.level}) ${env.suitable ? "✅适合接力" : "⚠️谨慎操作"}`,
             env.detail,
             "",
@@ -1475,7 +1475,7 @@ export function createQuantCommands(
                 const chg = `${st.change_pct >= 0 ? "+" : ""}${st.change_pct.toFixed(1)}%`;
                 lines.push(`  • ${st.code} ${st.name} ${chg} 换手${st.turnover_rate.toFixed(1)}%`);
               }
-              if (s.stocks.length > 5) lines.push(`  …共 ${String(s.stocks.length)} 只`);
+              if (s.stocks.length > 5) lines.push(`  …共 ${String(s.stocks.length)} ֻ`);
               lines.push("");
             }
             return lines.join("\n");
@@ -1835,7 +1835,7 @@ export function createQuantCommands(
     // ── Status Dashboard ──────────────────────────────────────────────
     {
       name: "/qstatus",
-      aliases: ["/状态", "/dashboard"],
+      aliases: ["/״̬", "/dashboard"],
       description: "总览面板。用法: /qstatus",
       async execute() {
         const engine = getEngine?.();
@@ -1864,7 +1864,7 @@ export function createQuantCommands(
             const todayPnl =
               account.todayProfit != null ? `¥${account.todayProfit.toFixed(0)}` : "--";
             lines.push(
-              `资产: ¥${account.totalAssets.toFixed(0)}  今日: ${todayPnl}  持仓: ${String(positions.length)}只`,
+              `资产: ¥${account.totalAssets.toFixed(0)}  今日: ${todayPnl}  持仓: ${String(positions.length)}ֻ`,
             );
           }
         } else {
@@ -1874,7 +1874,7 @@ export function createQuantCommands(
             const raw = await fs.readFile(path.join(dir, "portfolio.json"), "utf-8");
             const pf = JSON.parse(raw) as import("../types.js").Portfolio;
             lines.push(
-              `模拟: ¥${pf.totalValue.toFixed(0)}  持仓: ${String(pf.positions.length)}只`,
+              `模拟: ¥${pf.totalValue.toFixed(0)}  持仓: ${String(pf.positions.length)}ֻ`,
             );
           } catch {
             // No portfolio data
@@ -1887,7 +1887,7 @@ export function createQuantCommands(
           const wl = JSON.parse(
             await fs.readFile(path.join(dir, "watchlist.json"), "utf-8"),
           ) as string[];
-          if (wl.length > 0) lines.push(`自选: ${String(wl.length)}只`);
+          if (wl.length > 0) lines.push(`自选: ${String(wl.length)}ֻ`);
         } catch {
           // No watchlist
         }
@@ -2067,7 +2067,14 @@ export function createQuantCommands(
           "  交易笔记 — 记录买卖心得、标签、评分",
           "  绩效归因 — 按策略/标的/时间分析盈亏来源",
           "  策略健康 — 胜率追踪、连亏预警、沉寂检测",
-          "  相关性分析 — 标的配对、价差Z值",
+          "  相关性分析 — 标的配对、价差Zֵ",
+          "",
+          "**诊断工具**",
+          "  `/大盘诊断`        — 指数+板块+资金+情绪 一键综合诊断",
+          "  `/诊断 <代码>`     — 个股综合诊断 (行情+估值+资金+吸筹+财务)",
+          "  `/持仓诊断`        — 逐只持仓诊断 (盈亏+资金+操作建议)",
+          "  `/同类对比 <代码>` — 同行业估值对比",
+          "  `/交易记录 [代码]` — 查看历史成交记录",
           "",
           "**估值与财报**",
           "  `/估值 <代码>`     — 多模型估值 (DCF/PE/PB/PEG)",
@@ -2098,7 +2105,7 @@ export function createQuantCommands(
           "  `/热股`            — 今日社区人气排名",
           "",
           "**总览**",
-          "  `/状态`            — 一键看全局 (资产+持仓+预警+信号)",
+          "  `/״̬`            — 一键看全局 (资产+持仓+预警+信号)",
           "",
           `引擎状态: ${engineStatus}`,
         ].join("\n");
@@ -2231,7 +2238,589 @@ export function createQuantCommands(
             (s) =>
               `${String(s.rank).padStart(2, " ")}. ${String(s.symbol)} ${String(s.name)} (热度: ${String(s.hot_score ?? "-")})`,
           );
-        return [`🔥 今日社区热度排名 (共${String(d.count)}只)`, "", ...lines].join("\n");
+        return [`🔥 今日社区热度排名 (共${String(d.count)}ֻ)`, "", ...lines].join("\n");
+      },
+    },
+
+    // ── 大盘诊断 (Market Diagnosis) ──────────────────────────────
+    {
+      name: "/大盘诊断",
+      aliases: ["/market-diagnosis", "/dpzd"],
+      description:
+        "大盘综合诊断：指数行情+板块+资金+情绪+趋势，一键了解市场状态。用法: /大盘诊断",
+      async execute() {
+        const lines: string[] = ["🏥 **大盘综合诊断**", ""];
+
+        // 1. Index data — try to get major indices
+        const indices = ["000001", "399001", "399006"]; // 上证/深证/创业板
+        const indexNames: Record<string, string> = {
+          "000001": "上证指数",
+          "399001": "深证成指",
+          "399006": "创业板指",
+        };
+        const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
+        lines.push("**指数行情**");
+        for (const idx of indices) {
+          try {
+            const market = detectMarketFromSymbol(idx);
+            const q = await provider.getQuote(idx, market);
+            if (q) {
+              const arrow = q.changePct >= 0 ? "📈" : "📉";
+              const chg = `${q.changePct >= 0 ? "+" : ""}${q.changePct.toFixed(2)}%`;
+              const vol = q.amount >= 1e8 ? `${(q.amount / 1e8).toFixed(0)}亿` : "--";
+              lines.push(
+                `  ${arrow} ${indexNames[idx] ?? idx}  ¥${q.price.toFixed(2)} ${chg}  成交额: ${vol}`,
+              );
+            }
+          } catch {
+            // skip
+          }
+        }
+        lines.push("");
+
+        // 2. Sector ranking (top 5 / bottom 5)
+        try {
+          const sectorResult = await runPythonScript<{
+            sectors: Array<{
+              name: string;
+              change_pct: number;
+              leader: string;
+              leader_change: number;
+            }>;
+          }>("engines/sector_analysis.py", { action: "ranking", limit: 30 }, config);
+          if (sectorResult.ok && sectorResult.data?.sectors?.length) {
+            const sectors = sectorResult.data.sectors;
+            lines.push("**板块涨幅前5**");
+            for (const s of sectors.slice(0, 5)) {
+              const chg = `${s.change_pct >= 0 ? "+" : ""}${s.change_pct.toFixed(2)}%`;
+              lines.push(`  📈 ${s.name} ${chg}  领涨: ${s.leader}`);
+            }
+            lines.push("");
+            lines.push("**板块跌幅前5**");
+            const bottom = [...sectors].sort((a, b) => a.change_pct - b.change_pct).slice(0, 5);
+            for (const s of bottom) {
+              const chg = `${s.change_pct >= 0 ? "+" : ""}${s.change_pct.toFixed(2)}%`;
+              lines.push(`  📉 ${s.name} ${chg}  领涨: ${s.leader}`);
+            }
+            lines.push("");
+
+            // Market breadth
+            const upCount = sectors.filter((s) => s.change_pct > 0).length;
+            const downCount = sectors.filter((s) => s.change_pct < 0).length;
+            lines.push(
+              `**板块涨跌比**: ${upCount}涨 / ${downCount}跌 / ${sectors.length - upCount - downCount}ƽ`,
+            );
+          }
+        } catch {
+          lines.push("板块数据: 获取失败");
+        }
+        lines.push("");
+
+        // 3. Fund flow
+        try {
+          const flowResult = await runPythonScript<{
+            stocks: Array<{ code: string; name: string; net_inflow: number; change_pct: number }>;
+          }>("engines/fund_flow.py", { action: "rank", limit: 5 }, config);
+          if (flowResult.ok && flowResult.data?.stocks?.length) {
+            lines.push("**主力资金净流入 Top5**");
+            for (const s of flowResult.data.stocks) {
+              const inflow = `${(s.net_inflow / 10000).toFixed(0)}万`;
+              lines.push(`  ${s.code} ${s.name}  净流入: ${inflow}`);
+            }
+            lines.push("");
+          }
+        } catch {
+          // skip
+        }
+
+        // 4. Lianban sentiment
+        try {
+          const lbResult = await runPythonScript<{
+            summary: {
+              total_zt: number;
+              highest_board: number;
+              sentiment_score: number;
+              sentiment_level: string;
+              zt_dt_ratio: number;
+              failure_rate: number;
+            };
+          }>("scripts/lianban_dashboard.py", { action: "scan" }, config);
+          if (lbResult.ok && lbResult.data?.summary) {
+            const s = lbResult.data.summary;
+            lines.push("**市场情绪**");
+            lines.push(
+              `  涨停: ${s.total_zt}家  最高板: ${s.highest_board}板  涨跌停比: ${s.zt_dt_ratio}`,
+            );
+            lines.push(
+              `  情绪评分: ${s.sentiment_score}/100 (${s.sentiment_level})  炸板率: ${(s.failure_rate * 100).toFixed(0)}%`,
+            );
+            lines.push("");
+          }
+        } catch {
+          // skip
+        }
+
+        // 5. Diagnosis conclusion
+        lines.push("**综合诊断**");
+        // Simple heuristic based on collected data
+        const indexQuote = await provider.getQuote("000001", "cn_stock").catch(() => null);
+        if (indexQuote) {
+          const pct = indexQuote.changePct;
+          if (pct > 1.5) {
+            lines.push("  🟢 大盘强势上攻，注意追高风险，关注量能持续性");
+          } else if (pct > 0.3) {
+            lines.push("  🟢 大盘小幅上涨，市场偏暖，关注板块轮动方向");
+          } else if (pct > -0.3) {
+            lines.push("  🟡 大盘窄幅震荡，方向不明，建议控制仓位等待确认");
+          } else if (pct > -1.5) {
+            lines.push("  🟠 大盘偏弱调整，注意止损纪律，减少追涨操作");
+          } else {
+            lines.push("  🔴 大盘大幅下跌，建议防守为主，关注系统性风险");
+          }
+        }
+        lines.push("", "💡 深度分析可用对话模式: 「帮我全面分析今日大盘」");
+
+        return lines.join("\n");
+      },
+    },
+
+    // ── 个股诊断 (Stock Diagnosis) ──────────────────────────────
+    {
+      name: "/个股诊断",
+      aliases: ["/stock-diagnosis", "/诊断", "/diagnosis"],
+      description:
+        "个股综合诊断：行情+技术面+基本面+资金面+吸筹信号，一键出结论。用法: /诊断 600519",
+      async execute(args: string) {
+        const symbol = args.trim();
+        if (!symbol) return "用法: /诊断 <代码>  例如: /诊断 600519";
+
+        const lines: string[] = [];
+        const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
+        const market = detectMarketFromSymbol(symbol);
+
+        // 1. Quote
+        let stockName = symbol;
+        try {
+          const q = await provider.getQuote(symbol, market);
+          if (q) {
+            stockName = q.symbol.name ?? symbol;
+            const arrow = q.changePct >= 0 ? "📈" : "📉";
+            const chg = `${q.changePct >= 0 ? "+" : ""}${q.changePct.toFixed(2)}%`;
+            const vol =
+              q.volume >= 1e8
+                ? `${(q.volume / 1e8).toFixed(2)}亿`
+                : `${(q.volume / 1e4).toFixed(0)}万`;
+            lines.push(
+              `🏥 **${stockName}** (${symbol}) 综合诊断`,
+              "",
+              `**实时行情**`,
+              `  ${arrow} ¥${q.price.toFixed(2)} ${chg}  ` +
+                `开: ¥${q.open.toFixed(2)}  高: ¥${q.high.toFixed(2)}  低: ¥${q.low.toFixed(2)}`,
+              `  成交量: ${vol}`,
+            );
+          } else {
+            lines.push(`🏥 **${symbol}** 综合诊断`, "", "行情数据: 获取失败");
+          }
+        } catch {
+          lines.push(`🏥 **${symbol}** 综合诊断`, "", "行情数据: 获取失败");
+        }
+        lines.push("");
+
+        // 2. Fundamentals (via financial_calculator)
+        try {
+          const fundResult = await runPythonScript<Record<string, unknown>>(
+            "engines/financial_calculator_engine.py",
+            { action: "compare", symbol, growthRate: 0.08, discountRate: 0.1 },
+            config,
+          );
+          if (fundResult.ok && fundResult.data) {
+            const d = fundResult.data;
+            const models = d.models as Record<string, Record<string, unknown>> | undefined;
+            lines.push("**估值分析**");
+            if (models) {
+              const pe = models.pe;
+              if (pe)
+                lines.push(
+                  `  PE: ${String(pe.currentPE ?? "—")}x  ${String(pe.pePercentile ?? "")}`,
+                );
+              const pb = models.pb;
+              if (pb)
+                lines.push(
+                  `  PB: ${String(pb.currentPB ?? "—")}x  ${String(pb.interpretation ?? "")}`,
+                );
+              const peg = models.peg;
+              if (peg)
+                lines.push(
+                  `  PEG: ${String(peg.peg ?? "—")}  ${String(peg.interpretation ?? "")}`,
+                );
+              const dcf = models.dcf;
+              if (dcf && !dcf.error)
+                lines.push(
+                  `  DCF估值: ¥${String(dcf.perShare ?? "—")}  空间: ${String(dcf.upside ?? 0)}%`,
+                );
+            }
+            lines.push("");
+          }
+        } catch {
+          // skip
+        }
+
+        // 3. Fund flow
+        try {
+          const flowResult = await runPythonScript<{
+            code: string;
+            name: string;
+            main_inflow: number;
+            main_outflow: number;
+            net_inflow: number;
+            retail_net: number;
+          }>("engines/fund_flow.py", { action: "stock", symbol }, config);
+          if (flowResult.ok && flowResult.data) {
+            const f = flowResult.data;
+            const netStr =
+              f.net_inflow >= 0
+                ? `+${(f.net_inflow / 10000).toFixed(0)}万`
+                : `${(f.net_inflow / 10000).toFixed(0)}万`;
+            lines.push("**资金流向**");
+            lines.push(`  主力净流入: ${netStr}  散户净流入: ${((f.retail_net ?? 0) / 10000).toFixed(0)}万`);
+            const signal =
+              f.net_inflow > 0 ? "🟢 主力资金流入" : f.net_inflow < -5000000 ? "🔴 主力大幅流出" : "🟡 资金面中性";
+            lines.push(`  ${signal}`);
+            lines.push("");
+          }
+        } catch {
+          // skip
+        }
+
+        // 4. Chip accumulation
+        try {
+          const chipResult = await runPythonScript<{
+            symbol: string;
+            total_score: number;
+            level: string;
+            conclusion: string;
+            advice: string;
+          }>("engines/chip_accumulation.py", { action: "detect", symbol, lookback: 30 }, config);
+          if (chipResult.ok && chipResult.data) {
+            const c = chipResult.data;
+            const icon =
+              c.total_score >= 70
+                ? "🟢"
+                : c.total_score >= 50
+                  ? "🟡"
+                  : c.total_score >= 30
+                    ? "⚪"
+                    : "🔴";
+            lines.push("**吸筹检测**");
+            lines.push(`  ${icon} 评分: ${c.total_score.toFixed(1)}/100  ${c.conclusion}`);
+            lines.push(`  💡 ${c.advice}`);
+            lines.push("");
+          }
+        } catch {
+          // skip
+        }
+
+        // 5. CFO quick
+        try {
+          const cfoResult = await runPythonScript<Record<string, unknown>>(
+            "engines/cfo_engine.py",
+            { action: "comprehensive", symbol, years: 3, period: "annual" },
+            config,
+          );
+          if (cfoResult.ok && cfoResult.data) {
+            const d = cfoResult.data;
+            const ratios = (d.ratios as Record<string, unknown>) ?? {};
+            const profit = ratios.profitability as Record<string, number> | undefined;
+            if (profit) {
+              lines.push("**财务健康**");
+              lines.push(
+                `  毛利率: ${String(profit.grossMargin ?? "—")}%  净利率: ${String(profit.netMargin ?? "—")}%  ROE: ${String(profit.roe ?? "—")}%`,
+              );
+              const flags = (d.redFlags as Record<string, unknown>) ?? {};
+              const riskLevel = flags.riskLevel as string;
+              if (riskLevel)
+                lines.push(
+                  `  风险等级: ${riskLevel} (${String(flags.flagCount ?? 0)}项预警)`,
+                );
+              lines.push("");
+            }
+          }
+        } catch {
+          // skip
+        }
+
+        // 6. Diagnosis conclusion
+        lines.push(
+          "💡 完整研报可用对话模式: 「帮我全面分析」 + 股票名",
+        );
+
+        return lines.join("\n");
+      },
+    },
+
+    // ── 持仓诊断 (Position Diagnosis) ───────────────────────────
+    {
+      name: "/持仓诊断",
+      aliases: ["/position-diagnosis", "/cczd"],
+      description:
+        "持仓逐只诊断：盈亏+资金面+估值+建议，帮助决定加仓/减仓/止损。用法: /持仓诊断",
+      async execute() {
+        const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
+
+        // Load positions (prefer live engine, fallback paper)
+        const engine = getEngine?.();
+        let positions: Array<{
+          symbol: string;
+          name?: string;
+          quantity: number;
+          avgCost: number;
+          currentPrice?: number;
+          unrealizedPnlPct?: number;
+        }> = [];
+
+        if (engine && (engine.getStatus?.() === "running" || engine.getStatus?.() === "paused")) {
+          positions = (engine.getPositions?.() ?? []).map((p) => ({
+            symbol: p.symbol,
+            name: p.name,
+            quantity: p.quantity,
+            avgCost: p.avgCost,
+            currentPrice: p.currentPrice,
+            unrealizedPnlPct: p.unrealizedPnlPct,
+          }));
+        } else {
+          try {
+            const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+            const pfPath = path.join(dir, "portfolio.json");
+            const raw = await fs.readFile(pfPath, "utf-8");
+            const pf = JSON.parse(raw) as import("../types.js").Portfolio;
+            positions = pf.positions.map((p) => ({
+              symbol: p.symbol,
+              name: p.name,
+              quantity: p.quantity,
+              avgCost: p.avgCost,
+              currentPrice: p.currentPrice,
+              unrealizedPnlPct: p.unrealizedPnlPct,
+            }));
+          } catch {
+            return "📊 暂无持仓数据，无法进行诊断。";
+          }
+        }
+
+        if (positions.length === 0) return "📊 当前空仓，无需诊断。";
+
+        const lines: string[] = [
+          `🏥 **持仓诊断** (${positions.length}ֻ)`,
+          "",
+        ];
+
+        for (const pos of positions) {
+          const name = pos.name ?? pos.symbol;
+          lines.push(`━━━━━ **${name}** (${pos.symbol}) ━━━━━`);
+
+          // Update price if not available
+          let price = pos.currentPrice;
+          let pnlPct = pos.unrealizedPnlPct;
+          if (!price) {
+            try {
+              const market = detectMarketFromSymbol(pos.symbol);
+              const q = await provider.getQuote(pos.symbol, market);
+              if (q) {
+                price = q.price;
+                pnlPct = ((q.price - pos.avgCost) / pos.avgCost) * 100;
+              }
+            } catch {
+              // skip
+            }
+          }
+
+          const priceStr = price ? `¥${price.toFixed(2)}` : "--";
+          const pnlStr =
+            pnlPct != null
+              ? `${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%`
+              : "--";
+          const icon = (pnlPct ?? 0) >= 5 ? "🟢" : (pnlPct ?? 0) >= 0 ? "🟡" : (pnlPct ?? 0) > -5 ? "🟠" : "🔴";
+
+          lines.push(
+            `  ${icon} ${pos.quantity}股  成本: ¥${pos.avgCost.toFixed(2)}  现价: ${priceStr}  浮盈: ${pnlStr}`,
+          );
+
+          // Fund flow quick check
+          try {
+            const flowResult = await runPythonScript<{
+              net_inflow: number;
+            }>("engines/fund_flow.py", { action: "stock", symbol: pos.symbol }, config);
+            if (flowResult.ok && flowResult.data) {
+              const net = flowResult.data.net_inflow;
+              const flowIcon = net > 0 ? "🟢" : net < -5000000 ? "🔴" : "🟡";
+              lines.push(
+                `  资金: ${flowIcon} 主力净流入 ${(net / 10000).toFixed(0)}万`,
+              );
+            }
+          } catch {
+            // skip
+          }
+
+          // Generate advice based on P&L
+          if (pnlPct != null) {
+            if (pnlPct <= -10) {
+              lines.push("  ⚠️ 建议: 亏损较大，严格执行止损纪律，考虑减仓或清仓");
+            } else if (pnlPct <= -5) {
+              lines.push("  ⚠️ 建议: 已达预警线，密切关注支撑位，跌破即减仓");
+            } else if (pnlPct >= 20) {
+              lines.push("  💰 建议: 盈利丰厚，考虑分批止盈锁定利润");
+            } else if (pnlPct >= 10) {
+              lines.push("  💰 建议: 盈利可观，可上移止损位保护利润");
+            } else if (pnlPct >= 0) {
+              lines.push("  💡 建议: 小幅盈利，关注趋势方向，设好止损");
+            } else {
+              lines.push("  💡 建议: 小幅浮亏，关注支撑位和资金面变化");
+            }
+          }
+          lines.push("");
+        }
+
+        // Overall summary
+        const totalPnl = positions.reduce((sum, p) => {
+          const pnl = p.currentPrice
+            ? (p.currentPrice - p.avgCost) * p.quantity
+            : 0;
+          return sum + pnl;
+        }, 0);
+        lines.push(
+          `**组合浮盈**: ¥${totalPnl.toFixed(0)}`,
+          "",
+          "💡 个股深度分析: /诊断 <代码>",
+        );
+
+        return lines.join("\n");
+      },
+    },
+
+    // ── 交易记录 (Trade History) ────────────────────────────────
+    {
+      name: "/交易记录",
+      aliases: ["/trades", "/历史成交", "/trade-history"],
+      description:
+        "查看历史成交记录。用法:\n" +
+        "  /交易记录          — 查看最近成交\n" +
+        "  /交易记录 600519   — 查看个股成交记录",
+      async execute(args: string) {
+        const filterSymbol = args.trim().toUpperCase() || undefined;
+
+        // Try live engine first
+        const engine = getEngine?.();
+        if (engine && engine.orderManager) {
+          try {
+            const trades = await engine.orderManager.getTrades();
+            const filtered = filterSymbol
+              ? trades.filter((t: Record<string, unknown>) => t.symbol === filterSymbol)
+              : trades;
+            if (filtered.length === 0) {
+              return filterSymbol
+                ? `暂无 ${filterSymbol} 的成交记录`
+                : "暂无成交记录";
+            }
+            const lines = [`📋 **成交记录** (${filtered.length}笔)`, ""];
+            for (const t of (filtered as Array<Record<string, unknown>>).slice(-30)) {
+              const side = t.side === "buy" ? "🟢买" : "🔴卖";
+              const time = t.filledAt
+                ? new Date(t.filledAt as string).toLocaleString("zh-CN", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "--";
+              lines.push(
+                `  ${side} ${time}  ${String(t.symbol)} ${String(t.quantity ?? t.filledQty)}股 @ ¥${Number(t.price ?? t.filledPrice).toFixed(2)}`,
+              );
+            }
+            return lines.join("\n");
+          } catch {
+            // fall through
+          }
+        }
+
+        // Fallback: read paper trade history
+        try {
+          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const histPath = path.join(dir, "trade-history.json");
+          const raw = await fs.readFile(histPath, "utf-8");
+          const history = JSON.parse(raw) as Array<{
+            timestamp: string;
+            symbol: string;
+            name?: string;
+            side: string;
+            quantity: number;
+            price: number;
+            amount: number;
+          }>;
+          const filtered = filterSymbol
+            ? history.filter((t) => t.symbol === filterSymbol)
+            : history;
+          if (filtered.length === 0) {
+            return filterSymbol
+              ? `暂无 ${filterSymbol} 的模拟成交记录`
+              : "暂无模拟成交记录。买卖后成交记录将自动保存。";
+          }
+          const lines = [`📋 **模拟成交记录** (${filtered.length}笔)`, ""];
+          for (const t of filtered.slice(-30)) {
+            const side = t.side === "buy" ? "🟢买" : "🔴卖";
+            const time = new Date(t.timestamp).toLocaleString("zh-CN", {
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+            const pnlStr = t.side === "sell" ? `  金额: ¥${t.amount.toFixed(0)}` : "";
+            lines.push(
+              `  ${side} ${time}  ${t.symbol} ${t.name ?? ""} ${t.quantity}股 @ ¥${t.price.toFixed(2)}${pnlStr}`,
+            );
+          }
+          return lines.join("\n");
+        } catch {
+          return "暂无成交记录。买卖后成交记录将自动保存。";
+        }
+      },
+    },
+
+    // ── 同类对比 (Peer Comparison) ──────────────────────────────
+    {
+      name: "/同类对比",
+      aliases: ["/peer", "/peer-compare"],
+      description: "同行业对比分析。用法: /同类对比 600519",
+      async execute(args: string) {
+        const symbol = args.trim();
+        if (!symbol) return "用法: /同类对比 <代码>  例: /同类对比 600519";
+        try {
+          const pyResult = await runPythonScript<{
+            target: { code: string; name: string; [k: string]: unknown };
+            peers: Array<{ code: string; name: string; [k: string]: unknown }>;
+            industry: string;
+          }>("engines/peer_compare.py", { action: "compare", symbol, limit: 8 }, config);
+          if (!pyResult.ok || !pyResult.data)
+            return `❌ ${pyResult.error ?? "同类对比数据获取失败"}`;
+          const d = pyResult.data;
+          const lines = [
+            `📊 **${d.target.name}** (${d.target.code}) 同类对比 — ${d.industry}`,
+            "",
+          ];
+          // Format target
+          const t = d.target;
+          lines.push(
+            `  🎯 ${t.code} ${t.name}  PE: ${String(t.pe ?? "—")}  PB: ${String(t.pb ?? "—")}  ROE: ${String(t.roe ?? "—")}%  市值: ${String(t.market_cap ?? "—")}`,
+          );
+          lines.push("");
+          lines.push("**同行业公司**");
+          for (const p of d.peers) {
+            lines.push(
+              `  • ${p.code} ${p.name}  PE: ${String(p.pe ?? "—")}  PB: ${String(p.pb ?? "—")}  ROE: ${String(p.roe ?? "—")}%  市值: ${String(p.market_cap ?? "—")}`,
+            );
+          }
+          return lines.join("\n");
+        } catch (err) {
+          return `❌ 同类对比失败: ${err instanceof Error ? err.message : String(err)}`;
+        }
       },
     },
   ];

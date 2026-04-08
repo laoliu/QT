@@ -368,8 +368,8 @@ def frequency_analysis(
 
 
 def _freq_label(freq: int) -> str:
-    labels = {1: "每步", 2: "每2步", 5: "每周", 10: "每2周", 21: "每月", 63: "每季"}
-    return labels.get(freq, f"每{freq}步")
+    labels = {1: "每步", 2: "ÿ2步", 5: "每周", 10: "ÿ2周", 21: "每月", 63: "每季"}
+    return labels.get(freq, f"ÿ{freq}步")
 
 
 # ── Main Dispatcher ───────────────────────────────────────────────────────────

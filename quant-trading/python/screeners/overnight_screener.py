@@ -7,7 +7,7 @@
   3. 筛选换手率：换手率 3~15%（流动性好但不过度投机）
   4. 筛选流通值：流通市值 20~200 亿（中盘股，拉升空间大）
   5. 筛选成交量：近 5 日成交量递增趋势
-  6. 筛选K线形态：实体阳线，上影线短（买盘强势）
+  6. ɸѡK线形态：实体阳线，上影线短（买盘强势）
   7. 筛选分时图：收盘价 > 当日均价（尾盘走强）
   8. 筛选均价线：收盘价站上 5 日和 10 日均线
 """
@@ -133,7 +133,7 @@ class OvernightScreener(BaseScreener):
             if circ_mv is None:
                 continue
             try:
-                circ_mv_yi = float(circ_mv) / 1e8  # 元 → 亿
+                circ_mv_yi = float(circ_mv) / 1e8  # Ԫ → 亿
             except (ValueError, TypeError):
                 continue
             if not (cfg["circulating_mv_min"] <= circ_mv_yi <= cfg["circulating_mv_max"]):

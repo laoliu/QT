@@ -156,7 +156,7 @@ class EODCatalystScreener(BaseScreener):
             late_vol_ratio = float(data.get("lateVolumeRatio", data.get("late_volume_ratio", 0)))
             if late_vol_ratio >= params["late_volume_ratio"]:
                 score += params["w_late_strength"]
-                signals.append(f"尾盘放量: 末30分钟占比{late_vol_ratio:.0%}")
+                signals.append(f"尾盘放量: ĩ30分钟占比{late_vol_ratio:.0%}")
                 factors["lateVolumeRatio"] = late_vol_ratio
             elif late_vol_ratio > 0:
                 score += params["w_late_strength"] * 0.3  # partial credit

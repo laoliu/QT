@@ -16,7 +16,7 @@ import { AsyncMutex } from "../utils/async-mutex.js";
 export interface FavoriteStock {
   /** Stock code (e.g., "600519") */
   code: string;
-  /** Stock name (e.g., "茅台") */
+  /** Stock name (e.g., "ę́") */
   name?: string;
   /** User's custom notes */
   notes?: string;

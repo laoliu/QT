@@ -41,7 +41,7 @@ def run_fund_flow(config: dict) -> dict:
     elif action == "northbound":
         return _northbound_flow(errors)
     else:
-        return {"error": f"未知action: {action}"}
+        return {"error": f"δ֪action: {action}"}
 
 
 def _stock_fund_flow(symbol: str, errors: list[str]) -> dict:

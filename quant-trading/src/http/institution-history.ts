@@ -416,7 +416,7 @@ export async function appendInstitutionActivityHistory(
       candidateCount: candidates.length,
       leaderCount: leaders.length,
       baitCount: baits.length,
-      marketTone: String(marketSummary.marketTone ?? "未知"),
+      marketTone: String(marketSummary.marketTone ?? "δ֪"),
       northboundNetIn:
         marketSummary.northboundNetIn == null
           ? null

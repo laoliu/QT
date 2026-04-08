@@ -26,7 +26,7 @@ export function createOptionsDataTool(api: OpenClawPluginApi, config: QuantTradi
       "获取期权市场数据：期权链、实时行情、合约信息、K线、IV曲面、希腊值。\n" +
       "支持 ETF期权（50ETF/300ETF/500ETF/创业板ETF/科创50ETF等）、\n" +
       "股指期权（沪深300/中证1000/中证500/上证50）、\n" +
-      "商品期权（豆粕/白糖/铜/黄金/铁矿等）。\n\n" +
+      "商品期权（豆粕/白糖/ͭ/黄金/铁矿等）。\n\n" +
       "action=chain 获取期权链（T型报价），\n" +
       "action=quote 获取期权合约实时行情，\n" +
       "action=contracts 获取合约列表，\n" +
@@ -335,6 +335,9 @@ function formatGreeks(g: GreeksSnapshot) {
     vega: g.vega?.toFixed(4),
     rho: g.rho?.toFixed(4),
     impliedVol: g.impliedVol != null ? (g.impliedVol * 100).toFixed(2) + "%" : undefined,
+    charm: g.charm?.toFixed(6),
+    vanna: g.vanna?.toFixed(6),
+    vomma: g.vomma?.toFixed(6),
   };
 }
 

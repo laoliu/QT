@@ -1,1 +1,1 @@
-"""Data provider modules for quant-trading (akshare, tushare, yfinance)."""
+"""Data provider modules for quant-trading (akshare, tushare, yfinance, jqdata)."""

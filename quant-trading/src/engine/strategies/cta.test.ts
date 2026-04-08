@@ -1473,11 +1473,11 @@ describe("ctaIchimoku", () => {
     expect(buys.length).toBeGreaterThanOrEqual(0);
   });
 
-  it("reason text mentions 一目", () => {
+  it("reason text mentions һĿ", () => {
     const bars = generateBars(200, { trend: "sine" });
     const signals = runStrategy(ctaIchimoku(5, 10, 20), bars);
     if (signals.length > 0) {
-      expect(signals[0]!.reason).toMatch(/一目/);
+      expect(signals[0]!.reason).toMatch(/һĿ/);
     }
   });
 

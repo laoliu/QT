@@ -93,7 +93,7 @@ TOP_COMBOS: list[dict] = [
         "minVotes": 2,
     },
     {
-        "name": "KDJ+竞价 投票",
+        "name": "KDJ+竞价 ͶƱ",
         "method": "voting",
         "strategies": [
             {"strategyId": "kdj", "weight": 1},
@@ -140,7 +140,7 @@ TOP_COMBOS: list[dict] = [
         "minVotes": 2,
     },
     {
-        "name": "MACD+KDJ 投票",
+        "name": "MACD+KDJ ͶƱ",
         "method": "voting",
         "strategies": [
             {"strategyId": "macd", "weight": 1},
@@ -340,7 +340,7 @@ def build_routing_table(
                 "combo": best["combo"],
                 "score": best["score"],
                 "performance": best["performance"],
-                "reason": (f"数据驱动: {best['performance']['sampleSize']}只"
+                "reason": (f"数据驱动: {best['performance']['sampleSize']}ֻ"
                            f"{vol_cls}波动/{trend_cls}/{mcap_cls}盘股回测最优"),
                 "alternatives": [
                     {"name": c["combo"]["name"], "score": c["score"],

@@ -73,7 +73,7 @@ def action_scan(date: str | None = None) -> dict[str, Any]:
     # Build per-sector counts
     sector_counts: dict[str, dict[str, Any]] = {}
     for s in stocks:
-        industry = s.get("industry", "") or "未知"
+        industry = s.get("industry", "") or "δ֪"
         if industry not in sector_counts:
             sector_counts[industry] = {
                 "name": industry,
@@ -309,7 +309,7 @@ def main():
         elif action == "config":
             result = action_config()
         else:
-            result = {"error": f"未知 action: {action}"}
+            result = {"error": f"δ֪ action: {action}"}
 
         _output(result)
     except Exception as e:

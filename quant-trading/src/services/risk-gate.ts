@@ -1,5 +1,7 @@
 import type { OrderRequest } from "../broker/adapter.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
+import fs from "node:fs/promises";
+import path from "node:path";
 /**
  * RiskGate — pre-trade risk checks.
  *
@@ -77,6 +79,7 @@ function softConfirm(reason: string): RiskCheckResult {
 
 export class RiskGate {
   private limits: Required<RiskLimitsConfig>;
+  private dataDir: string | null;
 
   // ── Frequency tracking state ─────────────────────────────────
   /** Sliding window of recent order timestamps (epoch ms). */
@@ -86,8 +89,10 @@ export class RiskGate {
   /** Calendar date string for the current trading day. */
   private dailyTradeDate = "";
 
-  constructor(limits?: RiskLimitsConfig) {
+  constructor(limits?: RiskLimitsConfig, dataDir?: string | null) {
     this.limits = { ...DEFAULT_LIMITS, ...(limits ?? {}) };
+    this.dataDir = dataDir ?? null;
+    void this.loadDailyTradeCount();
   }
 
   /**
@@ -101,6 +106,43 @@ export class RiskGate {
       this.dailyTradeCount = 0;
     }
     this.dailyTradeCount++;
+    void this.saveDailyTradeCount();
+  }
+
+  // ── Persistence for daily trade count ─────────────────────────
+
+  private get tradeCountPath(): string | null {
+    if (!this.dataDir) return null;
+    return path.join(this.dataDir, "risk-gate-state.json");
+  }
+
+  private async loadDailyTradeCount(): Promise<void> {
+    const filePath = this.tradeCountPath;
+    if (!filePath) return;
+    try {
+      const raw = await fs.readFile(filePath, "utf-8");
+      const state = JSON.parse(raw) as { date?: string; count?: number };
+      const today = new Date().toISOString().slice(0, 10);
+      if (state.date === today) {
+        this.dailyTradeDate = state.date;
+        this.dailyTradeCount = state.count ?? 0;
+      }
+    } catch {
+      // File doesn't exist or is corrupted — start fresh
+    }
+  }
+
+  private async saveDailyTradeCount(): Promise<void> {
+    const filePath = this.tradeCountPath;
+    if (!filePath) return;
+    try {
+      await fs.writeFile(
+        filePath,
+        JSON.stringify({ date: this.dailyTradeDate, count: this.dailyTradeCount }),
+      );
+    } catch {
+      // Best-effort persistence
+    }
   }
 
   /**

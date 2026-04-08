@@ -29,19 +29,19 @@ describe("FavoritesStore", () => {
 
   it("should add a favorite stock", async () => {
     const fav = await store.addFavorite("600519", {
-      name: "茅台",
+      name: "ę́",
       category: "blue-chip",
       priority: 5,
     });
 
     expect(fav.code).toBe("600519");
-    expect(fav.name).toBe("茅台");
+    expect(fav.name).toBe("ę́");
     expect(fav.category).toBe("blue-chip");
     expect(fav.priority).toBe(5);
   });
 
   it("should normalize stock codes to uppercase", async () => {
-    const fav = await store.addFavorite("600519", { name: "茅台" });
+    const fav = await store.addFavorite("600519", { name: "ę́" });
     expect(fav.code).toBe("600519");
 
     const retrieved = store.getFavorite("600519");
@@ -50,7 +50,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should list all favorites", async () => {
-    await store.addFavorite("600519", { name: "茅台", category: "blue-chip", priority: 5 });
+    await store.addFavorite("600519", { name: "ę́", category: "blue-chip", priority: 5 });
     await store.addFavorite("000858", { name: "五粮液", category: "blue-chip", priority: 4 });
     await store.addFavorite("300089", { name: "文化", category: "ideas", priority: 2 });
 
@@ -59,7 +59,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should filter favorites by category", async () => {
-    await store.addFavorite("600519", { name: "茅台", category: "blue-chip", priority: 5 });
+    await store.addFavorite("600519", { name: "ę́", category: "blue-chip", priority: 5 });
     await store.addFavorite("000858", { name: "五粮液", category: "blue-chip", priority: 4 });
     await store.addFavorite("300089", { name: "文化", category: "ideas", priority: 2 });
 
@@ -69,7 +69,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should filter favorites by priority", async () => {
-    await store.addFavorite("600519", { name: "茅台", priority: 5 });
+    await store.addFavorite("600519", { name: "ę́", priority: 5 });
     await store.addFavorite("000858", { name: "五粮液", priority: 3 });
     await store.addFavorite("300089", { name: "文化", priority: 1 });
 
@@ -79,7 +79,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should filter favorites by tags", async () => {
-    await store.addFavorite("600519", { name: "茅台", tags: ["blue-chip", "consumer"] });
+    await store.addFavorite("600519", { name: "ę́", tags: ["blue-chip", "consumer"] });
     await store.addFavorite("000858", { name: "五粮液", tags: ["blue-chip", "consumer"] });
     await store.addFavorite("000333", { name: "美的", tags: ["tech"] });
 
@@ -88,7 +88,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should search favorites by code", async () => {
-    await store.addFavorite("600519", { name: "茅台" });
+    await store.addFavorite("600519", { name: "ę́" });
     await store.addFavorite("000858", { name: "五粮液" });
 
     const results = store.search("600");
@@ -97,26 +97,26 @@ describe("FavoritesStore", () => {
   });
 
   it("should search favorites by name", async () => {
-    await store.addFavorite("600519", { name: "茅台" });
+    await store.addFavorite("600519", { name: "ę́" });
     await store.addFavorite("000858", { name: "五粮液" });
 
-    const results = store.search("茅");
+    const results = store.search("é");
     expect(results).toHaveLength(1);
     expect(results[0].code).toBe("600519");
   });
 
   it("should update a favorite", async () => {
-    let fav = await store.addFavorite("600519", { name: "茅台", priority: 3 });
+    let fav = await store.addFavorite("600519", { name: "ę́", priority: 3 });
     expect(fav.priority).toBe(3);
 
     fav = await store.addFavorite("600519", { notes: "看好白酒", priority: 5 });
     expect(fav.priority).toBe(5);
     expect(fav.notes).toBe("看好白酒");
-    expect(fav.name).toBe("茅台"); // Should retain previous name
+    expect(fav.name).toBe("ę́"); // Should retain previous name
   });
 
   it("should remove a favorite", async () => {
-    await store.addFavorite("600519", { name: "茅台" });
+    await store.addFavorite("600519", { name: "ę́" });
     expect(store.getFavorite("600519")).toBeDefined();
 
     const removed = await store.removeFavorite("600519");
@@ -158,7 +158,7 @@ describe("FavoritesStore", () => {
   });
 
   it("should clear all favorites", async () => {
-    await store.addFavorite("600519", { name: "茅台" });
+    await store.addFavorite("600519", { name: "ę́" });
     await store.addFavorite("000858", { name: "五粮液" });
 
     const count = await store.clear();
@@ -168,7 +168,7 @@ describe("FavoritesStore", () => {
 
   it("should persist to disk", async () => {
     await store.addFavorite("600519", {
-      name: "茅台",
+      name: "ę́",
       category: "blue-chip",
       priority: 5,
       tags: ["consumer"],
@@ -178,14 +178,14 @@ describe("FavoritesStore", () => {
     const store2 = new FavoritesStore({ dataDir: tmpDir });
     const fav = store2.getFavorite("600519");
     expect(fav).toBeDefined();
-    expect(fav?.name).toBe("茅台");
+    expect(fav?.name).toBe("ę́");
     expect(fav?.category).toBe("blue-chip");
     expect(fav?.priority).toBe(5);
     expect(fav?.tags).toEqual(["consumer"]);
   });
 
   it("should sort by priority (descending) then by update time (descending)", async () => {
-    await store.addFavorite("600519", { name: "茅台", priority: 3 });
+    await store.addFavorite("600519", { name: "ę́", priority: 3 });
 
     // Wait a bit to ensure different timestamps
     await new Promise((resolve) => setTimeout(resolve, 10));

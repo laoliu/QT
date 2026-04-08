@@ -89,7 +89,7 @@ COMBOS: list[dict] = [
         "minVotes": 2,
     },
     {
-        "name": "KDJ+竞价 投票",
+        "name": "KDJ+竞价 ͶƱ",
         "method": "voting",
         "strategies": [
             {"strategyId": "kdj", "weight": 1},
@@ -136,7 +136,7 @@ COMBOS: list[dict] = [
         "minVotes": 2,
     },
     {
-        "name": "MACD+KDJ 投票",
+        "name": "MACD+KDJ ͶƱ",
         "method": "voting",
         "strategies": [
             {"strategyId": "macd", "weight": 1},

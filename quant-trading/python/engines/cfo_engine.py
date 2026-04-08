@@ -88,9 +88,9 @@ def _get_cn_financials(symbol: str, years: int, period: str) -> dict[str, Any]:
                 for _, row in fin.head(years).iterrows():
                     income_data.append({
                         "period": str(row.get("报告期", "")),
-                        "revenue": _parse_float(row.get("营业总收入(元)", 0)),
-                        "netProfit": _parse_float(row.get("净利润(元)", 0)),
-                        "eps": _parse_float(row.get("基本每股收益(元)", 0)),
+                        "revenue": _parse_float(row.get("营业总收入(Ԫ)", 0)),
+                        "netProfit": _parse_float(row.get("净利润(Ԫ)", 0)),
+                        "eps": _parse_float(row.get("基本每股收益(Ԫ)", 0)),
                         "roe": _parse_float(row.get("净资产收益率(%)", 0)),
                         "grossMargin": _parse_float(row.get("销售毛利率(%)", 0)),
                         "netMargin": _parse_float(row.get("销售净利率(%)", 0)),
@@ -107,10 +107,10 @@ def _get_cn_financials(symbol: str, years: int, period: str) -> dict[str, Any]:
                 for _, row in bs.head(years).iterrows():
                     balance_data.append({
                         "period": str(row.get("报告期", "")),
-                        "totalAssets": _parse_float(row.get("资产总计(元)", 0)),
-                        "totalLiabilities": _parse_float(row.get("负债合计(元)", 0)),
-                        "totalEquity": _parse_float(row.get("股东权益合计(元)", 0)),
-                        "bvps": _parse_float(row.get("每股净资产(元)", 0)),
+                        "totalAssets": _parse_float(row.get("资产总计(Ԫ)", 0)),
+                        "totalLiabilities": _parse_float(row.get("负债合计(Ԫ)", 0)),
+                        "totalEquity": _parse_float(row.get("股东权益合计(Ԫ)", 0)),
+                        "bvps": _parse_float(row.get("每股净资产(Ԫ)", 0)),
                     })
                 result["balanceSheets"] = balance_data
         except Exception:

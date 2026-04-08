@@ -13,7 +13,7 @@ const dataProvider = process.argv.includes("--demo")
     ? "akshare"
     : undefined;
 
-// 精选20只 — 覆盖不同行业和波动特征的代表性个股
+// 精选20ֻ — 覆盖不同行业和波动特征的代表性个股
 const defaultStocks = [
   // 大消费（低波动，适合均值回归）
   { code: "600519", name: "贵州茅台" },
@@ -77,7 +77,7 @@ console.log(`\n━━━━━━━━━━━━━━━━━━━━━�
 console.log(`  波段交易策略回测  |  ${new Date().toISOString().slice(0, 10)}`);
 console.log(`  数据源: ${dataProvider ?? "qmt-remote (auto)"}`);
 console.log(`  标的数: ${stocks.length}  |  策略数: ${strategies.length}`);
-console.log(`  回测区间: 2024-06-01 ~ 2025-12-31 (约18个月)`);
+console.log(`  回测区间: 2024-06-01 ~ 2025-12-31 (Լ18个月)`);
 console.log(`  初始资金: ¥100,000  |  佣金万3 + 印花税千0.5`);
 console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 

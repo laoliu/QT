@@ -680,7 +680,7 @@ def _macro_correlation(config: dict) -> dict:
         # Trim to match lengths
         macro_vals = []
         for col in macro_df.columns:
-            if any(kw in str(col) for kw in ["值", "当月", "同比", "指数"]):
+            if any(kw in str(col) for kw in ["ֵ", "当月", "同比", "指数"]):
                 vals = macro_df[col].dropna().tolist()
                 macro_vals = [_parse_float(v) for v in vals[-len(returns_monthly):]]
                 break

@@ -58,16 +58,16 @@ SIGNAL_MODE = "http"  # "http" | "file"
 # 自动下单 (需要 xttrader)
 AUTO_ORDER = False
 ORDER_ACCOUNT_ID = ""  # QMT 资金账号
-ORDER_AMOUNT_PER_STOCK = 100000  # 每只股票最大买入金额 (元)
+ORDER_AMOUNT_PER_STOCK = 100000  # 每只股票最大买入金额 (Ԫ)
 ORDER_PRICE_TYPE = 11  # 11=限价 (涨停价挂单), 5=市价
 
 # 封板确认参数
 SEAL_CONFIRM_MINUTES = 3         # 持续封板 N 分钟 → 确认
-SEAL_RECHECK_INTERVAL = 60       # 每 60 秒重新检查封板状态
+SEAL_RECHECK_INTERVAL = 60       # ÿ 60 秒重新检查封板状态
 MAX_OPEN_COUNT = 2               # 盘中开板超 N 次 → 放弃
 COOLDOWN_AFTER_SIGNAL = 600      # 同一股票信号间隔 (秒)
 
-# 止损/止盈 (次日监控)
+# 止损/ֹӯ (次日监控)
 STOP_LOSS_PCT = -0.05            # 亏损 5% 止损
 EMERGENCY_SELL_AT_LIMIT_DOWN = True  # 跌停紧急卖出
 
@@ -214,7 +214,7 @@ def _fetch_candidates_from_mac() -> list:
             data = json.loads(body)
             stocks = data.get("data", [])
             if isinstance(stocks, list) and stocks:
-                print(f"[{STRATEGY_ID}] 获取候选 {len(stocks)} 只: {stocks[:5]}...")
+                print(f"[{STRATEGY_ID}] 获取候选 {len(stocks)} ֻ: {stocks[:5]}...")
                 return stocks
     except Exception as e:
         print(f"[{STRATEGY_ID}] 获取候选失败: {e}")

@@ -1,5 +1,5 @@
 /**
- * Unit tests for QMTBroker — the real-money 迅投 broker adapter.
+ * Unit tests for QMTBroker — the real-money ѸͶ broker adapter.
  *
  * Mocks PersistentPythonProcess to verify order flow, position queries,
  * event handling, and symbol normalisation without connecting to real QMT.

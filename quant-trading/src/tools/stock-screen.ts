@@ -110,6 +110,12 @@ export function createStockScreenTool(
             '["pe","roe","market_cap"]。支持: pe, pb, roe, roa, eps, revenue_growth, ' +
             "total_market_val, price_fluctuate_ratio, stock_rps, history_volatility",
         },
+        symbol: {
+          type: "string",
+          description:
+            "目标股票代码（action=peer_compare 时使用），如 '600519'。" +
+            "指定后自动查找同行业标的进行多维对比。",
+        },
         industry: {
           type: "string",
           description: "行业过滤 (如 '白酒', '半导体')",
@@ -341,9 +347,9 @@ export function createStockScreenTool(
 
       // ── Peer comparison: fetch fundamentals for target + industry peers ──
       if (action === "peer_compare") {
-        const symbol = (args.codes as string) ?? (args.symbol as string);
+        const symbol = (args.symbol as string) ?? (args.codes as string);
         if (!symbol) {
-          return { error: "请提供标的代码 (codes 或通过 symbol 参数指定)" };
+          return { error: "请提供标的代码 (symbol 参数指定股票代码，如 '600519')" };
         }
 
         // Parse symbol — accept JSON array or single code
@@ -366,11 +372,20 @@ export function createStockScreenTool(
           target?: Record<string, unknown>;
           peers?: Array<Record<string, unknown>>;
           industry?: string;
+          comparison?: Record<string, unknown>;
+          rankings?: Record<string, unknown>;
+          comparisonTable?: Array<Record<string, unknown>>;
+          displayHint?: string;
           error?: string;
+          errors?: string[];
         }>("engines/peer_compare.py", { code: targetCode, market, limit }, config);
 
         if (pyResult.ok && pyResult.data) {
-          return pyResult.data;
+          const data = pyResult.data;
+          if (data.error) {
+            return { error: data.error, errors: data.errors };
+          }
+          return data;
         }
 
         return {

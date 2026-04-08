@@ -239,6 +239,68 @@ class YFinanceProvider implements MarketDataProvider {
   }
 }
 
+// ── JQData Provider (Python) ────────────────────────────────────
+
+class JQDataProvider implements MarketDataProvider {
+  name = "jqdata";
+
+  constructor(private config: QuantTradingConfig) {}
+
+  async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
+    const result = await runPythonScript<QuoteSnapshot>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "quote",
+        symbol,
+        market: market ?? this.config.defaultMarket ?? "cn_stock",
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? null) : null;
+  }
+
+  async getKlines(
+    symbol: string,
+    interval: KlineInterval,
+    start: string,
+    end: string,
+    market?: MarketType,
+  ): Promise<KlineBar[]> {
+    const result = await runPythonScript<KlineBar[]>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "klines",
+        symbol,
+        interval,
+        start,
+        end,
+        market: market ?? this.config.defaultMarket ?? "cn_stock",
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? []) : [];
+  }
+
+  async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
+    const result = await runPythonScript<SymbolInfo[]>(
+      "data_providers/jqdata_provider.py",
+      {
+        action: "search",
+        keyword,
+        market: market ?? this.config.defaultMarket,
+        username: this.config.dataProviders?.jqdata?.username,
+        password: this.config.dataProviders?.jqdata?.password,
+      },
+      this.config,
+    );
+    return result.ok ? (result.data ?? []) : [];
+  }
+}
+
 // ── Demo / Mock Provider ─────────────────────────────────────────
 
 class DemoProvider implements MarketDataProvider {
@@ -555,7 +617,7 @@ export function detectMarketFromSymbol(symbol: string): MarketType {
   if (sym.includes("IO") && (sym.includes("-C-") || sym.includes("-P-"))) return "index_option";
   // Commodity options — various exchange conventions:
   //   DCE:  m2404-C-3200, c2405-P-2600 (豆粕/玉米 etc.)
-  //   SHFE: cu2404C52000, au2406C500, ru2405C14500 (铜/金/橡胶)
+  //   SHFE: cu2404C52000, au2406C500, ru2405C14500 (ͭ/金/橡胶)
   //   CZCE: SR405C5600, CF405P14000 (白糖/棉花 — 3-digit contract month)
   if (/^[A-Z]{1,2}\d{4}-[CP]-/.test(sym)) return "commodity_option"; // DCE style
   if (/^[A-Z]{1,2}\d{3,4}[CP]\d+$/.test(sym)) return "commodity_option"; // SHFE/CZCE style
@@ -609,15 +671,21 @@ export function getLotSize(symbol: string, market?: MarketType): number {
  * Routes data requests to the appropriate backend by market type:
  *   - cn_stock / futures / fund → AKShare (Chinese finance APIs)
  *   - hk_stock / us_stock / others → YFinance (Yahoo Finance)
+ *
+ * When AKShare fails for cn_stock, falls back through Tushare → JQData → YFinance.
  */
 class SmartProvider implements MarketDataProvider {
   name = "smart";
   private akshare: AKShareProvider;
   private yfinance: YFinanceProvider;
+  private tushare: TushareProvider;
+  private jqdata: JQDataProvider;
 
-  constructor(config: QuantTradingConfig) {
+  constructor(private config: QuantTradingConfig) {
     this.akshare = new AKShareProvider(config);
     this.yfinance = new YFinanceProvider(config);
+    this.tushare = new TushareProvider(config);
+    this.jqdata = new JQDataProvider(config);
   }
 
   private pick(market?: MarketType): MarketDataProvider {
@@ -626,14 +694,32 @@ class SmartProvider implements MarketDataProvider {
     return this.akshare;
   }
 
+  /** Get ordered fallback providers for CN markets. */
+  private cnFallbacks(): MarketDataProvider[] {
+    const fallbacks: MarketDataProvider[] = [];
+    if (this.config.dataProviders?.tushare?.enabled && this.config.dataProviders.tushare.token) {
+      fallbacks.push(this.tushare);
+    }
+    if (this.config.dataProviders?.jqdata?.enabled) {
+      fallbacks.push(this.jqdata);
+    }
+    fallbacks.push(this.yfinance);
+    return fallbacks;
+  }
+
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
     const m = market ?? detectMarketFromSymbol(symbol);
     const quote = await this.pick(m).getQuote(symbol, m);
-    // Fallback to yfinance if primary fails (e.g. akshare down)
-    if (!quote && m === "hk_stock") {
-      return this.yfinance.getQuote(symbol, m);
+    if (quote) return quote;
+
+    // Fallback chain for CN markets
+    if (m === "cn_stock" || m === "hk_stock" || m === "fund") {
+      for (const provider of this.cnFallbacks()) {
+        const fallbackQuote = await provider.getQuote(symbol, m);
+        if (fallbackQuote) return fallbackQuote;
+      }
     }
-    return quote;
+    return null;
   }
 
   async getKlines(
@@ -644,7 +730,17 @@ class SmartProvider implements MarketDataProvider {
     market?: MarketType,
   ): Promise<KlineBar[]> {
     const m = market ?? detectMarketFromSymbol(symbol);
-    return this.pick(m).getKlines(symbol, interval, start, end, m);
+    const bars = await this.pick(m).getKlines(symbol, interval, start, end, m);
+    if (bars.length > 0) return bars;
+
+    // Fallback chain for CN markets
+    if (m === "cn_stock" || m === "fund") {
+      for (const provider of this.cnFallbacks()) {
+        const fallbackBars = await provider.getKlines(symbol, interval, start, end, m);
+        if (fallbackBars.length > 0) return fallbackBars;
+      }
+    }
+    return [];
   }
 
   async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
@@ -895,8 +991,14 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
   const isRemoteQmt = config.tradingAccount?.broker === "remote-qmt";
 
   let inner: MarketDataProvider;
-  if (config.dataProviders?.tushare?.enabled) {
+  if (config.dataProvider === "jqdata" || config.dataProviders?.jqdata?.enabled) {
+    inner = new JQDataProvider(config);
+  } else if (config.dataProvider === "tushare" || config.dataProviders?.tushare?.enabled) {
     inner = new TushareProvider(config);
+  } else if (config.dataProvider === "yfinance") {
+    inner = new YFinanceProvider(config);
+  } else if (config.dataProvider === "akshare") {
+    inner = new AKShareProvider(config);
   } else if (isRemoteQmt) {
     // QMT bridge as primary for CN stocks, with SmartProvider fallback for
     // search, HK/US, and when QMT bridge times out

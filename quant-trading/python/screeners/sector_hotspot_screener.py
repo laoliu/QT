@@ -826,10 +826,10 @@ class SectorHotspotScreener(BaseScreener):
         # 4-layer exit framework (from auction_strategy)
         hints.append("止损: 开盘跳空低开>3%且继续下探>2%立即清仓")
         if env_score >= 60:
-            hints.append("止盈: 涨幅>15%减半仓, 破MA5清仓")
+            hints.append("ֹӯ: 涨幅>15%减半仓, 破MA5清仓")
             factors["exitMode"] = "积极"
         else:
-            hints.append("止盈: 涨幅>10%减半仓, 14:55未创新高清仓")
+            hints.append("ֹӯ: 涨幅>10%减半仓, 14:55未创新高清仓")
             factors["exitMode"] = "保守"
         hints.append("持仓: 最多持有3天, 第3天尾盘无条件清仓")
         factors["exitHints"] = hints

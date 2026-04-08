@@ -210,7 +210,7 @@ function renderThemes() {
     const dragons = (t.dragons || []).slice(0, 3);
 
     html += '<div class="card">';
-    html += '<h3>' + superTag + ' ' + esc(t.sector) + ' <span style="color:var(--text-dim);font-size:12px;font-weight:400">评分 ' + fmt(t.theme_score) + ' | 涨停 ' + t.today_zt_count + '只 | 最高' + t.max_board_height + '连板</span></h3>';
+    html += '<h3>' + superTag + ' ' + esc(t.sector) + ' <span style="color:var(--text-dim);font-size:12px;font-weight:400">评分 ' + fmt(t.theme_score) + ' | 涨停 ' + t.today_zt_count + 'ֻ | 最高' + t.max_board_height + '连板</span></h3>';
 
     if (dragons.length) {
       html += '<div class="table-scroll"><table><tr><th>排名</th><th>代码</th><th>名称</th><th>龙头评分</th><th>连板</th><th>首封时间</th><th>封单(亿)</th><th>开板次数</th><th>信号</th></tr>';
@@ -331,7 +331,7 @@ function renderSignals() {
   // Board buy signals (封单分析)
   if (allBoard.length) {
     html += '<div class="card"><h3>🔒 封单打板信号</h3><div class="table-scroll"><table>';
-    html += '<tr><th>代码</th><th>名称</th><th>板块</th><th>状态</th><th>封单强度</th><th>封单(亿)</th><th>建议</th></tr>';
+    html += '<tr><th>代码</th><th>名称</th><th>板块</th><th>״̬</th><th>封单强度</th><th>封单(亿)</th><th>建议</th></tr>';
     for (const bs of allBoard) {
       html += '<tr>';
       html += '<td>' + esc(bs.code) + '</td>';

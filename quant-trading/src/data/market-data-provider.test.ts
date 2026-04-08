@@ -43,10 +43,10 @@ describe("market-data-provider", () => {
     });
 
     it("searchSymbols should return matches", async () => {
-      const results = await provider.searchSymbols("茅台");
+      const results = await provider.searchSymbols("ę́");
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]!.code).toBe("600519");
-      expect(results[0]!.name).toContain("茅台");
+      expect(results[0]!.name).toContain("ę́");
     });
 
     it("searchSymbols should return empty for no match", async () => {

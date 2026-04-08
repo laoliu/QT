@@ -237,7 +237,7 @@ const REGIME_META = {
   recovery:    { label: '复苏期', color: '#2ecc71', icon: '🌱', advice: '对权益资产最友好，可适度增加股票配置' },
   stagflation: { label: '滞胀期', color: '#e67e22', icon: '⚠️', advice: '防御为主，关注必需消费和贵金属' },
   recession:   { label: '衰退期', color: '#3498db', icon: '❄️', advice: '关注利率债和高股息防御标的' },
-  unknown:     { label: '未知',   color: '#95a5a6', icon: '❓', advice: '' },
+  unknown:     { label: 'δ֪',   color: '#95a5a6', icon: '❓', advice: '' },
 };
 
 function renderRegime(data) {

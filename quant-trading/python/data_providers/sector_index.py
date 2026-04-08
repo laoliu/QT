@@ -249,5 +249,5 @@ if __name__ == "__main__":
         }, ensure_ascii=False, indent=2))
 
     else:
-        print(_json.dumps({"error": f"未知 action: {action}"}, ensure_ascii=False))
+        print(_json.dumps({"error": f"δ֪ action: {action}"}, ensure_ascii=False))
         sys.exit(1)

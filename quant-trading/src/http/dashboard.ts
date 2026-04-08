@@ -916,7 +916,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const ret = b.returnPct != null ? (b.returnPct*100).toFixed(1)+'%' : '--';
         const cls = pctClass(b.returnPct??0);
         const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN') : '--';
-        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\'backtest\',\''+esc(b.id)+'\')">CSV</button></td></tr>';
+        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\\'backtest\\',\\''+esc(b.id)+'\\')">CSV</button></td></tr>';
       }
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';
     }

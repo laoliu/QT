@@ -19,8 +19,13 @@ import sys
 import traceback
 from typing import Any
 
-os.environ.setdefault("no_proxy", "eastmoney.com,push2his.eastmoney.com,datacenter-web.eastmoney.com")
-os.environ.setdefault("NO_PROXY", "eastmoney.com,push2his.eastmoney.com,datacenter-web.eastmoney.com")
+# Bypass proxy for all requests
+os.environ["no_proxy"] = "*"
+os.environ["NO_PROXY"] = "*"
+os.environ.pop("http_proxy", None)
+os.environ.pop("https_proxy", None)
+os.environ.pop("HTTP_PROXY", None)
+os.environ.pop("HTTPS_PROXY", None)
 
 
 def run_fund_flow(config: dict) -> dict:
@@ -166,32 +171,63 @@ def _northbound_flow(errors: list[str]) -> dict:
 
     result: dict[str, Any] = {"action": "northbound"}
 
-    # Today's real-time northbound flow
+    # Today's northbound summary
     try:
-        df = ak.stock_hsgt_fund_min_em(symbol="北向资金")
+        df = ak.stock_hsgt_fund_flow_summary_em()
         if df is not None and not df.empty:
-            last = df.iloc[-1]
-            result["realtime"] = {
-                "date": str(last.get("日期", ""))[:10],
-                "time": str(last.get("时间", "")),
-                "hk2sh": _safe_float(last.get("沪股通")),
-                "hk2sz": _safe_float(last.get("深股通")),
-                "northTotal": _safe_float(last.get("北向资金")),
-            }
+            north = df[df["资金方向"] == "北向"]
+            if not north.empty:
+                hk2sh_row = north[north["板块"] == "沪股通"]
+                hk2sz_row = north[north["板块"] == "深股通"]
+
+                hk2sh_net = _safe_float(hk2sh_row["资金净流入"].iloc[0]) if not hk2sh_row.empty else None
+                hk2sz_net = _safe_float(hk2sz_row["资金净流入"].iloc[0]) if not hk2sz_row.empty else None
+                hk2sh_buy = _safe_float(hk2sh_row["成交净买额"].iloc[0]) if not hk2sh_row.empty else None
+                hk2sz_buy = _safe_float(hk2sz_row["成交净买额"].iloc[0]) if not hk2sz_row.empty else None
+
+                total_net = 0.0
+                if hk2sh_net is not None:
+                    total_net += hk2sh_net
+                if hk2sz_net is not None:
+                    total_net += hk2sz_net
+
+                date_str = str(north["交易日"].iloc[0])[:10] if "交易日" in north.columns else ""
+                result["realtime"] = {
+                    "date": date_str,
+                    "hk2sh": hk2sh_net,
+                    "hk2sz": hk2sz_net,
+                    "hk2shBuy": hk2sh_buy,
+                    "hk2szBuy": hk2sz_buy,
+                    "northTotal": round(total_net, 4),
+                }
     except Exception as e:
         errors.append(f"北向资金实时数据获取失败: {e}")
 
-    # Historical daily summary
+    # Historical daily flow (last 10 non-NaN trading days)
     try:
-        df2 = ak.stock_hsgt_fund_flow_summary_em()
-        if df2 is not None and not df2.empty:
+        df_sh = ak.stock_hsgt_hist_em(symbol="沪股通")
+        df_sz = ak.stock_hsgt_hist_em(symbol="深股通")
+
+        sh_good = df_sh[df_sh["当日成交净买额"].notna()].tail(10) if df_sh is not None else None
+        sz_good = df_sz[df_sz["当日成交净买额"].notna()].tail(10) if df_sz is not None else None
+
+        if sh_good is not None and not sh_good.empty:
             history = []
-            for _, row in df2.tail(5).iterrows():
+            for _, sh_row in sh_good.iterrows():
+                date = str(sh_row["日期"])[:10]
+                sz_match = sz_good[sz_good["日期"].astype(str).str[:10] == date] if sz_good is not None else None
+                sz_net = _safe_float(sz_match["当日成交净买额"].iloc[0]) if sz_match is not None and not sz_match.empty else None
+                sh_net = _safe_float(sh_row["当日成交净买额"])
+                total = 0.0
+                if sh_net is not None:
+                    total += sh_net
+                if sz_net is not None:
+                    total += sz_net
                 history.append({
-                    "date": str(row.get("日期", ""))[:10],
-                    "northNetIn": _safe_float(row.get("北向资金")),
-                    "hk2sh": _safe_float(row.get("沪股通")),
-                    "hk2sz": _safe_float(row.get("深股通")),
+                    "date": date,
+                    "northNetIn": round(total, 4),
+                    "hk2sh": sh_net,
+                    "hk2sz": sz_net,
                 })
             result["history"] = history
             result["historyCount"] = len(history)

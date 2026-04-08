@@ -314,17 +314,22 @@ async function loadLadder() {
 
     // Ladder chart
     const ladder = s.ladder || {};
-    const maxCount = Math.max(...Object.values(ladder), 1);
-    const ladderHtml = Object.keys(ladder).sort((a, b) => Number(b) - Number(a)).map(level => {
+    const sortedLevels = Object.keys(ladder).sort((a, b) => Number(b) - Number(a));
+    // Use separate max for 2板+ so 1板 count doesn't squash other bars
+    const counts2Plus = sortedLevels.filter(l => Number(l) >= 2).map(l => ladder[l]);
+    const max2Plus = Math.max(...counts2Plus, 1);
+    const ladderHtml = sortedLevels.map(level => {
       const count = ladder[level];
-      const pct = (count / maxCount * 100).toFixed(0);
+      const n = Number(level);
+      const refMax = n >= 2 ? max2Plus : count;
+      const pct = Math.max((count / refMax * 100), 3).toFixed(0);
       const stocks = (d.stocks_by_level || {})[level + "连板"] || [];
       const names = stocks.map(s => s.name).join("、");
       return '<div class="ladder-row">' +
         '<span class="ladder-level">' + level + '板</span>' +
         '<div style="flex:1;display:flex;align-items:center;gap:8px">' +
-          '<div class="ladder-bar" style="width:' + pct + '%;background:' + (Number(level) >= 3 ? 'var(--red)' : Number(level) >= 2 ? 'var(--orange)' : 'var(--accent)') + '"></div>' +
-          '<span class="ladder-count">' + count + 'ֻ</span>' +
+          '<div class="ladder-bar" style="width:' + pct + '%;background:' + (n >= 3 ? 'var(--red)' : n >= 2 ? 'var(--orange)' : 'var(--accent)') + '"></div>' +
+          '<span class="ladder-count">' + count + '</span>' +
         '</div>' +
         (names ? '<span class="ladder-stocks" title="' + esc(names) + '">' + esc(names) + '</span>' : '') +
       '</div>';

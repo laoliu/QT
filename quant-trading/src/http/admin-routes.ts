@@ -3605,6 +3605,27 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             config,
           );
           json(res, result.ok ? result.data : { error: result.error ?? "快照失败" });
+        } else if (action === "analyze") {
+          // Analyze pre-collected snapshot batches (POST with JSON body)
+          let body = "";
+          for await (const chunk of req) body += chunk;
+          let payload: { snapshots?: unknown[][]; symbols?: string[]; min_score?: number };
+          try {
+            payload = JSON.parse(body);
+          } catch {
+            json(res, { error: "无效 JSON" }, 400);
+            return;
+          }
+          const snapshots = Array.isArray(payload.snapshots) ? payload.snapshots : [];
+          const symbols = Array.isArray(payload.symbols) ? payload.symbols : [];
+          const minScore = Number(payload.min_score) || 35;
+          if (!snapshots.length) { json(res, { error: "缺少 snapshots 数据" }, 400); return; }
+          const result = await runPythonScript(
+            "engines/auction_sniper.py",
+            { action: "analyze", snapshots, symbols, min_score: minScore },
+            config,
+          );
+          json(res, result.ok ? { signals: result.data?.signals ?? [], count: result.data?.count ?? 0 } : { error: result.error ?? "分析失败" });
         } else {
           json(res, { error: "未知 action: " + action }, 400);
         }

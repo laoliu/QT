@@ -87,6 +87,7 @@ tr:hover{background:var(--bg3)}
   <h1>🎯 竞价抢筹狙击</h1>
   <div class="header-right">
     <span id="monitor-status"><span class="status-dot idle"></span>未启动</span>
+    <button class="btn btn-primary" id="btn-auto" onclick="toggleAutoCollect()">⏱️ 自动采集</button>
     <button class="btn btn-primary" onclick="doScan()">📡 实时扫描</button>
     <button class="btn" onclick="loadSignals()">🔄 刷新</button>
     <a href="${b}/quant/admin/lianban">连板分析</a>
@@ -109,7 +110,21 @@ tr:hover{background:var(--bg3)}
     <input type="number" id="minScore" value="35" min="0" max="100" step="5" style="width:60px">
     <label>股票代码 (逗号分隔，留空扫全市场):</label>
     <input type="text" id="scanSymbols" placeholder="600519,000001" style="width:200px">
+    <label>采集间隔(秒):</label>
+    <input type="number" id="pollInterval" value="20" min="5" max="120" step="5" style="width:60px">
     <button class="btn btn-primary" onclick="doScan()">扫描</button>
+  </div>
+  <!-- Auto-collect status bar -->
+  <div id="collect-bar" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div><span class="status-dot active"></span><strong id="collect-phase">采集中</strong> <span id="collect-info" style="font-size:12px;color:var(--text-dim)"></span></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="collect-timer" style="font-size:13px;font-variant-numeric:tabular-nums"></span>
+        <button class="btn" onclick="analyzeCollected()" id="btn-analyze" style="display:none">🔍 分析快照</button>
+        <button class="btn btn-danger" onclick="toggleAutoCollect()">⏹ 停止</button>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:var(--text-dim);max-height:160px;overflow-y:auto" id="collect-log"></div>
   </div>
   <div class="kpi-row" id="kpi-area"></div>
   <div class="card">
@@ -291,6 +306,135 @@ function showDetail(idx){
 
   html+='</div>';
   el.innerHTML=html;
+}
+
+// ── Auto-collect state ──────────────────────────────────────
+var _collectTimer=null;
+var _collectTimerDisplay=null;
+var _collectBatches=[];
+var _collectCount=0;
+var _collectStartTime=null;
+var _collecting=false;
+
+function toggleAutoCollect(){
+  if(_collecting){stopAutoCollect();return;}
+  _collecting=true;
+  _collectBatches=[];
+  _collectCount=0;
+  _collectStartTime=Date.now();
+
+  var btnAuto=document.getElementById('btn-auto');
+  btnAuto.textContent='⏹ 停止采集';
+  btnAuto.className='btn btn-danger';
+
+  var bar=document.getElementById('collect-bar');
+  bar.style.display='block';
+  document.getElementById('collect-phase').textContent='采集中';
+  document.getElementById('collect-info').textContent='';
+  document.getElementById('collect-log').innerHTML='';
+  document.getElementById('btn-analyze').style.display='none';
+  updateMonitorStatus('active','采集中');
+
+  collectSnapshot();
+
+  var intervalSec=parseInt(document.getElementById('pollInterval').value)||20;
+  _collectTimer=setInterval(function(){
+    collectSnapshot();
+  }, intervalSec*1000);
+  _collectTimerDisplay=setInterval(updateCollectTimer,1000);
+
+  toast('开始自动采集，每 '+intervalSec+' 秒轮询一次');
+  appendCollectLog('▶ 开始自动采集 (间隔 '+intervalSec+'s)');
+}
+
+function stopAutoCollect(){
+  _collecting=false;
+  if(_collectTimer){clearInterval(_collectTimer);_collectTimer=null;}
+  if(_collectTimerDisplay){clearInterval(_collectTimerDisplay);_collectTimerDisplay=null;}
+
+  var btnAuto=document.getElementById('btn-auto');
+  btnAuto.textContent='⏱️ 自动采集';
+  btnAuto.className='btn btn-primary';
+
+  document.getElementById('collect-phase').textContent='采集完成';
+  if(_collectBatches.length>=2){
+    document.getElementById('btn-analyze').style.display='inline-block';
+    updateMonitorStatus('idle','就绪 ('+_collectBatches.length+'批)');
+    toast('采集完成，共 '+_collectBatches.length+' 批快照，自动分析中…');
+    appendCollectLog('⏹ 采集结束，共 '+_collectBatches.length+' 批');
+    analyzeCollected();
+  }else{
+    updateMonitorStatus('idle','快照不足');
+    toast('快照不足（至少需要2批），请延长采集时间');
+    appendCollectLog('⚠ 快照不足，至少需要2批');
+  }
+}
+
+function collectSnapshot(){
+  var syms=document.getElementById('scanSymbols').value.trim();
+  var path='/quant/admin/api/auction-sniper?action=snapshot';
+  if(syms)path+='&symbols='+encodeURIComponent(syms);
+
+  api(path).then(function(d){
+    if(d.error){appendCollectLog('❌ '+d.error);return;}
+    var snaps=d.snapshots||[];
+    if(snaps.length===0){appendCollectLog('⚠ 本次未获取到快照数据');return;}
+    _collectBatches.push(snaps);
+    _collectCount+=snaps.length;
+    var now=new Date();
+    var ts=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2)+':'+('0'+now.getSeconds()).slice(-2);
+    appendCollectLog('📸 '+ts+' 第'+_collectBatches.length+'批 — '+snaps.length+' 只股票');
+    document.getElementById('collect-info').textContent='已采集 '+_collectBatches.length+' 批 / '+_collectCount+' 条快照';
+  }).catch(function(e){
+    appendCollectLog('❌ 请求失败: '+e.message);
+  });
+}
+
+function analyzeCollected(){
+  if(_collectBatches.length<2){toast('快照不足，至少需要采集2批');return;}
+  var minScore=parseInt(document.getElementById('minScore').value)||35;
+  var syms=document.getElementById('scanSymbols').value.trim();
+  var symbols=syms?syms.split(',').map(function(s){return s.trim()}).filter(Boolean):[];
+
+  document.getElementById('signals-area').innerHTML='<div class="loading">正在分析 '+_collectBatches.length+' 批快照…</div>';
+  toast('正在分析累积快照数据…');
+
+  fetch(B+'/quant/admin/api/auction-sniper?action=analyze',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({snapshots:_collectBatches,symbols:symbols,min_score:minScore})
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.error){
+      document.getElementById('signals-area').innerHTML='<div class="error">'+esc(d.error)+'</div>';
+      return;
+    }
+    var signals=d.signals||[];
+    renderSignals(signals);
+    toast('分析完成，发现 '+signals.length+' 个信号');
+    appendCollectLog('✅ 分析完成: '+signals.length+' 个信号');
+  }).catch(function(e){
+    document.getElementById('signals-area').innerHTML='<div class="error">分析失败: '+esc(e.message)+'</div>';
+  });
+}
+
+function updateCollectTimer(){
+  if(!_collectStartTime)return;
+  var elapsed=Math.floor((Date.now()-_collectStartTime)/1000);
+  var m=Math.floor(elapsed/60);
+  var s=elapsed%60;
+  document.getElementById('collect-timer').textContent=('0'+m).slice(-2)+':'+('0'+s).slice(-2);
+}
+
+function updateMonitorStatus(cls,text){
+  document.getElementById('monitor-status').innerHTML='<span class="status-dot '+cls+'"></span>'+esc(text);
+}
+
+function appendCollectLog(msg){
+  var el=document.getElementById('collect-log');
+  if(!el)return;
+  el.innerHTML+='<div>'+esc(msg)+'</div>';
+  while(el.children.length>20)el.removeChild(el.children[0]);
+  el.scrollTop=el.scrollHeight;
 }
 
 function doScan(){

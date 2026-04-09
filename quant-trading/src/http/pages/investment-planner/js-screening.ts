@@ -432,11 +432,850 @@ function loadScreenerHistory(){
 }
 
 /* ══════ REBALANCE ══════ */
+
+/* ── State for interactive rebalance ── */
+var _rebalancePositions=[];   // loaded from portfolio API
+var _rebalanceNewRows=0;      // counter for new purchase rows
+var _lastAiRebalance=null;    // last AI suggestion
+
+/* ── Load portfolio holdings into rebalance table ── */
+function loadRebalancePortfolio(){
+  var statusEl=document.getElementById('rebalance-holdings-status');
+  statusEl.textContent='正在加载持仓…';
+  var _mode=window._currentViewMode||'paper';
+
+  // Try live portfolio first, fall back to plan-based monitor
+  api('/quant/api/portfolio',{_timeout:30000}).then(function(d){
+    if(!d||d.status!=='ok'||!d.data||!d.data.positions||!d.data.positions.length){
+      // Fall back to plan-based monitor
+      return _loadRebalanceFromPlan();
+    }
+    var pf=d.data;
+    _rebalancePositions=pf.positions.map(function(p){
+      return {
+        symbol:p.symbol,name:p.name||p.symbol,
+        shares:p.quantity||p.shares||0,
+        cost:p.avgCost||p.costPrice||0,
+        currentPrice:p.currentPrice||p.lastPrice||0,
+        pnlPct:p.pnlPct!=null?p.pnlPct:((p.currentPrice||0)/(p.avgCost||1)-1)*100,
+        weight:p.weight||0,
+        marketValue:p.marketValue||0,
+        changePct:p.changePct||p.todayPnlPct||0,
+        stopLoss:p.stopLoss||0,takeProfit:p.takeProfit||0,
+      };
+    });
+    // Calculate weights if not provided
+    var totalValue=_rebalancePositions.reduce(function(s,p){return s+(p.marketValue||p.currentPrice*p.shares)},0);
+    if(totalValue>0)_rebalancePositions.forEach(function(p){
+      if(!p.weight)p.weight=((p.currentPrice*p.shares)/totalValue*100);
+      if(!p.marketValue)p.marketValue=p.currentPrice*p.shares;
+    });
+    _renderRebalanceKpis(pf,totalValue);
+    _renderRebalanceHoldings();
+    statusEl.textContent='持仓已加载 ('+_rebalancePositions.length+'只) · '+(pf.source||_mode);
+  }).catch(function(e){
+    console.warn('[rebalance] portfolio API failed, trying plan-based',e.message);
+    _loadRebalanceFromPlan();
+  });
+}
+
+function _loadRebalanceFromPlan(){
+  var statusEl=document.getElementById('rebalance-holdings-status');
+  if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
+    statusEl.textContent='无可用持仓数据。请先在"制定计划"中生成计划，或确保实盘已连接。';
+    document.getElementById('rebalance-holdings-body').innerHTML=
+      '<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:30px">'+
+      '暂无持仓 · <button class="btn btn-sm" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">前往制定计划</button></td></tr>';
+    return;
+  }
+  statusEl.textContent='正在通过计划数据加载…';
+  var _mode=window._currentViewMode||'paper';
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan,mode:_mode}),_timeout:60000}).then(function(d){
+    _rebalancePositions=(d.positions||[]).map(function(p){
+      return {
+        symbol:p.symbol,name:p.name||p.symbol,
+        shares:p.shares||0,cost:p.buyPrice||p.cost||0,
+        currentPrice:p.currentPrice||0,
+        pnlPct:p.pnlPct||0,weight:p.weight||0,
+        marketValue:p.currentValue||0,changePct:p.changePct||0,
+        stopLoss:p.stopLoss||0,takeProfit:p.takeProfit||0,
+      };
+    });
+    var totalValue=_rebalancePositions.reduce(function(s,p){return s+p.marketValue},0);
+    if(totalValue>0)_rebalancePositions.forEach(function(p){
+      if(!p.weight)p.weight=(p.marketValue/totalValue*100);
+    });
+    var s=d.summary||{};
+    _renderRebalanceKpis({totalValue:s.totalValue,cash:0,profit:s.totalPnl,profitPct:s.totalPnlPct},totalValue);
+    _renderRebalanceHoldings();
+    statusEl.textContent='持仓已加载 ('+_rebalancePositions.length+'只) · 计划模式';
+  }).catch(function(e){
+    statusEl.textContent='加载失败: '+e.message;
+  });
+}
+
+function _renderRebalanceKpis(pf,totalValue){
+  var kpis=document.getElementById('rebalance-portfolio-kpis');
+  if(!kpis)return;
+  kpis.innerHTML=[
+    kpiHtml('¥'+numInt(totalValue||pf.totalValue||pf.marketValue||0),'总市值'),
+    kpiHtml('¥'+numInt(pf.cash||0),'可用资金'),
+    kpiHtml('<span style="color:'+pctColor(pf.profit||0)+'">¥'+numInt(pf.profit||0)+'</span>','总盈亏'),
+    kpiHtml('<span style="color:'+pctColor(pf.profitPct||0)+'">'+pct(pf.profitPct||0)+'</span>','收益率'),
+    kpiHtml(_rebalancePositions.length,'持仓数'),
+  ].join('');
+}
+
+function _renderRebalanceHoldings(){
+  var tbody=document.getElementById('rebalance-holdings-body');
+  if(!_rebalancePositions.length){
+    tbody.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:30px">暂无持仓</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_rebalancePositions.map(function(p,i){
+    return '<tr data-rb-idx="'+i+'" data-symbol="'+esc(p.symbol)+'">' +
+      '<td><a href="'+B+'/quant/admin/stock?symbol='+esc(p.symbol)+'" target="_blank" style="color:var(--accent)">'+esc(p.symbol)+'</a></td>'+
+      '<td>'+esc(p.name)+'</td>'+
+      '<td>'+numInt(p.shares)+'</td>'+
+      '<td>'+num(p.cost)+'</td>'+
+      '<td>'+num(p.currentPrice)+'<br><span style="font-size:11px;color:'+pctColor(p.changePct)+'">'+pct(p.changePct)+'</span></td>'+
+      '<td style="color:'+pctColor(p.pnlPct)+'">'+pct(p.pnlPct)+'</td>'+
+      '<td>'+pct(p.weight)+'</td>'+
+      '<td>'+_actionSelect(i,'existing')+'</td>'+
+      '<td id="rb-param-'+i+'">'+_actionParams(i,'hold',p)+'</td>'+
+      '<td id="rb-strategy-'+i+'">—</td>'+
+      '<td><input type="text" id="rb-note-'+i+'" placeholder="备注" style="width:80px;font-size:11px"></td>'+
+      '</tr>';
+  }).join('');
+  // Clear new rows
+  document.getElementById('rebalance-new-rows').innerHTML='';
+  _rebalanceNewRows=0;
+}
+
+function _actionSelect(idx,type){
+  var prefix=type==='new'?'rbn':'rb';
+  return '<select id="'+prefix+'-action-'+idx+'" onchange="_onRebalanceActionChange('+idx+',\\''+type+'\\',this.value)" style="font-size:12px;padding:2px 4px">' +
+    (type==='existing'?
+      '<option value="hold">✊ 持有</option>'+
+      '<option value="add">📈 加仓</option>'+
+      '<option value="reduce">📉 减仓</option>'+
+      '<option value="sell">🛑 卖出</option>'
+    :
+      '<option value="buy">🆕 买入</option>'
+    ) +
+    '</select>';
+}
+
+function _actionParams(idx,action,pos){
+  var p=pos||_rebalancePositions[idx]||{};
+  if(action==='hold') return '<span style="color:var(--text-dim);font-size:12px">维持不变</span>';
+  if(action==='add'){
+    return '<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">'+
+      '<button class="btn btn-sm" onclick="_setAddPct('+idx+',25)" style="padding:1px 6px;font-size:11px">+25%</button>'+
+      '<button class="btn btn-sm" onclick="_setAddPct('+idx+',50)" style="padding:1px 6px;font-size:11px">+50%</button>'+
+      '<button class="btn btn-sm" onclick="_setAddPct('+idx+',100)" style="padding:1px 6px;font-size:11px">+100%</button>'+
+      '<input type="number" id="rb-qty-'+idx+'" value="'+Math.max(100,Math.round(p.shares*0.25/100)*100)+'" min="100" step="100" style="width:70px;font-size:11px" placeholder="股数">'+
+      '</div>';
+  }
+  if(action==='reduce'){
+    return '<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">'+
+      '<button class="btn btn-sm" onclick="_setReducePct('+idx+',25)" style="padding:1px 6px;font-size:11px">-25%</button>'+
+      '<button class="btn btn-sm" onclick="_setReducePct('+idx+',50)" style="padding:1px 6px;font-size:11px">-50%</button>'+
+      '<button class="btn btn-sm" onclick="_setReducePct('+idx+',75)" style="padding:1px 6px;font-size:11px">-75%</button>'+
+      '<input type="number" id="rb-qty-'+idx+'" value="'+Math.max(100,Math.round(p.shares*0.5/100)*100)+'" min="100" step="100" style="width:70px;font-size:11px" placeholder="股数">'+
+      '</div>';
+  }
+  if(action==='sell'){
+    return '<div style="font-size:12px">'+
+      '<label><input type="radio" name="rb-sell-'+idx+'" value="all" checked> 全部 '+numInt(p.shares)+' 股</label><br>'+
+      '<label><input type="radio" name="rb-sell-'+idx+'" value="partial"> 部分 </label>'+
+      '<input type="number" id="rb-sell-qty-'+idx+'" value="'+p.shares+'" min="100" step="100" style="width:70px;font-size:11px">'+
+      '</div>';
+  }
+  return '';
+}
+
+function _strategySelect(idx,action){
+  if(action==='hold') return '—';
+  if(action==='add'){
+    return '<select id="rb-strat-'+idx+'" style="font-size:11px;padding:2px">'+
+      '<option value="market">市价买入</option>'+
+      '<option value="limit">限价买入</option>'+
+      '<option value="batch">分批加仓</option>'+
+      '<option value="pullback">回调加仓</option>'+
+      '</select>';
+  }
+  if(action==='reduce'){
+    return '<select id="rb-strat-'+idx+'" style="font-size:11px;padding:2px">'+
+      '<option value="market">市价卖出</option>'+
+      '<option value="limit">限价卖出</option>'+
+      '<option value="trailing">移动止盈</option>'+
+      '<option value="batch">分批减仓</option>'+
+      '</select>';
+  }
+  if(action==='sell'){
+    return '<select id="rb-strat-'+idx+'" style="font-size:11px;padding:2px">'+
+      '<option value="market">市价清仓</option>'+
+      '<option value="limit">限价卖出</option>'+
+      '<option value="stop">止损卖出</option>'+
+      '<option value="trailing">移动止损</option>'+
+      '<option value="twap">TWAP 分批</option>'+
+      '</select>';
+  }
+  if(action==='buy'){
+    return '<select id="rb-strat-'+idx+'" style="font-size:11px;padding:2px">'+
+      '<option value="market">市价买入</option>'+
+      '<option value="limit">限价买入</option>'+
+      '<option value="batch">分批建仓</option>'+
+      '</select>';
+  }
+  return '—';
+}
+
+function _onRebalanceActionChange(idx,type,action){
+  var p=(type==='existing')?_rebalancePositions[idx]:null;
+  var prefix=(type==='new')?'rbn':'rb';
+  var paramEl=document.getElementById(prefix+'-param-'+idx);
+  var stratEl=document.getElementById(prefix+'-strategy-'+idx);
+  if(paramEl) paramEl.innerHTML=_actionParams(idx,action,p);
+  if(stratEl) stratEl.innerHTML=_strategySelect(idx,action);
+}
+
+function _setAddPct(idx,pctVal){
+  var p=_rebalancePositions[idx];if(!p)return;
+  var qty=Math.max(100,Math.round(p.shares*pctVal/100/100)*100);
+  var el=document.getElementById('rb-qty-'+idx);
+  if(el)el.value=qty;
+}
+function _setReducePct(idx,pctVal){
+  var p=_rebalancePositions[idx];if(!p)return;
+  var qty=Math.max(100,Math.round(p.shares*pctVal/100/100)*100);
+  var el=document.getElementById('rb-qty-'+idx);
+  if(el)el.value=qty;
+}
+
+/* ── Add new stock row ── */
+function showAddNewPositionRow(){
+  var tbody=document.getElementById('rebalance-new-rows');
+  var ni=_rebalanceNewRows++;
+  var nIdx='n'+ni;
+  var row=document.createElement('tr');
+  row.setAttribute('data-rb-new',ni);
+  row.innerHTML=
+    '<td><input type="text" id="rbn-symbol-'+ni+'" placeholder="代码" style="width:70px;font-size:12px"></td>'+
+    '<td><input type="text" id="rbn-name-'+ni+'" placeholder="名称" style="width:60px;font-size:12px"></td>'+
+    '<td colspan="2">—</td>'+
+    '<td><input type="number" id="rbn-price-'+ni+'" placeholder="价格" style="width:70px;font-size:12px" step="0.01"></td>'+
+    '<td>—</td><td>—</td>'+
+    '<td><span class="badge badge-green">🆕 新购</span></td>'+
+    '<td id="rbn-param-'+ni+'"><input type="number" id="rbn-qty-'+ni+'" value="100" min="100" step="100" style="width:70px;font-size:11px" placeholder="股数"></td>'+
+    '<td id="rbn-strategy-'+ni+'">'+_strategySelect(ni,'buy')+'</td>'+
+    '<td style="display:flex;gap:4px"><input type="text" id="rbn-note-'+ni+'" placeholder="备注" style="width:60px;font-size:11px">'+
+    '<button class="btn btn-sm" onclick="removeNewPositionRow('+ni+')" style="padding:1px 6px;font-size:11px;color:var(--red)">✕</button></td>';
+  tbody.appendChild(row);
+  // Auto-lookup stock name
+  var symInput=document.getElementById('rbn-symbol-'+ni);
+  symInput.addEventListener('blur',function(){
+    var sym=symInput.value.trim();if(!sym)return;
+    api('/quant/admin/api/stock-detail?symbol='+encodeURIComponent(sym)+'&kline_days=1',{_timeout:10000}).then(function(d){
+      var info=d&&(d.info||d.data||d);
+      if(info&&(info.name||info.stockName)){
+        var nameEl=document.getElementById('rbn-name-'+ni);
+        var priceEl=document.getElementById('rbn-price-'+ni);
+        if(nameEl&&!nameEl.value)nameEl.value=info.name||info.stockName||'';
+        if(priceEl&&!priceEl.value&&(info.price||info.currentPrice))priceEl.value=info.price||info.currentPrice;
+      }
+    }).catch(function(){});
+  });
+}
+function removeNewPositionRow(ni){
+  var row=document.querySelector('tr[data-rb-new="'+ni+'"]');
+  if(row)row.remove();
+}
+
+/* ── Reset all actions to hold ── */
+function resetRebalanceActions(){
+  _renderRebalanceHoldings();
+  toast('↩️ 已重置所有操作');
+}
+
+/* ── Collect and submit manual rebalance ── */
+var _pendingRebalanceActions=null;
+var _rbExecRunning=false;
+
+function submitManualRebalance(){
+  var actions=[];
+
+  // Existing positions
+  _rebalancePositions.forEach(function(p,i){
+    var actionSel=document.getElementById('rb-action-'+i);
+    if(!actionSel)return;
+    var action=actionSel.value;
+    if(action==='hold')return; // skip hold entries
+
+    var item={action:action,symbol:p.symbol,name:p.name,currentPrice:p.currentPrice,shares:p.shares};
+
+    if(action==='add'||action==='reduce'){
+      var qtyEl=document.getElementById('rb-qty-'+i);
+      item.quantity=parseInt(qtyEl?qtyEl.value:0)||0;
+    }
+    if(action==='sell'){
+      var radios=document.querySelectorAll('input[name="rb-sell-'+i+'"]');
+      var sellAll=true;
+      radios.forEach(function(r){if(r.checked&&r.value==='partial')sellAll=false});
+      if(sellAll){
+        item.quantity=p.shares;
+      }else{
+        var sq=document.getElementById('rb-sell-qty-'+i);
+        item.quantity=parseInt(sq?sq.value:0)||p.shares;
+      }
+    }
+    var stratEl=document.getElementById('rb-strat-'+i);
+    if(stratEl)item.strategy=stratEl.value;
+    var noteEl=document.getElementById('rb-note-'+i);
+    if(noteEl&&noteEl.value)item.note=noteEl.value;
+
+    actions.push(item);
+  });
+
+  // New positions
+  for(var ni=0;ni<_rebalanceNewRows;ni++){
+    var symEl=document.getElementById('rbn-symbol-'+ni);
+    if(!symEl||!symEl.value.trim())continue;
+    var sym=symEl.value.trim();
+    var nameEl=document.getElementById('rbn-name-'+ni);
+    var priceEl=document.getElementById('rbn-price-'+ni);
+    var qtyEl=document.getElementById('rbn-qty-'+ni);
+    var stratEl=document.getElementById('rbn-strat-'+ni);
+    var noteEl=document.getElementById('rbn-note-'+ni);
+    actions.push({
+      action:'buy',symbol:sym,
+      name:(nameEl?nameEl.value:'')||sym,
+      currentPrice:parseFloat(priceEl?priceEl.value:0)||0,
+      quantity:parseInt(qtyEl?qtyEl.value:0)||100,
+      strategy:(stratEl?stratEl.value:'market'),
+      note:(noteEl?noteEl.value:''),
+    });
+  }
+
+  if(!actions.length){
+    toast('⚠️ 请至少选择一个操作（非持有）');return;
+  }
+
+  var btn=document.getElementById('btn-submit-rebalance');
+  btn.disabled=true;btn.textContent='⏳ 验证中…';
+  var statusEl=document.getElementById('rebalance-status');
+  statusEl.textContent='正在验证调仓计划…';
+
+  // Step 1: Validate with backend (enrich with real-time quotes)
+  api('/quant/admin/api/rebalance-manual',{
+    method:'POST',
+    body:JSON.stringify({actions:actions,mode:window._currentViewMode||'paper'}),
+    _timeout:60000
+  }).then(function(d){
+    btn.disabled=false;btn.textContent='📋 提交调仓计划';
+    if(d.error){statusEl.textContent='验证失败: '+d.error;toast('❌ '+d.error);return;}
+    statusEl.textContent='✅ 调仓计划已验证，请确认后执行';
+    // Step 2: Show execution panel
+    _pendingRebalanceActions=d.actions||actions;
+    _showRebalanceExecPanel(d);
+  }).catch(function(e){
+    btn.disabled=false;btn.textContent='📋 提交调仓计划';
+    statusEl.textContent='验证失败: '+e.message;
+  });
+}
+
+function _showRebalanceExecPanel(d){
+  var panel=document.getElementById('rebalance-exec-panel');
+  panel.style.display='block';
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+
+  var enriched=d.actions||[];
+  var summary=d.summary||{};
+
+  // Summary text
+  var parts=[];
+  if(summary.buyCount)parts.push('新购 '+summary.buyCount+'只');
+  if(summary.addCount)parts.push('加仓 '+summary.addCount+'只');
+  if(summary.reduceCount)parts.push('减仓 '+summary.reduceCount+'只');
+  if(summary.sellCount)parts.push('卖出 '+summary.sellCount+'只');
+  var modeLabel=(window._currentViewMode==='live')?'🔴 实盘':'🟢 模拟盘';
+  document.getElementById('rebalance-exec-summary').innerHTML=
+    '<div style="font-size:13px"><strong>'+modeLabel+' · 调仓执行计划</strong>: '+parts.join('，')+'</div>';
+
+  // KPIs
+  document.getElementById('rebalance-exec-kpis').innerHTML=[
+    kpiHtml(summary.totalActions||enriched.length,'操作总数'),
+    kpiHtml('¥'+numInt(summary.totalBuyAmount||0),'<span style="color:var(--green)">买入金额</span>'),
+    kpiHtml('¥'+numInt(summary.totalSellAmount||0),'<span style="color:var(--red)">卖出金额</span>'),
+    kpiHtml('¥'+numInt(summary.netFlow||0),'净流入/流出'),
+  ].join('');
+
+  // Action table
+  var actionLabels={sell:'🛑 卖出',reduce:'📉 减仓',add:'📈 加仓',buy:'🆕 买入'};
+  var actionColors={sell:'var(--red)',reduce:'var(--orange)',add:'var(--green)',buy:'var(--blue)'};
+  var tbody=document.querySelector('#rebalance-exec-table tbody');
+  tbody.innerHTML=enriched.map(function(a){
+    return '<tr>'+
+      '<td style="color:'+(actionColors[a.action]||'var(--text)')+'">'+( actionLabels[a.action]||a.action)+'</td>'+
+      '<td>'+esc(a.symbol)+'</td>'+
+      '<td>'+esc(a.name||'')+'</td>'+
+      '<td>'+num(a.currentPrice||0)+'</td>'+
+      '<td>'+numInt(a.quantity||0)+'</td>'+
+      '<td>¥'+numInt(a.amount||0)+'</td>'+
+      '<td>'+esc(a.strategy||'market')+'</td>'+
+      '<td><span class="badge badge-yellow">待执行</span></td>'+
+      '</tr>';
+  }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">无操作</td></tr>';
+
+  // Reset execution state
+  document.getElementById('rebalance-exec-result').innerHTML='';
+  document.getElementById('rebalance-exec-status').textContent='请选择试运行或实盘执行';
+  document.getElementById('btn-rb-exec').disabled=false;
+  document.getElementById('btn-rb-dry-run').disabled=false;
+}
+
+function executeRebalancePlan(dryRun){
+  if(_rbExecRunning)return;
+  if(!_pendingRebalanceActions||!_pendingRebalanceActions.length){
+    toast('⚠️ 无待执行操作');return;
+  }
+
+  if(!dryRun){
+    var modeT=(window._currentViewMode==='live')?'【实盘模式】将提交真实委托':'【模拟盘】将记录模拟委托';
+    if(!confirm(modeT+'，是否确认执行调仓？'))return;
+  }
+
+  var actions=_pendingRebalanceActions;
+  var trailingVal=Number(document.getElementById('rb-exec-trailing').value)||8;
+  var createCond=document.getElementById('rb-exec-conds').checked;
+
+  // Convert to recommend-execute format:
+  // Buy/Add → buy orders, Sell/Reduce → sell orders
+  var buyAllocations=[];
+  var sellOrders=[];
+  actions.forEach(function(a){
+    if(a.action==='buy'||a.action==='add'){
+      buyAllocations.push({
+        code:a.symbol,name:a.name||a.symbol,
+        shares:a.quantity||0,
+        price:a.currentPrice||0,
+        entryPrices:{batch1:{price:a.currentPrice,pct:100}},
+      });
+    }
+    if(a.action==='sell'||a.action==='reduce'){
+      sellOrders.push({
+        symbol:a.symbol,name:a.name||a.symbol,
+        quantity:a.quantity||0,
+        price:a.currentPrice||0,
+        side:'sell',
+      });
+    }
+  });
+
+  _rbExecRunning=true;
+  var dryBtn=document.getElementById('btn-rb-dry-run');
+  var liveBtn=document.getElementById('btn-rb-exec');
+  dryBtn.disabled=true;liveBtn.disabled=true;
+  var statusEl=document.getElementById('rebalance-exec-status');
+  var resultEl=document.getElementById('rebalance-exec-result');
+  statusEl.textContent=dryRun?'正在试运行…':'正在提交委托…';
+
+  // Execute sells first, then buys
+  var sellPromise;
+  if(sellOrders.length&&!dryRun){
+    sellPromise=_executeSellOrders(sellOrders);
+  }else{
+    sellPromise=Promise.resolve({submitted:0,orders:[]});
+  }
+
+  sellPromise.then(function(sellResult){
+    if(buyAllocations.length){
+      return api('/quant/admin/api/recommend-execute',{
+        method:'POST',
+        body:JSON.stringify({
+          dry_run:dryRun,
+          execute_pct:100,
+          create_conditional_orders:createCond,
+          trailing_stop_pct:trailingVal,
+          allocations:buyAllocations,
+        }),
+        _timeout:60000
+      }).then(function(buyResp){
+        return {sellResult:sellResult,buyResp:buyResp};
+      });
+    }
+    return {sellResult:sellResult,buyResp:null};
+  }).then(function(combined){
+    _rbExecRunning=false;
+    dryBtn.disabled=false;
+
+    var sellRes=combined.sellResult||{};
+    var buyResp=combined.buyResp||{};
+
+    if(dryRun){
+      var plan=buyResp.plan||{};
+      var items=plan.items||[];
+      statusEl.style.color='var(--green)';
+      statusEl.textContent='试运行完成：买入 '+items.length+' 笔，卖出 '+sellOrders.length+' 笔';
+      var html='<div class="card" style="padding:10px;font-size:12px">';
+      if(items.length){
+        html+='<strong>买入计划：</strong><div style="overflow-x:auto;margin-top:4px"><table style="font-size:12px"><thead><tr><th>代码</th><th>数量</th><th>限价</th><th>金额</th></tr></thead><tbody>';
+        items.forEach(function(it){
+          html+='<tr><td>'+esc(it.code)+'</td><td>'+numInt(it.quantity)+'</td><td>'+num(it.limitPrice)+'</td><td>¥'+numInt(it.notional)+'</td></tr>';
+        });
+        html+='</tbody></table></div>';
+      }
+      if(sellOrders.length){
+        html+='<div style="margin-top:8px"><strong>卖出计划：</strong></div>';
+        sellOrders.forEach(function(s){
+          html+='<div>'+esc(s.symbol)+' '+esc(s.name)+' × '+numInt(s.quantity)+' 股 @ ¥'+num(s.price)+'</div>';
+        });
+      }
+      html+='</div>';
+      resultEl.innerHTML=html;
+      toast('✅ 试运行完成');
+      return;
+    }
+
+    // Real execution results
+    var buyExec=buyResp.execution||{};
+    var totalSubmitted=(Number(buyExec.submitted)||0)+(Number(sellRes.submitted)||0);
+    var totalFailed=(Number(buyExec.rejected)||0)+(Number(sellRes.rejected)||0);
+    var conds=Number(buyExec.conditionalOrders)||0;
+
+    statusEl.style.color=totalFailed>0?'var(--orange)':'var(--green)';
+    statusEl.textContent='执行完成：已提交 '+totalSubmitted+' 笔，失败 '+totalFailed+' 笔，条件单 '+conds+' 个';
+
+    var html='<div class="card" style="padding:10px;font-size:12px">';
+    var allOrders=[];
+    if(sellRes.orders)sellRes.orders.forEach(function(o){o._side='卖出';allOrders.push(o)});
+    if(buyExec.orders)(buyExec.orders).forEach(function(o){o._side='买入';allOrders.push(o)});
+    if(allOrders.length){
+      html+='<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>方向</th><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th></tr></thead><tbody>';
+      allOrders.forEach(function(o){
+        html+='<tr><td>'+(o._side||'')+'</td><td>'+esc(o.code||o.symbol)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td style="font-size:10px">'+esc((o.orderId||'').slice(0,8))+'</td><td>'+esc(o.status||'submitted')+'</td></tr>';
+      });
+      html+='</tbody></table></div>';
+    }else{
+      html+='<div style="color:var(--text-dim)">无成功委托</div>';
+    }
+    html+='</div>';
+    resultEl.innerHTML=html;
+    liveBtn.disabled=true; // Prevent re-execution
+
+    toast(totalFailed>0?'⚠️ 调仓已执行，部分失败':'✅ 调仓委托已全部提交');
+
+    // Start fill polling
+    if(totalSubmitted>0){
+      _startRebalanceFillPolling(allOrders);
+    }
+    // Refresh holdings after delay
+    setTimeout(function(){loadRebalancePortfolio()},5000);
+
+  }).catch(function(e){
+    _rbExecRunning=false;
+    dryBtn.disabled=false;liveBtn.disabled=false;
+    statusEl.style.color='var(--red)';
+    statusEl.textContent='执行失败: '+e.message;
+  });
+}
+
+function _executeSellOrders(sellOrders){
+  // Use the order API to submit sell orders
+  var results={submitted:0,rejected:0,orders:[]};
+  var promises=sellOrders.map(function(s){
+    return api('/quant/api/orders',{
+      method:'POST',
+      body:JSON.stringify({
+        symbol:s.symbol,
+        side:'sell',
+        orderType:s.price>0?'limit':'market',
+        quantity:s.quantity,
+        price:s.price||undefined,
+      }),
+      _timeout:30000
+    }).then(function(r){
+      if(r.status==='error'||r.error){
+        results.rejected++;
+        return;
+      }
+      results.submitted++;
+      var order=r.data||r;
+      results.orders.push({code:s.symbol,symbol:s.symbol,name:s.name,quantity:s.quantity,price:s.price,orderId:order.id||order.orderId||'',status:order.status||'submitted'});
+    }).catch(function(){results.rejected++});
+  });
+  return Promise.all(promises).then(function(){return results});
+}
+
+var _rbFillPollTimer=null;
+function _startRebalanceFillPolling(orders){
+  if(_rbFillPollTimer)clearInterval(_rbFillPollTimer);
+  var orderIds=orders.map(function(o){return o.orderId}).filter(Boolean);
+  if(!orderIds.length)return;
+  var pollCount=0;
+  _rbFillPollTimer=setInterval(function(){
+    pollCount++;
+    if(pollCount>60){clearInterval(_rbFillPollTimer);_rbFillPollTimer=null;return;}
+    api('/quant/admin/api/order-fill-status',{
+      method:'POST',
+      body:JSON.stringify({orderIds:orderIds}),
+      _timeout:10000
+    }).then(function(d){
+      if(!d||!d.orders)return;
+      var allDone=true;
+      d.orders.forEach(function(o){
+        if(o.status!=='filled'&&o.status!=='cancelled'&&o.status!=='rejected')allDone=false;
+      });
+      // Update status in exec table
+      var statusEl=document.getElementById('rebalance-exec-status');
+      var filled=d.orders.filter(function(o){return o.status==='filled'}).length;
+      statusEl.textContent='成交确认: '+filled+'/'+d.orders.length+' 已成交'+(allDone?'' : '，轮询中…');
+      if(allDone){
+        clearInterval(_rbFillPollTimer);_rbFillPollTimer=null;
+        statusEl.style.color='var(--green)';
+        statusEl.textContent='✅ 全部委托已处理完成 ('+filled+' 成交)';
+        toast('✅ 调仓委托全部处理完成');
+        loadRebalancePortfolio();
+      }
+    }).catch(function(){});
+  },5000);
+}
+
+/* ── Apply AI suggestions to the interactive table ── */
+function applyAiRebalanceToTable(){
+  if(!_lastAiRebalance||!_lastAiRebalance.actions)return;
+  _lastAiRebalance.actions.forEach(function(a){
+    // Find matching position
+    var matchIdx=-1;
+    _rebalancePositions.forEach(function(p,i){if(p.symbol===a.symbol)matchIdx=i});
+    if(matchIdx>=0&&a.action!=='buy'){
+      var sel=document.getElementById('rb-action-'+matchIdx);
+      if(sel){sel.value=a.action;_onRebalanceActionChange(matchIdx,'existing',a.action);}
+      // Set quantity
+      setTimeout(function(){
+        if(a.action==='add'||a.action==='reduce'){
+          var qEl=document.getElementById('rb-qty-'+matchIdx);
+          if(qEl&&a.suggestedShares)qEl.value=a.suggestedShares;
+        }
+        var noteEl=document.getElementById('rb-note-'+matchIdx);
+        if(noteEl)noteEl.value=a.reason||'';
+      },50);
+    }else if(a.action==='buy'){
+      showAddNewPositionRow();
+      var ni=_rebalanceNewRows-1;
+      setTimeout(function(){
+        var sEl=document.getElementById('rbn-symbol-'+ni);
+        var nEl=document.getElementById('rbn-name-'+ni);
+        var pEl=document.getElementById('rbn-price-'+ni);
+        var qEl=document.getElementById('rbn-qty-'+ni);
+        if(sEl)sEl.value=a.symbol;
+        if(nEl)nEl.value=a.name||'';
+        if(pEl)pEl.value=a.currentPrice||'';
+        if(qEl&&a.suggestedShares)qEl.value=a.suggestedShares;
+      },50);
+    }
+  });
+  toast('📥 AI 建议已应用到持仓表');
+}
+
+/* ══════ SMART STRATEGY ADVISOR ══════ */
+var _lastSmartStrategy=null;
+
+function runSmartStrategy(){
+  // Prefer actual loaded positions from broker/monitor over plan
+  var positions=_rebalancePositions;
+  if(!positions||!positions.length){
+    if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
+      toast('⚠️ 请先加载持仓或生成投资计划');return;
+    }
+    // fallback to plan portfolio
+    positions=currentPlan.portfolio;
+  }
+  var btn=document.getElementById('btn-smart-strategy');
+  btn.disabled=true;btn.textContent='⏳ 分析中…';
+  var statusEl=document.getElementById('rebalance-status');
+  statusEl.textContent='🧠 正在获取行情、技术指标、宏观数据…';
+  toast('🧠 正在进行智能策略诊断（'+positions.length+'只持仓）…');
+
+  // Build plan payload from actual positions
+  var planPayload={
+    portfolio:positions.map(function(p){
+      return {
+        symbol:p.symbol,
+        name:p.name||p.symbol,
+        shares:p.shares||p.quantity||0,
+        price:p.cost||p.avgCost||p.buyPrice||0,
+        stopLoss:p.stopLoss||0,
+        takeProfit:p.takeProfit||0,
+      };
+    }),
+    initialCapital:(currentPlan&&currentPlan.initialCapital)||0,
+  };
+
+  api('/quant/admin/api/smart-strategy',{
+    method:'POST',
+    body:JSON.stringify({plan:planPayload}),
+    _timeout:120000
+  }).then(function(d){
+    btn.disabled=false;btn.textContent='🧠 智能策略诊断';
+    if(d.error){statusEl.textContent='诊断失败: '+d.error;toast('❌ '+d.error);return;}
+    statusEl.textContent='✅ 智能策略诊断完成';
+    _lastSmartStrategy=d;
+    renderSmartStrategy(d);
+  }).catch(function(e){
+    btn.disabled=false;btn.textContent='🧠 智能策略诊断';
+    statusEl.textContent='诊断失败: '+e.message;
+  });
+}
+
+function renderSmartStrategy(d){
+  document.getElementById('smart-strategy-results').style.display='block';
+
+  // Macro regime banner
+  var macro=d.macroRegime||{};
+  var regimeColors={recovery:'var(--green)',overheating:'var(--orange)',stagflation:'var(--red)',recession:'var(--red)',unknown:'var(--text-dim)'};
+  var regimeIcons={recovery:'🟢',overheating:'🟡',stagflation:'🔴',recession:'⚫',unknown:'❓'};
+  var regimeNames={recovery:'复苏期',overheating:'过热期',stagflation:'滞胀期',recession:'衰退期',unknown:'未知'};
+  var regime=macro.regime||'unknown';
+  document.getElementById('smart-strategy-macro').innerHTML=
+    '<div style="padding:8px 12px;border-radius:6px;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2)">'+
+    '<strong>'+( regimeIcons[regime]||'❓')+' 宏观周期: '+(regimeNames[regime]||regime)+'</strong>'+
+    '<span style="font-size:12px;color:var(--text-dim);margin-left:8px">'+ esc(macro.description||'')+'</span></div>';
+
+  // KPIs
+  var s=d.summary||{};
+  document.getElementById('smart-strategy-kpis').innerHTML=[
+    kpiHtml(s.totalPositions||0,'诊断持仓'),
+    kpiHtml(s.sellCount||0,'<span style="color:var(--red)">建议卖出</span>'),
+    kpiHtml(s.reduceCount||0,'<span style="color:var(--orange)">建议减仓</span>'),
+    kpiHtml(s.holdCount||0,'建议持有'),
+    kpiHtml(s.addCount||0,'<span style="color:var(--green)">建议加仓</span>'),
+    kpiHtml(pct(s.avgConfidence||0),'平均置信度'),
+  ].join('');
+
+  // Position cards
+  var positions=d.positions||[];
+  var cardsHtml='';
+  positions.forEach(function(p){
+    var rec=p.recommendation||{};
+    var tech=p.technicals||{};
+    var manip=p.manipulation||{};
+    var combo=p.routerCombo;
+    var actionColor={sell:'var(--red)',reduce:'var(--orange)',hold:'var(--text-dim)',add:'var(--green)'};
+    var actionLabel={sell:'🛑 卖出',reduce:'📉 减仓',hold:'✊ 持有',add:'📈 加仓'};
+    var confColor=rec.confidence>=70?'var(--green)':rec.confidence>=50?'var(--orange)':'var(--text-dim)';
+
+    cardsHtml+='<div class="card" style="margin-top:8px;border-left:3px solid '+(actionColor[rec.action]||'var(--border)')+';padding:12px">';
+
+    // Header row
+    cardsHtml+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">';
+    cardsHtml+='<a href="'+B+'/quant/admin/stock?symbol='+esc(p.symbol)+'" target="_blank" style="color:var(--accent);font-weight:700;font-size:15px">'+esc(p.symbol)+'</a>';
+    cardsHtml+='<span style="font-weight:600">'+esc(p.name)+'</span>';
+    cardsHtml+='<span class="badge badge-'+(rec.action==='sell'?'red':rec.action==='reduce'?'orange':rec.action==='add'?'green':'yellow')+'" style="font-size:13px">'+(actionLabel[rec.action]||rec.action)+'</span>';
+    cardsHtml+='<span style="font-size:12px;color:'+confColor+'">置信度 '+rec.confidence+'%</span>';
+    cardsHtml+='<span style="font-size:12px;color:var(--text-dim)">现价 '+num(p.currentPrice)+'</span>';
+    cardsHtml+='<span style="font-size:12px;color:'+pctColor(p.pnlPct)+'">盈亏 '+pct(p.pnlPct)+'</span>';
+    cardsHtml+='<span style="font-size:12px;color:var(--text-dim)">仓位 '+pct(p.weight)+'</span>';
+    cardsHtml+='</div>';
+
+    // Strategy recommendation
+    cardsHtml+='<div style="background:rgba(139,92,246,.06);border-radius:6px;padding:8px 10px;margin-bottom:8px">';
+    cardsHtml+='<div style="font-weight:600;font-size:13px">📌 策略: '+esc(rec.strategyName||'')+'</div>';
+    cardsHtml+='<div style="font-size:12px;color:var(--text-dim);margin-top:2px">'+esc(rec.strategyDetail||'')+'</div>';
+    cardsHtml+='</div>';
+
+    // Two-column detail
+    cardsHtml+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">';
+
+    // Left: Technical indicators
+    cardsHtml+='<div style="background:var(--bg);border-radius:4px;padding:6px 8px">';
+    cardsHtml+='<div style="font-weight:600;margin-bottom:4px">📊 技术指标</div>';
+    var rsiVal=tech.rsi14;
+    var rsiColor=!rsiVal?'var(--text-dim)':rsiVal>70?'var(--red)':rsiVal<30?'var(--green)':'var(--text)';
+    cardsHtml+='<div>RSI(14): <span style="color:'+rsiColor+';font-weight:600">'+(rsiVal?rsiVal.toFixed(0):'N/A')+'</span>';
+    cardsHtml+=(rsiVal>70?' 超买':rsiVal<30?' 超卖':'')+'</div>';
+    cardsHtml+='<div>趋势得分: '+(tech.trendScore||0)+'/4 <span style="color:var(--text-dim)">('+(['极弱','弱','中性','强','极强'][tech.trendScore||0])+')</span></div>';
+    cardsHtml+='<div>5日动量: <span style="color:'+pctColor(tech.momentum5d||0)+'">'+pct(tech.momentum5d||0)+'</span></div>';
+    cardsHtml+='<div>20日动量: <span style="color:'+pctColor(tech.momentum20d||0)+'">'+pct(tech.momentum20d||0)+'</span></div>';
+    cardsHtml+='<div>量能: '+esc(tech.volumeTier||'N/A')+' ('+num(tech.volumeRatio||0)+')</div>';
+    cardsHtml+='<div>价格位置: '+(tech.pricePosition!=null?(tech.pricePosition*100).toFixed(0)+'%':'N/A')+' <span style="color:var(--text-dim)">(20日高低)</span></div>';
+    cardsHtml+='</div>';
+
+    // Right: Pattern & signals
+    cardsHtml+='<div style="background:var(--bg);border-radius:4px;padding:6px 8px">';
+    cardsHtml+='<div style="font-weight:600;margin-bottom:4px">🔍 市场信号</div>';
+    var patternLabels={none:'无异常',accumulation:'🧲 吸筹迹象',distribution:'📤 出货迹象',churning:'🔄 对倒交易'};
+    var mp=manip.pattern||'none';
+    cardsHtml+='<div>主力行为: <span style="font-weight:600">'+(patternLabels[mp]||mp)+'</span>';
+    if(manip.confidence)cardsHtml+=' (置信 '+manip.confidence+'%)';
+    cardsHtml+='</div>';
+    if(manip.signals&&manip.signals.length){
+      cardsHtml+='<div style="margin-top:3px;color:var(--text-dim)">';
+      manip.signals.slice(0,3).forEach(function(s){cardsHtml+='<div>• '+esc(s)+'</div>'});
+      cardsHtml+='</div>';
+    }
+    // Decision reasons
+    if(rec.reasons&&rec.reasons.length){
+      cardsHtml+='<div style="margin-top:6px;font-weight:600">💡 判断依据</div>';
+      rec.reasons.forEach(function(r){cardsHtml+='<div style="color:var(--text-dim)">• '+esc(r)+'</div>'});
+    }
+    cardsHtml+='</div>';
+
+    cardsHtml+='</div>'; // end grid
+
+    // Router combo (if available)
+    if(combo&&combo.name){
+      cardsHtml+='<div style="margin-top:6px;font-size:11px;padding:4px 8px;background:rgba(99,102,241,.06);border-radius:4px">';
+      cardsHtml+='<strong>🔀 策略路由: </strong>'+esc(combo.name)+' ('+esc(combo.method||'')+')';
+      if(combo.strategies&&combo.strategies.length)cardsHtml+=' — '+combo.strategies.map(esc).join('+');
+      if(combo.reason)cardsHtml+=' <span style="color:var(--text-dim)">| '+esc(combo.reason)+'</span>';
+      if(combo.stockProfile){
+        var sp=combo.stockProfile;
+        cardsHtml+=' <span style="color:var(--text-dim)">| 画像: '+esc(sp.volatility)+'/'+esc(sp.trend)+'/'+esc(sp.marketCap)+'</span>';
+      }
+      cardsHtml+='</div>';
+    }
+
+    cardsHtml+='</div>'; // end card
+  });
+  document.getElementById('smart-strategy-cards').innerHTML=cardsHtml||'<p style="text-align:center;color:var(--text-dim)">无持仓数据</p>';
+  toast('🧠 诊断完成');
+}
+
+function applySmartStrategyToTable(){
+  if(!_lastSmartStrategy||!_lastSmartStrategy.positions)return;
+  _lastSmartStrategy.positions.forEach(function(p){
+    var rec=p.recommendation||{};
+    if(rec.action==='hold')return;
+    var matchIdx=-1;
+    _rebalancePositions.forEach(function(pos,i){if(pos.symbol===p.symbol)matchIdx=i});
+    if(matchIdx<0)return;
+    var sel=document.getElementById('rb-action-'+matchIdx);
+    if(sel){sel.value=rec.action;_onRebalanceActionChange(matchIdx,'existing',rec.action);}
+    setTimeout(function(){
+      var noteEl=document.getElementById('rb-note-'+matchIdx);
+      if(noteEl)noteEl.value=rec.strategyName+': '+rec.strategyDetail;
+      // Select matching strategy in dropdown
+      var stratEl=document.getElementById('rb-strat-'+matchIdx);
+      if(stratEl){
+        var strat=rec.strategyName||'';
+        if(strat.indexOf('分批')>=0||strat.indexOf('阶梯')>=0)stratEl.value='batch';
+        else if(strat.indexOf('移动止')>=0)stratEl.value='trailing';
+        else if(strat.indexOf('止损')>=0)stratEl.value='stop';
+        else if(strat.indexOf('限价')>=0)stratEl.value='limit';
+      }
+    },50);
+  });
+  toast('📥 智能策略建议已应用到持仓表');
+}
+
+/* ── AI auto-suggest (original runRebalance) ── */
 function runRebalance(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
     toast('⚠️ 请先生成投资计划');_activateTab('plan');history.pushState(null,null,'#plan');return;
   }
-  var btn=document.getElementById('btn-rebalance');
+  var btn=document.getElementById('btn-ai-rebalance');
   btn.disabled=true;btn.textContent='⏳ 正在分析…';
   var statusEl=document.getElementById('rebalance-status');
   statusEl.textContent='正在获取行情并分析调仓…';
@@ -452,13 +1291,14 @@ function runRebalance(){
 
   api('/quant/admin/api/rebalance',{method:'POST',body:JSON.stringify(body),_timeout:60000})
     .then(function(d){
-      btn.disabled=false;btn.textContent='🔄 生成调仓建议';
+      btn.disabled=false;btn.textContent='🤖 AI 自动建议';
       if(d.error){statusEl.textContent='分析失败: '+d.error;toast('❌ '+d.error);return;}
-      statusEl.textContent='分析完成';
+      statusEl.textContent='AI 分析完成';
+      _lastAiRebalance=d;
       renderRebalance(d);
     })
     .catch(function(e){
-      btn.disabled=false;btn.textContent='🔄 生成调仓建议';
+      btn.disabled=false;btn.textContent='🤖 AI 自动建议';
       statusEl.textContent='分析失败: '+e.message;
     });
 }

@@ -1189,6 +1189,75 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Manual Rebalance API ───────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/rebalance-manual",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const result = await runPythonScript(
+          "scripts/investment_planner.py",
+          {
+            action: "rebalance_manual",
+            actions: body.actions ?? [],
+            mode: body.mode ?? "paper",
+          },
+          config,
+        );
+        if (!result.ok) {
+          json(res, { error: result.error ?? "调仓提交失败" }, 500);
+          return;
+        }
+        json(res, result.data);
+      } catch (err) {
+        json(
+          res,
+          { error: `调仓提交失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
+  // ── Smart Strategy Advisor API ─────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/smart-strategy",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const result = await runPythonScript(
+          "scripts/investment_planner.py",
+          {
+            action: "smart_strategy",
+            plan: body.plan ?? {},
+          },
+          config,
+        );
+        if (!result.ok) {
+          json(res, { error: result.error ?? "智能策略分析失败" }, 500);
+          return;
+        }
+        json(res, result.data);
+      } catch (err) {
+        json(
+          res,
+          { error: `智能策略分析失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
   // ── Stock Recommendation API ─────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

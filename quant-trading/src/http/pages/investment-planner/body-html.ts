@@ -570,20 +570,90 @@ export function getPlannerBodyHtml(b: string): string {
 
 <!-- ═══ Rebalance Tab ═══ -->
 <div class="tab-content" id="tab-rebalance">
-  <div class="card">
-    <h3>⚖️ 调仓建议</h3>
-    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px">根据当前持仓、最新行情和选股结果，生成买入/卖出/加仓/减仓建议</p>
-    <div id="rebalance-mode-hint" style="font-size:12px;margin-bottom:8px;padding:4px 8px;border-radius:4px;display:none"></div>
-    <div class="btn-group">
-      <button class="btn btn-primary" id="btn-rebalance" onclick="runRebalance()">🔄 生成调仓建议</button>
-    </div>
-    <div id="rebalance-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
+  <div id="rebalance-mode-hint" style="font-size:12px;margin-bottom:8px;padding:4px 8px;border-radius:4px;display:none"></div>
+
+  <!-- KPI summary row -->
+  <div class="kpi-row" id="rebalance-portfolio-kpis"></div>
+
+  <!-- Current Holdings with interactive action controls -->
+  <div class="card" style="margin-top:8px">
+    <h3>⚖️ 当前持仓 · 调仓操作 <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="loadRebalancePortfolio()">🔄 刷新持仓</button>
+      <button class="btn btn-sm btn-primary" onclick="showAddNewPositionRow()">➕ 新购股票</button>
+    </h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px">选择每个仓位的操作：持有、加仓、减仓或卖出，并设置具体参数后提交</p>
+    <div id="rebalance-holdings-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
+    <div style="overflow-x:auto"><table id="rebalance-holdings-table" style="font-size:13px">
+      <thead><tr>
+        <th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏%</th><th>仓位%</th>
+        <th style="min-width:100px">操作</th>
+        <th style="min-width:140px">参数</th>
+        <th style="min-width:100px">策略</th>
+        <th>备注</th>
+      </tr></thead>
+      <tbody id="rebalance-holdings-body"></tbody>
+      <tbody id="rebalance-new-rows"></tbody>
+    </table></div>
   </div>
-  <div id="rebalance-results" style="display:none">
+
+  <!-- Action buttons -->
+  <div class="card" style="margin-top:10px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btn-submit-rebalance" onclick="submitManualRebalance()">📋 提交调仓计划</button>
+      <button class="btn" id="btn-ai-rebalance" onclick="runRebalance()">🤖 AI 自动建议</button>
+      <button class="btn" id="btn-smart-strategy" onclick="runSmartStrategy()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none">🧠 智能策略诊断</button>
+      <button class="btn" onclick="resetRebalanceActions()">↩️ 重置操作</button>
+      <span id="rebalance-status" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+
+  <!-- Execution panel (shown after plan submission) -->
+  <div id="rebalance-exec-panel" style="display:none;margin-top:12px">
+    <div class="card" style="border-left:3px solid var(--green)">
+      <h3>🚀 调仓执行 <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="document.getElementById('rebalance-exec-panel').style.display='none'">✕ 关闭</button>
+      </h3>
+      <div id="rebalance-exec-summary" style="margin-bottom:10px"></div>
+      <div class="kpi-row" id="rebalance-exec-kpis" style="margin-bottom:10px"></div>
+      <div style="overflow-x:auto"><table id="rebalance-exec-table" style="font-size:12px">
+        <thead><tr><th>操作</th><th>代码</th><th>名称</th><th>价格</th><th>数量</th><th>金额</th><th>策略</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
+        <label style="font-size:12px">条件单 <input type="checkbox" id="rb-exec-conds" checked></label>
+        <label style="font-size:12px">移动止损%
+          <input type="number" id="rb-exec-trailing" value="8" min="2" max="20" step="0.5" style="width:60px;font-size:12px">
+        </label>
+        <span style="flex:1"></span>
+        <button class="btn" id="btn-rb-dry-run" onclick="executeRebalancePlan(true)">🧪 试运行</button>
+        <button class="btn btn-primary" id="btn-rb-exec" onclick="executeRebalancePlan(false)" style="background:var(--red);border-color:var(--red)">⚡ 实盘执行</button>
+      </div>
+      <div id="rebalance-exec-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
+      <div id="rebalance-exec-result" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- Smart strategy diagnosis results -->
+  <div id="smart-strategy-results" style="display:none;margin-top:12px">
+    <div class="card" style="border-left:3px solid #8b5cf6">
+      <h3>🧠 智能策略诊断报告 <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="applySmartStrategyToTable()">📥 应用建议到持仓表</button>
+        <button class="btn btn-sm" onclick="document.getElementById('smart-strategy-results').style.display='none'">✕ 关闭</button>
+      </h3>
+      <div id="smart-strategy-macro" style="margin-bottom:10px"></div>
+      <div class="kpi-row" id="smart-strategy-kpis"></div>
+      <div id="smart-strategy-cards" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- AI auto-generated results (shown after AI suggest) -->
+  <div id="rebalance-results" style="display:none;margin-top:12px">
     <div class="kpi-row" id="rebalance-kpis"></div>
     <div id="rebalance-actions"></div>
     <div class="card" style="margin-top:12px">
-      <h3>📋 调仓明细</h3>
+      <h3>📋 AI 调仓明细 <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="applyAiRebalanceToTable()">📥 应用到持仓表</button>
+      </h3>
       <div style="overflow-x:auto"><table id="rebalance-table">
         <thead><tr><th>操作</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>目标仓位</th><th>当前仓位</th><th>建议数量</th><th>理由</th></tr></thead>
         <tbody></tbody>

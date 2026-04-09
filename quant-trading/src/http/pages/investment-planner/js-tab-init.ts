@@ -24,7 +24,8 @@ function _onTabDataLoad(tabName){
     if(tabName==='institution'){ensureInstitutionDefaults();loadInstitutionHistory();}
     if(tabName==='plan'){loadTodayPlan();loadPlanHistory();restoreCachedPlan();}
     if(tabName==='recommend'){loadDailyPickHistory();loadOptHistory();}
-    if(tabName==='rebalance'||tabName==='recommend')refreshGlobalMode();
+    if(tabName==='rebalance'){refreshGlobalMode();loadRebalancePortfolio();}
+    if(tabName==='recommend')refreshGlobalMode();
   }catch(e){console.error('[tab-data-load]',e)}
 }
 /* wire the callback so the isolated tab script triggers data loads */

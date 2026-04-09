@@ -905,10 +905,13 @@ def run_backtest(
     all_data: dict[str, list[dict]] = {}  # symbol -> sorted bars
     stock_names: dict[str, str] = {}
     for sym in universe:
-        bars = _get_klines_cached(sym, lookback_str, end_str)
-        if bars and len(bars) >= 30:
-            all_data[sym] = bars
-            stock_names[sym] = _get_stock_name(sym)
+        try:
+            bars = _get_klines_cached(sym, lookback_str, end_str)
+            if bars and len(bars) >= 30:
+                all_data[sym] = bars
+                stock_names[sym] = _get_stock_name(sym)
+        except Exception as e:
+            print(f"[回测] {sym} 数据获取失败: {e}", file=sys.stderr)
 
     if not all_data:
         return {"error": "无法获取足够的历史数据进行回测", "symbols": universe}

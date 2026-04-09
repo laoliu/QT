@@ -45,6 +45,16 @@ try:
     import requests, requests.utils  # noqa: E401
     requests.utils.getproxies = lambda: {}  # type: ignore[assignment]
     requests.utils.get_environ_proxies = lambda *a, **kw: {}  # type: ignore[assignment]
+
+    # Enforce default 20s timeout on ALL requests calls (akshare uses requests
+    # internally but never passes timeout, causing infinite hangs).
+    if not getattr(requests.Session.request, "_timeout_patched", False):
+        _orig_request = requests.Session.request
+        def _timeout_request(self, method, url, **kwargs):
+            kwargs.setdefault("timeout", 20)
+            return _orig_request(self, method, url, **kwargs)
+        _timeout_request._timeout_patched = True  # type: ignore[attr-defined]
+        requests.Session.request = _timeout_request  # type: ignore[assignment]
 except ImportError:
     pass
 

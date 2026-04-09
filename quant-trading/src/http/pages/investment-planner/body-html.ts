@@ -1092,7 +1092,7 @@ export function getPlannerBodyHtml(b: string): string {
       <p style="color:var(--text-dim);font-size:12px;margin:4px 0 10px">自动运行多策略，选出前 2-3 个强势策略，合并候选池并筛出不超过 8 只股票，再进行收益/回撤/胜率排行，作为每日总和选股清单。</p>
       <div class="form-row">
         <label>策略池</label>
-        <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">ȫѡ</button>
+        <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">全选</button>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=false)" style="padding:2px 8px;font-size:11px">全不选</button>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="momentum" checked style="vertical-align:middle;margin-right:4px">趋势动量</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="value" checked style="vertical-align:middle;margin-right:4px">价值投资</label>

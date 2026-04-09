@@ -60,42 +60,54 @@ def fetch_chip_distribution(symbol: str) -> dict[str, Any] | None:
 
     Returns a dict of chip metrics, or ``None`` on any failure so callers
     can gracefully skip CYQ enrichment.
+
+    Runs in a subprocess to isolate mini-racer (V8 engine) crashes that
+    would otherwise abort the entire Python process on Python 3.13+.
     """
+    import json
+    import subprocess
+    import sys
+
+    script = f"""
+import json, sys
+try:
+    import akshare as ak
+    df = ak.stock_cyq_em(symbol="{symbol}", adjust="")
+    if df is None or df.empty:
+        print(json.dumps(None))
+        sys.exit(0)
+    last = df.iloc[-1]
+    def sf(v):
+        try:
+            return float(v) if v is not None else 0.0
+        except (ValueError, TypeError):
+            return 0.0
+    bp = sf(last.get("获利比例"))
+    print(json.dumps({{
+        "benefitPart": round(bp, 4),
+        "avgCost": round(sf(last.get("平均成本")), 2),
+        "concentration70": round(sf(last.get("70集中度")), 4),
+        "concentration90": round(sf(last.get("90集中度")), 4),
+        "support": round(sf(last.get("90成本-低")), 2),
+        "resistance": round(sf(last.get("90成本-高")), 2),
+        "chipDensityZone": [round(sf(last.get("70成本-低")), 2), round(sf(last.get("70成本-高")), 2)],
+        "costAbovePct": round(1.0 - bp, 4) if bp > 0 else None,
+    }}))
+except Exception as e:
+    print(json.dumps(None))
+"""
     try:
-        import akshare as ak
-
-        df = ak.stock_cyq_em(symbol=symbol, adjust="")
-        if df is None or df.empty:
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if result.returncode != 0:
             return None
-
-        # The last row is the most recent trading day
-        last = df.iloc[-1]
-
-        benefit_part = _safe_float(last.get("获利比例"))
-        avg_cost = _safe_float(last.get("平均成本"))
-        low_90 = _safe_float(last.get("90成本-低"))
-        high_90 = _safe_float(last.get("90成本-高"))
-        conc_90 = _safe_float(last.get("90集中度"))
-        low_70 = _safe_float(last.get("70成本-低"))
-        high_70 = _safe_float(last.get("70成本-高"))
-        conc_70 = _safe_float(last.get("70集中度"))
-
-        # costAbovePct: portion of chips above current price = 1 - benefitPart
-        cost_above_pct = round(1.0 - benefit_part, 4) if benefit_part > 0 else None
-
-        return {
-            "benefitPart": round(benefit_part, 4),
-            "avgCost": round(avg_cost, 2),
-            "concentration70": round(conc_70, 4),
-            "concentration90": round(conc_90, 4),
-            "support": round(low_90, 2),
-            "resistance": round(high_90, 2),
-            "chipDensityZone": [round(low_70, 2), round(high_70, 2)],
-            "costAbovePct": round(cost_above_pct, 4) if cost_above_pct is not None else None,
-        }
-    except Exception:
-        # CYQ is optional enrichment — never crash the caller
-        traceback.print_exc()
+        data = json.loads(result.stdout.strip())
+        return data
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
         return None
 
 

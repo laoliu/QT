@@ -174,7 +174,7 @@ def _fetch_announcements(days: int = 90, categories: Optional[list[str]] = None)
 
     restructuring_keywords = re.compile(
         r"重整|破产重整|重整计划|债权申报|管理人|"
-        r"撤销.*风险警示|退市风险|重整投资"
+        r"撤销.*风险警示|重整投资"
     )
 
     for date_str in sample_dates:
@@ -215,7 +215,7 @@ def _fetch_stock_announcements(symbol: str, days: int = 365) -> list[dict]:
     results: list[dict] = []
     restructuring_keywords = re.compile(
         r"重整|破产重整|重整计划|债权申报|管理人|"
-        r"撤销.*风险警示|退市风险|重整投资"
+        r"撤销.*风险警示|重整投资"
     )
 
     end_date = datetime.now().strftime("%Y%m%d")
@@ -324,6 +324,11 @@ def scan_all_restructuring(days: int = 90, force_refresh: bool = False) -> dict[
             risk_level = "delisting_risk"
         elif "ST" in name:
             risk_level = "st"
+
+        # Skip stocks where no announcement matched a restructuring stage —
+        # these are false positives from the broad keyword search.
+        if current_stage == "UNKNOWN":
+            continue
 
         record = RestructuringRecord(
             code=code,

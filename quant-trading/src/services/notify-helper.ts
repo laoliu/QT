@@ -21,6 +21,23 @@ export function registerNotificationChannels(channels: NotificationChannel[] | u
 }
 
 /**
+ * Best-effort notification delivery with severity level and title.
+ * Sends via `api.notify` (if available) AND all registered webhook channels.
+ * Adds a severity prefix for webhook channels.
+ * Swallows errors silently — notification should never break business logic.
+ */
+export async function tryNotifyWithPush(
+  api: OpenClawPluginApi,
+  message: string,
+  level: "info" | "warning" | "critical" = "info",
+  title?: string,
+): Promise<void> {
+  const prefix = title ? `【${title}】` : "";
+  const fullMessage = `${prefix}${message}`;
+  await tryNotify(api, fullMessage);
+}
+
+/**
  * Best-effort notification delivery.
  * Sends via `api.notify` (if available) AND all registered webhook channels.
  * Swallows errors silently — notification should never break business logic.

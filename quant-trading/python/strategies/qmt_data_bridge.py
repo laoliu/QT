@@ -36,6 +36,7 @@ BRIDGE_VERSION = 3
 import glob
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -117,9 +118,9 @@ def _find_qmt_path():
         r"C:\*QMT*",
         r"D:\*QMT*",
         r"E:\*QMT*",
-        r"C:\*ѸͶ*",
-        r"D:\*ѸͶ*",
-        r"E:\*ѸͶ*",
+        r"C:\*迅投*",
+        r"D:\*迅投*",
+        r"E:\*迅投*",
         r"C:\Program Files\*QMT*",
         r"D:\Program Files\*QMT*",
         r"C:\Program Files (x86)\*QMT*",
@@ -410,7 +411,7 @@ def _fetch_klines_xtdata(codes, period, count):
 
     Returns:
         dict 格式: {"600519": [{date, open, high, low, close, volume}, ...]}
-        key 使用 6 λ stock_id（去掉 .SH/.SZ 后缀），与 screener_engine 保持一致。
+        key 使用 6 位 stock_id（去掉 .SH/.SZ 后缀），与 screener_engine 保持一致。
     """
     try:
         import xtquant.xtdata as xtdata
@@ -436,7 +437,7 @@ def _fetch_klines_xtdata(codes, period, count):
         fetch_period = "1d"
     fetch_count = max(req_count * 7, req_count + 20) if use_weekly_agg else req_count
 
-    _log("拉取K线: %d ֻ, period=%s, count=%d" % (len(codes), period, count))
+    _log("拉取K线: %d 只, period=%s, count=%d" % (len(codes), period, count))
 
     # 确保本地有历史数据缓存（pip 版 xtquant 需要先 download）
     if hasattr(xtdata, "download_history_data"):
@@ -474,7 +475,7 @@ def _fetch_klines_xtdata(codes, period, count):
         if df is None or (hasattr(df, "empty") and df.empty):
             continue
 
-        # 6 λ stock_id（去 .SH/.SZ）
+        # 6 位 stock_id（去 .SH/.SZ）
         stock_id = qmt_code.split(".")[0]
 
         bars = []
@@ -586,6 +587,7 @@ _trading_account = None
 _trading_connected = False
 _trading_subscribed_codes = set()
 _trading_events_queue = []
+_trading_bg_retry_running = False  # background retry thread active
 
 
 class _TradingCallback(object):
@@ -631,11 +633,28 @@ class _TradingCallback(object):
         }})
 
 
+def _is_xtminiqmt_running():
+    """Check if XtMiniQmt.exe process is running (fast, no side effects)."""
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", "IMAGENAME eq XtMiniQmt.exe", "/NH"],
+            stderr=subprocess.DEVNULL,
+        )
+        return b"XtMiniQmt.exe" in out
+    except Exception:
+        return True  # If tasklist fails, assume running and let connect() decide
+
+
 def _trading_connect(params):
     """Connect to miniQMT via XtQuantTrader for trading."""
     global _trading_trader, _trading_account, _trading_connected
     if _trading_connected and _trading_trader:
         return {"ok": True, "data": {"status": "already_connected", "account_id": TRADING_ACCOUNT_ID}}
+
+    # Fast pre-check: skip heavy XtQuantTrader init if process isn't even running
+    if not _is_xtminiqmt_running():
+        return {"ok": False, "error": "XtMiniQmt.exe is not running"}
+
     try:
         from xtquant.xttrader import XtQuantTrader
         from xtquant.xttype import StockAccount
@@ -659,12 +678,14 @@ def _trading_connect(params):
         _trading_trader.register_callback(cb)
         _trading_trader.start()
 
-        for _ in range(20):
+        # connect() blocks ~3s per call when QMT isn't ready.
+        # Keep retries low so background thread can cycle faster.
+        for _ in range(3):
             if _trading_trader.connect() == 0:
                 break
             time.sleep(0.5)
         else:
-            return {"ok": False, "error": "Failed to connect to miniQMT within 10 seconds"}
+            return {"ok": False, "error": "Failed to connect to miniQMT"}
 
         _trading_account = StockAccount(account_id, account_type)
         result = _trading_trader.subscribe(_trading_account)
@@ -736,8 +757,9 @@ def _trading_cancel_order(params):
     if not _trading_trader or not _trading_account:
         return {"ok": False, "error": "Not connected"}
     order_id = int(params.get("order_id", 0))
+    stock_code = params.get("stock_code", "")
     try:
-        result = _trading_trader.cancel_order_stock(_trading_account, order_id)
+        result = _trading_trader.cancel_order_stock(_trading_account, order_id, stock_code)
         return {"ok": True, "data": {"result": result}}
     except Exception as e:
         return {"ok": False, "error": "cancel_order error: %s" % str(e)}
@@ -957,6 +979,36 @@ _TRADING_DISPATCH = {
 }
 
 
+def _trading_connect_background(interval=15, max_retries=0):
+    """Background thread: retry trading connection until success.
+
+    Args:
+        interval: seconds between retries (default 15)
+        max_retries: 0 = unlimited retries
+    """
+    global _trading_bg_retry_running
+    _trading_bg_retry_running = True
+    attempt = 0
+    while not _trading_connected:
+        attempt += 1
+        if max_retries > 0 and attempt > max_retries:
+            _log("trading bg: gave up after %d attempts" % max_retries)
+            break
+        _log("trading bg: attempt #%d (account=%s)..." % (attempt, TRADING_ACCOUNT_ID))
+        try:
+            result = _trading_connect({})
+            if result.get("ok"):
+                _log("trading bg: connected! %s" % json.dumps(result, ensure_ascii=False))
+                break
+            else:
+                _log("trading bg: failed: %s -- retry in %ds" % (result.get("error", ""), interval))
+        except Exception as e:
+            _log("trading bg: exception: %s -- retry in %ds" % (e, interval))
+        time.sleep(interval)
+    _trading_bg_retry_running = False
+    _log("trading bg: thread exiting (connected=%s)" % _trading_connected)
+
+
 # ========== HTTP 服务 ==========
 
 def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
@@ -1016,10 +1068,14 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                     xtdata_err = "xtquant import failed: %s" % e
                 else:
                     xtdata_ok, xtdata_err = _xtdata_connect(xtdata)
+                trading_status = "connected" if _trading_connected else (
+                    "connecting" if _trading_bg_retry_running else "disabled"
+                )
                 body = json.dumps({
                     "status": "ok" if xtdata_ok else "degraded",
                     "xtdata": xtdata_ok,
                     "trading": _trading_connected,
+                    "trading_status": trading_status,
                     "version": BRIDGE_VERSION,
                     "error": xtdata_err or None,
                 }).encode("utf-8")
@@ -1203,22 +1259,20 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 pass  # client disconnected mid-response
 
         def log_message(self, fmt, *args):
-            msg = fmt % args if args else fmt
-            # Suppress health-check noise
             if len(args) > 0 and "/health" in str(args[0]):
                 return
             # Suppress high-frequency long-poll access logs; keep errors/non-200 visible.
             if len(args) > 1 and "/trading/events" in str(args[0]) and str(args[1]) == "200":
                 return
-            # Suppress external scanner noise (RDP probes, TLS handshakes, etc.)
-            if "Bad HTTP" in msg or "\\x03\\x00" in msg or "mstshash" in msg:
-                return
-            _log("[serve] " + msg)
+            _log("[serve] " + (fmt % args))
 
     server = ThreadingHTTPServer((host, port), BridgeHandler)
     _log("HTTP serve mode started -- http://%s:%d (threaded)" % (host, port))
     _log("Endpoints: GET /health /trading/events, POST /klines /quote /trading")
-    _log("Trading: %s" % ("connected" if _trading_connected else "disabled"))
+    _trading_label = "connected" if _trading_connected else (
+        "connecting (background)" if _trading_bg_retry_running else "disabled"
+    )
+    _log("Trading: %s" % _trading_label)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1295,12 +1349,16 @@ Examples:
     else:
         _log("未找到 QMT 安装路径，将使用默认 xtdata.connect()")
 
-    # 初始化交易连接
+    # 初始化交易连接（后台重试，不阻塞 HTTP 服务启动）
     if not args.no_trading:
         if TRADING_ACCOUNT_ID:
-            _log("connecting trading (account=%s)..." % TRADING_ACCOUNT_ID)
-            result = _trading_connect({})
-            _log("trading connect: %s" % json.dumps(result, ensure_ascii=False))
+            _log("trading will connect in background (account=%s)" % TRADING_ACCOUNT_ID)
+            t = threading.Thread(
+                target=_trading_connect_background,
+                kwargs={"interval": 5, "max_retries": 0},
+                daemon=True,
+            )
+            t.start()
         else:
             _log("trading enabled but no account ID set (use --account or TRADING_ACCOUNT_ID)")
 

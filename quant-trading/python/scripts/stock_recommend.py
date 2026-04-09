@@ -39,6 +39,20 @@ def _get_lot_size(code: str) -> int:
 _PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _PYTHON_ROOT)
 
+# Apply network timeout before any akshare/requests-based imports.
+# akshare calls requests internally without timeout, causing infinite hangs.
+try:
+    import requests as _req
+    if not getattr(_req.Session.request, "_timeout_patched", False):
+        _orig_req = _req.Session.request
+        def _patched_request(self, method, url, **kwargs):
+            kwargs.setdefault("timeout", 20)
+            return _orig_req(self, method, url, **kwargs)
+        _patched_request._timeout_patched = True  # type: ignore[attr-defined]
+        _req.Session.request = _patched_request  # type: ignore[assignment]
+except ImportError:
+    pass
+
 from engines.chip_distribution import fetch_chip_distribution, score_chip_distribution
 
 def _load_backtest_engine():
@@ -787,13 +801,25 @@ def recommend(
         fk = executor.submit(_fetch_klines)
         cyq_futures = {executor.submit(_fetch_cyq_one, c): c for c in pool}
 
-        _quotes_result = fq.result()
-        _fund_result = ff.result()
-        _klines_result = fk.result()
-        for fut in as_completed(cyq_futures):
-            code, cyq = fut.result()
-            if cyq:
-                _cyq_results[code] = cyq
+        try:
+            _quotes_result = fq.result(timeout=20)
+        except Exception:
+            _quotes_result = {}
+        try:
+            _fund_result = ff.result(timeout=20)
+        except Exception:
+            _fund_result = {}
+        try:
+            _klines_result = fk.result(timeout=90)
+        except Exception:
+            _klines_result = {}
+        for fut in as_completed(cyq_futures, timeout=60):
+            try:
+                code, cyq = fut.result(timeout=20)
+                if cyq:
+                    _cyq_results[code] = cyq
+            except Exception:
+                pass
 
     quotes = _quotes_result
     fundamentals = _fund_result

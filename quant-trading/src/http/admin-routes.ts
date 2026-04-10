@@ -149,6 +149,18 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── /quant/admin and /quant/admin/ → redirect to /quant/admin/ui ──
+  for (const p of ["/quant/admin", "/quant/admin/"]) {
+    api.registerHttpRoute({
+      auth: "plugin",
+      path: p,
+      handler: securePublic(async (_req, res) => {
+        res.writeHead(302, { Location: "/quant/admin/ui" });
+        res.end();
+      }),
+    });
+  }
+
   // ── Admin UI Page ──────────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

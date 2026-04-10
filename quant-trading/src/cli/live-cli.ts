@@ -140,7 +140,7 @@ export async function runCliLive(
         break;
       }
       const engStatus = d["status"] ?? "unknown";
-      console.log(`״̬: ${engStatus}   ģʽ: ${d["mode"] ?? "-"}   Broker: ${d["broker"] ?? "-"}`);
+      console.log(`状态: ${engStatus}   模式: ${d["mode"] ?? "-"}   Broker: ${d["broker"] ?? "-"}`);
       if (d["account"]) {
         const acc = d["account"] as Record<string, unknown>;
         console.log(

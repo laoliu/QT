@@ -16,6 +16,9 @@ import {
   DAILY_PICK_STRATEGY_LABELS,
   CTA_SCREEN_STRATEGY_MAP,
 } from "./_helpers.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
   const { api, config, secure, securePublic, composedStrategyStore } = deps;
@@ -959,6 +962,201 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         json(
           res,
           { error: `每日综合选股失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
+  // ── Daily Pick History (server-side storage) ─────────────────
+  const historyDir = path.join(
+    config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading"),
+    "daily-pick-history",
+  );
+
+  function ensureHistoryDir(): void {
+    if (!fs.existsSync(historyDir)) {
+      fs.mkdirSync(historyDir, { recursive: true });
+    }
+  }
+
+  function readHistoryIndex(): Array<{
+    id: string;
+    createdAt: string;
+    params: unknown;
+    summary: unknown;
+    file: string;
+  }> {
+    const indexPath = path.join(historyDir, "index.json");
+    try {
+      if (!fs.existsSync(indexPath)) return [];
+      const raw = fs.readFileSync(indexPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeHistoryIndex(
+    index: Array<{ id: string; createdAt: string; params: unknown; summary: unknown; file: string }>,
+  ): void {
+    fs.writeFileSync(path.join(historyDir, "index.json"), JSON.stringify(index, null, 2), "utf-8");
+  }
+
+  // GET  — list history (lightweight, no full result data)
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/daily-pick-history",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") {
+        json(res, { error: "仅支持 GET" }, 405);
+        return;
+      }
+      ensureHistoryDir();
+      json(res, readHistoryIndex());
+    }),
+  });
+
+  // GET  — read a single history entry's full result
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/daily-pick-history/detail",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") {
+        json(res, { error: "仅支持 GET" }, 405);
+        return;
+      }
+      const url = new URL(req.url ?? "", "http://localhost");
+      const id = url.searchParams.get("id") ?? "";
+      if (!id || !/^[a-z0-9-]+$/i.test(id)) {
+        json(res, { error: "无效 ID" }, 400);
+        return;
+      }
+      ensureHistoryDir();
+      const filePath = path.join(historyDir, `${id}.json`);
+      if (!fs.existsSync(filePath)) {
+        json(res, { error: "记录不存在" }, 404);
+        return;
+      }
+      try {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(raw),
+        });
+        res.end(raw);
+      } catch {
+        json(res, { error: "读取失败" }, 500);
+      }
+    }),
+  });
+
+  // POST — save a new history entry
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/daily-pick-history/save",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const id = String(body.id ?? "");
+        const createdAt = String(body.createdAt ?? new Date().toISOString());
+        const params = body.params ?? {};
+        const summary = body.summary ?? {};
+        const result = body.result ?? {};
+        if (!id) {
+          json(res, { error: "缺少 id" }, 400);
+          return;
+        }
+        ensureHistoryDir();
+        // Write full result to individual file
+        fs.writeFileSync(
+          path.join(historyDir, `${id.replace(/[^a-z0-9-]/gi, "")}.json`),
+          JSON.stringify(result),
+          "utf-8",
+        );
+        // Update index (prepend, cap at 100)
+        const index = readHistoryIndex();
+        index.unshift({
+          id,
+          createdAt,
+          params,
+          summary,
+          file: `${id}.json`,
+        });
+        if (index.length > 100) index.length = 100;
+        writeHistoryIndex(index);
+        json(res, { ok: true, count: index.length });
+      } catch (err) {
+        json(
+          res,
+          { error: `保存失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
+  // POST — delete a history entry
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/daily-pick-history/delete",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const id = String(body.id ?? "");
+        if (!id || !/^[a-z0-9-]+$/i.test(id)) {
+          json(res, { error: "无效 ID" }, 400);
+          return;
+        }
+        ensureHistoryDir();
+        // Remove result file
+        const filePath = path.join(historyDir, `${id}.json`);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        // Update index
+        const index = readHistoryIndex().filter((e) => e.id !== id);
+        writeHistoryIndex(index);
+        json(res, { ok: true, count: index.length });
+      } catch (err) {
+        json(
+          res,
+          { error: `删除失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
+  // POST — clear all history
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/daily-pick-history/clear",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        ensureHistoryDir();
+        const index = readHistoryIndex();
+        for (const entry of index) {
+          const fp = path.join(historyDir, `${entry.id.replace(/[^a-z0-9-]/gi, "")}.json`);
+          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        }
+        writeHistoryIndex([]);
+        json(res, { ok: true });
+      } catch (err) {
+        json(
+          res,
+          { error: `清空失败: ${err instanceof Error ? err.message : String(err)}` },
           500,
         );
       }

@@ -237,31 +237,45 @@ def _fetch_klines_for_codes(codes: list[str]) -> dict[str, list[dict]]:
     """Fetch 90-day klines for a batch of stock codes concurrently. Returns {code: klines}."""
     result = {}
     try:
-        from data_providers.akshare_provider import get_klines
+        from data_providers.akshare_provider import get_klines_batch
     except ImportError:
+        # Fallback to per-stock fetch if batch not available
+        try:
+            from data_providers.akshare_provider import get_klines
+        except ImportError:
+            return result
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_dt = datetime.now() - timedelta(days=90)
+        start_date = start_dt.strftime("%Y-%m-%d")
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _fetch_one(code: str):
+            try:
+                klines = get_klines(code, "1d", start_date, end_date, "cn_stock")
+                if klines and len(klines) >= 20:
+                    return code, klines
+            except Exception:
+                pass
+            return code, None
+
+        with ThreadPoolExecutor(max_workers=min(len(codes), 8)) as pool:
+            futures = {pool.submit(_fetch_one, c): c for c in codes}
+            for fut in as_completed(futures):
+                code, klines = fut.result()
+                if klines:
+                    result[code] = klines
         return result
 
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_dt = datetime.now() - timedelta(days=90)
     start_date = start_dt.strftime("%Y-%m-%d")
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    def _fetch_one(code: str):
-        try:
-            klines = get_klines(code, "1d", start_date, end_date, "cn_stock")
-            if klines and len(klines) >= 20:
-                return code, klines
-        except Exception:
-            pass
-        return code, None
-
-    with ThreadPoolExecutor(max_workers=min(len(codes), 4)) as pool:
-        futures = {pool.submit(_fetch_one, c): c for c in codes}
-        for fut in as_completed(futures):
-            code, klines = fut.result()
-            if klines:
-                result[code] = klines
+    batch = get_klines_batch(codes, start_date, end_date, "cn_stock", 90)
+    for code, klines in batch.items():
+        if klines and len(klines) >= 20:
+            result[code] = klines
     return result
 
 
@@ -632,7 +646,7 @@ def _enrich_decision_fields(
             "batch3": {"price": entry_3, "pct": 15, "label": f"回调-5%{'(筹码支撑)' if support > 0 and abs(entry_3 - support) / price < 0.04 else ''}补仓15%"},
         }
 
-        # ── Exit targets (ֹӯ/止损) ──
+        # ── Exit targets (止盈/止损) ──
         sl_price = round(price * (1 - sl_pct), 2)
         tp1 = round(price * 1.10, 2)
         tp2 = round(price * 1.20, 2)
@@ -640,8 +654,8 @@ def _enrich_decision_fields(
         tp_chip = round(resistance, 2) if resistance > price else 0
         a["exitTargets"] = {
             "stopLoss": {"price": sl_price, "pct": round(-sl_pct * 100, 1), "label": "止损"},
-            "takeProfit1": {"price": tp1, "pct": 10.0, "label": "ֹӯ1(+10%)"},
-            "takeProfit2": {"price": tp2, "pct": 20.0, "label": "ֹӯ2(+20%)"},
+            "takeProfit1": {"price": tp1, "pct": 10.0, "label": "止盈1(+10%)"},
+            "takeProfit2": {"price": tp2, "pct": 20.0, "label": "止盈2(+20%)"},
         }
         if tp_chip > 0 and tp_chip != tp1 and tp_chip != tp2:
             a["exitTargets"]["chipResistance"] = {
@@ -826,12 +840,29 @@ def recommend(
     klines_map = _klines_result
 
     # ── 3. Multi-dimensional scoring ──
+    _no_quote_stocks = []  # stocks with no real-time quote
     scored = []
     for code in pool:
         q = quotes.get(code, {})
         tc = fundamentals.get(code, {})
         price = q.get("price", 0)
         if not price:
+            _no_quote_stocks.append({
+                "code": code,
+                "name": q.get("name", STOCK_NAMES.get(code, code)),
+                "price": 0,
+                "prevClose": 0,
+                "changePct": 0,
+                "pe": 0,
+                "pb": 0,
+                "marketCap": 0,
+                "turnover": 0,
+                "score": 0,
+                "reasons": ["⚠️ 实时行情获取失败，无法定价"],
+                "inFinalPosition": code in pos_map,
+                "btCost": pos_map.get(code, {}).get("avgCost", 0),
+                "btShares": pos_map.get(code, {}).get("shares", 0),
+            })
             continue
 
         score = 0.0
@@ -1082,6 +1113,18 @@ def recommend(
             "category": cat,
         })
 
+    # Append stocks with no real-time quote (so they still appear in the table)
+    for s in _no_quote_stocks:
+        allocations.append({
+            **s,
+            "shares": 0,
+            "amount": 0,
+            "weight": 0,
+            "category": "satellite",
+            "riskWarning": "实时行情获取失败，无法计算建仓方案",
+            "riskLevel": "high",
+        })
+
     total_invested = sum(a["amount"] for a in allocations)
     remaining_cash = capital - total_invested
 
@@ -1147,7 +1190,7 @@ def recommend(
             "大盘风控: 如沪指跌破重要支撑位,减仓至50%以下",
         ],
         "pool": pool,
-        "allStocks": scored,
+        "allStocks": scored + _no_quote_stocks,
         "period": {"startDate": start_date, "endDate": end_date},
     }
 

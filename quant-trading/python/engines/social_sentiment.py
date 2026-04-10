@@ -39,6 +39,9 @@ urllib.request.getproxies = lambda: {}  # type: ignore[assignment]
 
 _log = lambda msg: print(f"[social_sentiment] {msg}", file=sys.stderr)
 
+# Circuit breaker: skip APIs that fail persistently within one process lifetime
+_BROKEN_APIS: set[str] = set()
+
 
 def run_social_sentiment(config: dict) -> dict:
     """Dispatch social sentiment actions."""
@@ -171,6 +174,29 @@ def _hot_stocks(market: str, limit: int) -> dict:
 
 # ── Individual stock sentiment ────────────────────────────────────────────────
 
+# Cache full-market comment table (fetched once, reused for all stocks)
+_COMMENT_EM_CACHE: dict[str, Any] = {}  # {"df": DataFrame, "ts": float}
+
+
+def _get_stock_comment_em():
+    """Cached fetch of stock_comment_em (whole market table)."""
+    import time
+    cached = _COMMENT_EM_CACHE.get("df")
+    ts = _COMMENT_EM_CACHE.get("ts", 0)
+    if cached is not None and (time.time() - ts) < 300:  # 5min TTL
+        return cached
+    try:
+        import akshare as ak
+        df = ak.stock_comment_em()
+        if df is not None and not df.empty:
+            _COMMENT_EM_CACHE["df"] = df
+            _COMMENT_EM_CACHE["ts"] = time.time()
+            return df
+    except Exception as e:
+        _log(f"stock_comment_em failed: {type(e).__name__}: {e}")
+    return None
+
+
 def _stock_sentiment(symbol: str) -> dict:
     """Analyze sentiment for a specific stock from community discussions."""
     try:
@@ -183,9 +209,9 @@ def _stock_sentiment(symbol: str) -> dict:
         "timestamp": datetime.now().isoformat()[:19],
     }
 
-    # Eastmoney stock comment sentiment
+    # Eastmoney stock comment sentiment (cached full-market table)
     try:
-        df = ak.stock_comment_em()
+        df = _get_stock_comment_em()
         if df is not None and not df.empty:
             stock_row = df[df["代码"].astype(str) == str(symbol)]
             if not stock_row.empty:
@@ -194,18 +220,22 @@ def _stock_sentiment(symbol: str) -> dict:
                 sentiment["attention_score"] = _safe_float(row.get("关注指数", None))
                 sentiment["participation_score"] = _safe_float(row.get("参与指数", None))
     except Exception as e:
-        _log(f"stock_comment_em failed: {type(e).__name__}: {e}")
+        _log(f"stock_comment_em lookup failed: {type(e).__name__}: {e}")
 
-    # Eastmoney stock hot rank detail
-    try:
-        df2 = ak.stock_hot_rank_detail_em(symbol=symbol)
-        if df2 is not None and not df2.empty:
-            latest = df2.iloc[-1] if len(df2) > 0 else None
-            if latest is not None:
-                sentiment["hot_rank"] = int(latest.get("排名", 0)) if latest.get("排名") else None
-                sentiment["hot_score"] = _safe_float(latest.get("热度", None))
-    except Exception as e:
-        _log(f"stock_hot_rank_detail_em failed: {type(e).__name__}: {e}")
+    # Eastmoney stock hot rank detail (skip if API is known broken this session)
+    if "stock_hot_rank_detail_em" not in _BROKEN_APIS:
+        try:
+            df2 = ak.stock_hot_rank_detail_em(symbol=symbol)
+            if df2 is not None and not df2.empty:
+                latest = df2.iloc[-1] if len(df2) > 0 else None
+                if latest is not None:
+                    sentiment["hot_rank"] = int(latest.get("排名", 0)) if latest.get("排名") else None
+                    sentiment["hot_score"] = _safe_float(latest.get("热度", None))
+        except (ValueError, TypeError) as e:
+            _log(f"stock_hot_rank_detail_em broken (disabling): {e}")
+            _BROKEN_APIS.add("stock_hot_rank_detail_em")
+        except Exception as e:
+            _log(f"stock_hot_rank_detail_em failed: {type(e).__name__}: {e}")
 
     # Compute composite sentiment score (0-100)
     scores = []
@@ -248,17 +278,21 @@ def _sentiment_history(symbol: str, limit: int) -> dict:
 
     history: list[dict] = []
 
-    try:
-        df = ak.stock_hot_rank_detail_em(symbol=symbol)
-        if df is not None and not df.empty:
-            for _, row in df.tail(limit).iterrows():
-                history.append({
-                    "datetime": str(row.get("时间", row.get("日期", "")))[:16],
-                    "rank": int(row.get("排名", 0)) if row.get("排名") else None,
-                    "hot_score": _safe_float(row.get("热度", None)),
-                })
-    except Exception as e:
-        _log(f"sentiment_history failed: {type(e).__name__}: {e}")
+    if "stock_hot_rank_detail_em" not in _BROKEN_APIS:
+        try:
+            df = ak.stock_hot_rank_detail_em(symbol=symbol)
+            if df is not None and not df.empty:
+                for _, row in df.tail(limit).iterrows():
+                    history.append({
+                        "datetime": str(row.get("时间", row.get("日期", "")))[:16],
+                        "rank": int(row.get("排名", 0)) if row.get("排名") else None,
+                        "hot_score": _safe_float(row.get("热度", None)),
+                    })
+        except (ValueError, TypeError) as e:
+            _log(f"stock_hot_rank_detail_em broken (disabling): {e}")
+            _BROKEN_APIS.add("stock_hot_rank_detail_em")
+        except Exception as e:
+            _log(f"sentiment_history failed: {type(e).__name__}: {e}")
 
     # Compute trend
     trend = "stable"

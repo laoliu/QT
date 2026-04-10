@@ -227,7 +227,7 @@ export class ConfirmationManager {
       ``,
       `是否按默认规则创建止损止盈？`,
       `  止损: -${defaultStopPct}% @ ¥${stopPrice.toFixed(2)}`,
-      `  ֹӯ: +${defaultTpPct}% @ ¥${tpPrice.toFixed(2)}`,
+      `  止盈: +${defaultTpPct}% @ ¥${tpPrice.toFixed(2)}`,
       ``,
       `回复 /confirm ${confirmId} 确认创建 | /reject ${confirmId} 跳过`,
       `(${timeoutSecs} 秒后自动跳过)`,

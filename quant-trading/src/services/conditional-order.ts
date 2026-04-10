@@ -226,7 +226,7 @@ export class ConditionalOrderService {
       strategyId: params.strategyId,
       description:
         params.description ??
-        `ֹӯ: ${params.symbol} 涨到 ¥${params.targetPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股`,
+        `止盈: ${params.symbol} 涨到 ¥${params.targetPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股`,
     });
   }
 
@@ -510,6 +510,9 @@ export class ConditionalOrderService {
   /** Start the periodic check loop. */
   start(): void {
     if (this.timer) return;
+    console.log(
+      `[conditional-order] started (poll=${this.checkIntervalMs / 1000}s, active=${this.activeCount}, total=${this.orders.size})`,
+    );
     this.timer = setInterval(() => {
       void this.checkAll();
     }, this.checkIntervalMs);
@@ -529,6 +532,7 @@ export class ConditionalOrderService {
 
     const triggered: string[] = [];
     const active = this.listOrders(true);
+    if (active.length === 0) return [];
 
     // Deduplicate symbols to minimize quote calls
     const uniqueSymbols = [...new Set(active.map((o) => o.symbol))];
@@ -536,10 +540,25 @@ export class ConditionalOrderService {
 
     await Promise.allSettled(
       uniqueSymbols.map(async (symbol) => {
-        const q = await this.quoteFn!(symbol);
-        if (q) quotes.set(symbol, q.price);
+        try {
+          const q = await this.quoteFn!(symbol);
+          if (q) quotes.set(symbol, q.price);
+        } catch (err) {
+          console.warn(`[conditional-order] quote failed for ${symbol}:`, err);
+        }
       }),
     );
+
+    const missedSymbols = uniqueSymbols.filter((s) => !quotes.has(s));
+    if (missedSymbols.length > 0) {
+      console.warn(
+        `[conditional-order] check: ${active.length} orders, ${quotes.size}/${uniqueSymbols.length} quotes ok, missed: ${missedSymbols.join(",")}`,
+      );
+    } else {
+      console.log(
+        `[conditional-order] check: ${active.length} orders, ${quotes.size}/${uniqueSymbols.length} quotes ok`,
+      );
+    }
 
     for (const order of active) {
       const price = quotes.get(order.symbol);
@@ -718,6 +737,9 @@ export class ConditionalOrderService {
     }
 
     if (triggered.length > 0) {
+      console.log(
+        `[conditional-order] triggered ${triggered.length} order(s): ${triggered.join(", ")}`,
+      );
       this.saveToDisk();
     }
     return triggered;

@@ -844,7 +844,7 @@ function formatCompareResult(result: import("../services/live-backtest-compariso
       "实盘": `${fmt(m.live, 2)}${m.unit}`,
       "差异": `${m.delta > 0 ? "+" : ""}${fmt(m.delta, 2)}${m.unit}`,
       "偏差%": `${m.deltaPct > 0 ? "+" : ""}${fmt(m.deltaPct, 1)}%`,
-      "״̬": m.degraded ? "⚠️ 退化" : "✅ 正常",
+      "状态": m.degraded ? "⚠️ 退化" : "✅ 正常",
     })),
 
     gaps: result.gaps.map((g) => ({

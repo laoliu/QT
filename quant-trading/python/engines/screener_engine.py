@@ -1202,30 +1202,27 @@ def _attach_klines(
                     print(f"[klines] Tushare: attached {attached}/{len(codes)} stocks with K-line data", file=sys.stderr)
                     return stock_data, errors
 
-            # Fallback: akshare (slower, 300-code limit)
-            from data_providers.akshare_provider import get_klines
+            # Batch fetch: cache → QMT batch → per-stock fallback (TDX/EastMoney)
+            from data_providers.akshare_provider import get_klines_batch
 
-            # Prioritize main-board codes for kline fetch:
-            # stock_zh_a_hist works for SZ(000/001/002/003/300/301),
-            # SH(600/601/603/605), STAR(688) but NOT Beijing SE (920xxx).
-            # Sort main-board codes first so the [:500] limit covers useful stocks.
             _MAIN_PREFIXES = ("000", "001", "002", "003", "300", "301",
                               "600", "601", "603", "605", "688")
             main_codes = [c for c in codes if c.startswith(_MAIN_PREFIXES)]
             other_codes = [c for c in codes if not c.startswith(_MAIN_PREFIXES)]
             prioritized = main_codes + other_codes
 
+            max_fetch = 300
+            fetch_codes = prioritized[:max_fetch]
+
+            batch_result = get_klines_batch(
+                fetch_codes, start_date, end_date, market, kline_days
+            )
             attached = 0
-            max_fetch = 300  # reasonable limit within SCREENER_TIMEOUT_MS
-            for code in prioritized[:max_fetch]:
-                try:
-                    bars = get_klines(code, "1d", start_date.replace("-", ""), end_date.replace("-", ""), market)
-                    if bars:
-                        stock_data[code]["klines"] = bars
-                        attached += 1
-                except Exception:
-                    pass
-            print(f"[klines] attached {attached}/{max_fetch} stocks with K-line data", file=sys.stderr)
+            for code, bars in batch_result.items():
+                if bars and code in stock_data:
+                    stock_data[code]["klines"] = bars
+                    attached += 1
+            print(f"[klines] batch attached {attached}/{len(fetch_codes)} stocks with K-line data", file=sys.stderr)
         else:
             from data_providers.provider_factory import fetch_klines_batch
             batch_result = fetch_klines_batch(codes[:100], start_date, end_date, market)

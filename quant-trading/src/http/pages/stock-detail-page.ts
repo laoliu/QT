@@ -232,7 +232,7 @@ function renderDetail(d){
   var intervalLabels={'1d':'日线','1w':'周线','1M':'月线','1Q':'季线','6M':'半年线','1Y':'年线'};
   var intervalLabel=intervalLabels[currentInterval]||'日线';
   html+='<div class="card"><h3>📈 K 线图 ('+intervalLabel+')';
-  if(d.klineSource==='bridge') html+=' <span style="font-size:11px;padding:2px 6px;background:rgba(88,166,255,.15);color:var(--accent);border-radius:4px;margin-left:6px">⚡ ѸͶ</span>';
+  if(d.klineSource==='bridge') html+=' <span style="font-size:11px;padding:2px 6px;background:rgba(88,166,255,.15);color:var(--accent);border-radius:4px;margin-left:6px">⚡ 迅投</span>';
   html+='</h3><canvas id="kline-canvas" width="800" height="300"></canvas>';
   html+='<div class="ma-legend">';
   var maConfigs=[

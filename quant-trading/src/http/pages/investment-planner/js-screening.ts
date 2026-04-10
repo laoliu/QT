@@ -3,7 +3,28 @@ export function getScreeningJs(): string {
   return `
 function refreshPortfolio(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+    // Auto-load latest plan from history before giving up
+    api('/quant/admin/api/plan-history').then(function(d){
+      if(d.entries&&d.entries.length>0){
+        var latest=d.entries[0];
+        api('/quant/admin/api/plan-history?id='+encodeURIComponent(latest.id)).then(function(r){
+          if(r.status==='ok'&&r.entry&&r.entry.fullPlan){
+            currentPlan=r.entry.fullPlan;
+            currentPlanVersion=r.entry.version||null;
+            try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+            refreshPortfolio();
+          }else{
+            document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+          }
+        }).catch(function(){
+          document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+        });
+      }else{
+        document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+      }
+    }).catch(function(){
+      document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+    });
     return;
   }
   toast('🔄 刷新持仓行情…');
@@ -120,7 +141,7 @@ function loadPortfolioConditionals(){
       var rows='';
       orders.forEach(function(o){
         var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
-          o.type==='take_profit'?'<span class="badge badge-green">ֹӯ</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
           o.type==='trailing_stop'?'<span class="badge badge-blue">跟踪止损</span>':
           o.type==='trailing_atr'?'<span class="badge badge-blue">ATR止损</span>':
           o.type==='trailing_tp'?'<span class="badge badge-green">跟踪止盈</span>':
@@ -1208,7 +1229,7 @@ function renderSmartStrategy(d){
     var patternLabels={none:'无异常',accumulation:'🧲 吸筹迹象',distribution:'📤 出货迹象',churning:'🔄 对倒交易'};
     var mp=manip.pattern||'none';
     cardsHtml+='<div>主力行为: <span style="font-weight:600">'+(patternLabels[mp]||mp)+'</span>';
-    if(manip.confidence)cardsHtml+=' (置信 '+manip.confidence+'%)';
+    if(manip.confidence)cardsHtml+=' (置信 '+(manip.confidence<=1?(manip.confidence*100).toFixed(0):manip.confidence.toFixed(0))+'%)';
     cardsHtml+='</div>';
     if(manip.signals&&manip.signals.length){
       cardsHtml+='<div style="margin-top:3px;color:var(--text-dim)">';
@@ -1362,10 +1383,31 @@ function renderRebalance(d){
   toast('✅ 调仓建议已生成');
 }
 
+function _showSignalEmpty(){
+  document.getElementById('signal-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划并刷新持仓</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+}
+
 /* ══════ SIGNALS ══════ */
 function loadSignals(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
-    document.getElementById('signal-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划并刷新持仓</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+    // Auto-load latest plan from history before giving up
+    api('/quant/admin/api/plan-history').then(function(d){
+      if(d.entries&&d.entries.length>0){
+        var latest=d.entries[0];
+        api('/quant/admin/api/plan-history?id='+encodeURIComponent(latest.id)).then(function(r){
+          if(r.status==='ok'&&r.entry&&r.entry.fullPlan){
+            currentPlan=r.entry.fullPlan;
+            currentPlanVersion=r.entry.version||null;
+            try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+            loadSignals();
+          }else{
+            _showSignalEmpty();
+          }
+        }).catch(function(){_showSignalEmpty()});
+      }else{
+        _showSignalEmpty();
+      }
+    }).catch(function(){_showSignalEmpty()});
     return;
   }
   // Refresh portfolio to get latest signals

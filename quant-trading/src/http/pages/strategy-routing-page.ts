@@ -518,7 +518,7 @@ async function runPRBT() {
   };
 
   el.innerHTML = '<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">共验证 ' + results.length + ' 只股票</p>' +
-    '<table><tr><th>代码</th><th>名称</th><th>画像</th><th>策略组合</th><th>来源</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>胜率%</th><th>交易数</th><th>״̬</th></tr>' +
+    '<table><tr><th>代码</th><th>名称</th><th>画像</th><th>策略组合</th><th>来源</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>胜率%</th><th>交易数</th><th>状态</th></tr>' +
     results.map(function(r) {
       if (!r.ok) return '<tr><td>' + escHtml(r.symbol) + '</td><td colspan="10"><span style="color:var(--red)">' + escHtml(r.error || '失败') + '</span></td></tr>';
       var bt = r.backtest || {};

@@ -497,24 +497,65 @@ class StockCache:
         market: str = "cn_stock",
         period: str = "daily",
     ) -> list[tuple[str, str]]:
-        """Find date ranges not covered in cache.
+        """Find date ranges not covered in cache (including middle gaps).
 
-        Returns a list of (gap_start, gap_end) date strings that need fetching.
-        If cache fully covers the range, returns [].
+        Detects gaps by checking actual cached trade_dates against expected
+        trading days. Returns a list of (gap_start, gap_end) date strings
+        that need fetching. If cache fully covers the range, returns [].
         """
-        _, cached_start, cached_end = self.get_klines(symbol, market, period, start_date, end_date)
+        conn = self._ensure_conn()
 
-        if not cached_start:
-            # No cache at all — fetch entire range
+        # Query cached dates within the requested range
+        rows = conn.execute(
+            """SELECT trade_date FROM kline_data
+               WHERE symbol = ? AND market = ? AND period = ?
+                 AND trade_date >= ? AND trade_date <= ?
+               ORDER BY trade_date ASC""",
+            (symbol, market, period, start_date, end_date),
+        ).fetchall()
+
+        if not rows:
             return [(start_date, end_date)]
 
-        gaps = []
+        cached_dates = {r[0] for r in rows}
+        cached_start = rows[0][0]
+        cached_end = rows[-1][0]
+
+        gaps: list[tuple[str, str]] = []
+
         # Gap before cached data
         if start_date < cached_start:
             gaps.append((start_date, cached_start))
+
+        # Detect interior gaps: consecutive cached dates >5 calendar days apart
+        # (normal weekends = 2-3 days gap; holidays up to ~5 days; anything
+        #  larger likely means missing data that should be re-fetched)
+        sorted_dates = sorted(cached_dates)
+        for i in range(1, len(sorted_dates)):
+            prev_dt = datetime.strptime(sorted_dates[i - 1], "%Y-%m-%d")
+            curr_dt = datetime.strptime(sorted_dates[i], "%Y-%m-%d")
+            gap_days = (curr_dt - prev_dt).days
+            if gap_days > 5:
+                # There's a suspicious gap — re-fetch this range
+                gap_s = (prev_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+                gap_e = (curr_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+                if gap_s <= gap_e:
+                    gaps.append((gap_s, gap_e))
+
         # Gap after cached data
         if end_date > cached_end:
             gaps.append((cached_end, end_date))
+
+        # Merge overlapping/adjacent gaps
+        if len(gaps) > 1:
+            gaps.sort()
+            merged = [gaps[0]]
+            for gs, ge in gaps[1:]:
+                if gs <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], ge))
+                else:
+                    merged.append((gs, ge))
+            gaps = merged
 
         return gaps
 
@@ -698,6 +739,85 @@ class StockCache:
             for r in rows
         ]
 
+    def stale_kline_symbols(self, stale_days: int = 2, market: str = "cn_stock",
+                            period: str = "daily") -> list[str]:
+        """Return symbols whose latest cached bar is older than stale_days."""
+        conn = self._ensure_conn()
+        cutoff = (_now_cst() - timedelta(days=stale_days)).strftime("%Y-%m-%d")
+        rows = conn.execute(
+            """SELECT symbol, MAX(trade_date) as latest
+               FROM kline_data
+               WHERE market = ? AND period = ?
+               GROUP BY symbol
+               HAVING latest < ?
+               ORDER BY latest ASC""",
+            (market, period, cutoff),
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def prewarm_klines(
+        self,
+        symbols: list[str] | None = None,
+        days: int = 120,
+        market: str = "cn_stock",
+        max_workers: int = 8,
+    ) -> dict[str, int]:
+        """Pre-warm K-line cache for given symbols (or all stale ones).
+
+        Fetches only missing/stale data using incremental gap detection.
+        Returns {"fetched": N, "cached_hit": M, "failed": F}.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        if symbols is None:
+            # Default: refresh all stale symbols in cache
+            symbols = self.stale_kline_symbols(stale_days=2, market=market)
+            if not symbols:
+                print("[预热] 所有缓存K线数据均为最新", file=sys.stderr)
+                return {"fetched": 0, "cached_hit": 0, "failed": 0}
+
+        end_date = _now_cst().strftime("%Y-%m-%d")
+        start_dt = _now_cst() - timedelta(days=int(days * 1.5))
+        start_date = start_dt.strftime("%Y-%m-%d")
+
+        # Lazy import to avoid circular deps
+        try:
+            import importlib
+            akp = importlib.import_module("data_providers.akshare_provider")
+            _get_klines = akp.get_klines
+        except ImportError:
+            from data_providers.akshare_provider import get_klines as _get_klines
+
+        stats = {"fetched": 0, "cached_hit": 0, "failed": 0}
+        total = len(symbols)
+        print(f"[预热] 开始预热 {total} 只股票K线 (并发×{max_workers}) ...", file=sys.stderr)
+
+        def _warm_one(sym: str):
+            try:
+                bars = _get_klines(sym, "1d", start_date, end_date, market)
+                return sym, len(bars) if bars else 0, None
+            except Exception as e:
+                return sym, 0, str(e)
+
+        done = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_warm_one, s): s for s in symbols}
+            for fut in as_completed(futures):
+                sym, count, err = fut.result()
+                done += 1
+                if err:
+                    stats["failed"] += 1
+                elif count > 0:
+                    stats["fetched"] += 1
+                else:
+                    stats["cached_hit"] += 1
+                if done % 50 == 0 or done == total:
+                    print(f"[预热] 进度 {done}/{total}  成功:{stats['fetched']}  "
+                          f"缓存命中:{stats['cached_hit']}  失败:{stats['failed']}", file=sys.stderr)
+
+        print(f"[预热] 完成: {stats}", file=sys.stderr)
+        return stats
+
     def clear(self, table: Optional[str] = None):
         """Clear cache data.
 
@@ -791,6 +911,12 @@ if __name__ == "__main__":
         days = config.get("days", 30)
         cache.cleanup_old(days)
         result = {"status": "ok", "cleaned_before_days": days}
+    elif action == "prewarm":
+        symbols = config.get("symbols")  # None = all stale
+        days = config.get("days", 120)
+        market = config.get("market", "cn_stock")
+        max_workers = config.get("max_workers", 8)
+        result = cache.prewarm_klines(symbols, days, market, max_workers)
     else:
         result = {"error": f"Unknown action: {action}"}
 

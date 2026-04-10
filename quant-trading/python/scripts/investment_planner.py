@@ -36,6 +36,13 @@ urllib.request.getproxies = lambda: {}  # type: ignore[assignment]
 try:
     import requests, requests.utils  # noqa: E401
     requests.utils.getproxies = lambda: {}  # type: ignore[assignment]
+    if hasattr(requests.utils, "getproxies_environment"):
+        requests.utils.getproxies_environment = lambda: {}  # type: ignore[assignment]
+    _orig_session_init = requests.Session.__init__
+    def _no_proxy_session_init(self, *a, **kw):
+        _orig_session_init(self, *a, **kw)
+        self.trust_env = False
+    requests.Session.__init__ = _no_proxy_session_init  # type: ignore[assignment]
 except ImportError:
     pass
 
@@ -49,6 +56,19 @@ def _safe_float(v, default=0.0):
         return float(v) if v is not None else default
     except (ValueError, TypeError):
         return default
+
+
+def _sanitize_for_json(obj):
+    """Recursively replace NaN/Inf with None so json.dumps produces valid JSON."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
 
 
 # ── Cross-module integration caches (loaded once per process) ──
@@ -892,8 +912,11 @@ def _fetch_sina_all_pages(max_pages: int = 6, num_per_page: int = 80) -> list[di
     - turnoverratio (换手率) — active traded stocks
     - amount (成交额) — high liquidity stocks
     - volume (成交量) — volume leaders
+
+    Uses concurrent fetching to reduce total latency.
     """
     import random
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     # 6 dimensions covering momentum, activity, liquidity, valuation, and size
     sort_configs = [
         ("changepercent", 0),   # 涨跌幅 — 动量领涨股
@@ -905,22 +928,40 @@ def _fetch_sina_all_pages(max_pages: int = 6, num_per_page: int = 80) -> list[di
     ]
     random.shuffle(sort_configs)
 
-    seen_symbols: set[str] = set()
-    all_stocks: list[dict] = []
-
     pages_per_sort = max(1, max_pages // len(sort_configs))
+
+    # Build all (sort_key, asc, page) tasks upfront
+    tasks: list[tuple[str, int, int]] = []
     for sort_key, default_asc in sort_configs:
-        # Slight asc/desc variation, but respect the default direction
         asc = default_asc if random.random() < 0.7 else (1 - default_asc)
         for page in range(1, pages_per_sort + 1):
-            stocks = _fetch_sina_stock_list(page=page, num=num_per_page, sort=sort_key, asc=asc)
-            if not stocks:
-                break
-            for s in stocks:
-                sym = str(s.get("symbol", ""))
-                if sym and sym not in seen_symbols:
-                    seen_symbols.add(sym)
-                    all_stocks.append(s)
+            tasks.append((sort_key, asc, page))
+
+    # Concurrent fetch — up to 6 parallel requests
+    all_results: list[list[dict]] = []
+    workers = min(6, len(tasks))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {
+            pool.submit(_fetch_sina_stock_list, page=t[2], num=num_per_page, sort=t[0], asc=t[1]): t
+            for t in tasks
+        }
+        for fut in as_completed(futs, timeout=15):
+            try:
+                stocks = fut.result()
+                if stocks:
+                    all_results.append(stocks)
+            except Exception:
+                pass
+
+    # Deduplicate
+    seen_symbols: set[str] = set()
+    all_stocks: list[dict] = []
+    for stocks in all_results:
+        for s in stocks:
+            sym = str(s.get("symbol", ""))
+            if sym and sym not in seen_symbols:
+                seen_symbols.add(sym)
+                all_stocks.append(s)
     return all_stocks
 
 
@@ -930,15 +971,15 @@ _FALLBACK_UNIVERSE = [
     "600519", "601318", "600036", "000858", "000333", "600276", "601166",
     "600900", "601398", "600048", "000651", "601012", "600887", "600030",
     "601888", "000002", "600585", "000568", "600309", "601601", "000725",
-    "600104", "601688", "300750", "603259", "002415", "600031", "000001",
+    "600104", "601688", "603259", "002415", "600031", "000001",
     "600690", "002304", "601899", "600438", "002714", "601857", "600050",
-    "601225", "600089", "000538", "002352", "601668", "300059", "002142",
+    "601225", "600089", "000538", "002352", "601668", "002142",
     "002475", "600570", "601633", "000661", "600809", "601138", "600016",
     "002027", "000063", "600346", "603501", "601236", "002230", "002049",
     "600588", "601390", "002032", "600763", "000876", "601728", "002841",
-    "600019", "002594", "600741", "601669", "300760", "002460", "603986",
+    "600019", "002594", "600741", "601669", "002460", "603986",
     "002466", "001979", "600176", "603288", "600703", "601111", "002007",
-    "600000", "601919", "000776", "000166", "300015", "601628", "600009",
+    "600000", "601919", "000776", "000166", "601628", "600009",
     "002241", "600132", "002601", "002938", "600406", "003816", "002311",
     "000977", "601088", "000895", "002555", "600760", "601816", "600196",
     "688981",
@@ -959,6 +1000,7 @@ def screen_stocks(
 
     Falls back to AKShare or Tencent curated universe if Sina fails.
     """
+    import time as _time
     if risk_profile is None:
         risk_profile = RISK_PROFILES["medium"]
 
@@ -968,21 +1010,37 @@ def screen_stocks(
 
     # ── Round 1: Broad market fetch ──
     # Fast-probe Sina first to avoid long hangs when API is blocked
+    t0 = _time.time()
     if _probe_sina(timeout=4):
+        print(f"[planner:timing] Sina probe: {_time.time()-t0:.1f}s", file=sys.stderr, flush=True)
+        t1 = _time.time()
         sina_stocks = _fetch_sina_all_pages(max_pages=12, num_per_page=80)
+        print(f"[planner:timing] Sina fetch pages: {_time.time()-t1:.1f}s ({len(sina_stocks)} stocks)", file=sys.stderr, flush=True)
         if sina_stocks:
             # Round 2+3: filter + score, get top 50 for technical validation
+            t2 = _time.time()
             round3 = _score_sina_stocks(sina_stocks, strategy, risk_profile, top_n=50)
+            print(f"[planner:timing] Score+filter: {_time.time()-t2:.1f}s ({len(round3)} candidates)", file=sys.stderr, flush=True)
             # Round 4: technical validation with klines
-            return _technical_validation(round3, top_n)
+            t3 = _time.time()
+            result = _technical_validation(round3, top_n)
+            print(f"[planner:timing] Technical validation: {_time.time()-t3:.1f}s", file=sys.stderr, flush=True)
+            return result
+    else:
+        print(f"[planner:timing] Sina probe failed: {_time.time()-t0:.1f}s", file=sys.stderr, flush=True)
 
     # ── Fallback: AKShare ──
     try:
         import akshare as ak
+        t1 = _time.time()
         df = ak.stock_zh_a_spot_em()
+        print(f"[planner:timing] AKShare spot fetch: {_time.time()-t1:.1f}s", file=sys.stderr, flush=True)
         if df is not None and not df.empty:
             round3 = _score_akshare_stocks(df, strategy, risk_profile, top_n=50)
-            return _technical_validation(round3, top_n)
+            t3 = _time.time()
+            result = _technical_validation(round3, top_n)
+            print(f"[planner:timing] Technical validation: {_time.time()-t3:.1f}s", file=sys.stderr, flush=True)
+            return result
     except Exception:
         pass
 
@@ -1010,10 +1068,10 @@ def _fetch_klines_via_bridge(symbols: list[str], count: int = 90) -> dict[str, l
         if "." in sym:
             qmt = sym
             plain = sym.split(".")[0]
-        elif sym.startswith("6"):
+        elif sym.startswith("6") or sym.startswith("5"):
             qmt = sym + ".SH"
             plain = sym
-        elif sym.startswith(("0", "3")):
+        elif sym.startswith(("0", "1", "3")):
             qmt = sym + ".SZ"
             plain = sym
         else:
@@ -1083,29 +1141,44 @@ def _technical_validation(candidates: list[dict], top_n: int) -> list[dict]:
       1. Bridge (RECEIVER→BRIDGE→QMT) — batch, fast when Windows QMT is online
       2. akshare (eastmoney→baidu fallback) — per-stock, slower
     """
+    import time as _time
     top_n = int(top_n)
     subset = candidates[:min(50, len(candidates))]
     symbols = [s["symbol"] for s in subset]
 
     # ── Try bridge batch fetch first ──
+    t_bridge = _time.time()
     bridge_klines = _fetch_klines_via_bridge(symbols, count=90)
     if bridge_klines:
-        print("[planner] bridge returned klines for %d/%d stocks" % (len(bridge_klines), len(symbols)),
+        print("[planner:timing] bridge klines: %.1fs (%d/%d stocks)" % (_time.time()-t_bridge, len(bridge_klines), len(symbols)),
               file=sys.stderr, flush=True)
+    else:
+        print("[planner:timing] bridge klines: %.1fs (failed/empty)" % (_time.time()-t_bridge),
+              file=sys.stderr, flush=True)
+
+    # ── Batch-fetch remaining missing klines via akshare batch ──
+    missing_syms = [s for s in symbols if not bridge_klines.get(s) or len(bridge_klines.get(s, [])) < 20]
+    if missing_syms:
+        try:
+            from data_providers.akshare_provider import get_klines_batch
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            start_dt = datetime.now() - timedelta(days=90)
+            start_date = start_dt.strftime("%Y-%m-%d")
+            t_batch = _time.time()
+            batch_result = get_klines_batch(missing_syms, start_date, end_date, "cn_stock", 90)
+            for sym, bars in batch_result.items():
+                if bars:
+                    bridge_klines[sym] = bars
+            print("[planner:timing] batch fallback: %.1fs (%d/%d missing)" % (_time.time()-t_batch, len(batch_result), len(missing_syms)),
+                  file=sys.stderr, flush=True)
+        except Exception as e:
+            print("[planner] batch fallback failed: %s" % e, file=sys.stderr, flush=True)
 
     validated = []
     for stock in subset:
         try:
             sym = stock["symbol"]
             klines = bridge_klines.get(sym)
-
-            # Fallback to akshare if bridge didn't have this stock
-            if not klines or len(klines) < 20:
-                from data_providers.akshare_provider import get_klines
-                end_date = datetime.now().strftime("%Y%m%d")
-                start_dt = datetime.now() - timedelta(days=90)
-                start_date = start_dt.strftime("%Y%m%d")
-                klines = get_klines(sym, "1d", start_date, end_date, "cn_stock")
 
             if klines and len(klines) >= 20:
                 techs = _compute_technicals_from_klines(klines)
@@ -1358,6 +1431,9 @@ def _score_sina_stocks(
             continue
         if code.startswith("8") or code.startswith("4"):
             continue
+        # Skip 创业板 (ChiNext) — requires separate trading permission
+        if code.startswith("3"):
+            continue
 
         price = _safe_float(s.get("trade"))
         pe = _safe_float(s.get("per"))
@@ -1382,9 +1458,10 @@ def _score_sina_stocks(
         if pb_max > 0 and pb > 0 and (pb < pb_min or pb > pb_max):
             continue
         # During pre-market / opening auction turnoverRate may be 0; only
-        # skip if volume is also 0 (truly no data).
-        pre_market = turnover <= 0
-        if pre_market and volume <= 0:
+        # skip if volume is also 0 AND price is missing (truly no data).
+        # Before 09:30 most stocks have volume=0 but valid price/PE/PB.
+        pre_market = turnover <= 0 and volume <= 0
+        if pre_market and price <= 0:
             continue
 
         # Calculate amplitude
@@ -1398,30 +1475,38 @@ def _score_sina_stocks(
             if change_pct > 2:
                 score += min(change_pct, 10) * 1.0
                 reasons.append(f"涨{change_pct:.1f}%")
-            # Turnover bell-curve: healthy 2-8%, penalize extremes
-            if 2 < turnover <= 8:
-                score += 4
-                reasons.append(f"换手率健康({turnover:.1f}%)")
-            elif 8 < turnover <= 15:
-                score += 1
-                reasons.append(f"换手较高({turnover:.1f}%)")
-            elif turnover > 15:
-                score -= 4
-                reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
-            elif turnover <= 0.5:
-                score -= 2
-                reasons.append("流动性差")
-            if amount > 5e8:  # >5亿成交额
-                score += 3
-                reasons.append("活跃")
+            # Skip volume/turnover scoring during pre-market
+            if not pre_market:
+                # Turnover bell-curve: healthy 2-8%, penalize extremes
+                if 2 < turnover <= 8:
+                    score += 4
+                    reasons.append(f"换手率健康({turnover:.1f}%)")
+                elif 8 < turnover <= 15:
+                    score += 1
+                    reasons.append(f"换手较高({turnover:.1f}%)")
+                elif turnover > 15:
+                    score -= 4
+                    reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
+                elif turnover <= 0.5:
+                    score -= 2
+                    reasons.append("流动性差")
+                if amount > 5e8:  # >5亿成交额
+                    score += 3
+                    reasons.append("活跃")
+            else:
+                # Pre-market: give a small base score for momentum candidates
+                if change_pct > 0:
+                    score += 2
+                    reasons.append("盘前竞价上涨")
 
-        # Small-cap + high turnover = manipulation risk
-        if nmc > 0 and nmc < 50e8 and turnover > 10:
-            score -= 3
-            reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
-        elif nmc > 0 and nmc < 30e8 and turnover > 8:
-            score -= 2
-            reasons.append(f"小盘换手偏高({turnover:.0f}%)")
+        # Small-cap + high turnover = manipulation risk (skip during pre-market)
+        if not pre_market:
+            if nmc > 0 and nmc < 50e8 and turnover > 10:
+                score -= 3
+                reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
+            elif nmc > 0 and nmc < 30e8 and turnover > 8:
+                score -= 2
+                reasons.append(f"小盘换手偏高({turnover:.0f}%)")
 
         if strategy in ("value", "auto", "mixed"):
             if 5 < pe < 20:
@@ -1557,6 +1642,9 @@ def _score_akshare_stocks(
             continue
         if code.startswith("8") or code.startswith("4"):
             continue
+        # Skip 创业板 (ChiNext) — requires separate trading permission
+        if code.startswith("3"):
+            continue
 
         price = _safe_float(row.get("最新价"))
         pe = _safe_float(row.get("市盈率-动态"))
@@ -1572,10 +1660,9 @@ def _score_akshare_stocks(
         circ_cap = _safe_float(row.get("流通市值"))
 
         # During pre-market / opening auction turnoverRate may be 0;
-        # only skip if volume is also 0 (truly no data).
+        # Before 09:30 most stocks have volume=0 but valid price/PE/PB.
+        pre_market = turnover <= 0 and _safe_float(row.get("成交量")) <= 0
         if price <= 0:
-            continue
-        if turnover <= 0 and _safe_float(row.get("成交量")) <= 0:
             continue
         if total_cap < min_cap:
             continue
@@ -1594,55 +1681,63 @@ def _score_akshare_stocks(
             if change_5d > 0:
                 score += min(change_5d, 15) * 0.5
                 reasons.append(f"5日涨{change_5d:.1f}%")
-            # Volume ratio tier scoring
-            vr_tier, _ = _classify_volume_ratio(volume_ratio) if volume_ratio > 0 else ("normal", "")
-            if vr_tier == "extreme_high":
-                # 量比>5: extreme — check if pump or distribution
-                if change_pct > 5:
-                    score += 3
-                    reasons.append(f"量比{volume_ratio:.1f}极端+大涨(可能急拉)")
-                elif abs(change_pct) < 2:
+            # Skip volume/turnover scoring during pre-market
+            if not pre_market:
+                # Volume ratio tier scoring
+                vr_tier, _ = _classify_volume_ratio(volume_ratio) if volume_ratio > 0 else ("normal", "")
+                if vr_tier == "extreme_high":
+                    # 量比>5: extreme — check if pump or distribution
+                    if change_pct > 5:
+                        score += 3
+                        reasons.append(f"量比{volume_ratio:.1f}极端+大涨(可能急拉)")
+                    elif abs(change_pct) < 2:
+                        score -= 4
+                        reasons.append(f"量比{volume_ratio:.1f}极端+滞涨(疑似对倒)")
+                    else:
+                        score -= 2
+                        reasons.append(f"量比{volume_ratio:.1f}极端异常")
+                elif vr_tier == "surge":
+                    if change_pct > 0:
+                        score += min(volume_ratio, 5) * 1.5
+                        reasons.append(f"量比{volume_ratio:.1f}急剧放量+上涨")
+                    else:
+                        score -= 2
+                        reasons.append(f"量比{volume_ratio:.1f}急剧放量+下跌(出货)")
+                elif vr_tier in ("strong_expand", "mild_expand"):
+                    if change_pct > 0:
+                        score += min(volume_ratio, 5) * 2
+                        reasons.append(f"量比{volume_ratio:.1f}")
+                elif vr_tier == "extreme_low":
+                    score -= 1
+                    reasons.append(f"量比{volume_ratio:.1f}极度缩量")
+                # Turnover bell-curve: healthy 2-8%, penalize extremes
+                if 2 < turnover <= 8:
+                    score += 4
+                    reasons.append(f"换手率健康({turnover:.1f}%)")
+                elif 8 < turnover <= 15:
+                    score += 1
+                    reasons.append(f"换手较高({turnover:.1f}%)")
+                elif turnover > 15:
                     score -= 4
-                    reasons.append(f"量比{volume_ratio:.1f}极端+滞涨(疑似对倒)")
-                else:
+                    reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
+                elif turnover <= 0.5:
                     score -= 2
-                    reasons.append(f"量比{volume_ratio:.1f}极端异常")
-            elif vr_tier == "surge":
+                    reasons.append("流动性差")
+            else:
+                # Pre-market: give a small base score for momentum candidates
                 if change_pct > 0:
-                    score += min(volume_ratio, 5) * 1.5
-                    reasons.append(f"量比{volume_ratio:.1f}急剧放量+上涨")
-                else:
-                    score -= 2
-                    reasons.append(f"量比{volume_ratio:.1f}急剧放量+下跌(出货)")
-            elif vr_tier in ("strong_expand", "mild_expand"):
-                if change_pct > 0:
-                    score += min(volume_ratio, 5) * 2
-                    reasons.append(f"量比{volume_ratio:.1f}")
-            elif vr_tier == "extreme_low":
-                score -= 1
-                reasons.append(f"量比{volume_ratio:.1f}极度缩量")
-            # Turnover bell-curve: healthy 2-8%, penalize extremes
-            if 2 < turnover <= 8:
-                score += 4
-                reasons.append(f"换手率健康({turnover:.1f}%)")
-            elif 8 < turnover <= 15:
-                score += 1
-                reasons.append(f"换手较高({turnover:.1f}%)")
-            elif turnover > 15:
-                score -= 4
-                reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
-            elif turnover <= 0.5:
-                score -= 2
-                reasons.append("流动性差")
+                    score += 2
+                    reasons.append("盘前竞价上涨")
 
-        # Small-cap + high turnover = manipulation risk
-        cap_for_check = circ_cap if circ_cap > 0 else total_cap
-        if cap_for_check > 0 and cap_for_check < 50e8 and turnover > 10:
-            score -= 3
-            reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
-        elif cap_for_check > 0 and cap_for_check < 30e8 and turnover > 8:
-            score -= 2
-            reasons.append(f"小盘换手偏高({turnover:.0f}%)")
+        # Small-cap + high turnover = manipulation risk (skip during pre-market)
+        if not pre_market:
+            cap_for_check = circ_cap if circ_cap > 0 else total_cap
+            if cap_for_check > 0 and cap_for_check < 50e8 and turnover > 10:
+                score -= 3
+                reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
+            elif cap_for_check > 0 and cap_for_check < 30e8 and turnover > 8:
+                score -= 2
+                reasons.append(f"小盘换手偏高({turnover:.0f}%)")
 
         if strategy in ("value", "auto", "mixed"):
             if 5 < pe < 20:
@@ -1804,6 +1899,9 @@ def _screen_from_tencent_universe(
     for sym, q in all_quotes.items():
         if q["price"] <= 0:
             continue
+        # Skip 创业板 (ChiNext) — requires separate trading permission
+        if sym.startswith("3"):
+            continue
         pe = q.get("pe", 0)
         pb = q.get("pb", 0)
         mkt_cap = q.get("totalMarketCap", 0)
@@ -1822,63 +1920,73 @@ def _screen_from_tencent_universe(
         amplitude = q.get("amplitude", 0)
 
         # During pre-market / opening auction turnoverRate may be 0 even
-        # though volume > 0.  Only skip if both are zero (truly no data).
-        pre_market = turnover <= 0
-        if pre_market and q.get("volume", 0) <= 0:
+        # though volume > 0.  Only skip if both are zero AND price is also 0
+        # (truly no data).  Before 09:30 most stocks have volume=0 but valid
+        # price/PE/PB data, so we keep them and score on fundamentals.
+        pre_market = turnover <= 0 and q.get("volume", 0) <= 0
+        if pre_market and q["price"] <= 0:
             continue
 
         if strategy in ("momentum", "auto", "mixed"):
             if change_pct > 2:
                 score += min(change_pct, 10) * 1.0
                 reasons.append(f"涨{change_pct:.1f}%")
-            # Volume ratio tier scoring
-            vr_tier_t, _ = _classify_volume_ratio(volume_ratio) if volume_ratio > 0 else ("normal", "")
-            if vr_tier_t == "extreme_high":
-                if abs(change_pct) < 2:
+            # Skip volume/turnover scoring during pre-market (no volume data)
+            if not pre_market:
+                # Volume ratio tier scoring
+                vr_tier_t, _ = _classify_volume_ratio(volume_ratio) if volume_ratio > 0 else ("normal", "")
+                if vr_tier_t == "extreme_high":
+                    if abs(change_pct) < 2:
+                        score -= 4
+                        reasons.append(f"量比{volume_ratio:.1f}极端+滞涨(疑似对倒)")
+                    elif change_pct > 5:
+                        score += 3
+                        reasons.append(f"量比{volume_ratio:.1f}极端+大涨")
+                    else:
+                        score -= 2
+                        reasons.append(f"量比{volume_ratio:.1f}极端异常")
+                elif vr_tier_t == "surge":
+                    if change_pct > 0:
+                        score += min(volume_ratio, 5) * 1.5
+                        reasons.append(f"量比{volume_ratio:.1f}急剧放量+上涨")
+                    else:
+                        score -= 2
+                        reasons.append(f"量比{volume_ratio:.1f}急剧放量+下跌")
+                elif vr_tier_t in ("strong_expand", "mild_expand") and change_pct > 0:
+                    score += min(volume_ratio, 5) * 2
+                    reasons.append(f"量比{volume_ratio:.1f}")
+                elif vr_tier_t == "extreme_low":
+                    score -= 1
+                    reasons.append(f"量比{volume_ratio:.1f}极度缩量")
+                # Turnover bell-curve: healthy 2-8%, penalize extremes
+                if 2 < turnover <= 8:
+                    score += 4
+                    reasons.append(f"换手率健康({turnover:.1f}%)")
+                elif 8 < turnover <= 15:
+                    score += 1
+                    reasons.append(f"换手较高({turnover:.1f}%)")
+                elif turnover > 15:
                     score -= 4
-                    reasons.append(f"量比{volume_ratio:.1f}极端+滞涨(疑似对倒)")
-                elif change_pct > 5:
-                    score += 3
-                    reasons.append(f"量比{volume_ratio:.1f}极端+大涨")
-                else:
+                    reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
+                elif turnover <= 0.5:
                     score -= 2
-                    reasons.append(f"量比{volume_ratio:.1f}极端异常")
-            elif vr_tier_t == "surge":
+                    reasons.append("流动性差")
+            else:
+                # Pre-market: give a small base score for momentum candidates
                 if change_pct > 0:
-                    score += min(volume_ratio, 5) * 1.5
-                    reasons.append(f"量比{volume_ratio:.1f}急剧放量+上涨")
-                else:
-                    score -= 2
-                    reasons.append(f"量比{volume_ratio:.1f}急剧放量+下跌")
-            elif vr_tier_t in ("strong_expand", "mild_expand") and change_pct > 0:
-                score += min(volume_ratio, 5) * 2
-                reasons.append(f"量比{volume_ratio:.1f}")
-            elif vr_tier_t == "extreme_low":
-                score -= 1
-                reasons.append(f"量比{volume_ratio:.1f}极度缩量")
-            # Turnover bell-curve: healthy 2-8%, penalize extremes
-            if 2 < turnover <= 8:
-                score += 4
-                reasons.append(f"换手率健康({turnover:.1f}%)")
-            elif 8 < turnover <= 15:
-                score += 1
-                reasons.append(f"换手较高({turnover:.1f}%)")
-            elif turnover > 15:
-                score -= 4
-                reasons.append(f"换手率过高({turnover:.0f}%)投机风险")
-            elif turnover <= 0.5:
-                score -= 2
-                reasons.append("流动性差")
+                    score += 2
+                    reasons.append("盘前竞价上涨")
 
-        # Small-cap + high turnover = manipulation risk
-        circ_cap_t = q.get("circulatingMarketCap", 0)
-        cap_for_check = circ_cap_t if circ_cap_t > 0 else mkt_cap
-        if cap_for_check > 0 and cap_for_check < 50e8 and turnover > 10:
-            score -= 3
-            reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
-        elif cap_for_check > 0 and cap_for_check < 30e8 and turnover > 8:
-            score -= 2
-            reasons.append(f"小盘换手偏高({turnover:.0f}%)")
+        # Small-cap + high turnover = manipulation risk (skip during pre-market)
+        if not pre_market:
+            circ_cap_t = q.get("circulatingMarketCap", 0)
+            cap_for_check = circ_cap_t if circ_cap_t > 0 else mkt_cap
+            if cap_for_check > 0 and cap_for_check < 50e8 and turnover > 10:
+                score -= 3
+                reasons.append(f"小盘高换手({turnover:.0f}%)疑似庄股")
+            elif cap_for_check > 0 and cap_for_check < 30e8 and turnover > 8:
+                score -= 2
+                reasons.append(f"小盘换手偏高({turnover:.0f}%)")
 
         if strategy in ("value", "auto", "mixed"):
             if 5 < pe < 20:
@@ -2408,37 +2516,28 @@ def update_screening(
     top_n: int = 20,
 ) -> dict:
     """Run stock screening and return ranked candidates with technical data."""
+    import time as _time
+    t_total = _time.time()
     profile = RISK_PROFILES.get(risk_tolerance, RISK_PROFILES["medium"])
+
+    t0 = _time.time()
     candidates = screen_stocks(strategy, profile, top_n)
+    print(f"[planner:timing] screen_stocks total: {_time.time()-t0:.1f}s ({len(candidates)} candidates)", file=sys.stderr, flush=True)
 
-    # Enhance top candidates with kline technicals
-    enhanced = []
-    for stock in candidates[:top_n]:
-        try:
-            from data_providers.akshare_provider import get_klines
-            end_date = datetime.now().strftime("%Y%m%d")
-            start_dt = datetime.now() - timedelta(days=90)
-            start_date = start_dt.strftime("%Y%m%d")
-            klines = get_klines(stock["symbol"], "1d", start_date, end_date, "cn_stock")
-            if klines and len(klines) >= 20:
-                techs = _compute_technicals_from_klines(klines)
-                stock["technicals"] = techs
-                # Boost score based on technicals
-                if techs.get("trend_score", 0) >= 3:
-                    stock["score"] += 5
-                    stock["reasons"].append("趋势强势")
-                if techs.get("rsi14") and 30 < techs["rsi14"] < 70:
-                    stock["score"] += 2
-                    stock["reasons"].append("RSI健康")
-        except Exception:
-            pass
-        enhanced.append(stock)
+    # screen_stocks already includes technical validation with klines (Round 4),
+    # so skip redundant batch kline re-fetch here.
+    enhanced = list(candidates[:top_n])
 
-    # Re-sort after technical boost
-    enhanced.sort(key=lambda x: x["score"], reverse=True)
-
-    # Institutional + sentiment + analyst enrichment for top 10 (parallel)
-    top_symbols = [s["symbol"] for s in enhanced[:10]]
+    # Institutional + sentiment + analyst enrichment for top candidates (parallel)
+    t_enrich = _time.time()
+    # Pre-warm the full-market sentiment table (shared across all stocks)
+    try:
+        from engines.social_sentiment import _get_stock_comment_em
+        _get_stock_comment_em()
+    except Exception:
+        pass
+    enrich_count = min(5, len(enhanced))  # top 5 for speed, covers most user interest
+    top_symbols = [s["symbol"] for s in enhanced[:enrich_count]]
     sm_results: dict[str, dict | None] = {}
     sent_results: dict[str, dict | None] = {}
     analyst_results: dict[str, dict | None] = {}
@@ -2452,7 +2551,7 @@ def update_screening(
             analyst_futures = {pool.submit(_get_analyst_consensus, sym): ("analyst", sym) for sym in top_symbols}
             all_futures = {**sm_futures, **sent_futures, **analyst_futures}
 
-            for future in as_completed(all_futures, timeout=20):
+            for future in as_completed(all_futures, timeout=30):
                 kind, sym = all_futures[future]
                 try:
                     result = future.result()
@@ -2466,8 +2565,9 @@ def update_screening(
                     pass
     except Exception as e:
         print(f"[planner] enrichment parallel fetch failed: {e}", file=sys.stderr, flush=True)
+    print(f"[planner:timing] enrichment (institutional+sentiment+analyst): {_time.time()-t_enrich:.1f}s", file=sys.stderr, flush=True)
 
-    for stock in enhanced[:10]:
+    for stock in enhanced[:enrich_count]:
         sym = stock["symbol"]
         # ── Institutional smart money ──
         try:
@@ -2552,7 +2652,7 @@ def update_screening(
     else:
         adjusted_max_positions = base_max_positions
 
-    return {
+    _result = {
         "candidates": enhanced,
         "strategy": strategy,
         "riskProfile": profile["label"],
@@ -2569,6 +2669,385 @@ def update_screening(
             "baseMaxPositions": base_max_positions,
         },
         "timestamp": datetime.now().isoformat(),
+    }
+    print(f"[planner:timing] update_screening TOTAL: {_time.time()-t_total:.1f}s", file=sys.stderr, flush=True)
+    return _result
+
+
+def smart_strategy_advisor(
+    plan: dict,
+) -> dict:
+    """Analyze each position with technicals, manipulation detection, macro regime,
+    and strategy routing to recommend optimal strategy per holding.
+
+    Returns per-position analysis with:
+      - Technical indicators snapshot
+      - Volume/price pattern
+      - Manipulation detection results
+      - Macro regime context
+      - Recommended action (hold/add/reduce/sell)
+      - Recommended strategy combo
+      - Confidence level and reasoning
+    """
+    portfolio = plan.get("portfolio", [])
+    if not portfolio:
+        return {"error": "无持仓数据", "positions": []}
+
+    symbols = [p["symbol"] for p in portfolio]
+
+    # 1. Fetch real-time quotes
+    quotes = _fetch_tencent_batch(symbols)
+
+    # 2. Fetch klines for technical analysis
+    klines_map = _fetch_klines_via_bridge(symbols, count=90)
+
+    # 3. Get macro regime
+    macro = _get_macro_regime()
+    regime = macro.get("regime", "unknown")
+    regime_desc = macro.get("description", "")
+
+    # 4. Try to get strategy routing recommendations
+    strategy_recs: dict[str, dict] = {}
+    try:
+        from engines.strategy_router import recommend_with_regime
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        for sym in symbols:
+            try:
+                rec = recommend_with_regime(sym, end_date)
+                if rec.get("ok"):
+                    strategy_recs[sym] = rec
+            except Exception as e:
+                print(f"[advisor] routing failed for {sym}: {e}", file=sys.stderr, flush=True)
+    except ImportError:
+        print("[advisor] strategy_router not available", file=sys.stderr, flush=True)
+
+    # Calculate portfolio total value
+    initial_capital = plan.get("initialCapital", 0)
+    total_value = 0.0
+    for pos in portfolio:
+        q = quotes.get(pos["symbol"], {})
+        price = q.get("price", pos.get("price", 0))
+        total_value += price * pos.get("shares", 0)
+    if total_value <= 0:
+        total_value = initial_capital or 500000
+
+    # 5. Analyze each position
+    results: list[dict] = []
+    for pos in portfolio:
+        sym = pos["symbol"]
+        q = quotes.get(sym, {})
+        current_price = q.get("price", 0)
+        if current_price <= 0:
+            continue
+
+        buy_price = pos.get("price", 0)
+        shares = pos.get("shares", 0)
+        stop_loss = pos.get("stopLoss", 0)
+        take_profit = pos.get("takeProfit", 0)
+        position_value = current_price * shares
+        weight = position_value / total_value * 100 if total_value > 0 else 0
+        pnl_pct = (current_price / buy_price - 1) * 100 if buy_price > 0 else 0
+        change_pct = q.get("changePct", 0)
+        name = q.get("name", pos.get("name", sym))
+        pe = q.get("pe", 0)
+        pb = q.get("pb", 0)
+        turnover = q.get("turnoverRate", 0)
+        volume_ratio = q.get("volumeRatio", 0)
+
+        # Technical indicators from klines
+        klines = klines_map.get(sym, [])
+        technicals = _compute_technicals_from_klines(klines) if len(klines) >= 20 else {}
+
+        # Manipulation pattern detection
+        manipulation = _detect_manipulation_patterns(klines) if len(klines) >= 20 else {}
+
+        # Volume classification
+        vr = technicals.get("volume_ratio", volume_ratio) or volume_ratio
+        vol_tier, vol_desc = _classify_volume_ratio(vr) if vr > 0 else ("unknown", "未知")
+
+        # Strategy router recommendation
+        routing = strategy_recs.get(sym, {})
+
+        # ── Smart decision logic ──
+        action = "hold"
+        confidence = 0
+        reasons: list[str] = []
+        strategy_name = "持有观望"
+        strategy_detail = ""
+
+        rsi = technicals.get("rsi14", 50)
+        trend_score = technicals.get("trend_score", 2)
+        momentum_5d = technicals.get("momentum_5d", 0)
+        momentum_20d = technicals.get("momentum_20d", 0)
+        price_pos = technicals.get("price_position", 0.5)
+        volatility = technicals.get("volatility", 0)
+
+        manip_pattern = manipulation.get("pattern", "none")
+
+        # === SELL signals ===
+        sell_score = 0
+        if stop_loss > 0 and current_price <= stop_loss:
+            sell_score += 40
+            reasons.append(f"触及止损 {stop_loss}")
+        if pnl_pct <= -15:
+            sell_score += 35
+            reasons.append(f"亏损 {pnl_pct:.1f}% 超限")
+        if rsi and rsi > 80:
+            sell_score += 15
+            reasons.append(f"RSI={rsi:.0f} 严重超买")
+        if manip_pattern == "distribution":
+            sell_score += 25
+            reasons.append("检测到出货迹象")
+        if trend_score <= 0 and momentum_20d < -10:
+            sell_score += 20
+            reasons.append(f"趋势极弱(得分{trend_score})，20日动量{momentum_20d:.1f}%")
+        if regime == "recession":
+            sell_score += 10
+            reasons.append("宏观处于衰退周期")
+
+        # === REDUCE signals ===
+        reduce_score = 0
+        if take_profit > 0 and current_price >= take_profit:
+            reduce_score += 30
+            reasons.append(f"达止盈位 {take_profit}")
+        if weight > 25:
+            reduce_score += 25
+            reasons.append(f"仓位 {weight:.1f}% 过高")
+        if rsi and rsi > 70:
+            reduce_score += 15
+            reasons.append(f"RSI={rsi:.0f} 超买")
+        if pnl_pct > 30 and momentum_5d < -2:
+            reduce_score += 20
+            reasons.append(f"盈利 {pnl_pct:.1f}% 但近期走弱")
+        if vol_tier in ("surge", "extreme_high") and price_pos > 0.8:
+            reduce_score += 15
+            reasons.append(f"高位放量({vol_desc})，警惕冲高回落")
+        if regime == "stagflation":
+            reduce_score += 5
+            reasons.append("宏观滞胀周期，宜适度减仓")
+
+        # === ADD signals ===
+        add_score = 0
+        if pnl_pct > 5 and weight < 10 and change_pct > 0:
+            add_score += 20
+            reasons.append(f"盈利{pnl_pct:.1f}%但仓位偏低{weight:.1f}%")
+        if rsi and 30 < rsi < 50 and trend_score >= 2:
+            add_score += 15
+            reasons.append(f"RSI={rsi:.0f}回调到位，趋势完好(得分{trend_score})")
+        if manip_pattern == "accumulation":
+            add_score += 20
+            reasons.append("检测到吸筹迹象")
+        if vol_tier in ("mild_shrink", "extreme_low") and price_pos < 0.3 and trend_score >= 2:
+            add_score += 15
+            reasons.append(f"缩量回调({vol_desc})，底部区域")
+        if regime == "recovery":
+            add_score += 5
+            reasons.append("宏观复苏期，适合加仓")
+
+        # === Determine action ===
+        if sell_score >= 35:
+            action = "sell"
+            confidence = min(95, 50 + sell_score)
+            strategy_name = "止损清仓" if pnl_pct < 0 else "止盈清仓"
+            if volatility > 0.03:
+                strategy_detail = "建议分批卖出(高波动)，避免单次冲击"
+            else:
+                strategy_detail = "建议市价卖出，快速离场"
+        elif reduce_score >= 25:
+            action = "reduce"
+            confidence = min(90, 45 + reduce_score)
+            if pnl_pct > 20:
+                strategy_name = "阶梯止盈"
+                strategy_detail = "先减50%锁定利润，余仓上移止损"
+            elif rsi and rsi > 70:
+                strategy_name = "超买减仓"
+                strategy_detail = "RSI超买先减30%，等回调到60以下再观察"
+            elif weight > 25:
+                strategy_name = "仓位再平衡"
+                strategy_detail = f"当前仓位{weight:.1f}%过重，建议减到15%左右"
+            else:
+                strategy_name = "防守减仓"
+                strategy_detail = "减少风险敞口，保留核心仓位"
+        elif add_score >= 20:
+            action = "add"
+            confidence = min(85, 40 + add_score)
+            if manip_pattern == "accumulation":
+                strategy_name = "跟庄加仓"
+                strategy_detail = "检测到主力吸筹，建议分批跟进"
+            elif rsi and rsi < 40:
+                strategy_name = "超卖加仓"
+                strategy_detail = "RSI低位反弹，建议低吸加仓"
+            elif trend_score >= 3:
+                strategy_name = "趋势加仓"
+                strategy_detail = "均线多头排列，顺势加码"
+            else:
+                strategy_name = "价值加仓"
+                strategy_detail = "基本面未变，仓位有加仓空间"
+        else:
+            action = "hold"
+            confidence = max(30, 70 - abs(sell_score - add_score))
+            strategy_name = "持有观望"
+            if trend_score >= 3:
+                strategy_detail = "趋势良好，继续持有"
+            elif trend_score <= 1:
+                strategy_detail = "趋势偏弱，密切关注止损位"
+            else:
+                strategy_detail = "震荡整理中，等待方向明朗"
+
+        # Merge router strategy combo if available
+        combo_info = None
+        if routing:
+            combo = routing.get("combo", {})
+            combo_info = {
+                "name": combo.get("name", ""),
+                "method": combo.get("method", ""),
+                "strategies": [s.get("strategyId", "") for s in combo.get("strategies", [])],
+                "reason": routing.get("reason", ""),
+                "source": routing.get("source", ""),
+            }
+            profile = routing.get("profile", {})
+            if profile:
+                combo_info["stockProfile"] = {
+                    "volatility": profile.get("volatility", {}).get("class", ""),
+                    "trend": profile.get("trend", {}).get("class", ""),
+                    "marketCap": profile.get("marketCap", {}).get("class", ""),
+                    "momentum": profile.get("momentum", {}).get("class", ""),
+                }
+
+        results.append({
+            "symbol": sym,
+            "name": name,
+            "shares": shares,
+            "currentPrice": round(current_price, 2),
+            "buyPrice": round(buy_price, 2),
+            "pnlPct": round(pnl_pct, 2),
+            "changePct": round(change_pct, 2),
+            "weight": round(weight, 2),
+            "pe": pe,
+            "pb": pb,
+            "turnover": turnover,
+            # Technical snapshot
+            "technicals": {
+                "rsi14": rsi,
+                "trendScore": trend_score,
+                "momentum5d": round(momentum_5d, 2),
+                "momentum20d": round(momentum_20d, 2),
+                "pricePosition": price_pos,
+                "volatility": round(volatility, 4) if volatility else 0,
+                "volumeRatio": vr,
+                "volumeTier": vol_desc,
+                "ma5": technicals.get("ma5"),
+                "ma20": technicals.get("ma20"),
+                "ma60": technicals.get("ma60"),
+            },
+            # Manipulation detection
+            "manipulation": {
+                "pattern": manip_pattern,
+                "confidence": manipulation.get("confidence", 0),
+                "signals": manipulation.get("signals", []),
+            },
+            # Strategy recommendation
+            "recommendation": {
+                "action": action,
+                "confidence": confidence,
+                "strategyName": strategy_name,
+                "strategyDetail": strategy_detail,
+                "reasons": reasons,
+            },
+            # Strategy router combo (if available)
+            "routerCombo": combo_info,
+        })
+
+    # Macro summary
+    summary = {
+        "totalPositions": len(results),
+        "macroRegime": regime,
+        "macroDescription": regime_desc,
+        "sellCount": len([r for r in results if r["recommendation"]["action"] == "sell"]),
+        "reduceCount": len([r for r in results if r["recommendation"]["action"] == "reduce"]),
+        "holdCount": len([r for r in results if r["recommendation"]["action"] == "hold"]),
+        "addCount": len([r for r in results if r["recommendation"]["action"] == "add"]),
+        "avgConfidence": round(sum(r["recommendation"]["confidence"] for r in results) / max(len(results), 1), 1),
+        "totalValue": round(total_value, 2),
+    }
+
+    return {
+        "positions": results,
+        "summary": summary,
+        "macroRegime": {
+            "regime": regime,
+            "description": regime_desc,
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+def manual_rebalance(
+    actions: list[dict],
+    mode: str = "paper",
+) -> dict:
+    """Validate and enrich user-specified rebalance actions with live quotes.
+
+    Each action: {action, symbol, name?, quantity, strategy?, note?}
+    Returns enriched actions with current prices and estimated amounts.
+    """
+    if not actions:
+        return {"error": "无操作指令", "actions": [], "summary": {}}
+
+    symbols = [a["symbol"] for a in actions if a.get("symbol")]
+    quotes = _fetch_tencent_batch(symbols) if symbols else {}
+
+    enriched: list[dict] = []
+    total_buy_amount = 0.0
+    total_sell_amount = 0.0
+
+    for a in actions:
+        sym = a.get("symbol", "")
+        if not sym:
+            continue
+        q = quotes.get(sym, {})
+        price = q.get("price", a.get("currentPrice", 0))
+        name = q.get("name", a.get("name", sym))
+        quantity = int(a.get("quantity", 0))
+        action_type = a.get("action", "hold")
+        strategy = a.get("strategy", "market")
+        amount = price * quantity if price > 0 and quantity > 0 else 0
+
+        if action_type in ("sell", "reduce"):
+            total_sell_amount += amount
+        elif action_type in ("buy", "add"):
+            total_buy_amount += amount
+
+        enriched.append({
+            "action": action_type,
+            "symbol": sym,
+            "name": name,
+            "currentPrice": round(price, 2) if price else 0,
+            "changePct": round(q.get("changePct", 0), 2),
+            "quantity": quantity,
+            "amount": round(amount, 2),
+            "strategy": strategy,
+            "note": a.get("note", ""),
+            "status": "pending",
+        })
+
+    summary = {
+        "totalActions": len(enriched),
+        "buyCount": len([a for a in enriched if a["action"] == "buy"]),
+        "addCount": len([a for a in enriched if a["action"] == "add"]),
+        "reduceCount": len([a for a in enriched if a["action"] == "reduce"]),
+        "sellCount": len([a for a in enriched if a["action"] == "sell"]),
+        "totalBuyAmount": round(total_buy_amount, 2),
+        "totalSellAmount": round(total_sell_amount, 2),
+        "netFlow": round(total_sell_amount - total_buy_amount, 2),
+        "mode": mode,
+    }
+
+    return {
+        "actions": enriched,
+        "summary": summary,
+        "timestamp": datetime.now().isoformat(),
+        "status": "accepted",
     }
 
 
@@ -2754,10 +3233,19 @@ if __name__ == "__main__":
                 plan=config.get("plan", {}),
                 new_candidates=config.get("newCandidates", []),
             )
+        elif action == "rebalance_manual":
+            result = manual_rebalance(
+                actions=config.get("actions", []),
+                mode=config.get("mode", "paper"),
+            )
+        elif action == "smart_strategy":
+            result = smart_strategy_advisor(
+                plan=config.get("plan", {}),
+            )
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:
         import traceback
         result = {"error": str(e), "traceback": traceback.format_exc()}
 
-    print(json.dumps(result, ensure_ascii=False))
+    print(json.dumps(_sanitize_for_json(result), ensure_ascii=False))

@@ -67,7 +67,7 @@ SEAL_RECHECK_INTERVAL = 60       # ÿ 60 秒重新检查封板状态
 MAX_OPEN_COUNT = 2               # 盘中开板超 N 次 → 放弃
 COOLDOWN_AFTER_SIGNAL = 600      # 同一股票信号间隔 (秒)
 
-# 止损/ֹӯ (次日监控)
+# 止损/止盈 (次日监控)
 STOP_LOSS_PCT = -0.05            # 亏损 5% 止损
 EMERGENCY_SELL_AT_LIMIT_DOWN = True  # 跌停紧急卖出
 

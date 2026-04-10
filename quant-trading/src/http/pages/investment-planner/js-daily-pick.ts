@@ -20,25 +20,21 @@ function setDailyPickLoading(loading,msg){
 }
 
 function getDailyPickHistoryRaw(){
-  try{
-    var raw=localStorage.getItem(DAILY_PICK_HISTORY_KEY);
-    if(!raw)return [];
-    var parsed=JSON.parse(raw);
-    return Array.isArray(parsed)?parsed:[];
-  }catch(_e){
-    return [];
-  }
-}
-
-function saveDailyPickHistoryRaw(list){
-  try{
-    localStorage.setItem(DAILY_PICK_HISTORY_KEY,JSON.stringify((list||[]).slice(0,30)));
-  }catch(_e){}
+  return _dailyPickHistory||[];
 }
 
 function syncDailyPickHistory(){
-  _dailyPickHistory=getDailyPickHistoryRaw();
-  return _dailyPickHistory;
+  return _dailyPickHistory||[];
+}
+
+function fetchDailyPickHistory(){
+  return api('/quant/admin/api/daily-pick-history').then(function(list){
+    _dailyPickHistory=Array.isArray(list)?list:[];
+    return _dailyPickHistory;
+  }).catch(function(){
+    _dailyPickHistory=[];
+    return _dailyPickHistory;
+  });
 }
 
 function captureDailyPickParams(){
@@ -83,12 +79,17 @@ function saveDailyPickHistoryEntry(d){
     summary:summarizeDailyPickResult(d),
     result:d
   };
-  var list=syncDailyPickHistory();
-  list.unshift(entry);
-  if(list.length>30)list=list.slice(0,30);
-  saveDailyPickHistoryRaw(list);
-  _dailyPickHistory=list;
-  renderDailyPickHistory();
+  api('/quant/admin/api/daily-pick-history/save',{
+    method:'POST',
+    body:JSON.stringify(entry)
+  }).then(function(){
+    return fetchDailyPickHistory();
+  }).then(function(){
+    renderDailyPickHistory();
+  }).catch(function(e){
+    console.warn('saveDailyPickHistoryEntry failed',e);
+    toast('⚠️ 历史记录保存失败: '+e.message);
+  });
 }
 
 function renderDailyPickHistory(){
@@ -134,10 +135,12 @@ function renderDailyPickHistory(){
 }
 
 function loadDailyPickHistory(){
-  renderDailyPickHistory();
+  fetchDailyPickHistory().then(function(){
+    renderDailyPickHistory();
+  });
 }
 
-function restoreDailyPickHistory(id){
+function restoreDailyPickHistory(id,callback){
   if(_dailyPickRunning){
     toast('⏳ 综合选股正在运行中，请等待完成后再操作');
     return;
@@ -147,39 +150,51 @@ function restoreDailyPickHistory(id){
   for(var i=0;i<list.length;i++){
     if(list[i]&&list[i].id===id){found=list[i];break;}
   }
-  if(!found||!found.result){
+  if(!found){
     toast('未找到历史记录');
     return;
   }
 
-  var p=found.params||{};
-  if(Array.isArray(p.strategies)&&p.strategies.length){
-    document.querySelectorAll('.dp-strategy').forEach(function(el){
-      el.checked=p.strategies.indexOf(el.value)>=0;
+  toast('正在加载历史记录…');
+  api('/quant/admin/api/daily-pick-history/detail?id='+encodeURIComponent(id))
+    .then(function(result){
+      if(!result||result.error){
+        toast('❌ 加载失败: '+(result&&result.error||'未知错误'));
+        return;
+      }
+      var p=found.params||{};
+      if(Array.isArray(p.strategies)&&p.strategies.length){
+        document.querySelectorAll('.dp-strategy').forEach(function(el){
+          el.checked=p.strategies.indexOf(el.value)>=0;
+        });
+      }
+      if(p.topN!=null)document.getElementById('dp-top-n').value=p.topN;
+      if(p.topStrategyCount!=null)document.getElementById('dp-top-strategy-count').value=p.topStrategyCount;
+      if(p.finalLimit!=null)document.getElementById('dp-final-limit').value=p.finalLimit;
+      if(p.startDate)document.getElementById('rec-start').value=p.startDate;
+      document.getElementById('rec-end').value=p.endDate||'';
+      if(p.initialCapital!=null)document.getElementById('rec-capital').value=p.initialCapital;
+      if(p.rebalanceDays!=null)document.getElementById('rec-rebalance').value=p.rebalanceDays;
+      if(p.riskTolerance){
+        var riskSel=document.getElementById('rec-risk');
+        for(var j=0;j<riskSel.options.length;j++){
+          if(riskSel.options[j].value===p.riskTolerance){riskSel.selectedIndex=j;break;}
+        }
+      }
+      renderDailyCompositePick(result,{skipHistory:true});
+      setDailyPickLoading(false,'已加载历史记录：'+formatDailyPickTime(found.createdAt));
+      toast('✅ 已恢复历史综合选股结果');
+      if(typeof callback==='function')callback();
+    })
+    .catch(function(e){
+      toast('❌ 加载历史记录失败: '+e.message);
     });
-  }
-  if(p.topN!=null)document.getElementById('dp-top-n').value=p.topN;
-  if(p.topStrategyCount!=null)document.getElementById('dp-top-strategy-count').value=p.topStrategyCount;
-  if(p.finalLimit!=null)document.getElementById('dp-final-limit').value=p.finalLimit;
-  if(p.startDate)document.getElementById('rec-start').value=p.startDate;
-  document.getElementById('rec-end').value=p.endDate||'';
-  if(p.initialCapital!=null)document.getElementById('rec-capital').value=p.initialCapital;
-  if(p.rebalanceDays!=null)document.getElementById('rec-rebalance').value=p.rebalanceDays;
-  if(p.riskTolerance){
-    var riskSel=document.getElementById('rec-risk');
-    for(var j=0;j<riskSel.options.length;j++){
-      if(riskSel.options[j].value===p.riskTolerance){riskSel.selectedIndex=j;break;}
-    }
-  }
-
-  renderDailyCompositePick(found.result,{skipHistory:true});
-  setDailyPickLoading(false,'已加载历史记录：'+formatDailyPickTime(found.createdAt));
-  toast('✅ 已恢复历史综合选股结果');
 }
 
 function applyDailyPickHistoryToRecommend(id){
-  restoreDailyPickHistory(id);
-  applyDailyPickToRecommend();
+  restoreDailyPickHistory(id,function(){
+    applyDailyPickToRecommend();
+  });
 }
 
 function deleteDailyPickHistory(id){
@@ -188,11 +203,17 @@ function deleteDailyPickHistory(id){
     return;
   }
   if(!confirm('确认删除这条每日综合选股历史记录吗？'))return;
-  var list=syncDailyPickHistory().filter(function(entry){return entry&&entry.id!==id;});
-  saveDailyPickHistoryRaw(list);
-  _dailyPickHistory=list;
-  renderDailyPickHistory();
-  toast('🗑️ 历史记录已删除');
+  api('/quant/admin/api/daily-pick-history/delete',{
+    method:'POST',
+    body:JSON.stringify({id:id})
+  }).then(function(){
+    return fetchDailyPickHistory();
+  }).then(function(){
+    renderDailyPickHistory();
+    toast('🗑️ 历史记录已删除');
+  }).catch(function(e){
+    toast('❌ 删除失败: '+e.message);
+  });
 }
 
 function runDailyCompositePick(){
@@ -231,13 +252,17 @@ function runDailyCompositePick(){
   api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:900000})
     .then(function(d){
       _dailyPickRunning=false;
+      if(d.error){
+        setDailyPickLoading(false,'❌ 每日综合选股失败: '+d.error);
+        toast('❌ '+d.error);
+        return;
+      }
       setDailyPickLoading(false,'每日综合选股完成');
-      if(d.error){toast('❌ '+d.error);return;}
       renderDailyCompositePick(d);
     })
     .catch(function(e){
       _dailyPickRunning=false;
-      setDailyPickLoading(false,'每日综合选股失败: '+e.message);
+      setDailyPickLoading(false,'❌ 每日综合选股失败: '+e.message);
     });
 }
 
@@ -255,9 +280,11 @@ function renderDailyCompositePick(d){
 
   var ranking=Array.isArray(d.strategyRanking)?d.strategyRanking:[];
   var selected=Array.isArray(d.selectedStrategies)?d.selectedStrategies:[];
-  var combined=Array.isArray(d.combinedList)?d.combinedList:[];
-  var finalSymbols=Array.isArray(d.finalSymbols)?d.finalSymbols:[];
-  var stockBt=Array.isArray(d.stockBacktestRanking)?d.stockBacktestRanking:[];
+  // Filter out 创业板 (ChiNext 3xxxxx) stocks — user has no trading permission
+  function _notChiNext(item){return !item.symbol||!item.symbol.startsWith('3');}
+  var combined=Array.isArray(d.combinedList)?d.combinedList.filter(_notChiNext):[];
+  var finalSymbols=Array.isArray(d.finalSymbols)?d.finalSymbols.filter(function(s){return !s.startsWith('3');}):[];
+  var stockBt=Array.isArray(d.stockBacktestRanking)?d.stockBacktestRanking.filter(_notChiNext):[];
   var poolBt=Array.isArray(d.poolBacktestRanking)?d.poolBacktestRanking:[];
 
   var bestLabel='-';
@@ -476,10 +503,16 @@ function executeRecommend(dryRun,forcePremarket){
     return;
   }
 
+  var selectedAllocs=getSelectedAllocations();
+  if(selectedAllocs.length===0){
+    toast('请至少勾选一只股票');
+    return;
+  }
+
   if(!dryRun&&!forcePremarket){
     var modeHintEl=document.getElementById('rec-exec-mode-hint');
     var modeText=modeHintEl&&modeHintEl.style.color==='var(--red)'?'【实盘模式】将提交真实买入委托':'【模拟盘】将记录模拟买入委托';
-    var ok=confirm(modeText+'并创建条件单，是否继续？');
+    var ok=confirm(modeText+'（已选 '+selectedAllocs.length+' 只）并创建条件单，是否继续？');
     if(!ok){
       return;
     }
@@ -520,7 +553,7 @@ function executeRecommend(dryRun,forcePremarket){
       execute_pct:pctVal,
       create_conditional_orders:createCond,
       trailing_stop_pct:trailingVal,
-      allocations:data.allocations
+      allocations:selectedAllocs
     })
   })
     .then(function(resp){
@@ -575,7 +608,7 @@ function executeRecommend(dryRun,forcePremarket){
         failHtml='<div style="margin-top:8px;font-size:12px;color:var(--orange)">失败明细：'+exec.failures.map(function(f){return esc(f.code+':'+f.reason)}).join('；')+'</div>';
       }
       resultEl.innerHTML='<div class="card" style="padding:10px">'+
-        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>״̬</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
+        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
         failHtml+
         '</div>';
       toast(rejected>0?'⚠️ 已执行，存在部分失败':'✅ 建仓委托已提交，正在等待成交确认…');
@@ -615,7 +648,13 @@ function scheduleStrategy(){
     return;
   }
 
-  var ok=confirm('将在 Windows MiniQMT 上生成预埋策略文件，开盘时自动提交限价买单。是否继续？');
+  var selectedAllocs=getSelectedAllocations();
+  if(selectedAllocs.length===0){
+    toast('请至少勾选一只股票');
+    return;
+  }
+
+  var ok=confirm('将在 Windows MiniQMT 上生成预埋策略文件，开盘时自动提交限价买单（已选 '+selectedAllocs.length+' 只）。是否继续？');
   if(!ok) return;
 
   var pctVal=Number(document.getElementById('rec-exec-pct').value);
@@ -635,7 +674,7 @@ function scheduleStrategy(){
     method:'POST',
     body:JSON.stringify({
       execute_pct:pctVal,
-      allocations:data.allocations
+      allocations:selectedAllocs
     })
   })
     .then(function(resp){

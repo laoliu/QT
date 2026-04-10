@@ -350,7 +350,7 @@ const quantTradingPlugin = {
       (msg) => void tryNotify(api, msg),
     );
 
-    // ── Conditional Order Service (止损/ֹӯ/跟踪止损) ─────────────
+    // ── Conditional Order Service (止损/止盈/跟踪止损) ─────────────
     // Created early so toolInstances can reference it; wiring (quoteFn, exitFn etc.) happens later.
     const conditionalOrderService = new ConditionalOrderService({
       checkIntervalMs: 30_000,

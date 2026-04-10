@@ -221,7 +221,7 @@ def _detect_accumulation(symbol: str, lookback: int, as_of_date: str | None = No
         if net_err:
             return {
                 "error": f"网络连接失败，无法获取 {symbol} 的行情数据。"
-                         "请检查网络连接和代理设置 (如 Clash 需要开启 '系统代理' 或关闭 TUN ģʽ)。",
+                         "请检查网络连接和代理设置 (如 Clash 需要开启 '系统代理' 或关闭 TUN 模式)。",
                 "errors": errors,
             }
         return {"error": f"K线数据不足 (需要至少 {lookback} 日)", "errors": errors}

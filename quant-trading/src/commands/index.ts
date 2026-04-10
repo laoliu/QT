@@ -1835,7 +1835,7 @@ export function createQuantCommands(
     // ── Status Dashboard ──────────────────────────────────────────────
     {
       name: "/qstatus",
-      aliases: ["/״̬", "/dashboard"],
+      aliases: ["/状态", "/dashboard"],
       description: "总览面板。用法: /qstatus",
       async execute() {
         const engine = getEngine?.();
@@ -2105,7 +2105,7 @@ export function createQuantCommands(
           "  `/热股`            — 今日社区人气排名",
           "",
           "**总览**",
-          "  `/״̬`            — 一键看全局 (资产+持仓+预警+信号)",
+          "  `/状态`            — 一键看全局 (资产+持仓+预警+信号)",
           "",
           `引擎状态: ${engineStatus}`,
         ].join("\n");

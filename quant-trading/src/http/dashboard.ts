@@ -528,7 +528,7 @@ export function getDashboardHtml(baseUrl: string): string {
     async function loadOrders() {
       const r = await api('/quant/api/orders' + modeParam(false)); const orders=r?.data??[];
       if(!orders.length){document.getElementById('ordersTable').innerHTML='<div class="empty">暂无委托</div>';return;}
-      let h='<table><tr><th>时间</th><th>代码</th><th>方向</th><th>数量</th><th>价格</th><th>״̬</th></tr>';
+      let h='<table><tr><th>时间</th><th>代码</th><th>方向</th><th>数量</th><th>价格</th><th>状态</th></tr>';
       for(const o of orders.slice(-20)){
         const side=o.side==='buy'?'<span class="badge badge-buy">买入</span>':'<span class="badge badge-sell">卖出</span>';
         const st=o.status==='filled'?'<span class="badge badge-filled">已成</span>':'<span class="badge badge-pending">'+esc(o.status??'待处理')+'</span>';
@@ -748,7 +748,7 @@ export function getDashboardHtml(baseUrl: string): string {
         document.getElementById('stalenessTable').innerHTML='<div class="empty">暂无订阅</div>';
         return;
       }
-      let h='<table><tr><th>标的</th><th>״̬</th><th>延迟</th></tr>';
+      let h='<table><tr><th>标的</th><th>状态</th><th>延迟</th></tr>';
       for (const s of d.symbols) {
         const cls = 'badge-'+s.status;
         const lb2 = {fresh:'正常',warning:'延迟',critical:'中断'}[s.status]??s.status;
@@ -881,7 +881,7 @@ export function getDashboardHtml(baseUrl: string): string {
       const alerts = r?.data ?? [];
       if (!alerts.length) { document.getElementById('priceAlertsPanel').innerHTML='<div class="empty">暂无预警</div>'; return; }
       const active = alerts.filter(a => !a.triggered || a.repeating);
-      let h='<table><tr><th>标的</th><th>条件</th><th>״̬</th></tr>';
+      let h='<table><tr><th>标的</th><th>条件</th><th>状态</th></tr>';
       for (const a of alerts.slice(0, 20)) {
         const st = a.triggered && !a.repeating ? '<span class="badge badge-filled">已触发</span>' : '<span class="badge badge-pending">监控中</span>';
         h += '<tr><td>'+(a.symbol??'')+'</td><td>'+(a.description??a.type+' '+a.threshold)+'</td><td>'+st+'</td></tr>';
@@ -897,7 +897,7 @@ export function getDashboardHtml(baseUrl: string): string {
       const tasks = r?.data ?? [];
       if (!tasks.length) { document.getElementById('scheduledTasksPanel').innerHTML='<div class="empty">暂无定时任务</div>'; return; }
       const icons = {pending:'⏳',completed:'✅',failed:'❌',cancelled:'🚫'};
-      let h='<table><tr><th>״̬</th><th>描述</th><th>计划时间</th></tr>';
+      let h='<table><tr><th>状态</th><th>描述</th><th>计划时间</th></tr>';
       for (const t of tasks.slice(0, 20)) {
         const icon = icons[t.status] ?? '•';
         const sched = t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';

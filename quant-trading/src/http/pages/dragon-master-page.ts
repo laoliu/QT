@@ -331,7 +331,7 @@ function renderSignals() {
   // Board buy signals (封单分析)
   if (allBoard.length) {
     html += '<div class="card"><h3>🔒 封单打板信号</h3><div class="table-scroll"><table>';
-    html += '<tr><th>代码</th><th>名称</th><th>板块</th><th>״̬</th><th>封单强度</th><th>封单(亿)</th><th>建议</th></tr>';
+    html += '<tr><th>代码</th><th>名称</th><th>板块</th><th>状态</th><th>封单强度</th><th>封单(亿)</th><th>建议</th></tr>';
     for (const bs of allBoard) {
       html += '<tr>';
       html += '<td>' + esc(bs.code) + '</td>';

@@ -89,7 +89,7 @@ export function createStockRecommendTool(
       "  - 用户要'热点/题材/龙头' → sector_hotspot 或 dragon_master 或 lianban_relay\n" +
       "  - 用户要'事件驱动/催化剂' → event_catalyst\n" +
       "  - 用户要'再推荐/换一批/不一样的' → 换一个不同的screenerId\n" +
-      "参数：count=推荐数量(默认3), mode=ģʽ, horizon=持有周期筛选, screenerId=选股策略。",
+      "参数：count=推荐数量(默认3), mode=模式, horizon=持有周期筛选, screenerId=选股策略。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -126,7 +126,7 @@ export function createStockRecommendTool(
             "dragon_master",
           ],
           description:
-            "选股策略(classicģʽ), 共12种。" +
+            "选股策略(classic模式), 入12种。" +
             "基本面类: fscore=F-Score价值质量(季报驱动,适合中长线), canslim=CAN SLIM成长动量(盈利+营收增长), " +
             "magic_formula=魔法公式(高ROIC+低估值), peg=PEG/GARP合理价格成长股; " +
             "技术面类: technical=技术指标(均线/MACD/RSI突破), volume_price=量价异动(机构建仓/底部反转); " +

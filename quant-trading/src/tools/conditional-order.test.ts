@@ -71,7 +71,7 @@ describe("conditional_order tool", () => {
       target_price: 2000,
       quantity: 100,
     })) as Record<string, unknown>;
-    expect(res.message).toContain("ֹӯ");
+    expect(res.message).toContain("止盈");
     expect(res.id).toBeDefined();
   });
 

@@ -27,6 +27,7 @@ import os
 import re
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -44,8 +45,14 @@ except ImportError:
     pass
 
 import importlib.util
+import sqlite3
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PYTHON_DIR = os.path.dirname(_SCRIPT_DIR)
+
+# Ensure parent python/ dir is on sys.path so we can import cache modules
+if _PYTHON_DIR not in sys.path:
+    sys.path.insert(0, _PYTHON_DIR)
 
 
 def _load_backtest_engine():
@@ -65,8 +72,72 @@ def _safe_float(v, default=0.0):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Full-market screening via Sina Finance API
+# Cache-aware full-market data fetching
 # ═══════════════════════════════════════════════════════════════════
+
+# -- Cache layer: persist parsed optimizer data to SQLite so repeated
+#    runs within the TTL window skip the network entirely. -----------
+
+def _optimizer_cache_db_path() -> str:
+    home = os.path.expanduser("~")
+    cache_dir = os.path.join(home, ".openclaw", "extensions", "quant-trading", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, "stock_data.db")
+
+
+def _optimizer_cache_get() -> list[dict] | None:
+    """Return cached parsed stocks if fresh (≤10 min during trading, ≤18h otherwise)."""
+    try:
+        db_path = _optimizer_cache_db_path()
+        if not os.path.exists(db_path):
+            return None
+        conn = sqlite3.connect(db_path, timeout=5)
+        row = conn.execute(
+            "SELECT value, updated_at FROM cache_meta WHERE key = 'optimizer_stocks'"
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        updated_str, updated_at = row
+        from datetime import timezone, timedelta as _td
+        updated_dt = datetime.fromisoformat(updated_at)
+        age_s = (datetime.utcnow() - updated_dt).total_seconds()
+        # During trading hours: 10 min; otherwise: 18 hours
+        now_cst = datetime.utcnow() + _td(hours=8)
+        is_trading = (now_cst.weekday() < 5
+                      and 915 <= now_cst.hour * 100 + now_cst.minute <= 1505)
+        ttl = 600 if is_trading else 18 * 3600
+        if age_s > ttl:
+            return None
+        data = json.loads(updated_str)
+        if isinstance(data, list) and len(data) >= 30:
+            print(f"[pool_optimizer] 命中缓存: {len(data)} 只股票 (age {age_s:.0f}s)", file=sys.stderr)
+            return data
+        return None
+    except Exception as exc:
+        print(f"[pool_optimizer] 缓存读取失败: {exc}", file=sys.stderr)
+        return None
+
+
+def _optimizer_cache_save(parsed: list[dict]) -> None:
+    """Save parsed optimizer stocks to cache."""
+    try:
+        db_path = _optimizer_cache_db_path()
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.execute("CREATE TABLE IF NOT EXISTS cache_meta (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        now = datetime.utcnow().isoformat()
+        conn.execute(
+            "INSERT OR REPLACE INTO cache_meta (key, value, updated_at) VALUES (?, ?, ?)",
+            ("optimizer_stocks", json.dumps(parsed, ensure_ascii=False), now),
+        )
+        conn.commit()
+        conn.close()
+        print(f"[pool_optimizer] 已缓存 {len(parsed)} 只股票到 SQLite", file=sys.stderr)
+    except Exception as exc:
+        print(f"[pool_optimizer] 缓存写入失败: {exc}", file=sys.stderr)
+
+
+# -- Sina direct HTTP fetching (fallback) --------------------------
 
 def _fetch_sina_page(page: int, num: int = 80, sort: str = "changepercent",
                      asc: int = 0) -> list[dict]:
@@ -93,18 +164,32 @@ def _fetch_sina_page(page: int, num: int = 80, sort: str = "changepercent",
 def _fetch_all_sina(max_pages: int = 30, per_page: int = 80) -> tuple[list[dict], int]:
     """Fetch many pages from Sina (default ~2400 stocks).
     Sort by market cap descending to get the most liquid/important first.
+    Uses concurrent fetching for speed.
     Returns (stocks, failed_pages).
     """
-    all_stocks: list[dict] = []
+    results: dict[int, list[dict]] = {}
     failed = 0
-    for page in range(1, max_pages + 1):
-        stocks = _fetch_sina_page(page, per_page, sort="mktcap", asc=0)
-        if not stocks:
-            failed += 1
-            if failed >= 3 and not all_stocks:
-                break  # API likely unreachable
-            continue
-        all_stocks.extend(stocks)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_fetch_sina_page, page, per_page, "mktcap", 0): page
+            for page in range(1, max_pages + 1)
+        }
+        for fut in as_completed(futures):
+            page = futures[fut]
+            try:
+                stocks = fut.result()
+            except Exception:
+                stocks = []
+            if stocks:
+                results[page] = stocks
+            else:
+                failed += 1
+    if failed >= max_pages:
+        return [], failed
+    # Merge in page order
+    all_stocks: list[dict] = []
+    for page in sorted(results.keys()):
+        all_stocks.extend(results[page])
     return all_stocks, failed
 
 
@@ -384,15 +469,27 @@ def optimize(
     screening_summary = None
 
     if auto_screen:
-        raw, failed_pages = _fetch_all_sina(max_pages=30, per_page=80)
-        parsed = _parse_sina_stocks(raw)
+        # Try cache first → Sina API fallback → save to cache
+        parsed = _optimizer_cache_get()
+        cache_hit = parsed is not None
+        failed_pages = 0
+
+        if parsed is None:
+            print("[pool_optimizer] 缓存未命中，从 Sina Finance API 获取…", file=sys.stderr)
+            raw, failed_pages = _fetch_all_sina(max_pages=30, per_page=80)
+            parsed = _parse_sina_stocks(raw)
+            if parsed:
+                _optimizer_cache_save(parsed)
+        else:
+            raw = []  # not needed when cache hit
+
         screening_summary = {
-            "totalFetched": len(raw),
+            "totalFetched": len(raw) if not cache_hit else len(parsed),
             "afterFilter": len(parsed),
             "failedPages": failed_pages,
-            "source": "Sina Finance API",
+            "source": "缓存" if cache_hit else "Sina Finance API",
         }
-        if not raw and failed_pages > 0:
+        if not parsed and failed_pages > 0:
             screening_summary["warning"] = f"Sina Finance API 请求全部失败（{failed_pages}页），请检查网络连接"
         if len(parsed) >= 30:
             auto_pools = _build_auto_pools(parsed)

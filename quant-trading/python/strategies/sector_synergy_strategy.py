@@ -601,7 +601,7 @@ def _check_sell(C, stock: str, state: StockState, cur_price: float,
     # Rule 1: Profit >= 10% → sell all
     if profit >= SELL_PROFIT_FULL:
         _sell_all(C, stock, state, cur_price, bar_datetime,
-                  f"盈利{profit*100:.1f}%≥10%ֹӯ")
+                  f"盈利{profit*100:.1f}%≥10%止盈")
         return True
 
     # Rule 3: Loss >= 3% → sell all (priority over half-sell)

@@ -2490,7 +2490,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             auto_screen: autoScreen,
           },
           config,
-          { timeoutMs: 600_000 },
+          { timeoutMs: 900_000 },
         );
         if (!result.ok) {
           json(res, { error: result.error ?? "优化失败" }, 500);

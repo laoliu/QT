@@ -62,6 +62,8 @@ function renderRecommend(d){
     if(a.riskLevel==='high'){riskHtml='<span class="badge badge-red" style="margin-left:4px" title="'+esc(a.riskWarning||'')+'">⚠️</span>';}
     else if(a.riskLevel==='medium'){riskHtml='<span class="badge badge-orange" style="margin-left:4px" title="'+esc(a.riskWarning||'')+'">⚡</span>';}
 
+    var checkboxHtml='<td><input type="checkbox" class="rec-row-check" data-idx="'+i+'" checked onchange="updateRecSelectionHint()"></td>';
+
     // Entry prices
     var ep=a.entryPrices;
     var entryHtml='-';
@@ -114,6 +116,7 @@ function renderRecommend(d){
     var mlHtml=a.maxLossAmount?('<span style="color:var(--red);font-size:11px">最大亏¥'+numInt(a.maxLossAmount)+'</span>'):'';
 
     rows+='<tr>'+
+      checkboxHtml+
       '<td>'+(i+1)+'</td>'+
       '<td style="cursor:pointer" onclick="viewStock(\\''+esc(a.code).replace(/'/g,"\\\\'")+'\\')">'+' <strong><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(a.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(a.code)+'</a></strong></td>'+
       '<td>'+esc(a.name)+'</td>'+
@@ -209,7 +212,42 @@ function renderRecommend(d){
   });
   document.querySelector('#rec-pool-table tbody').innerHTML=poolRows;
 
+  updateRecSelectionHint();
   toast('✅ 建仓推荐已生成');
+}
+
+function toggleRecSelectAll(checked){
+  var boxes=document.querySelectorAll('.rec-row-check');
+  for(var i=0;i<boxes.length;i++){boxes[i].checked=checked;}
+  updateRecSelectionHint();
+}
+
+function updateRecSelectionHint(){
+  var boxes=document.querySelectorAll('.rec-row-check');
+  var total=boxes.length;
+  var selected=0;
+  for(var i=0;i<boxes.length;i++){if(boxes[i].checked)selected++;}
+  var hint=document.getElementById('rec-sel-hint');
+  if(hint){
+    if(selected===total){hint.textContent='已全选 '+total+' 只';}
+    else{hint.textContent='已选 '+selected+'/'+total+' 只';}
+  }
+  var selectAll=document.getElementById('rec-select-all');
+  if(selectAll){selectAll.checked=selected===total;selectAll.indeterminate=selected>0&&selected<total;}
+}
+
+function getSelectedAllocations(){
+  var data=_lastRecommendData;
+  if(!data||!Array.isArray(data.allocations))return [];
+  var boxes=document.querySelectorAll('.rec-row-check');
+  var result=[];
+  for(var i=0;i<boxes.length;i++){
+    if(boxes[i].checked){
+      var idx=Number(boxes[i].getAttribute('data-idx'));
+      if(data.allocations[idx])result.push(data.allocations[idx]);
+    }
+  }
+  return result;
 }
 
 function renderMonthlyChart(monthly){
@@ -440,7 +478,7 @@ function loadConditionalOrders(){
       var rows='';
       orders.forEach(function(o){
         var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
-          o.type==='take_profit'?'<span class="badge badge-green">ֹӯ</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
           '<span class="badge badge-blue">跟踪止损</span>';
         var triggerDisplay;
         if(o.type==='trailing_stop'){

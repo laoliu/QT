@@ -368,7 +368,7 @@ function handleTickAction(
     }
 
     default:
-      return { error: `未知的Tickģʽ: ${tickMode}。支持: latest, recent, features, bars` };
+      return { error: `未知的Tick模式: ${tickMode}。支持: latest, recent, features, bars` };
   }
 }
 

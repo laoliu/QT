@@ -32,7 +32,7 @@ function runOptimizer(){
   };
   if(endVal)body.end_date=endVal;
 
-  api('/quant/admin/api/optimize-pool',{method:'POST',body:JSON.stringify(body),_timeout:600000})
+  api('/quant/admin/api/optimize-pool',{method:'POST',body:JSON.stringify(body),_timeout:900000})
     .then(function(d){
       btn.disabled=false;btn.textContent='🔬 开始寻优（约3-8分钟）';
       if(d.error){statusEl.textContent='寻优失败: '+d.error;toast('❌ '+d.error);return;}
@@ -80,7 +80,7 @@ function renderOptResults(d){
     kpiHtml('<span style="color:'+pctColor(best.totalReturn)+'">'+pct(best.totalReturn)+'</span>','收益率')+
     kpiHtml(best.sharpeRatio!=null?best.sharpeRatio.toFixed(2):'-','夏普比率')+
     kpiHtml('<span style="color:var(--red)">'+pct(-Math.abs(best.maxDrawdown||0))+'</span>','最大回撤')+
-    kpiHtml(best.symbolCount+'ֻ','股票数');
+    kpiHtml(best.symbolCount+'只','股票数');
 
   // Table
   document.getElementById('opt-round-count').textContent=d.totalRounds;
@@ -190,7 +190,7 @@ function viewOptHistoryDetail(id){
       html+=kpiHtml(esc(d.params.startDate),'起始');
       html+=kpiHtml(esc(d.params.endDate||'今天'),'结束');
       html+=kpiHtml(d.totalRounds,'测试轮次');
-      html+=kpiHtml(d.params.autoScreen?'🌐 全市场':'预设池','ɸѡģʽ');
+      html+=kpiHtml(d.params.autoScreen?'🌐 全市场':'预设池','筛选模式');
       html+='</div>';
       // Best
       if(d.best){
@@ -204,7 +204,7 @@ function viewOptHistoryDetail(id){
         html+=kpiHtml('<span style="color:'+pctColor(b.totalReturn)+'">'+pct(b.totalReturn)+'</span>','收益率');
         html+=kpiHtml(b.sharpeRatio!=null?b.sharpeRatio.toFixed(2):'-','夏普比率');
         html+=kpiHtml('<span style="color:var(--red)">'+pct(-Math.abs(b.maxDrawdown||0))+'</span>','最大回撤');
-        html+=kpiHtml(b.symbolCount+'ֻ','股票数');
+        html+=kpiHtml(b.symbolCount+'只','股票数');
         html+='</div></div>';
       }
       // Screening summary
@@ -219,7 +219,7 @@ function viewOptHistoryDetail(id){
         html+='</div>';
         if(ss.autoPoolNames&&ss.autoPoolNames.length){
           html+='<div style="margin-top:6px">';
-          ss.autoPoolNames.forEach(function(p){html+='<span class="badge badge-blue" style="margin:2px;padding:3px 8px">'+esc(p.label)+' ('+p.count+'ֻ)</span> ';});
+          ss.autoPoolNames.forEach(function(p){html+='<span class="badge badge-blue" style="margin:2px;padding:3px 8px">'+esc(p.label)+' ('+p.count+'只)</span> ';});
           html+='</div>';
         }
         html+='</div>';
@@ -280,7 +280,7 @@ function showStrategyDetail(idx){
     '<h2 style="font-size:18px;margin:0">📊 '+esc(label)+' — 回测详情</h2>'+statusBadge+
     '</div>'+
     '<p style="color:var(--text-dim);font-size:12px;margin:6px 0 0">策略: '+esc(r.strategy)+' | 筛选引擎: '+esc(r.screenStrategy||r.strategy)+
-    ' | 候选: '+r.screenCount+'ֻ'+(_dailyPickState.input?' | 回测周期: '+esc(_dailyPickState.input.startDate||'')+' ~ '+esc(_dailyPickState.input.endDate||''):'')+
+    ' | 候选: '+r.screenCount+'只'+(_dailyPickState.input?' | 回测周期: '+esc(_dailyPickState.input.startDate||'')+' ~ '+esc(_dailyPickState.input.endDate||''):'')+
     '</p>';
 
   function isNum(v){return typeof v==='number'&&isFinite(v)}

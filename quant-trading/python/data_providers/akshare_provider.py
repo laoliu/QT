@@ -14,6 +14,7 @@ Requirements:
 import json
 import os
 import sys
+import threading
 import urllib.request
 from datetime import datetime
 
@@ -343,6 +344,15 @@ def _fetch_cn_klines_baidu(ak, symbol: str, period: str, gap_start: str, gap_end
 _qmt_bridge_url_cache: str | None = None
 _qmt_bridge_failed: bool = False  # fast-fail: skip QMT after first connection error
 
+# ── QMT Auto-Batch Coalescer ──────────────────────────────────────
+# When multiple threads call _fetch_qmt_klines() concurrently, requests are
+# automatically merged into a single batch HTTP call to the bridge.
+
+_qmt_batch_lock = threading.Lock()
+_qmt_batch_queue: dict[str, dict] = {}  # {symbol: {start, end, market, event, result}}
+_qmt_batch_timer: threading.Timer | None = None
+_QMT_BATCH_WINDOW_S = 0.15  # 150ms window to collect concurrent requests
+
 
 def _read_qmt_bridge_url() -> str:
     """Read QMT windowsBridgeUrl from openclaw config (cached).
@@ -387,7 +397,10 @@ def _read_qmt_bridge_url() -> str:
 
 
 def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock") -> list:
-    """Fetch K-lines from QMT Windows bridge via HTTP.
+    """Fetch K-lines from QMT Windows bridge via HTTP (auto-batching).
+
+    When multiple threads call this concurrently, requests are automatically
+    coalesced into a single batch HTTP call within a 150ms window.
 
     Bridge URL resolution order:
       1. WINDOWS_XTDATA_URL env var (set by TypeScript bridge)
@@ -399,80 +412,321 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
     if _qmt_bridge_failed:
         return []
 
-    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "").rstrip("/")
-    if not bridge_url:
-        bridge_url = _read_qmt_bridge_url()
+    bridge_url = _get_qmt_bridge_url()
     if not bridge_url:
         return []
 
-    try:
-        # Convert symbol to QMT format: 600711 → 600711.SH
-        if market in ("cn_stock", "index"):
-            if symbol.startswith(("6", "5", "9")):
-                qmt_code = f"{symbol}.SH"
-            else:
-                qmt_code = f"{symbol}.SZ"
-        else:
-            qmt_code = symbol
+    # Register this request in the batch queue
+    event = threading.Event()
+    entry = {"start": start, "end": end, "market": market, "event": event, "result": []}
+    flush_now = False
 
-        # Estimate count from date range (dates already normalized to %Y-%m-%d by get_klines)
+    with _qmt_batch_lock:
+        _qmt_batch_queue[symbol] = entry
+        queue_size = len(_qmt_batch_queue)
+        # Schedule batch flush if not already scheduled
+        global _qmt_batch_timer
+        if _qmt_batch_timer is None or not _qmt_batch_timer.is_alive():
+            _qmt_batch_timer = threading.Timer(
+                _QMT_BATCH_WINDOW_S,
+                _flush_qmt_batch,
+                args=(bridge_url,),
+            )
+            _qmt_batch_timer.daemon = True
+            _qmt_batch_timer.start()
+        # Flush immediately if queue is large enough (don't wait for timer)
+        if queue_size >= 100:
+            if _qmt_batch_timer is not None:
+                _qmt_batch_timer.cancel()
+            flush_now = True
+
+    if flush_now:
+        _flush_qmt_batch(bridge_url)
+
+    # Wait for the batch to complete (timeout = 60s to cover large batches)
+    event.wait(timeout=60)
+    return entry["result"]
+
+
+def _flush_qmt_batch(bridge_url: str):
+    """Flush all queued QMT kline requests as a single batch HTTP call."""
+    global _qmt_bridge_failed
+
+    with _qmt_batch_lock:
+        if not _qmt_batch_queue:
+            return
+        # Snapshot and clear the queue
+        batch = dict(_qmt_batch_queue)
+        _qmt_batch_queue.clear()
+
+    # Build QMT code list and compute max count
+    qmt_codes: list[str] = []
+    qmt_to_entry: dict[str, tuple[str, dict]] = {}  # qmt_code → (plain_symbol, entry)
+    max_count = 0
+
+    for sym, entry in batch.items():
+        qmt_code = _to_qmt_code(sym, entry["market"])
+        qmt_codes.append(qmt_code)
+        qmt_to_entry[qmt_code] = (sym, entry)
+        try:
+            s = datetime.strptime(entry["start"], "%Y-%m-%d")
+            e = datetime.strptime(entry["end"], "%Y-%m-%d")
+            max_count = max(max_count, (e - s).days + 10)
+        except ValueError:
+            max_count = max(max_count, 250)
+
+    print(f"[QMT自动合批] 合并 {len(qmt_codes)} 只股票为1次请求 (count={max_count})", file=sys.stderr)
+
+    # Send batch request (split into sub-batches of 100 if needed)
+    BATCH_SIZE = 100
+    for i in range(0, len(qmt_codes), BATCH_SIZE):
+        sub_batch = qmt_codes[i : i + BATCH_SIZE]
+        try:
+            resp = requests.post(
+                f"{bridge_url}/klines",
+                json={"codes": sub_batch, "period": "1d", "count": max_count},
+                timeout=max(30, len(sub_batch) // 3),
+            )
+            data = resp.json()
+            if data.get("status") != "ok":
+                print(f"[QMT自动合批] 请求失败: {data.get('error', '未知')}", file=sys.stderr)
+                continue
+
+            raw_data = data.get("data", {})
+            for key, raw_bars in raw_data.items():
+                if key in qmt_to_entry:
+                    plain, entry = qmt_to_entry[key]
+                else:
+                    # Try plain code lookup
+                    plain_key = key.split(".")[0]
+                    found = False
+                    for qc, (ps, ent) in qmt_to_entry.items():
+                        if ps == plain_key:
+                            plain, entry = ps, ent
+                            found = True
+                            break
+                    if not found:
+                        continue
+
+                bars = _parse_qmt_bars(raw_bars, entry["start"], entry["end"])
+                entry["result"] = bars
+
+            print(f"[QMT自动合批] 获取 {len(raw_data)}/{len(sub_batch)} 只数据", file=sys.stderr)
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            _qmt_bridge_failed = True
+            print(f"[QMT自动合批] 桥接不可达: {e}", file=sys.stderr)
+            break
+        except Exception as e:
+            print(f"[QMT自动合批] 异常: {e}", file=sys.stderr)
+
+    # Signal all waiting threads
+    for sym, entry in batch.items():
+        entry["event"].set()
+
+
+def _get_qmt_bridge_url() -> str:
+    """Resolve QMT bridge URL (env → config). Returns '' if unavailable."""
+    if _qmt_bridge_failed:
+        return ""
+    url = os.environ.get("WINDOWS_XTDATA_URL", "").rstrip("/")
+    if not url:
+        url = _read_qmt_bridge_url()
+    return url
+
+
+def _to_qmt_code(symbol: str, market: str = "cn_stock") -> str:
+    """Convert plain 6-digit code to QMT format (600519 → 600519.SH)."""
+    if market in ("cn_stock", "index"):
+        if symbol.startswith(("6", "5", "9")):
+            return f"{symbol}.SH"
+        return f"{symbol}.SZ"
+    return symbol
+
+
+def _parse_qmt_bars(raw_bars: list, start: str, end: str) -> list[dict]:
+    """Parse raw QMT bar dicts to standard bar format, filtering by date range."""
+    bars = []
+    for b in raw_bars:
+        date_str = str(b.get("date", ""))
+        if len(date_str) == 8:
+            ts_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+        elif len(date_str) >= 10:
+            ts_str = date_str[:10]
+        else:
+            continue
+        if ts_str < start or ts_str > end:
+            continue
+        close_val = float(b.get("close", 0))
+        if close_val <= 0:
+            continue
+        bars.append({
+            "timestamp": int(datetime.strptime(ts_str, "%Y-%m-%d").timestamp() * 1000),
+            "open": float(b.get("open", 0)),
+            "high": float(b.get("high", 0)),
+            "low": float(b.get("low", 0)),
+            "close": close_val,
+            "volume": int(b.get("volume", 0)),
+            "amount": float(b.get("amount", 0)),
+        })
+    return bars
+
+
+def _fetch_qmt_klines_batch(
+    symbols: list[str],
+    start: str,
+    end: str,
+    market: str = "cn_stock",
+    batch_size: int = 100,
+) -> dict[str, list[dict]]:
+    """Batch-fetch K-lines from QMT bridge for multiple symbols in one HTTP call.
+
+    Sends up to batch_size codes per request.
+    Returns {plain_symbol: [bar_dicts]}.
+    """
+    global _qmt_bridge_failed
+    bridge_url = _get_qmt_bridge_url()
+    if not bridge_url:
+        return {}
+
+    # Estimate count from date range
+    try:
         start_dt = datetime.strptime(start, "%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
-        days_diff = max(1, (end_dt - start_dt).days)
-        count = days_diff + 10  # small buffer
+        count = max(1, (end_dt - start_dt).days) + 10
+    except ValueError:
+        count = 250
 
-        resp = requests.post(
-            f"{bridge_url}/klines",
-            json={"codes": [qmt_code], "period": "1d", "count": count},
-            timeout=15,
-        )
-        data = resp.json()
-        if data.get("status") != "ok":
-            return []
+    # Build QMT code → plain symbol mapping
+    qmt_to_plain: dict[str, str] = {}
+    for sym in symbols:
+        qmt = _to_qmt_code(sym, market)
+        qmt_to_plain[qmt] = sym
 
-        raw_bars = data.get("data", {}).get(qmt_code, [])
-        if not raw_bars:
-            # Try with plain symbol as key (bridge may return without .SH/.SZ suffix)
-            raw_bars = data.get("data", {}).get(symbol, [])
-        if not raw_bars:
-            # Try with plain symbol as key
-            raw_bars = list(data.get("data", {}).values())
-            raw_bars = raw_bars[0] if raw_bars else []
+    all_qmt_codes = list(qmt_to_plain.keys())
+    result: dict[str, list[dict]] = {}
+    total_batches = (len(all_qmt_codes) + batch_size - 1) // batch_size
 
-        bars = []
-        for b in raw_bars:
-            date_str = str(b.get("date", ""))
-            if len(date_str) == 8:
-                ts_str = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-            elif len(date_str) >= 10:
-                ts_str = date_str[:10]
+    for i in range(0, len(all_qmt_codes), batch_size):
+        batch = all_qmt_codes[i : i + batch_size]
+        batch_num = i // batch_size + 1
+        try:
+            resp = requests.post(
+                f"{bridge_url}/klines",
+                json={"codes": batch, "period": "1d", "count": count},
+                timeout=max(30, len(batch) // 5),  # scale timeout with batch size
+            )
+            data = resp.json()
+            if data.get("status") != "ok":
+                print(f"[QMT批量] 批次{batch_num}/{total_batches} 失败: {data.get('error', '未知')}", file=sys.stderr)
+                continue
+
+            raw_data = data.get("data", {})
+            for key, raw_bars in raw_data.items():
+                # key may be QMT code (600519.SH) or plain (600519)
+                plain = qmt_to_plain.get(key, key.split(".")[0])
+                bars = _parse_qmt_bars(raw_bars, start, end)
+                if bars:
+                    result[plain] = bars
+
+            print(f"[QMT批量] 批次{batch_num}/{total_batches}: "
+                  f"请求{len(batch)}只, 获取{len(raw_data)}只数据", file=sys.stderr)
+
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            _qmt_bridge_failed = True
+            print(f"[QMT批量] 桥接不可达，跳过剩余批次: {e}", file=sys.stderr)
+            break
+        except Exception as e:
+            print(f"[QMT批量] 批次{batch_num} 异常: {e}", file=sys.stderr)
+
+    if result:
+        print(f"[QMT批量] 总计获取 {len(result)}/{len(symbols)} 只股票K线", file=sys.stderr)
+    return result
+
+
+def get_klines_batch(
+    symbols: list[str],
+    start: str,
+    end: str,
+    market: str = "cn_stock",
+    kline_days: int = 120,
+) -> dict[str, list[dict]]:
+    """Batch-fetch K-lines with cache-aware incremental loading.
+
+    Flow:
+      1. Check SQLite cache for each symbol, collect fully-cached vs needs-fetch
+      2. Batch-fetch missing symbols via QMT bridge (if available)
+      3. Per-stock fallback (TDX/EastMoney) for any remaining symbols
+      4. Save all new data to cache
+
+    Returns {symbol: [bar_dicts]}.
+    """
+    result: dict[str, list[dict]] = {}
+    need_fetch: list[str] = []
+
+    # Normalize dates
+    def _norm(d: str) -> str:
+        d = d.strip()
+        if len(d) == 8 and d.isdigit():
+            return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        return d[:10]
+
+    start_n = _norm(start)
+    end_n = _norm(end)
+
+    # Step 1: Check cache
+    try:
+        from cache.stock_cache import get_cache
+        cache = get_cache()
+        period = "daily"
+        for sym in symbols:
+            cached_bars, cs, ce = cache.get_klines(sym, market, period, start_n, end_n)
+            if cached_bars and cs <= start_n and ce >= end_n:
+                result[sym] = cached_bars
             else:
-                continue
-
-            if ts_str < start or ts_str > end:
-                continue
-
-            close_val = float(b.get("close", 0))
-            if close_val <= 0:
-                continue
-
-            bars.append({
-                "timestamp": int(datetime.strptime(ts_str, "%Y-%m-%d").timestamp() * 1000),
-                "open": float(b.get("open", 0)),
-                "high": float(b.get("high", 0)),
-                "low": float(b.get("low", 0)),
-                "close": close_val,
-                "volume": int(b.get("volume", 0)),
-                "amount": float(b.get("amount", 0)),
-            })
-        return bars
-    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-        _qmt_bridge_failed = True
-        print(f"[QMT] 桥接连接失败，本次运行跳过QMT: {e}", file=sys.stderr)
-        return []
+                need_fetch.append(sym)
+        print(f"[批量缓存] {len(result)} 命中, {len(need_fetch)} 需拉取", file=sys.stderr)
     except Exception as e:
-        print(f"[QMT] K线获取失败: {e}", file=sys.stderr)
-        return []
+        print(f"[批量缓存] 缓存检查失败: {e}", file=sys.stderr)
+        need_fetch = list(symbols)
+
+    if not need_fetch:
+        return result
+
+    # Step 2: Batch QMT fetch
+    qmt_result = _fetch_qmt_klines_batch(need_fetch, start_n, end_n, market)
+    if qmt_result:
+        # Save to cache
+        try:
+            cache = get_cache()
+            for sym, bars in qmt_result.items():
+                cache.save_klines(sym, bars, market, "daily")
+        except Exception as e:
+            print(f"[批量缓存] QMT数据保存失败: {e}", file=sys.stderr)
+        result.update(qmt_result)
+
+    # Step 3: Per-stock fallback for remaining symbols
+    still_missing = [s for s in need_fetch if s not in result]
+    if still_missing:
+        print(f"[批量回退] {len(still_missing)} 只股票走逐只拉取 ...", file=sys.stderr)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _fallback_one(sym: str):
+            try:
+                bars = get_klines(sym, "1d", start_n, end_n, market)
+                return sym, bars
+            except Exception:
+                return sym, None
+
+        workers = min(8, len(still_missing))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = {pool.submit(_fallback_one, s): s for s in still_missing}
+            for fut in as_completed(futs):
+                sym, bars = fut.result()
+                if bars:
+                    result[sym] = bars
+
+    return result
 
 
 # ── TDX (通达信) K-line fetcher ───────────────────────────────────
@@ -606,11 +860,16 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
 
         # Check if cache fully covers the requested range
         if cached_bars and cached_start <= start and cached_end >= end:
-            print(f"[缓存] K线命中: {symbol} {start}~{end} ({len(cached_bars)} bars)", file=sys.stderr)
+            print(f"[缓存✓] K线全命中: {symbol} {start}~{end} ({len(cached_bars)} bars)", file=sys.stderr)
             return cached_bars
 
         # Determine what gaps to fill
         gaps = cache.get_klines_missing_range(symbol, start, end, market, period)
+        if cached_bars:
+            gap_desc = ", ".join(f"{g[0]}~{g[1]}" for g in gaps)
+            print(f"[缓存△] K线部分命中: {symbol} 已缓存{len(cached_bars)}bars, 需补: {gap_desc}", file=sys.stderr)
+        else:
+            print(f"[缓存✗] K线未命中: {symbol} {start}~{end}, 需全量拉取", file=sys.stderr)
     except Exception as e:
         print(f"[缓存] K线缓存读取失败: {e}", file=sys.stderr)
         cached_bars = []
@@ -764,6 +1023,12 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
             if ts not in seen:
                 seen.add(ts)
                 result.append(bar)
+
+        _cached_n = len(cached_bars)
+        _new_n = len(all_new_bars)
+        _total_n = len(result)
+        if _new_n > 0:
+            print(f"[缓存汇总] {symbol}: 缓存{_cached_n} + 新拉{_new_n} = 合计{_total_n} bars", file=sys.stderr)
         return result
 
     except Exception as e:

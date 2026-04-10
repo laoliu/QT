@@ -1335,7 +1335,7 @@ export class LiveBacktestComparison {
     // Metrics table
     lines.push("## 100803");
     lines.push("");
-    lines.push("| 指标 | 回测 | 实盘 | 差异 | 偏差% | ״̬ |");
+    lines.push("| 指标 | 回测 | 实盘 | 差异 | 偏差% | 状态 |");
     lines.push("|------|------|------|------|--------|------|");
     for (const m of result.metrics) {
       const status = m.degraded ? "7215 退" : "✅正常";

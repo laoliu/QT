@@ -124,7 +124,7 @@ class StrategyCallback:
                       4: "部成待撤", 5: "部撤", 6: "已撤", 7: "部成",
                       8: "已成", 9: "废单", 10: "已报待改"}
         status_str = status_map.get(order.order_status, str(order.order_status))
-        _log("订单状态: %s %s 数量:%d 已成:%d ״̬:%s %s" % (
+        _log("订单状态: %s %s 数量:%d 已成:%d 状态:%s %s" % (
             order.stock_code, "买" if order.order_type == 23 else "卖",
             order.order_volume, order.traded_volume, status_str,
             order.strategy_error_msg or ""))

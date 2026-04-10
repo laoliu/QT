@@ -144,9 +144,9 @@ function updateRebalanceModeHint(isLive,brokerType){
 (function(){
   loadComposedStrategies();
   refreshGlobalMode();
+  loadPlanHistory();restoreCachedPlan();
   var h=(location.hash||'').replace('#','');
-  if(!h){loadPlanHistory();restoreCachedPlan();}
-  else{_onTabDataLoad(h);}
+  if(h){_onTabDataLoad(h);}
 })();
 `;
 }

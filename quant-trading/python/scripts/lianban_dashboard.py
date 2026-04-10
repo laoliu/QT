@@ -391,7 +391,7 @@ def main():
         parser.add_argument("action", choices=["scan", "detail", "candidates", "zhaban"],
                             help="scan=梯队全景, detail=单股分析, candidates=候选列表, zhaban=炸板预测")
         parser.add_argument("--date", default=None, help="日期 YYYYMMDD (默认今天)")
-        parser.add_argument("--symbol", default=None, help="股票代码 (detailģʽ)")
+        parser.add_argument("--symbol", default=None, help="股票代码 (detail模式)")
         parser.add_argument("--min-boards", type=int, default=2, help="最低连板数 (默认2)")
         parser.add_argument("--limit", type=int, default=20, help="返回数量 (默认20)")
         parser.add_argument("--min-risk", type=int, default=0, help="最低风险分 (默认0)")

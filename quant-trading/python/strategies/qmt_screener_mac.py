@@ -117,7 +117,7 @@ DIRECT_PULL_TIMEOUT = int(os.environ.get("DIRECT_PULL_TIMEOUT", "90"))
 # 工具函数
 # =====================================================================
 
-# 预检缓存：同一次选股调用中只探测一次 bridge ״̬
+# 预检缓存：同一次选股调用中只探测一次 bridge 状态
 _bridge_probe_cache: dict[str, object] = {}
 
 def _to_qmt_code(stock_id: str, factors: dict | None = None) -> str | None:

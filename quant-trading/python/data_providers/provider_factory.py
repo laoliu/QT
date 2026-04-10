@@ -330,7 +330,7 @@ def fetch_klines_batch(
     start_date: str,
     end_date: str,
     market: str = "",
-    max_workers: int = 4,
+    max_workers: int = 8,
 ) -> dict[str, Any]:
     """Fetch K-line data for multiple symbols concurrently.
 

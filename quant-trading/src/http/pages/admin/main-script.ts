@@ -125,17 +125,17 @@ function loadServices(){
     var c=document.getElementById('svc-cards');c.innerHTML='';
     if(!d||!d.gateway){c.innerHTML='<div style="color:var(--text-dim)">⚠️ 服务数据异常</div>';return;}
     var gw=d.gateway;
-    c.innerHTML+=card('🌐 网关服务',infoList({'״̬':dotSt(gw.running),'PID':gw.pid,'端口':gw.port,'版本':gw.version,'运行时间':gw.uptime}));
+    c.innerHTML+=card('🌐 网关服务',infoList({'状态':dotSt(gw.running),'PID':gw.pid,'端口':gw.port,'版本':gw.version,'运行时间':gw.uptime}));
     var rc=d.receiver;
-    c.innerHTML+=card('📡 RECEIVER 桥接',infoList({'״̬':dotSt(rc.running),'PID':rc.pid||'-','端口':rc.port,'主机':esc(rc.host),'重启次数':rc.restartCount,'启动':rc.startedAt?fmtTime(rc.startedAt):'-'})+
+    c.innerHTML+=card('📡 RECEIVER 桥接',infoList({'状态':dotSt(rc.running),'PID':rc.pid||'-','端口':rc.port,'主机':esc(rc.host),'重启次数':rc.restartCount,'启动':rc.startedAt?fmtTime(rc.startedAt):'-'})+
       btnGrp([['btn-primary','svcAction("receiver","start")','▶ 启动',rc.running],['btn-danger','svcAction("receiver","stop")','⏹ ֹͣ',!rc.running],['','svcAction("receiver","restart")','🔄 重启',!rc.running]]));
     if(d.bridgeHealth){var bh=d.bridgeHealth;
       c.innerHTML+=card('🔗 桥接状态',infoList({'连接':dotSt(bh.bridge_connected),'待处理':bh.pending_requests,'上次轮询':bh.bridge_last_poll_age!=null?bh.bridge_last_poll_age.toFixed(1)+'s':'-'}));}
     var eng=d.engine;
     var eRun=eng.status==='running',ePause=eng.status==='paused',eStop=eng.status==='stopped';
-    c.innerHTML+=card('🤖 实盘引擎',infoList({'״̬':'<span class="badge '+(eRun?'badge-green':ePause?'badge-yellow':'badge-red')+'">'+esc(eng.status)+'</span>','活跃策略':eng.activeStrategies,'持仓数':eng.positions})+
+    c.innerHTML+=card('🤖 实盘引擎',infoList({'状态':'<span class="badge '+(eRun?'badge-green':ePause?'badge-yellow':'badge-red')+'">'+esc(eng.status)+'</span>','活跃策略':eng.activeStrategies,'持仓数':eng.positions})+
       btnGrp([['btn-primary','svcAction("engine","start")','▶ 启动',eRun||ePause],['btn-danger','svcAction("engine","stop")','⏹ ֹͣ',eStop],['','svcAction("engine","pause")','⏸ 暂停',!eRun],['','svcAction("engine","resume")','▶️ 恢复',!ePause]]));
-    (d.services||[]).forEach(function(svc){c.innerHTML+=card('📌 '+esc(svc.id),infoList({'服务ID':svc.id,'״̬':'<span class="dot dot-green"></span>已注册'}));});
+    (d.services||[]).forEach(function(svc){c.innerHTML+=card('📌 '+esc(svc.id),infoList({'服务ID':svc.id,'状态':'<span class="dot dot-green"></span>已注册'}));});
   }).catch(function(){document.getElementById('svc-cards').innerHTML='<div style="color:var(--text-dim)">⚠️ 服务信息加载失败</div>'});
 }
 function svcAction(service,action){
@@ -150,7 +150,7 @@ function loadData(){
   api('/quant/admin/api/data').then(function(d){
     var c=document.getElementById('data-cards');c.innerHTML='';
     c.innerHTML+=card('🔌 数据源',infoList({'当前数据源':'<span class="badge badge-blue">'+esc(d.provider)+'</span>','Python':'<span style="font-size:11px;word-break:break-all">'+esc(d.pythonPath)+'</span>'})+
-      '<table style="margin-top:8px"><thead><tr><th>数据源</th><th>说明</th><th>״̬</th></tr></thead><tbody>'+
+      '<table style="margin-top:8px"><thead><tr><th>数据源</th><th>说明</th><th>状态</th></tr></thead><tbody>'+
       d.availableProviders.map(function(p){return '<tr><td>'+esc(p.id)+'</td><td style="font-size:11px">'+esc(p.description)+'</td><td>'+(p.id===d.provider?'<span class="badge badge-green">使用中</span>':'<span class="badge badge-yellow">可用</span>')+'</td></tr>'}).join('')+'</tbody></table>');
     var pc=d.pythonCache||{};var kl=pc.klines||{};
     c.innerHTML+=card('💾 缓存概览 (SQLite)',infoList({

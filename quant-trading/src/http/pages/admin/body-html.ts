@@ -129,7 +129,7 @@ export function getAdminBodyHtml(b: string): string {
 <div class="tab-content" id="tab-trading">
   <div id="trading-summary-cards"></div>
   <div class="card" style="margin-bottom:14px"><h3>📊 持仓列表</h3>
-    <div style="overflow-x:auto"><table id="positions-table"><thead><tr><th>代码</th><th>方向</th><th>数量</th><th>成本</th><th>现价</th><th>盈亏</th><th>盈亏%</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="positions-table"><thead><tr><th>代码</th><th>名称</th><th>方向</th><th>数量</th><th>成本</th><th>现价</th><th>盈亏</th><th>盈亏%</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" style="margin-bottom:14px"><h3>📝 委托单</h3>
     <div style="overflow-x:auto"><table id="orders-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>

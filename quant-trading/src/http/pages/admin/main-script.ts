@@ -312,11 +312,11 @@ function loadTrading(){
       ].join('')+'</div>';
       var pts=p.positions||[];
       document.querySelector('#positions-table tbody').innerHTML=pts.map(function(pos){
-        return '<tr><td>'+esc(pos.symbol)+'</td><td>'+esc(pos.direction||'long')+'</td><td>'+pos.quantity+'</td>'+
+        return '<tr><td>'+esc(pos.symbol)+'</td><td>'+esc(pos.name||'')+'</td><td>'+esc(pos.direction||'long')+'</td><td>'+pos.quantity+'</td>'+
           '<td>'+num(pos.avgCost)+'</td><td>'+num(pos.currentPrice)+'</td>'+
           '<td style="color:'+(pos.unrealizedPnl>=0?'var(--green)':'var(--red)')+'">'+num(pos.unrealizedPnl)+'</td>'+
           '<td style="color:'+(pos.unrealizedPnlPct>=0?'var(--green)':'var(--red)')+'">'+(pos.unrealizedPnlPct!=null?(pos.unrealizedPnlPct*100).toFixed(2)+'%':'-')+'</td></tr>';
-      }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无持仓</td></tr>';
+      }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">暂无持仓</td></tr>';
     }
   }).catch(function(){});
   api('/quant/api/orders'+adminModeParam(false)).then(function(o){

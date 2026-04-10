@@ -9,7 +9,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 
@@ -70,7 +70,7 @@ export class EarningsAlertService {
     this.timer = setInterval(() => {
       void this.check();
     }, this.config.checkIntervalMs);
-    this.api.log?.("EarningsAlertService started");
+    console.log("[EarningsAlert] started");
   }
 
   stop(): void {
@@ -139,8 +139,8 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "earnings_alert_check", script);
-      const events: EarningsEvent[] = (result as { events: EarningsEvent[] })?.events ?? [];
+      const result = await runInlinePython<{ events: EarningsEvent[] }>(script, this.tradingConfig);
+      const events: EarningsEvent[] = result.data?.events ?? [];
 
       for (const ev of events) {
         const key = `${ev.symbol}_${ev.reportDate}_${ev.type}`;
@@ -150,12 +150,7 @@ except Exception as e:
         const severity = ev.type === "09" || ev.type === "00" ? "warning" as const : "info" as const;
         const message = `[0700] ${ev.name}(${ev.symbol}) ${ev.type} — ${ev.reportDate} — ${ev.description}`;
 
-        this.alertStore?.add({
-          severity,
-          source: "strategy",
-          message,
-          metadata: ev as unknown as Record<string, unknown>,
-        });
+        this.alertStore?.add(severity, "strategy", message, ev as unknown as Record<string, unknown>);
 
         if (this.notificationService) {
           const msg: NotificationMessage = {
@@ -167,7 +162,7 @@ except Exception as e:
           void this.notificationService.send(msg);
         }
 
-        this.api.log?.(`[EarningsAlert] ${severity}: ${message}`);
+        console.log(`[EarningsAlert] ${severity}: ${message}`);
       }
 
       return events;

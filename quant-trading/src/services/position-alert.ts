@@ -67,7 +67,7 @@ export class PositionAlertService {
     this.timer = setInterval(() => {
       void this.check(getPositions());
     }, this.config.checkIntervalMs);
-    this.api.log?.("PositionAlertService started");
+    console.log("[PositionAlert] started");
   }
 
   /** Stop monitoring */
@@ -143,12 +143,7 @@ export class PositionAlertService {
     this.lastAlerted.set(key, now);
 
     // AlertStore
-    this.alertStore?.add({
-      severity,
-      source: "pnl_monitor",
-      message,
-      metadata,
-    });
+    this.alertStore?.add(severity, "pnl_monitor", message, metadata);
 
     // Notification push
     if (this.notificationService) {
@@ -161,6 +156,6 @@ export class PositionAlertService {
       void this.notificationService.send(msg);
     }
 
-    this.api.log?.(`[PositionAlert] ${severity}: ${message}`);
+    console.log(`[PositionAlert] ${severity}: ${message}`);
   }
 }

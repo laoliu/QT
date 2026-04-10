@@ -4,7 +4,7 @@
  * 00 Python AKShare 0919001100
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createLockupCalendarTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
@@ -27,15 +27,21 @@ export function createLockupCalendarTool(api: OpenClawPluginApi, config: QuantTr
 
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
+      const today = new Date();
+      const future = new Date(today.getTime() + 30 * 86400000);
+      const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+      const startDate = (args.start_date as string) || fmt(today);
+      const endDate = (args.end_date as string) || fmt(future);
+
       const script = `
 import akshare as ak
 import json, sys
 from datetime import datetime, timedelta
 
-action = "${action}?
+action = "${action}"
 symbol = "${args.symbol ?? ""}"
-start_date = "${args.start_date ?? datetime.now().strftime('%Y%m%d')}"
-end_date = "${args.end_date ?? (datetime.now() + timedelta(days=30)).strftime('%Y%m%d')}"
+start_date = "${startDate}"
+end_date = "${endDate}"
 
 try:
     if action == "upcoming":
@@ -71,7 +77,7 @@ except Exception as e:
 `;
 
       try {
-        const result = await runPythonScript(api, config, "lockup_calendar", script);
+        const result = await runInlinePython(script, config);
         return result;
       } catch (err) {
         return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };

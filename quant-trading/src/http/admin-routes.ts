@@ -30,6 +30,7 @@ import type { LogStore } from "../services/log-store.js";
 import type { OptimizationStore } from "../services/optimization-store.js";
 import type { PriceAlertService } from "../services/price-alert.js";
 import type { ReceiverService } from "../services/receiver-service.js";
+import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
 import { analyzeTechMoat, collectTechMoatInputs } from "../services/tech-moat-analysis.js";
@@ -77,6 +78,7 @@ export interface AdminRouteDeps {
   tickFeatureStore?: TickFeatureStore | null;
   tickStrategyService?: TickStrategyService | null;
   tickHistoryStore?: TickHistoryStore | null;
+  signalHitRateTracker?: SignalHitRateTracker;
   secure: (handler: HttpHandler) => HttpHandler;
   securePublic: (handler: HttpHandler) => HttpHandler;
 }
@@ -115,6 +117,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     secure,
     securePublic,
   } = deps;
+  const { signalHitRateTracker } = deps;
   const marketDataProvider = createDataProvider(config);
 
   // ── OpenClaw iframe proxy ──────────────────────────────────────
@@ -1877,7 +1880,36 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const activeOnly =
           new URL(req.url ?? "/", "http://localhost").searchParams.get("active") !== "false";
         const orders = conditionalOrderService.listOrders(activeOnly);
-        json(res, { orders, activeCount: conditionalOrderService.activeCount });
+        // Enrich orders with stock names from positions
+        const engine = getEngine();
+        const positions = engine.getPositions();
+        const nameMap = new Map<string, string>();
+        for (const p of positions) {
+          if (p.name) nameMap.set(p.symbol, p.name);
+        }
+        // Fallback: fetch names via market data provider for missing entries
+        const missing = [...new Set(orders.map((o) => o.symbol))].filter(
+          (s) => !nameMap.has(s),
+        );
+        if (missing.length > 0) {
+          await Promise.all(
+            missing.map(async (sym) => {
+              try {
+                const q = await marketDataProvider.getQuote(sym);
+                if (q?.symbol?.name && q.symbol.name !== sym) {
+                  nameMap.set(sym, q.symbol.name);
+                }
+              } catch {
+                /* ignore */
+              }
+            }),
+          );
+        }
+        const enriched = orders.map((o) => ({
+          ...o,
+          name: nameMap.get(o.symbol) ?? "",
+        }));
+        json(res, { orders: enriched, activeCount: conditionalOrderService.activeCount });
         return;
       }
 
@@ -3339,6 +3371,26 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         /* ignore */
       }
 
+      // Override with signal hit rate if available (more meaningful for dashboard)
+      if (signalHitRateTracker) {
+        const signalStats = signalHitRateTracker.getStats();
+        if (signalStats.checkedSignals > 0) {
+          // Use T+3 horizon as the primary display metric
+          const t3 = signalStats.horizons["T+3"];
+          if (t3 && t3.checked > 0) {
+            hitRate = `${(t3.hitRate * 100).toFixed(1)}%`;
+          } else {
+            // Fall back to first horizon with data
+            for (const h of Object.values(signalStats.horizons)) {
+              if (h.checked > 0) {
+                hitRate = `${(h.hitRate * 100).toFixed(1)}%`;
+                break;
+              }
+            }
+          }
+        }
+      }
+
       json(res, {
         gateway: {
           pid: process.pid,
@@ -3604,7 +3656,10 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const limit = Number(params.get("limit") || 250);
         try {
           const market = detectMarketFromSymbol(symbol);
-          const klines = await marketDataProvider.getKlines(symbol, "daily", limit, market);
+          // Calculate date range from limit (days back from today)
+          const end = new Date().toISOString().slice(0, 10);
+          const start = new Date(Date.now() - limit * 86400000).toISOString().slice(0, 10);
+          const klines = await marketDataProvider.getKlines(symbol, "1d", start, end, market);
           json(res, { klines: klines || [] });
         } catch (e: unknown) {
           json(res, { error: String((e as Error).message || e) });
@@ -3659,7 +3714,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const minScore = toNumberOrDefault(params.get("min_score"), 35);
           const symbolsRaw = params.get("symbols") || "";
           const symbols = symbolsRaw ? symbolsRaw.split(",").map((s) => s.trim()).filter(Boolean) : [];
-          const result = await runPythonScript(
+          const result = await runPythonScript<{ signals: unknown[]; count: number }>(
             "engines/auction_sniper.py",
             { action: "scan", symbols, min_score: minScore },
             config,
@@ -3689,7 +3744,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const symbols = Array.isArray(payload.symbols) ? payload.symbols : [];
           const minScore = Number(payload.min_score) || 35;
           if (!snapshots.length) { json(res, { error: "缺少 snapshots 数据" }, 400); return; }
-          const result = await runPythonScript(
+          const result = await runPythonScript<{ signals: unknown[]; count: number }>(
             "engines/auction_sniper.py",
             { action: "analyze", snapshots, symbols, min_score: minScore },
             config,

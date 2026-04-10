@@ -31,7 +31,7 @@ export type DataStalenessConfig = {
   isMarketOpen?: () => boolean;
 };
 
-const DEFAULTS: Required<DataStalenessConfig> = {
+const DEFAULTS: Omit<Required<DataStalenessConfig>, "isMarketOpen"> & { isMarketOpen?: () => boolean } = {
   enabled: true,
   checkIntervalMs: 30_000,
   warningThresholdMs: 60_000,
@@ -79,7 +79,7 @@ export type StalenessAlertCallback = (
 // ── Monitor class ────────────────────────────────────────────────
 
 export class DataStalenessMonitor {
-  private readonly config: Required<DataStalenessConfig>;
+  private readonly config: DataStalenessConfig & { enabled: boolean; checkIntervalMs: number; warningThresholdMs: number; criticalThresholdMs: number };
   private readonly logger: StalenessLogger;
   private readonly notifier: StalenessNotifier;
   private readonly onAlert: StalenessAlertCallback | undefined;
@@ -211,8 +211,9 @@ export class DataStalenessMonitor {
   check(): void {
     // Skip checks outside trading hours to avoid false alarms
     if (this.config.isMarketOpen && !this.config.isMarketOpen()) {
-      // Clear any previously fired alerts so they can re-fire next session
-      if (this.firedAlerts.size > 0) {
+      // Only clear fired alerts when the full trading day is over (after 15:00)
+      // so midday break (11:30-13:00) doesn't re-trigger the same alerts
+      if (this.firedAlerts.size > 0 && isAfterCnClose()) {
         this.firedAlerts.clear();
       }
       return;
@@ -261,8 +262,16 @@ export class DataStalenessMonitor {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+/** Returns true after 15:00 CST — i.e. the trading day is fully over. */
+function isAfterCnClose(): boolean {
+  const now = new Date();
+  const cst = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const hm = cst.getUTCHours() * 100 + cst.getUTCMinutes();
+  return hm > 1500;
+}
+
 function formatDuration(ms: number): string {
-  if (ms < 0 || !Number.isFinite(ms)) return "N/A";
+  if (ms < 0 || !Number.isFinite(ms)) return "从未收到数据";
   const secs = Math.floor(ms / 1000);
   if (secs < 60) return `${secs}s`;
   const mins = Math.floor(secs / 60);

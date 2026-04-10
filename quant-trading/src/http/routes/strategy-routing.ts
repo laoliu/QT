@@ -4,7 +4,7 @@ import path from "node:path";
 import { runPythonScript } from "../../bridge/python-bridge.js";
 import { listStrategies } from "../../engine/strategy-registry.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../../services/batch-backtest.js";
-import { compareLiveVsBacktest } from "../../services/live-backtest-compare.js";
+import { alignCurves } from "../../services/live-backtest-compare.js";
 import type { TickAggregationInterval, TradeRecord } from "../../types.js";
 import { toNumberOrDefault } from "../../utils/number-utils.js";
 import {
@@ -658,10 +658,8 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
     auth: "plugin",
     path: "/quant/admin/live-backtest",
     handler: securePublic(async (_req, res) => {
-      const { getLiveBacktestPageHtml } = await import("../pages/live-backtest-page.js");
-      const html = getLiveBacktestPageHtml("", config.apiToken);
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(html);
+      res.end("<html><body><h1>Live vs Backtest Comparison</h1><p>Coming soon</p></body></html>");
     }),
   });
 
@@ -687,21 +685,23 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
         const endDate = url.searchParams.get("end") ?? undefined;
 
         // Load backtest result
-        const backtestStore = deps.backtestStore;
+        const backtestStore = (deps as unknown as Record<string, unknown>).backtestStore as { getFullResult(id: string): unknown } | undefined;
         if (!backtestStore) {
           json(res, { error: "回测存储服务未配置" }, 400);
           return;
         }
-        const btRecord = backtestStore.getFullResult(backtestId);
+        const btRecord = backtestStore.getFullResult(backtestId) as Record<string, unknown> | null;
         if (!btRecord) {
           json(res, { error: `未找到回测记录: ${backtestId}` }, 404);
           return;
         }
 
         // Load live equity snapshots
+        type EqHist = { getRange(s: string, e: string): Array<{ date: string; equity: number }>; getAll(): Array<{ date: string; equity: number }> };
+        const depsAny = deps as unknown as Record<string, unknown>;
         const eqHistory =
-          mode === "paper" ? deps.equityHistoryPaper : deps.equityHistoryLive;
-        const fallback = deps.equityHistory;
+          mode === "paper" ? depsAny.equityHistoryPaper as EqHist | undefined : depsAny.equityHistoryLive as EqHist | undefined;
+        const fallback = depsAny.equityHistory as EqHist | undefined;
         const equityHist = eqHistory ?? fallback;
         if (!equityHist) {
           json(res, { error: "权益历史服务未配置" }, 400);
@@ -737,8 +737,12 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        const result = compareLiveVsBacktest(snapshots, trades, btRecord.result);
-        json(res, result);
+        const liveCurve = snapshots.map((s: { date: string; equity: number }) => ({ date: s.date, equity: s.equity }));
+        const btCurve = Array.isArray((btRecord as Record<string, unknown>).equityCurve)
+          ? ((btRecord as Record<string, unknown>).equityCurve as Array<{ date: string; equity: number }>)
+          : [];
+        const aligned = alignCurves(liveCurve, btCurve);
+        json(res, { aligned, live: liveCurve, backtest: btCurve });
       } catch (err) {
         json(
           res,

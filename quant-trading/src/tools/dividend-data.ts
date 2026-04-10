@@ -7,7 +7,7 @@
  *  - 分红日历 (190704)
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createDividendDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
@@ -71,7 +71,7 @@ except Exception as e:
 `;
 
       try {
-        const result = await runPythonScript(api, config, "dividend_data", script);
+        const result = await runInlinePython(script, config);
         return result;
       } catch (err) {
         return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };

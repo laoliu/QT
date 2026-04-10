@@ -194,6 +194,83 @@ async function _spawnPython<T = unknown>(
 }
 
 /**
+ * Run inline Python code and parse its JSON stdout output.
+ * Used by services that generate Python scripts dynamically (e.g. auction-monitor).
+ * The code should `print(json.dumps(...))` its result to stdout.
+ */
+export async function runInlinePython<T = unknown>(
+  code: string,
+  config: QuantTradingConfig,
+): Promise<PythonBridgeResult<T>> {
+  await limiter.acquire();
+  try {
+    return await _spawnInlinePython<T>(code, config);
+  } finally {
+    limiter.release();
+  }
+}
+
+/** Spawn python with inline code via stdin. */
+async function _spawnInlinePython<T = unknown>(
+  code: string,
+  config: QuantTradingConfig,
+  overrideTimeoutMs?: number,
+): Promise<PythonBridgeResult<T>> {
+  const pythonPath = config.pythonPath ?? "python3";
+  const TIMEOUT_MS = overrideTimeoutMs ?? 300_000;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn(pythonPath, ["-"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: "utf-8",
+      },
+    });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        child.kill("SIGKILL");
+        resolve({ ok: false, error: `Inline Python timed out after ${TIMEOUT_MS / 1000}s` });
+      }
+    }, TIMEOUT_MS);
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf-8"); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf-8"); });
+
+    child.on("close", (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (exitCode !== 0) {
+        resolve({ ok: false, error: stderr || `Python exited with code ${exitCode}` });
+        return;
+      }
+      try {
+        const data = JSON.parse(stdout) as T;
+        resolve({ ok: true, data });
+      } catch {
+        resolve({ ok: false, error: `Failed to parse Python output: ${stdout.slice(0, 500)}` });
+      }
+    });
+
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ ok: false, error: `Failed to spawn Python: ${err.message}` });
+    });
+
+    child.stdin.write(code);
+    child.stdin.end();
+  });
+}
+
+/**
  * Check if a Python module is available.
  */
 export async function checkPythonModule(

@@ -462,10 +462,25 @@ def _serialize_qmt_order(o):
     }
 
 
+def _lookup_stock_name(stock_code):
+    """Look up stock name via xtdata.get_instrument_detail."""
+    try:
+        import xtquant.xtdata as xtdata
+        detail = xtdata.get_instrument_detail(stock_code)
+        if detail and isinstance(detail, dict):
+            return detail.get("InstrumentName", "") or ""
+    except Exception:
+        pass
+    return ""
+
+
 def _serialize_qmt_position(p):
+    stock_name = getattr(p, "stock_name", "") or ""
+    if not stock_name:
+        stock_name = _lookup_stock_name(p.stock_code)
     return {
         "stock_code": p.stock_code,
-        "stock_name": getattr(p, "stock_name", ""),
+        "stock_name": stock_name,
         "volume": p.volume,
         "can_use_volume": p.can_use_volume,
         "frozen_volume": p.frozen_volume,
@@ -533,13 +548,45 @@ def _trading_query_account(_params):
         return {"ok": False, "error": "query_account error: %s" % str(e)}
 
 
+def _on_quote_push(datas):
+    """Callback for xtdata.subscribe_whole_quote — queues quote events for Mac polling."""
+    import time as _time
+    now = _time.time()
+    for code, bars in datas.items():
+        if not bars:
+            continue
+        # Throttle: max 1 event per symbol per 3 seconds to avoid queue bloat
+        last = _quote_push_last.get(code, 0)
+        if now - last < 3.0:
+            continue
+        _quote_push_last[code] = now
+        bar = bars[-1] if isinstance(bars, list) else bars
+        _trading_events_queue.append({"event": "quote", "data": {
+            "stock_code": code,
+            "last_price": bar.get("lastPrice", 0),
+            "open": bar.get("open", 0),
+            "high": bar.get("high", 0),
+            "low": bar.get("low", 0),
+            "last_close": bar.get("lastClose", 0),
+            "volume": bar.get("volume", 0),
+            "amount": bar.get("amount", 0),
+            "bid_price": bar.get("bidPrice", [0, 0, 0, 0, 0]),
+            "ask_price": bar.get("askPrice", [0, 0, 0, 0, 0]),
+            "bid_vol": bar.get("bidVol", [0, 0, 0, 0, 0]),
+            "ask_vol": bar.get("askVol", [0, 0, 0, 0, 0]),
+            "time": int(now * 1000),
+        }})
+
+_quote_push_last = {}  # {stock_code: last_push_timestamp}
+
+
 def _trading_subscribe_quote(params):
     codes = params.get("stock_codes", [])
     new_codes = [c for c in codes if c not in _trading_subscribed_codes]
     if new_codes:
         try:
             import xtquant.xtdata as xtdata
-            xtdata.subscribe_whole_quote(new_codes)
+            xtdata.subscribe_whole_quote(new_codes, callback=_on_quote_push)
             _trading_subscribed_codes.update(new_codes)
         except Exception as e:
             return {"ok": False, "error": "subscribe_quote error: %s" % str(e)}

@@ -37,7 +37,7 @@ export type SymbolInfo = {
 
 export type KlineInterval = "1m" | "5m" | "15m" | "30m" | "60m" | "1d" | "1w" | "1M";
 
-export type TickAggregationInterval = "3s" | "15s" | "1m" | "5m";
+export type TickAggregationInterval = "3s" | "10s" | "15s" | "30s" | "1m" | "5m";
 
 export type TickDepthLevel = {
   price: number;
@@ -47,6 +47,7 @@ export type TickDepthLevel = {
 
 export type KlineBar = {
   timestamp: number; // unix ms
+  date?: string; // YYYY-MM-DD (optional convenience alias)
   open: number;
   high: number;
   low: number;
@@ -59,6 +60,8 @@ export type KlineBar = {
   /** Settlement price (futures) — exchange-published daily settlement */
   settlementPrice?: number;
 };
+
+export type TickDirection = "up" | "down" | "flat" | "buy" | "sell" | "neutral";
 
 export type TickData = {
   symbol: SymbolInfo;
@@ -76,6 +79,8 @@ export type TickData = {
   askLevels?: TickDepthLevel[];
   source?: "qmt-bridge" | "receiver" | "unknown";
   raw?: Record<string, unknown>;
+  direction?: TickDirection;
+  tradeCount?: number;
 };
 
 export type TickFeatures = {
@@ -282,6 +287,16 @@ export type Portfolio = {
   updatedAt: string;
 };
 
+/** Alias for LivePosition — backward compat. */
+export type Position = LivePosition;
+
+/** Portfolio persistence store interface. */
+export interface PortfolioStore {
+  load(): Promise<Portfolio[]>;
+  save(portfolios: Portfolio[]): Promise<void>;
+  get(id: string): Promise<Portfolio | undefined>;
+}
+
 // ── Screening ────────────────────────────────────────────────────
 
 export type ScreenCriteria = {
@@ -325,7 +340,7 @@ export type OrderSide =
   | "buy_close" // 买入平仓
   | "sell_open"; // 卖出开仓
 
-export type OrderType = "market" | "limit" | "stop" | "stop_limit";
+export type OrderType = "market" | "limit" | "stop" | "stop_limit" | "auction" | "auction_limit" | "special_limit";
 
 export type OrderStatus =
   | "pending" // created locally, not yet submitted
@@ -359,6 +374,8 @@ export type Order = {
   updatedAt: string; // ISO datetime
   submittedAt?: string;
   filledAt?: string;
+  /** Filled price (alias for avgFillPrice, for backward compat) */
+  filledPrice?: number;
 
   // ── Option-specific fields (populated only for option orders) ──
   /** Strike price (行权价) */
@@ -452,6 +469,9 @@ export type GreeksSnapshot = {
   rho: number;
   impliedVol: number; // annualized IV
   calculatedAt: number; // unix ms
+  charm?: number;
+  vanna?: number;
+  vomma?: number;
 };
 
 /** Full option contract metadata */
@@ -698,6 +718,8 @@ export type RiskLimitsConfig = {
   maxOrdersPerMinute?: number;
   /** Max round-trip trades per day (default: 50) */
   maxDailyTrades?: number;
+  /** Max absolute portfolio theta exposure (default: unlimited) */
+  maxThetaExposure?: number;
 };
 
 export type RiskRuleId =
@@ -760,6 +782,7 @@ export type DataProviderConfig = {
   jqdata?: { enabled: boolean; username?: string; password?: string };
   tushare?: { enabled: boolean; token?: string };
   yfinance?: { enabled: boolean };
+  fred?: { enabled?: boolean; apiKey?: string };
 };
 
 /** Broker-specific connection configs */
@@ -786,6 +809,11 @@ export type IBBrokerConfig = {
   accountId?: string; // IB account string, e.g. "U1234567"
 };
 
+export type NamedTradingAccount = TradingAccountConfig & {
+  name: string;
+  label?: string;
+};
+
 export type TradingAccountConfig = {
   mode: "paper" | "live";
   broker?: BrokerType;
@@ -810,6 +838,14 @@ export type NotificationConfig = {
   riskAlerts?: boolean;
 };
 
+export type NotificationChannel = {
+  type: "feishu" | "dingtalk" | "wechat" | "webhook" | "wecom";
+  webhookUrl: string;
+  enabled?: boolean;
+  label?: string;
+  name?: string;
+};
+
 export type SignalWebhookConfig = {
   /**
    * Optional shared secret sent by the remote machine as the
@@ -824,12 +860,15 @@ export type QuantTradingConfig = {
   dataDir?: string;
   defaultMarket?: MarketType;
   /** Shorthand provider selector: "demo" for offline/test, otherwise use `dataProviders`. */
-  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart";
+  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart" | "jqdata";
   dataProviders?: DataProviderConfig;
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;
+  tradingAccounts?: NamedTradingAccount[];
+  activeAccount?: string;
   notifications?: NotificationConfig;
+  notificationChannels?: NotificationChannel[];
   /**
    * PnL monitor configuration.
    * Background service that polls account data and emits alerts

@@ -462,6 +462,18 @@ export class LiveEngine implements OpenClawPluginService {
 
       this.log(`信号: ${raw.direction} ${raw.symbol} @ ¥${raw.price} | ${raw.reason ?? ""}`);
 
+      // Skip when all data sources are stale — orders based on stale data are dangerous
+      if (this.stalenessMonitor) {
+        const report = this.stalenessMonitor.getReport();
+        if (report.overallStatus === "critical" && report.freshCount === 0 && report.totalSymbols > 0) {
+          this.log(
+            `信号跳过 (数据中断): ${raw.symbol} — 所有行情源中断，拒绝下单`,
+            "warn",
+          );
+          return;
+        }
+      }
+
       // Skip regime-paused strategies
       if (ls?.regimePaused) {
         this.log(

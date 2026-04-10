@@ -9,7 +9,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 
@@ -72,7 +72,7 @@ export class MarketAnomalyService {
     this.timer = setInterval(() => {
       void this.check();
     }, this.config.checkIntervalMs);
-    this.api.log?.("MarketAnomalyService started");
+    console.log("[MarketAnomaly] started");
   }
 
   stop(): void {
@@ -115,8 +115,8 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "market_anomaly_check", script);
-      const indices: IndexSnapshot[] = (result as { indices: IndexSnapshot[] })?.indices ?? [];
+      const result = await runInlinePython<{ indices: IndexSnapshot[] }>(script, this.tradingConfig);
+      const indices: IndexSnapshot[] = result.data?.indices ?? [];
       await this.evaluate(indices);
       return indices;
     } catch {
@@ -152,7 +152,7 @@ except Exception as e:
 
     // Auto-pause on market drop
     if (triggeredDrop && this.config.autoPauseOnDrop && this.onPauseCallback) {
-      this.api.log?.("[MarketAnomaly] Triggering auto-pause due to market drop");
+      console.log("[MarketAnomaly] Triggering auto-pause due to market drop");
       this.onPauseCallback();
     }
   }
@@ -166,7 +166,7 @@ except Exception as e:
     if (now - last < this.cooldownMs) return;
     this.lastAlerted.set(key, now);
 
-    this.alertStore?.add({ severity, source: "system", message, metadata });
+    this.alertStore?.add(severity, "system", message, metadata);
 
     if (this.notificationService) {
       const msg: NotificationMessage = {
@@ -178,6 +178,6 @@ except Exception as e:
       void this.notificationService.send(msg);
     }
 
-    this.api.log?.(`[MarketAnomaly] ${severity}: ${message}`);
+    console.log(`[MarketAnomaly] ${severity}: ${message}`);
   }
 }

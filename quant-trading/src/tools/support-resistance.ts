@@ -4,7 +4,7 @@
  * 080710 (14110306160013)
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createSupportResistanceTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
@@ -115,7 +115,7 @@ except Exception as e:
 `;
 
       try {
-        const result = await runPythonScript(api, config, "support_resistance", script);
+        const result = await runInlinePython(script, config);
         return result;
       } catch (err) {
         return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };

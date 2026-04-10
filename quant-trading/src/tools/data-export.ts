@@ -958,7 +958,7 @@ async function batchExport(
   args: Record<string, unknown>,
   deps: DataExportDeps,
 ) {
-  const { quantStorage, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine } = deps;
+  const { quantStorage, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine, conditionalOrderService, dcaScheduleService } = deps;
   const format = (args.format as string) ?? "csv";
   const symbol = args.symbol as string | undefined;
   const startDate = args.startDate as string | undefined;

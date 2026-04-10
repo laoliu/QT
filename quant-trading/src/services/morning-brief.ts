@@ -8,7 +8,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -64,7 +64,7 @@ export class MorningBriefService {
     this.timer = setInterval(() => {
       void this.tryAutoGenerate();
     }, 60_000);
-    this.api.log?.("MorningBriefService started");
+    console.log("[MorningBrief] started");
   }
 
   stop(): void {
@@ -159,9 +159,9 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "morning_global", script);
-      if (result && typeof result === "object" && !("error" in result)) {
-        return result as Record<string, { close: number; changePct: number }>;
+      const result = await runInlinePython<Record<string, { close: number; changePct: number }>>(script, this.tradingConfig);
+      if (result.ok && result.data) {
+        return result.data;
       }
       return {};
     } catch {
@@ -197,7 +197,7 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "morning_watchlist", script);
+      const result = await runInlinePython(script, this.tradingConfig);
       return Array.isArray(result) ? result as Array<{ symbol: string; name: string; prevClose: number }> : [];
     } catch {
       return [];

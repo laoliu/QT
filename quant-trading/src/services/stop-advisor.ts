@@ -5,7 +5,7 @@
  */
 
 export interface KlineBar {
-  date: string;
+  date?: string;
   open: number;
   high: number;
   low: number;

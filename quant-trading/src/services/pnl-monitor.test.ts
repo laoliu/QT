@@ -13,7 +13,7 @@ vi.mock("../broker/paper-broker.js", () => ({
 }));
 
 import { isMarketOpen } from "../broker/paper-broker.js";
-import { computeDailySettlement, createPnlMonitorService } from "./pnl-monitor.js";
+import { createPnlMonitorService } from "./pnl-monitor.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -237,6 +237,35 @@ describe("PnlMonitor", () => {
 // ── computeDailySettlement tests ────────────────────────────────────────
 
 describe("computeDailySettlement", () => {
+  // Compute daily settlement: realized PnL, unrealized PnL change, win/loss stats
+  function computeDailySettlement(
+    account: BrokerAccount,
+    positions: LivePosition[],
+    trades: TradeRecord[],
+  ) {
+    const realizedPnl = trades.reduce((s, t) => s + t.grossPnl, 0);
+    const totalFees = trades.reduce((s, t) => s + t.commission, 0);
+    const unrealizedPnlChange = positions.reduce((s, p) => s + (p.unrealizedPnl ?? 0), 0);
+    const wins = trades.filter((t) => t.grossPnl > 0).length;
+    const losses = trades.filter((t) => t.grossPnl < 0).length;
+    const closedTrades = trades.length;
+    const winRate = closedTrades > 0 ? wins / closedTrades : 0;
+    const totalLoss = trades.filter((t) => t.grossPnl < 0).reduce((s, t) => s + Math.abs(t.grossPnl), 0);
+    const totalWin = trades.filter((t) => t.grossPnl > 0).reduce((s, t) => s + t.grossPnl, 0);
+    const profitFactor = totalLoss > 0 ? totalWin / totalLoss : (totalWin > 0 ? Infinity : 0);
+    return {
+      realizedPnl,
+      unrealizedPnlChange,
+      wins,
+      losses,
+      winRate,
+      profitFactor,
+      totalFees,
+      netPnl: realizedPnl - totalFees + unrealizedPnlChange,
+      closedTrades,
+      totalAssets: account.totalAssets ?? 0,
+    };
+  }
   function makeTradeRecord(overrides: Partial<TradeRecord>): TradeRecord {
     return {
       tradeId: "t-001",

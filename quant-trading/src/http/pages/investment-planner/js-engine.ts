@@ -472,7 +472,7 @@ function loadConditionalOrders(){
       document.getElementById('cond-status').textContent='共 '+orders.length+' 条记录，活跃 '+(d.activeCount||0)+' 条';
       var tbody=document.querySelector('#cond-order-table tbody');
       if(!orders.length){
-        tbody.innerHTML='<tr><td colspan="11" style="color:var(--text-dim)">暂无条件单</td></tr>';
+        tbody.innerHTML='<tr><td colspan="12" style="color:var(--text-dim)">暂无条件单</td></tr>';
         return;
       }
       var rows='';
@@ -500,6 +500,7 @@ function loadConditionalOrders(){
         rows+='<tr>'+
           '<td style="font-size:11px">'+esc(o.id)+'</td>'+
           '<td><strong>'+esc(o.symbol)+'</strong></td>'+
+          '<td style="font-size:11px">'+esc(o.name||'')+'</td>'+
           '<td>'+typeLabel+'</td>'+
           '<td>'+num(o.entryPrice)+'</td>'+
           '<td>'+triggerDisplay+'</td>'+

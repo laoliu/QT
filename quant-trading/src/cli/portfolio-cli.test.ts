@@ -13,9 +13,12 @@ function jsonResponse(data: unknown, status = 200): Response {
 }
 
 describe("portfolio-cli", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let logSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let errorSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fetchSpy: any;
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});

@@ -10,7 +10,7 @@
  *  - VIX / 波动率代理
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createMarketSentimentIndexTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
@@ -207,7 +207,7 @@ except Exception as e:
 `;
 
   try {
-    return await runPythonScript(api, config, "market_sentiment_current", script);
+    return await runInlinePython(script, config);
   } catch (err) {
     return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -263,7 +263,7 @@ except Exception as e:
 `;
 
   try {
-    return await runPythonScript(api, config, "market_sentiment_history", script);
+    return await runInlinePython(script, config);
   } catch (err) {
     return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };
   }

@@ -51,8 +51,8 @@ function mockReportDataSource(overrides?: Partial<ReportDataSource>): ReportData
   return {
     getTrades: async () => SAMPLE_TRADES,
     getEquityCurve: async () => EQUITY_CURVE,
-    getBenchmarkCurve: async (benchmark, from, to) => {
-      return generateEquityCurve(90, 100000, 0.0005, 0.015);
+    getBenchmarkCurve: async (_benchmark, _from, _to) => {
+      return generateEquityCurve(90, 100000, 0.0005, 0.015).map(p => ({ date: p.date, value: p.equity }));
     },
     getSectorForSymbol: (symbol) => {
       const map: Record<string, string> = {

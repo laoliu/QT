@@ -8,7 +8,7 @@ import type { LiveEngine } from "../engine/live-engine.js";
  * HTTP API for portfolio operations (REST-style).
  * Used by the web dashboard and external integrations.
  */
-import type { Portfolio, PortfolioStore, QuantTradingConfig, OrderSide, OrderType, MarketType } from "../types.js";
+import type { Portfolio, QuantTradingConfig, OrderSide, OrderType, MarketType } from "../types.js";
 import { loadPortfolioStore } from "../tools/portfolio.js";
 
 // ── Pagination Helper ────────────────────────────────────────────

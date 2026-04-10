@@ -9,7 +9,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 
@@ -69,7 +69,7 @@ export class SectorAlertService {
     this.timer = setInterval(() => {
       void this.check();
     }, this.config.checkIntervalMs);
-    this.api.log?.("SectorAlertService started");
+    console.log("[SectorAlert] started");
   }
 
   stop(): void {
@@ -111,8 +111,8 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "sector_alert_check", script);
-      const sectors: SectorData[] = (result as { sectors: SectorData[] })?.sectors ?? [];
+      const result = await runInlinePython<{ sectors: SectorData[] }>(script, this.tradingConfig);
+      const sectors: SectorData[] = result.data?.sectors ?? [];
       await this.evaluate(sectors);
       return sectors;
     } catch {
@@ -172,7 +172,7 @@ except Exception as e:
     if (now - last < this.cooldownMs) return;
     this.lastAlerted.set(key, now);
 
-    this.alertStore?.add({ severity, source: "strategy", message, metadata });
+    this.alertStore?.add(severity, "strategy", message, metadata);
 
     if (this.notificationService) {
       const msg: NotificationMessage = {
@@ -184,6 +184,6 @@ except Exception as e:
       void this.notificationService.send(msg);
     }
 
-    this.api.log?.(`[SectorAlert] ${severity}: ${message}`);
+    console.log(`[SectorAlert] ${severity}: ${message}`);
   }
 }

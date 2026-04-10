@@ -1,6 +1,20 @@
 /** Investment Planner — stock screening, rebalancing, signals, milestones, and monitoring */
 export function getScreeningJs(): string {
   return `
+/* Sync plan portfolio with actual broker positions in live mode */
+function _getSyncedPlan(plan){
+  var mode=window._currentViewMode||'paper';
+  if(mode!=='live')return Promise.resolve(plan);
+  return api('/quant/api/portfolio?mode=live',{_timeout:15000}).then(function(d){
+    if(!d||!d.data||!d.data.positions||!d.data.positions.length)return plan;
+    var liveSymbols={};
+    d.data.positions.forEach(function(p){liveSymbols[p.symbol]=p});
+    var filtered=plan.portfolio.filter(function(p){return !!liveSymbols[p.symbol]});
+    if(!filtered.length)return plan;
+    return Object.assign({},plan,{portfolio:filtered});
+  }).catch(function(){return plan});
+}
+
 function refreshPortfolio(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){
     // Auto-load latest plan from history before giving up
@@ -28,7 +42,8 @@ function refreshPortfolio(){
     return;
   }
   toast('🔄 刷新持仓行情…');
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan}),_timeout:60000}).then(function(d){
+  _getSyncedPlan(currentPlan).then(function(syncedPlan){
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan}),_timeout:60000}).then(function(d){
     var s=d.summary;
     var _mode=window._currentViewMode||'paper';
     _lastPortfolioSignals[_mode]=d.signals||[];
@@ -64,13 +79,21 @@ function refreshPortfolio(){
         '</tr>';
     }).join('')||'<tr><td colspan="12" style="text-align:center;color:var(--text-dim)">暂无持仓数据</td></tr>';
 
-    // Store signals (per mode)
+    // Store signals (per mode) with dedup – skip if same symbol+type within 5min
     if(d.signals&&d.signals.length){
       var _m=window._currentViewMode||'paper';
-      d.signals.forEach(function(s){s.timestamp=d.timestamp;s._mode=_m;signalHistory[_m].unshift(s)});
+      var DEDUP_MS=5*60*1000;
+      d.signals.forEach(function(s){
+        s.timestamp=d.timestamp;s._mode=_m;
+        var dup=signalHistory[_m].some(function(h){
+          return h.symbol===s.symbol&&h.type===s.type&&(new Date(s.timestamp).getTime()-new Date(h.timestamp).getTime()<DEDUP_MS);
+        });
+        if(!dup){signalHistory[_m].unshift(s)}
+      });
       if(signalHistory[_m].length>100)signalHistory[_m]=signalHistory[_m].slice(0,100);
     }
     toast('✅ 持仓已刷新');
+  });
   });
 }
 
@@ -135,7 +158,7 @@ function loadPortfolioConditionals(){
       statusEl.textContent='共 '+orders.length+' 条 | 监控中 '+active.length+' 条 | 已触发 '+triggered.length+' 条';
       var tbody=document.querySelector('#pf-cond-table tbody');
       if(!orders.length){
-        tbody.innerHTML='<tr><td colspan="10" style="color:var(--text-dim)">暂无条件单</td></tr>';
+        tbody.innerHTML='<tr><td colspan="11" style="color:var(--text-dim)">暂无条件单</td></tr>';
         return;
       }
       var rows='';
@@ -162,6 +185,7 @@ function loadPortfolioConditionals(){
         var rowStyle=o.triggered?'background:rgba(251,191,36,.06)':'';
         rows+='<tr style="'+rowStyle+'">'+
           '<td><strong>'+esc(o.symbol)+'</strong></td>'+
+          '<td style="font-size:11px">'+esc(o.name||'')+'</td>'+
           '<td>'+typeLabel+'</td>'+
           '<td>'+num(o.entryPrice)+'</td>'+
           '<td>'+triggerDisplay+'</td>'+
@@ -1412,7 +1436,8 @@ function loadSignals(){
   }
   // Refresh portfolio to get latest signals
   var _mode=window._currentViewMode||'paper';
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:currentPlan,mode:_mode}),_timeout:60000}).then(function(d){
+  _getSyncedPlan(currentPlan).then(function(syncedPlan){
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan,mode:_mode}),_timeout:60000}).then(function(d){
     var signals=d.signals||[];
     _lastPortfolioSignals[_mode]=signals;
     var modeTag=_mode==='live'?'🔴 实盘':'🟢 模拟盘';
@@ -1463,6 +1488,7 @@ function loadSignals(){
         '<td style="font-size:11px;max-width:200px;word-break:break-all">'+esc(s.message)+'</td>'+
         '</tr>';
     }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无历史信号</td></tr>';
+  });
   });
 }
 

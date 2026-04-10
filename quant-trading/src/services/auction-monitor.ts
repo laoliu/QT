@@ -9,7 +9,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 
@@ -85,7 +85,7 @@ export class AuctionMonitorService {
     this.timer = setInterval(() => {
       void this.check();
     }, this.config.checkIntervalMs);
-    this.api.log?.("AuctionMonitorService started");
+    console.log("[AuctionMonitor] started");
   }
 
   stop(): void {
@@ -144,8 +144,8 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "auction_monitor", script);
-      const snapshots: AuctionSnapshot[] = (result as { snapshots: AuctionSnapshot[] })?.snapshots ?? [];
+      const result = await runInlinePython<{ snapshots: AuctionSnapshot[] }>(script, this.tradingConfig);
+      const snapshots: AuctionSnapshot[] = result.data?.snapshots ?? [];
       await this.evaluate(snapshots);
       // Collect snapshot for sniper analysis (异动量大单抢筹检测)
       this.collectSniperSnapshot(snapshots);
@@ -198,7 +198,7 @@ except Exception as e:
     if (this.alertedKeys.has(key)) return;
     this.alertedKeys.add(key);
 
-    this.alertStore?.add({ severity, source: "signal", message, metadata });
+    this.alertStore?.add(severity, "signal", message, metadata);
 
     if (this.notificationService) {
       const msg: NotificationMessage = {
@@ -210,7 +210,7 @@ except Exception as e:
       void this.notificationService.send(msg);
     }
 
-    this.api.log?.(`[AuctionMonitor] ${severity}: ${message}`);
+    console.log(`[AuctionMonitor] ${severity}: ${message}`);
   }
 
   // ── Auction Sniper: 异动量大单抢筹检测 ─────────────────────────
@@ -245,7 +245,7 @@ except Exception as e:
    */
   async runSniperAnalysis(minScore = 35): Promise<SniperAnalysisResult[]> {
     if (this.sniperSnapshots.length < 2) {
-      this.api.log?.("[AuctionSniper] 0804082批数据");
+      console.log("[AuctionSniper] 0804082批数据");
       return [];
     }
 
@@ -261,10 +261,8 @@ print(json.dumps({"signals": results}, ensure_ascii=False))
 `;
 
     try {
-      const result = await runPythonScript(
-        this.api, this.tradingConfig, "auction_sniper", script,
-      );
-      const signals = (result as { signals: SniperAnalysisResult[] })?.signals ?? [];
+      const result = await runInlinePython<{ signals: SniperAnalysisResult[] }>(script, this.tradingConfig);
+      const signals = result.data?.signals ?? [];
 
       // Emit alerts for strong/moderate signals
       for (const sig of signals) {
@@ -283,7 +281,7 @@ print(json.dumps({"signals": results}, ensure_ascii=False))
 
       return signals;
     } catch (err) {
-      this.api.log?.(`[AuctionSniper] Analysis error: ${err}`);
+      console.log(`[AuctionSniper] Analysis error: ${err}`);
       return [];
     }
   }
@@ -316,10 +314,8 @@ print(json.dumps({"signal": sig.to_dict()}, ensure_ascii=False))
 `;
 
     try {
-      const result = await runPythonScript(
-        this.api, this.tradingConfig, "auction_sniper_confirm", script,
-      );
-      const sig = (result as { signal: SniperAnalysisResult })?.signal ?? null;
+      const result = await runInlinePython<{ signal: SniperAnalysisResult }>(script, this.tradingConfig);
+      const sig = result.data?.signal ?? null;
 
       if (sig?.post_open_confirmed) {
         await this.emit(
@@ -340,7 +336,7 @@ print(json.dumps({"signal": sig.to_dict()}, ensure_ascii=False))
 
       return sig;
     } catch (err) {
-      this.api.log?.(`[AuctionSniper] Confirm error: ${err}`);
+      console.log(`[AuctionSniper] Confirm error: ${err}`);
       return null;
     }
   }

@@ -94,7 +94,7 @@ export class StopLossEngine {
    * Called when a new position is opened (buy order filled).
    * Automatically sets stop-loss/take-profit if autoAttach is enabled.
    */
-  async onPositionOpened(order: Order): Promise<void> {
+  onPositionOpened(order: Order): void {
     if (!this.config.autoAttach) return;
     if (order.side !== "buy" && order.side !== "buy_open") return;
     if (order.status !== "filled") return;
@@ -123,11 +123,12 @@ export class StopLossEngine {
 
     // Register with ConditionalOrderService if available
     if (this.conditionalOrderSvc) {
-      const orderId = await this.conditionalOrderSvc.addOrder({
+      const orderId = this.conditionalOrderSvc.addStopLoss({
         symbol,
-        triggerType: "price_below",
-        triggerValue: stopPrice,
+        entryPrice,
+        stopPrice,
         quantity,
+        strategyId: "stop-loss-engine",
         description: `0809: ${symbol} 跌破 06${stopPrice.toFixed(2)}`,
       });
       rule.conditionalOrderId = orderId;
@@ -155,11 +156,9 @@ export class StopLossEngine {
         const newStop = currentPrice * (1 - pct);
         if (newStop > rule.stopPrice) {
           rule.stopPrice = newStop;
-          // Update conditional order if exists
+          // Re-create conditional order with updated stop price
           if (this.conditionalOrderSvc && rule.conditionalOrderId) {
-            void this.conditionalOrderSvc.updateOrder(rule.conditionalOrderId, {
-              triggerValue: newStop,
-            });
+            this.conditionalOrderSvc.removeOrder(rule.conditionalOrderId);
           }
         }
       }
@@ -173,18 +172,18 @@ export class StopLossEngine {
   onPositionClosed(symbol: string): void {
     const rule = this.rules.get(symbol);
     if (rule?.conditionalOrderId && this.conditionalOrderSvc) {
-      void this.conditionalOrderSvc.cancelOrder(rule.conditionalOrderId);
+      this.conditionalOrderSvc.removeOrder(rule.conditionalOrderId);
     }
     this.rules.delete(symbol);
   }
 
   /** Manually set a stop-loss rule */
-  async setStopLoss(
+  setStopLoss(
     symbol: string,
     stopPrice: number,
     quantity: number,
     stopType?: StopType,
-  ): Promise<StopLossRule> {
+  ): StopLossRule {
     const existing = this.rules.get(symbol);
     const rule: StopLossRule = {
       symbol,
@@ -199,13 +198,14 @@ export class StopLossEngine {
     if (this.conditionalOrderSvc) {
       // Cancel existing conditional order
       if (existing?.conditionalOrderId) {
-        void this.conditionalOrderSvc.cancelOrder(existing.conditionalOrderId);
+        this.conditionalOrderSvc.removeOrder(existing.conditionalOrderId);
       }
-      const orderId = await this.conditionalOrderSvc.addOrder({
+      const orderId = this.conditionalOrderSvc.addStopLoss({
         symbol,
-        triggerType: "price_below",
-        triggerValue: stopPrice,
+        entryPrice: rule.entryPrice,
+        stopPrice,
         quantity,
+        strategyId: "stop-loss-engine",
         description: `止损设置: ${symbol} 跌破 06${stopPrice.toFixed(2)}`,
       });
       rule.conditionalOrderId = orderId;
@@ -220,7 +220,7 @@ export class StopLossEngine {
     const rule = this.rules.get(symbol);
     if (!rule) return false;
     if (rule.conditionalOrderId && this.conditionalOrderSvc) {
-      void this.conditionalOrderSvc.cancelOrder(rule.conditionalOrderId);
+      this.conditionalOrderSvc.removeOrder(rule.conditionalOrderId);
     }
     this.rules.delete(symbol);
     return true;

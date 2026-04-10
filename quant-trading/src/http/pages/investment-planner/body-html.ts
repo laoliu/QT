@@ -255,7 +255,7 @@ export function getPlannerBodyHtml(b: string): string {
       </div>
       <div id="pf-cond-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
       <div style="overflow-x:auto"><table id="pf-cond-table" style="font-size:12px">
-        <thead><tr><th>代码</th><th>类型</th><th>入场价</th><th>触发价/比例</th><th>当前止损价</th><th>峰值价</th><th>数量</th><th>创建时间</th><th>状态</th><th>触发结果</th></tr></thead>
+        <thead><tr><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发价/比例</th><th>当前止损价</th><th>峰值价</th><th>数量</th><th>创建时间</th><th>状态</th><th>触发结果</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>
@@ -1429,7 +1429,7 @@ export function getPlannerBodyHtml(b: string): string {
       <!-- Active conditional orders -->
       <div style="overflow-x:auto">
         <table id="cond-order-table">
-          <thead><tr><th>ID</th><th>代码</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

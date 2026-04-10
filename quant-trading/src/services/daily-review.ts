@@ -9,7 +9,7 @@
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { QuantTradingConfig } from "../types.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -94,7 +94,7 @@ export class DailyReviewService {
     this.timer = setInterval(() => {
       void this.tryAutoGenerate();
     }, 60_000);
-    this.api.log?.("DailyReviewService started");
+    console.log("[DailyReview] started");
   }
 
   stop(): void {
@@ -139,7 +139,7 @@ export class DailyReviewService {
       }
       const filePath = join(this.config.outputDir, `daily-review-${date}.md`);
       writeFileSync(filePath, report, "utf-8");
-      this.api.log?.(`Daily review saved to ${filePath}`);
+      console.log(`[DailyReview] saved to ${filePath}`);
     }
 
     // Push notification
@@ -208,8 +208,8 @@ except Exception as e:
 `;
 
     try {
-      const result = await runPythonScript(this.api, this.tradingConfig, "daily_review_market", script);
-      return result as DailyReviewData["market"];
+      const result = await runInlinePython<DailyReviewData["market"]>(script, this.tradingConfig);
+      return result.data as DailyReviewData["market"];
     } catch {
       return {
         shIndex: { close: 0, changePct: 0 },

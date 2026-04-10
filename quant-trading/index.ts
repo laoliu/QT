@@ -523,6 +523,17 @@ const quantTradingPlugin = {
         dailyPnl: snap.dailyPnl,
         positionCount: snap.positionCount,
       });
+
+      // Auto-register price alerts for held positions
+      const posSymbols = positions
+        .filter((p) => p.quantity > 0)
+        .map((p) => p.symbol);
+      if (posSymbols.length > 0) {
+        const created = priceAlertService.syncPositionAlerts(posSymbols);
+        if (created > 0) {
+          api.logger.info(`Auto-created ${created} price alert(s) for held positions`);
+        }
+      }
     });
 
     // Wire completed trades to strategy health monitor
@@ -1171,10 +1182,17 @@ const quantTradingPlugin = {
         }
         // Fallback: TS-side price-action regime detection (MA + volatility based)
         if (!priceRegimeDetect) {
-          const { createMarketRegimeDetector } = await import("./src/services/market-regime.js");
-          priceRegimeDetect = createMarketRegimeDetector(config);
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const modPath = "./src/services/market-regime.js";
+            const mod = await (Function("p", "return import(p)")(modPath) as Promise<{ createMarketRegimeDetector: (c: typeof config) => () => Promise<string | null> }>);
+            priceRegimeDetect = mod.createMarketRegimeDetector(config);
+          } catch {
+            // Market regime module not available
+            return "unknown";
+          }
         }
-        return priceRegimeDetect();
+        return priceRegimeDetect!();
       });
 
       api.registerService(tickIngressService);
@@ -1305,6 +1323,7 @@ const quantTradingPlugin = {
       tickFeatureStore: tickFeatureStoreRef,
       tickStrategyService: tickStrategyServiceRef,
       tickHistoryStore: tickHistoryStoreRef,
+      signalHitRateTracker,
       secure,
       securePublic,
     });

@@ -251,6 +251,49 @@ export class PriceAlertService {
     }
   }
 
+  /**
+   * Auto-create a change_pct alert for a held position.
+   * Skips if the symbol already has an active change_pct alert.
+   * Returns the alert ID if created, or null if skipped.
+   */
+  addPositionAlert(symbol: string, thresholdPct = 5): string | null {
+    // Check if the symbol already has an active change_pct alert
+    for (const a of this.alerts.values()) {
+      if (
+        a.symbol === symbol &&
+        (a.type === "change_pct_above" || a.type === "change_pct_below") &&
+        (!a.triggered || a.repeating)
+      ) {
+        return null; // already monitored
+      }
+    }
+    try {
+      return this.addAlert({
+        symbol,
+        type: "change_pct_above",
+        threshold: thresholdPct,
+        description: `[持仓] ${symbol} 涨跌幅超过${String(thresholdPct)}%`,
+        repeating: true,
+      });
+    } catch {
+      return null; // reached limit
+    }
+  }
+
+  /**
+   * Sync price alerts for all current positions.
+   * Creates alerts for new positions, does not remove alerts for sold positions
+   * (user may still want to watch them).
+   */
+  syncPositionAlerts(symbols: string[], thresholdPct = 5): number {
+    let created = 0;
+    for (const symbol of symbols) {
+      const id = this.addPositionAlert(symbol, thresholdPct);
+      if (id) created++;
+    }
+    return created;
+  }
+
   /** Start the periodic check loop. */
   start(): void {
     if (this.timer) return;

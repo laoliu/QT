@@ -63,6 +63,7 @@ const DEFAULT_LIMITS: Required<RiskLimitsConfig> = {
   // Frequency / over-trading defaults
   maxOrdersPerMinute: 10, // 每分钟最多下 10 单
   maxDailyTrades: 50, // 每日最多 50 笔成交
+  maxThetaExposure: 0, // 0 = unlimited
 };
 
 function pass(): RiskCheckResult {

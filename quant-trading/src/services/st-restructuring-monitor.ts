@@ -90,7 +90,7 @@ export class STRestructuringMonitor {
     this.timer = setInterval(() => {
       void this.tryAutoScan();
     }, 60_000);
-    this.api.log?.("STRestructuringMonitor started — scan at " + this.config.scanTime);
+    console.log("[ST Monitor] started — scan at " + this.config.scanTime);
   }
 
   /** Stop the scheduler */
@@ -114,7 +114,7 @@ export class STRestructuringMonitor {
     if (day === 0 || day === 6) return;
 
     this.lastScanDate = today;
-    this.api.log?.(`[ST Monitor] Auto-scan triggered at ${hhmm}`);
+    console.log(`[ST Monitor] Auto-scan triggered at ${hhmm}`);
 
     try {
       const result = await this.scan();
@@ -129,14 +129,14 @@ export class STRestructuringMonitor {
       const summary = this.formatSummary(result);
       await tryNotify(this.api, summary);
     } catch (err) {
-      this.api.log?.(`[ST Monitor] Scan failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.log(`[ST Monitor] Scan failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   /** Manually trigger a scan */
   async scan(days?: number): Promise<STScanResult> {
     const scanDays = days ?? this.config.scanDays;
-    this.api.log?.(`[ST Monitor] Scanning ${scanDays} days of announcements...`);
+    console.log(`[ST Monitor] Scanning ${scanDays} days of announcements...`);
 
     const result = await runPythonScript(
       "engines/st_restructuring.py",

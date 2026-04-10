@@ -468,6 +468,7 @@ class QMTBridgeProvider implements MarketDataProvider {
           low: q.low,
           volume: q.volume,
           amount: q.amount,
+          name: q.name,
           bid1: (q.bids as Array<{ price: number }>)?.[0]?.price,
           ask1: (q.asks as Array<{ price: number }>)?.[0]?.price,
         } as T;

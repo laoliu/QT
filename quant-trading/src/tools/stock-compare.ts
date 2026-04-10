@@ -4,7 +4,7 @@
  * 2-10 01070418/07/PE/PB/ROE/主力资金/0803
  */
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createStockCompareTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
@@ -82,7 +82,7 @@ print(json.dumps({"status": "ok", "count": len(results), "comparison": results},
 `;
 
       try {
-        const result = await runPythonScript(api, config, "stock_compare", script);
+        const result = await runInlinePython(script, config);
         return result;
       } catch (err) {
         return { error: `Python 0402: ${err instanceof Error ? err.message : String(err)}` };

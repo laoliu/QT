@@ -20,7 +20,7 @@ function getLegacyPortfolioPath(config: QuantTradingConfig): string {
   return path.join(dir, "portfolio.json");
 }
 
-async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
+export async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
   // Try mode-specific file first, then legacy
   for (const filePath of [getPortfolioPath(config), getLegacyPortfolioPath(config)]) {
     try {
@@ -46,6 +46,23 @@ async function savePortfolio(portfolio: Portfolio, config: QuantTradingConfig): 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   portfolio.updatedAt = new Date().toISOString();
   await fs.writeFile(filePath, JSON.stringify(portfolio, null, 2));
+}
+
+/** Load all portfolios as a record keyed by id. */
+export async function loadAllPortfolios(
+  config: QuantTradingConfig,
+): Promise<Record<string, Portfolio>> {
+  const pf = await loadPortfolio(config);
+  return { [pf.id]: pf };
+}
+
+/** Load portfolio store (multi-portfolio support). */
+export async function loadPortfolioStore(
+  config: QuantTradingConfig,
+): Promise<{ portfolios: Record<string, Portfolio>; defaultId: string }> {
+  const portfolios = await loadAllPortfolios(config);
+  const ids = Object.keys(portfolios);
+  return { portfolios, defaultId: ids[0] ?? "default" };
 }
 
 /** Append a trade record to the paper trade history file. */

@@ -138,6 +138,19 @@ class QMTBrokerBridge:
         if not self.mini_qmt_path:
             raise RuntimeError("mini_qmt_path is not configured")
 
+        # ── 1) Initialise xtdata (market data channel) ───────────
+        try:
+            if hasattr(xtdata, "connect"):
+                xtdata.connect(self.mini_qmt_path)
+            elif hasattr(xtdata, "rpc_init"):
+                xtdata.rpc_init(self.mini_qmt_path)
+            if hasattr(xtdata, "run"):
+                xtdata.run()
+            log.info("xtdata market-data channel initialised")
+        except Exception as e:
+            log.warning("xtdata init failed (quotes may be unavailable): %s", e)
+
+        # ── 2) Connect XtQuantTrader (trading channel) ───────────
         self.trader = XtQuantTrader(self.mini_qmt_path, session_id=int(time.time()) % 10000)
         callback = BridgeCallback()
         self.trader.register_callback(callback)

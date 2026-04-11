@@ -238,7 +238,7 @@ export function getDashboardHtml(baseUrl: string): string {
         <button class="btn btn-primary" onclick="engineAction('start')" id="btnStart" disabled>启动</button>
         <button class="btn" onclick="engineAction('pause')" id="btnPause" disabled>暂停</button>
         <button class="btn" onclick="engineAction('resume')" id="btnResume" disabled>恢复</button>
-        <button class="btn btn-danger" onclick="engineAction('stop')" id="btnStop" disabled>ֹͣ</button>
+        <button class="btn btn-danger" onclick="engineAction('stop')" id="btnStop" disabled>停止</button>
       </div>
       <button class="btn" onclick="refreshAll()">刷新</button>
       <span class="status" id="sseStatus" title="SSE 连接状态">
@@ -461,7 +461,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const el = document.getElementById('sseStatus');
         if (!el) return;
         if (state === 'connected') {
-          el.innerHTML = '<span class="dot dot-green"></span>ʵʱ';
+          el.innerHTML = '<span class="dot dot-green"></span>实时';
           el.title = 'SSE 实时连接正常';
         } else {
           el.innerHTML = '<span class="dot dot-orange"></span>轮询';
@@ -486,7 +486,7 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Engine controls ─────────────────────────────────────
     async function engineAction(action) {
-      var labels={start:'启动',stop:'ֹͣ',pause:'暂停',resume:'恢复'};
+      var labels={start:'启动',stop:'停止',pause:'暂停',resume:'恢复'};
       var el=document.getElementById('btn'+action.charAt(0).toUpperCase()+action.slice(1));
       if(el)el.disabled=true;
       try{

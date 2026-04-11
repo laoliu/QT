@@ -15,6 +15,15 @@ export type PythonBridgeResult<T = unknown> = {
   error?: string;
 };
 
+// ── Module-level Logger ──────────────────────────────────────────
+
+let _bridgeLogger: { info: (msg: string) => void; warn: (msg: string) => void } | undefined;
+
+/** Set a logger so that Python stderr output is forwarded to LogStore in real time. */
+export function setPythonBridgeLogger(logger: { info: (msg: string) => void; warn: (msg: string) => void }): void {
+  _bridgeLogger = logger;
+}
+
 // ── Concurrency Limiter ──────────────────────────────────────────
 
 /**
@@ -156,18 +165,32 @@ async function _spawnPython<T = unknown>(
 
     let stdout = "";
     let stderr = "";
+    let stderrRemainder = "";
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf-8");
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
+      const text = chunk.toString("utf-8");
+      stderr += text;
+      if (_bridgeLogger) {
+        const lines = (stderrRemainder + text).split("\n");
+        stderrRemainder = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) _bridgeLogger.info(`[python:${modulePath}] ${trimmed}`);
+        }
+      }
     });
 
     child.on("close", (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      // Flush remaining stderr
+      if (_bridgeLogger && stderrRemainder.trim()) {
+        _bridgeLogger.info(`[python:${modulePath}] ${stderrRemainder.trim()}`);
+      }
       if (code !== 0) {
         resolve({ ok: false, error: stderr || `Python exited with code ${code}` });
         return;
@@ -239,13 +262,28 @@ async function _spawnInlinePython<T = unknown>(
 
     let stdout = "";
     let stderr = "";
+    let stderrRemainder = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf-8"); });
-    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf-8"); });
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8");
+      stderr += text;
+      if (_bridgeLogger) {
+        const lines = (stderrRemainder + text).split("\n");
+        stderrRemainder = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) _bridgeLogger.info(`[python:inline] ${trimmed}`);
+        }
+      }
+    });
 
     child.on("close", (exitCode) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (_bridgeLogger && stderrRemainder.trim()) {
+        _bridgeLogger.info(`[python:inline] ${stderrRemainder.trim()}`);
+      }
       if (exitCode !== 0) {
         resolve({ ok: false, error: stderr || `Python exited with code ${exitCode}` });
         return;

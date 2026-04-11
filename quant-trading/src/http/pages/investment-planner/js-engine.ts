@@ -499,7 +499,7 @@ function loadConditionalOrders(){
         var time=o.createdAt?(new Date(o.createdAt)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
         rows+='<tr>'+
           '<td style="font-size:11px">'+esc(o.id)+'</td>'+
-          '<td><strong>'+esc(o.symbol)+'</strong></td>'+
+          '<td style="cursor:pointer" onclick="viewStock(\\''+esc(o.symbol).replace(/'/g,"\\\\'")+'\\')"><strong><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.symbol)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.symbol)+'</a></strong></td>'+
           '<td style="font-size:11px">'+esc(o.name||'')+'</td>'+
           '<td>'+typeLabel+'</td>'+
           '<td>'+num(o.entryPrice)+'</td>'+

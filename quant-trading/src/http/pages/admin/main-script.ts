@@ -128,13 +128,13 @@ function loadServices(){
     c.innerHTML+=card('🌐 网关服务',infoList({'状态':dotSt(gw.running),'PID':gw.pid,'端口':gw.port,'版本':gw.version,'运行时间':gw.uptime}));
     var rc=d.receiver;
     c.innerHTML+=card('📡 RECEIVER 桥接',infoList({'状态':dotSt(rc.running),'PID':rc.pid||'-','端口':rc.port,'主机':esc(rc.host),'重启次数':rc.restartCount,'启动':rc.startedAt?fmtTime(rc.startedAt):'-'})+
-      btnGrp([['btn-primary','svcAction("receiver","start")','▶ 启动',rc.running],['btn-danger','svcAction("receiver","stop")','⏹ ֹͣ',!rc.running],['','svcAction("receiver","restart")','🔄 重启',!rc.running]]));
+      btnGrp([['btn-primary','svcAction("receiver","start")','▶ 启动',rc.running],['btn-danger','svcAction("receiver","stop")','⏹ 停止',!rc.running],['','svcAction("receiver","restart")','🔄 重启',!rc.running]]));
     if(d.bridgeHealth){var bh=d.bridgeHealth;
       c.innerHTML+=card('🔗 桥接状态',infoList({'连接':dotSt(bh.bridge_connected),'待处理':bh.pending_requests,'上次轮询':bh.bridge_last_poll_age!=null?bh.bridge_last_poll_age.toFixed(1)+'s':'-'}));}
     var eng=d.engine;
     var eRun=eng.status==='running',ePause=eng.status==='paused',eStop=eng.status==='stopped';
     c.innerHTML+=card('🤖 实盘引擎',infoList({'状态':'<span class="badge '+(eRun?'badge-green':ePause?'badge-yellow':'badge-red')+'">'+esc(eng.status)+'</span>','活跃策略':eng.activeStrategies,'持仓数':eng.positions})+
-      btnGrp([['btn-primary','svcAction("engine","start")','▶ 启动',eRun||ePause],['btn-danger','svcAction("engine","stop")','⏹ ֹͣ',eStop],['','svcAction("engine","pause")','⏸ 暂停',!eRun],['','svcAction("engine","resume")','▶️ 恢复',!ePause]]));
+      btnGrp([['btn-primary','svcAction("engine","start")','▶ 启动',eRun||ePause],['btn-danger','svcAction("engine","stop")','⏹ 停止',eStop],['','svcAction("engine","pause")','⏸ 暂停',!eRun],['','svcAction("engine","resume")','▶️ 恢复',!ePause]]));
     (d.services||[]).forEach(function(svc){c.innerHTML+=card('📌 '+esc(svc.id),infoList({'服务ID':svc.id,'状态':'<span class="dot dot-green"></span>已注册'}));});
   }).catch(function(){document.getElementById('svc-cards').innerHTML='<div style="color:var(--text-dim)">⚠️ 服务信息加载失败</div>'});
 }

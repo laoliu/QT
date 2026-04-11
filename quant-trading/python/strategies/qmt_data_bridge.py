@@ -1060,6 +1060,28 @@ def _trading_connect_background(interval=15, max_retries=0):
 
 # ========== HTTP 服务 ==========
 
+# Request stats — periodically printed to show bridge is alive
+_req_stats = {"health": 0, "events": 0, "klines": 0, "quote": 0,
+              "trading": 0, "sector": 0, "other": 0, "last_report": 0}
+_REQ_STATS_INTERVAL = 60  # seconds between periodic status reports
+
+
+def _bump_stat(key):
+    _req_stats[key] = _req_stats.get(key, 0) + 1
+    now = time.time()
+    elapsed = now - _req_stats["last_report"]
+    if elapsed >= _REQ_STATS_INTERVAL:
+        _req_stats["last_report"] = now
+        parts = []
+        for k in ("health", "events", "klines", "quote", "trading", "sector", "other"):
+            v = _req_stats.get(k, 0)
+            if v > 0:
+                parts.append("%s=%d" % (k, v))
+        _log("[stats] 最近 %ds 请求: %s" % (int(elapsed), ", ".join(parts) if parts else "(无)"))
+        for k in ("health", "events", "klines", "quote", "trading", "sector", "other"):
+            _req_stats[k] = 0
+
+
 def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
     """
     启动 HTTP 服务器，Mac 可以直接拉取数据和执行交易。
@@ -1109,6 +1131,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
         def do_GET(self):
             path = urlparse(self.path).path
             if path == "/health":
+                _bump_stat("health")
                 xtdata_ok = False
                 xtdata_err = ""
                 try:
@@ -1137,6 +1160,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
                     pass
             elif path == "/trading/events":
+                _bump_stat("events")
                 # Mac polls Windows for trading events (fills, order status)
                 global _trading_events_queue
                 events = _trading_events_queue[:]
@@ -1228,6 +1252,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
 
             # --- Trading endpoint ---
             if path == "/trading":
+                _bump_stat("trading")
                 method = req_body.get("method", "")
                 params = req_body.get("params", {})
                 if not method:
@@ -1250,6 +1275,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
 
             # --- Sector endpoints ---
             if path == "/sector_list":
+                _bump_stat("sector")
                 sector_type = req_body.get("sector_type", "")
                 sectors = _fetch_sector_list_xtdata(sector_type)
                 self._json_response(200, {"status": "ok", "data": sectors, "count": len(sectors)})
@@ -1257,6 +1283,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 return
 
             if path == "/sector_members":
+                _bump_stat("sector")
                 sector = req_body.get("sector", "")
                 if not sector:
                     self._json_response(400, {"error": "sector name required"})
@@ -1282,6 +1309,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 return
 
             if path == "/quote":
+                _bump_stat("quote")
                 quotes = _fetch_quotes_xtdata(codes)
                 self._json_response(200, {"status": "ok", "data": quotes, "count": len(quotes)})
                 _log("[serve] returned %d quotes" % len(quotes))
@@ -1289,6 +1317,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
 
             period = req_body.get("period", "1d")
             count = int(req_body.get("count", 120))
+            _bump_stat("klines")
             _log("[serve] klines request: %d stocks, period=%s, count=%d" % (len(codes), period, count))
 
             klines = _fetch_klines_xtdata(codes, period, count)
@@ -1316,6 +1345,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
             _log("[serve] " + (fmt % args))
 
     server = ThreadingHTTPServer((host, port), BridgeHandler)
+    _req_stats["last_report"] = time.time()
     _log("HTTP serve mode started -- http://%s:%d (threaded)" % (host, port))
     _log("Endpoints: GET /health /trading/events, POST /klines /quote /trading")
     _trading_label = "connected" if _trading_connected else (

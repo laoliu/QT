@@ -68,7 +68,7 @@ import type {
   OpenClawPluginApi,
   OpenClawPluginConfigSchema,
 } from "openclaw/plugin-sdk";
-import { runPythonScript } from "./src/bridge/python-bridge.js";
+import { runPythonScript, setPythonBridgeLogger } from "./src/bridge/python-bridge.js";
 import { createQuantCommands } from "./src/commands/index.js";
 import { validateConfig } from "./src/config-validator.js";
 import { createDataProvider } from "./src/data/market-data-provider.js";
@@ -274,6 +274,9 @@ const quantTradingPlugin = {
     // ── Log Store (in-memory ring buffer for admin log viewer) ───
     const logStore = new LogStore({ maxEntries: 2000 });
     api.logger = wrapLoggerWithStore(api.logger, logStore);
+
+    // Forward Python subprocess stderr to LogStore
+    setPythonBridgeLogger(api.logger);
 
     // ── Equity History (daily snapshots, separate for paper / live) ─
     const equityHistoryPaper = new EquityHistory({

@@ -61,6 +61,8 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-trades::before{background:linear-gradient(90deg,var(--orange),var(--accent))}
 .nav-card.card-compare::before{background:linear-gradient(90deg,var(--purple),var(--green))}
 .nav-card.card-strestructure::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
+.nav-card.card-combo::before{background:linear-gradient(90deg,var(--accent),var(--purple))}
+.nav-card.card-risksim::before{background:linear-gradient(90deg,var(--red),var(--orange))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -293,6 +295,24 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">涨跌对比</span><span class="tag">基本面</span><span class="tag">技术指标</span>
       <span class="tag">最多5ֻ</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/portfolio-combo" class="nav-card card-combo" style="color:inherit;text-decoration:none">
+    <div class="icon">🧩</div>
+    <h3>跨资产组合构建</h3>
+    <p>多策略/多资产组合构建，风险平价 / 波动率目标权重分配，DSR/HLZ/PBO 统计检验</p>
+    <div class="tags">
+      <span class="tag">组合构建</span><span class="tag">风险平价</span><span class="tag">统计检验</span>
+      <span class="tag">权重扰动</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/risk-simulator" class="nav-card card-risksim" style="color:inherit;text-decoration:none">
+    <div class="icon">🛡️</div>
+    <h3>风控模拟器</h3>
+    <p>MDD 梯度控仓 + 波动率缩放交互式模拟，回撤阈值/恢复策略可视化调参</p>
+    <div class="tags">
+      <span class="tag">MDD梯度</span><span class="tag">波动率缩放</span><span class="tag">仓位控制</span>
+      <span class="tag">交互模拟</span>
     </div>
   </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">

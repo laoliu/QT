@@ -1,0 +1,82 @@
+name: dividend_quality_11y
+description: "O7 A股红利质量策略 11年回测 (2015-2025)"
+
+data:
+  source: tushare_pro
+  start_date: "2015-01-05"
+  end_date: "2025-12-31"
+  symbols: null
+  frequency: 1d
+  adjust: qfq
+  cache_dir: data/cache/tushare
+
+universe:
+  policy: default
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  exclude_list_path: configs/universe/exclude_list.yml
+  min_listing_days: 60
+
+strategy:
+  name: dividend_quality
+  params:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 500000.0
+    max_mv: 50000000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: false
+    momentum_lookback: 20
+    volatility_lookback: 60
+    weight_dividend: 0.25
+    weight_fcfy: 0.25
+    weight_roe: 0.20
+    weight_vol: 0.15
+    weight_ep: 0.15
+    dividend_field: dv_ratio
+    roe_metric: roe
+    ep_metric: pe_ttm
+    vol_lookback: 60
+    min_dividend: 0.5
+    min_roe: 5.0
+
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 1.0e-05
+  slippage_bps: 10.0  # A股最低合理值（§质量闸门 min_realistic=5.0）
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+risk:
+  enabled: true
+  max_position_weight: 0.06
+  max_drawdown: 0.70
+  max_sector_weight: 0.35
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.10
+  enable_audit_log: true
+  benchmark_symbol: "000300.SH"
+
+initial_capital: 1000000
+lot_size: 100
+t_plus_n: 1
+random_seed: 42
+output_dir: output/dividend_quality_11y

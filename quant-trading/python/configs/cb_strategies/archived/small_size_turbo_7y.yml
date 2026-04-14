@@ -1,0 +1,69 @@
+# CB 小盘轮动激进版 — 7年全期回测 (2018-2024)
+# 核心变化: 去掉 circuit_breaker, top_k=10, 每日换仓无缓冲
+#
+# Turbo 含义: 更集中持仓 + 更高频换仓 + 放宽过滤 + 无熔断
+# 对比 optimized_7y (top_k=6, max_issue_size=20000):
+#   top_k: 6 → 10 (更分散但仍集中)
+#   max_issue_size: 20000 → 50000 (放宽到 5 亿，覆盖更多标的)
+#   circuit_breaker: OFF
+
+name: "small_size_turbo"
+description: >
+  可转债小盘轮动激进版，放宽过滤条件选top10小规模转债等权轮动。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "small_size"
+  params:
+    top_k: 10
+    rebalance_days: 1
+    buffer_k: 0
+    max_price: 150.0
+    max_issue_size: 50000.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.10           # CB有债底保护,10%止损更合理(修复F-R3)
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    lot_size: 10
+    exclude_called: true
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15  # 开盘集合竞价仅占全天成交量15%(修复F-E2)
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+initial_capital: 1000000.0
+lot_size: 10
+t_plus_n: 0
+
+risk_constraints:
+  force_redeem_enabled: true
+  force_redeem_max_weight: 0.50
+  force_redeem_cb_value_threshold: 125.0
+  stop_loss_pct: 0.10            # CB有债底保护,10%止损更合理(修复F-R3)
+  circuit_breaker_enabled: false
+
+random_seed: 42
+output_dir: "output/cb_small_size_turbo_7y"
+
+report:
+  benchmark: null
+  custom_benchmark: "000832.CSI"

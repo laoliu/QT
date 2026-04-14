@@ -1,0 +1,79 @@
+# 增强多因子策略 V2 8 年回测配置
+# CB Enhanced Multifactor V2 — 12 因子融合 (7 基础 + 5 新增正交因子)
+#
+# Phase 1 (Alpha-Plus Roadmap) 产出
+# 新因子: iv_bias, gamma_convexity, credit_spread, liquidity_activity, maturity_convexity
+
+name: "cb_enhanced_mf_v2_8y"
+description: >
+  增强多因子策略 V2 — 在原 7 因子基础上叠加 5 个正交新因子,
+  通过12因子横截面排名加权融合, 选取 top_k 只持有。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2025-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_enhanced_mf_v2"
+  params:
+    top_k: 20
+    rebalance_days: 3
+    # 基础因子权重
+    price_weight: 0.10
+    premium_weight: 0.10
+    cb_value_weight: 0.08
+    size_weight: 0.10
+    # v1 增强因子
+    delta_weight: 0.08
+    rating_weight: 0.06
+    ytm_weight: 0.06
+    # v2 新因子
+    iv_bias_weight: 0.10
+    gamma_convexity_weight: 0.10
+    credit_spread_weight: 0.08
+    liquidity_activity_weight: 0.06
+    maturity_convexity_weight: 0.08
+    # 筛选
+    max_price: 130.0
+    max_premium: 40.0
+    min_turnover: 50.0
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.15
+    lot_size: 10
+    # 新因子参数
+    risk_free_rate: 0.025
+    maturity_sweet_spot: 3.0
+    maturity_half_range: 3.0
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_enhanced_mf_v2_8y"
+
+report:
+  benchmark: "000300.SH"

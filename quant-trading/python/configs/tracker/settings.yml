@@ -1,0 +1,50 @@
+# ============================================================
+# Aipha-Q Tracker — 全局设置
+# ============================================================
+# 此文件定义 tracker 模块的运行参数。
+# 敏感信息（app_token 等）请用环境变量覆盖或放在本地私有 .env 文件，
+# 不要提交到 Git。
+
+# 数据存储目录
+data_dir: "data/tracker"
+
+# 浏览器设置
+browser:
+  headless: true
+  slow_mo: 0       # ms, 模拟人类操作间隔（0=不额外等待）
+  # proxy:
+  #   server: "http://proxy:8080"
+
+# 采集调度
+schedule:
+  # cron 表达式 (服务器 crontab 使用)
+  # 盘前: 08:30, 盘后: 15:30, 晚间: 21:00
+  fetch_cron: "30 8,15,21 * * 1-5"
+  # 最小采集间隔（分钟），防止过于频繁
+  min_interval_minutes: 60
+
+# 差异检测
+diff:
+  # 权重变化低于此阈值视为"无变化"（绝对值,0.005 = 0.5%）
+  weight_threshold: 0.005
+
+# 通知设置
+notification:
+  wxpusher:
+    enabled: false  # 默认关闭，配置好 app_token 后改为 true
+    # 从 WxPusher 后台获取:
+    # 1. 注册 https://wxpusher.zjiecode.com/admin/main/app/appList
+    # 2. 创建应用 → 获取 app_token
+    # 3. 用微信扫码关注 → 获取 UID
+    # app_token 请通过环境变量 WXPUSHER_APP_TOKEN 设置，不要写在此文件中
+    uids: []        # ["UID_xxxxx"]
+    # 通知级别:
+    #   all     — 所有变化都通知
+    #   changes — 仅有持仓变化时通知
+    #   major   — 仅新增/清仓时通知
+    level: "changes"
+
+# 审计日志
+audit:
+  enabled: true
+  log_dir: "logs/audit"

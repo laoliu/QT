@@ -1,0 +1,77 @@
+# R118 双低五因子增强评估 — 对比多种权重配置
+# ============================================================
+# 基于全球量化策略师调研(2026-03-15)：
+#   - 江海证券/国金证券 2025 推荐五因子增强 (AR>24%)
+#   - 持有封基: 多因子+分散化 → 长期有效
+#   - AQR: 四因子(V/M/C/D)跨资产验证
+# 本配置: 变体 B — 研报推荐五因子全开
+# ============================================================
+
+name: "r118_dl5f_variant_b"
+description: >
+  R118 五因子全开(研报推荐权重): DL(0.25)+DL_pct(0.25)+momentum(0.20)+RV_pct(0.15)+rating(0.15)
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-15"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_dl_enhanced_5f"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 135.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    max_premium: 40.0
+    exclude_st: true
+    exclude_called: true
+    stop_loss_pct: 0.10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    buffer_k: 2
+    dl_percentile_window: 120
+    reversal_window: 20
+    rv_window: 20
+    rv_percentile_window: 120
+    min_history: 20
+    premium_weight_in_dl: 1.0
+    # 研报推荐权重 — 五因子全开
+    w_double_low: 0.25
+    w_dl_percentile: 0.25
+    w_reversal: 0.20
+    w_rv_percentile: 0.15
+    w_rating: 0.15
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/r118_dl5f_variant_b"
+
+report:
+  generate_html: true

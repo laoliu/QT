@@ -1,0 +1,66 @@
+# 双均线策略 — 回测配置
+# ============================================================
+# 策略思路: 短期均线上穿长期均线买入, 下穿卖出。
+# 适用于趋势性较强的品种。
+
+name: "dual_ma"
+description: >
+  双均线交叉策略 — 基于短期(5日)和长期(20日)移动平均线
+  的交叉信号进行交易。
+
+# ------ 数据 ------
+data:
+  source: "tushare_pro"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "demo_dual_ma"
+  params:
+    short_window: 5
+    long_window: 20
+    position_pct: 0.10
+    max_positions: 10
+    target_symbols:
+      - "000001.SZ"
+      - "600519.SH"
+      - "000858.SZ"
+      - "002594.SZ"
+      - "000333.SZ"
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+# ------ 股票池 ------
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 60
+
+# ------ 成本 (A股) ------
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005            # 2023-08-28 起印花税减半（千分之0.5，卖出）
+  transfer_fee_rate: 0.00001        # 2022-04-29 起统一过户费（万分之0.1）
+
+# ------ 滑点 ------
+slippage:
+  model: "fixed_bps"
+  bps: 5.0
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"
+

@@ -1,0 +1,93 @@
+cost_model:
+  commission:
+    min_fee: 0
+    rate: 0
+  stamp_tax:
+    sell_rate: 0
+  transfer_fee:
+    rate: 0
+data:
+  cache_dir: data/cache/tushare
+  provider: tushare_pro
+  snapshot: latest
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 100
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.25
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/ml_csi300_t1aligned_zerocost
+  universe_summary: true
+risk_constraints:
+  circuit_breaker_enabled: false
+  max_drawdown_pct: 1.0
+  max_sector_pct: 1.0
+  max_single_position_pct: 1.0
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+  stop_loss_pct: 0
+  trailing_stop_pct: 0
+run:
+  end_date: '2025-12-15'
+  mode: backtest
+  seed: 42
+  start_date: '2018-01-16'
+  timezone: Asia/Shanghai
+slippage_model:
+  base_bps: 0
+  name: fixed
+strategy:
+  name: ml_factor
+  parameters:
+    buffer_k: 0
+    cash_reserve_pct: 0.03
+    check_index_member: false
+    colsample_bytree: 0.8
+    forward_days: 5
+    learning_rate: 0.05
+    max_depth: 6
+    max_price: 300.0
+    max_single_pct: 1.0
+    min_child_samples: 50
+    min_listed_days: 120
+    min_mv: 100000
+    min_price: 3.0
+    min_turnover: 500.0
+    model_objective: regression
+    model_path: models/ml_csi300_lgb_p3_t1aligned
+    model_type: lightgbm
+    n_estimators: 300
+    num_leaves: 31
+    oos_predictions_path: models/ml_csi300_lgb_p3_t1aligned/oos_predictions.parquet
+    predict_months: 3
+    purge_days: 10
+    rebalance_days: 5
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    stop_loss_pct: 0
+    subsample: 0.8
+    top_k: 30
+    trailing_stop_pct: 0
+    train_years: 3

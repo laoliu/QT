@@ -1,0 +1,131 @@
+# ============================================================
+# ML 多因子选股策略 — CSI800 (10 年回测)
+# ============================================================
+# 核心假说：
+#   Alpha158 量价因子 + LightGBM Walk-Forward 训练
+#   基于 Qlib 研究: excess AR=17.8%, IR=2.0
+#   选股池: CSI800 (中证800 = 沪深300 + 中证500)
+#   调仓: 周频 (5个交易日)
+#   持仓: top 50 等权
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000906.SH
+  region: CN
+
+report:
+  benchmark: 000906.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/ml_factor_csi800_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.04
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  # R94: MDD 梯度减仓 + 波动率目标
+  # R94: death spiral disabled
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 40.0
+  fallback_bps: 10.0
+  max_bps: 80.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 5
+    min_mv: 200_000.0
+    max_mv: 10_000_000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 800.0
+    min_listed_days: 120
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.15
+    buffer_k: 15
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.04
+    # --- ML 参数 ---
+    model_objective: regression
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    purge_days: 10
+    # --- 回退权重 ---
+    fallback_weights:
+      pe_ttm: -1.0
+      pb: -1.0
+      roe: 1.0
+      circ_mv: -0.5
+      turnover_rate: -0.3
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000906.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

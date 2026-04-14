@@ -1,0 +1,119 @@
+# ============================================================
+# CSI300 ≥200亿 市值分层 ML 策略 — P0 生产化配置
+# ============================================================
+# CF-034: CSI300≥200B 近期 SR=1.23 零衰减，最稳定 alpha 源
+# CF-035: 与 CSI2000<20B 相关仅 0.475，最优分散化配对
+# 模型: ml_csi300_lgb_p3 (32 folds, OOS IC=0.075, PBO=0.037)
+# 市值过滤: min_mv=2,000,000万元 (≥200亿流通市值)
+# 大盘股滑点较低: base_bps=3, impact_coeff=10
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0000854   # 万0.854 — §13.1 MarketRulesCNEquity
+  stamp_tax:
+    sell_rate: 0.0005  # 万5 卖出
+  transfer_fee:
+    rate: 1.0e-05      # 万0.1 双向
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/ml_csi300_ge200b
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05   # 大盘个股可稍高
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  # R94: death spiral disabled
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2018-01-16'  # 模型 OOS 起始日
+  end_date: '2025-12-15'    # 模型 OOS 终止日
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 10.0           # 大盘股 ≥10bps (系统推荐最低值)
+  impact_coeff: 20.0        # 大盘冲击成本适中
+  fallback_bps: 15.0
+  max_bps: 50.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 30                # ≥200B 约100-150只，取 top 30
+    rebalance_days: 5
+    min_mv: 2_000_000.0     # ≥200亿流通市值（万元）
+    min_price: 3.0
+    max_price: 500.0         # 大盘股价格上限更高
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.15
+    buffer_k: 8              # 缓冲区较小（大盘稳定）
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    # --- ML 参数 ---
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi300_lgb_p3
+    oos_predictions_path: models/ml_csi300_lgb_p3/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    purge_days: 10

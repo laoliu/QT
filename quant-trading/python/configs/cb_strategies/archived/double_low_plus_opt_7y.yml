@@ -1,0 +1,77 @@
+# DoubleLow+ 可转债6因子增强策略 — 7年优化版
+# 借鉴 small_size_optimized 最优参数: top_k=5, rebalance_days=1, 小规模
+# 目标: 年化30%+, 最大回撤<25%
+# ============================================================
+
+name: "double_low_plus_optimized_7y"
+description: >
+  DoubleLow+ 6因子优化版。收紧规模+价格+集中持仓+日频调仓。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "double_low_plus"
+  params:
+    top_k: 5
+    rebalance_days: 1
+    max_price: 145.0
+    max_issue_size: 20000.0        # 2亿以下（小规模博弈空间大）
+    min_issue_size: 500.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+    # 次新过滤
+    use_age_filter: true
+    min_age_days: 3
+    max_age_days: 180
+    fallback_max_age_days: 730
+    # 溢价率过滤
+    max_premium: 60.0
+    # 均值回归
+    lookback: 20
+    bb_k: 2.0
+    # 6因子权重 — 加重规模+均值回归
+    weight_price: 0.15
+    weight_premium: 0.15
+    weight_size: 0.25
+    weight_age: 0.05
+    weight_mean_reversion: 0.25
+    weight_rating: 0.15
+    # 自适应降级
+    min_candidates: 3
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.50
+  enable_audit_log: true
+
+random_seed: 42
+
+output_dir: "output/double_low_plus_opt_7y"

@@ -1,0 +1,100 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.1
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - sortino
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  - alpha
+  - beta
+  - information_ratio
+  output_dir: reports/dividend_defensive_10y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.4
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: 000300.SH
+  stop_loss_pct: 0.2
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.25
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+run:
+  start_date: '2015-01-01'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+strategy:
+  name: dividend_defensive
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 200000.0
+    stop_loss_pct: 0.2
+    weight_dividend: 0.35
+    weight_quality: 0.25
+    weight_volatility: 0.2
+    weight_value: 0.1
+    weight_momentum: 0.1
+    quality_roe_weight: 0.6
+    quality_debt_weight: 0.4
+    min_dividend_yield: 0.5
+    min_roe: 5.0
+    max_pe: 60.0
+    max_debt_to_assets: 75.0
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: dividend_defensive

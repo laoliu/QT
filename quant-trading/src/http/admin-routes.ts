@@ -52,6 +52,7 @@ import {
 } from "./routes/_helpers.js";
 import { registerDailyPickRoutes } from "./routes/daily-pick.js";
 import { registerStrategyLabRoutes } from "./routes/strategy-lab.js";
+import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
 import { registerStrategyRoutingRoutes } from "./routes/strategy-routing.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -3700,6 +3701,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
 
   // Strategy Routing (extracted to routes/strategy-routing.ts)
   registerStrategyRoutingRoutes(deps);
+
+  // Portfolio Combo & Risk Simulator (extracted to routes/portfolio-combo.ts)
+  registerPortfolioComboRoutes(deps);
 
   // ── Auction Sniper (竞价抢筹狙击) Page ──────────────────────────
   api.registerHttpRoute({

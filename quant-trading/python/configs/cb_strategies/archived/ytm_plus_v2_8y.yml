@@ -1,0 +1,71 @@
+# YTM增强策略 v2 — 8年回测 (统一 linear_impact)
+# ============================================================
+# 经济学基础:
+#   - 低于面值的CB = 负溢价+正YTM → 持有到期本身就盈利
+#   - 类似"拾烟蒂"策略 → 在市场恐慌时大量低价CB满足条件
+#   - 双频调仓(10日) → 低换手 → 适合流动性较差的低价债
+# v2 调整:
+#   - 面值门槛: close < 100 (严格低于面值)
+#   - 提升 ytm 权重到 0.60 (核心驱动因子)
+#   - 降低 premium 权重到 0.40
+# ============================================================
+
+name: "ytm_plus_v2_8y"
+description: >
+  YTM增强策略 v2 — 仅选面值以下CB, 赚到期收益。
+  2因子: pseudo_ytm(0.60) + premium(0.40)。
+  极度防守, 双周调仓, 持仓15只。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "ytm_plus"
+  params:
+    top_k: 15
+    rebalance_days: 10
+    max_price: 115.0
+    face_value: 100.0
+    ytm_weight: 0.60
+    premium_weight: 0.40
+    min_years_to_maturity: 0.5
+    min_turnover: 20.0
+    max_premium: 50.0
+    stop_loss_pct: 0.10
+    min_days_to_maturity: 180
+    lot_size: 10
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/ytm_plus_v2_8y"
+
+report:
+  benchmark: "000300.SH"

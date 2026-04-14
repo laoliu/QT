@@ -1,0 +1,89 @@
+# ETF 轮动策略 — 宽松风控版
+# 改进: 放宽引擎层风控, 让策略自身的止损生效
+# ETF 流动性好且不会退市, 无需像个股一样严格的引擎风控
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  symbols:
+    # 宽基
+    - 510300.SH   # 沪深300 ETF
+    - 510500.SH   # 中证500 ETF
+    - 159915.SZ   # 创业板 ETF
+    - 512100.SH   # 中证1000 ETF
+    - 510050.SH   # 上证50 ETF
+    # 风格/行业
+    - 510880.SH   # 红利 ETF
+    - 512010.SH   # 医药 ETF
+    - 512690.SH   # 酒 ETF
+    - 512660.SH   # 军工 ETF
+    # 跨境
+    - 513100.SH   # 纳指 ETF
+    - 159920.SZ   # 恒生 ETF
+    # 商品
+    - 518880.SH   # 黄金 ETF
+    # 债券
+    - 511010.SH   # 国债 ETF
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_rotation_norisk_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 1.0
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 20
+    weight_momentum: 0.40
+    weight_volatility: 0.30
+    weight_reversion: 0.20
+    weight_volume: 0.10
+    momentum_lookback: 60
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 120
+    stop_loss_pct: 0.12
+    trailing_stop_pct: 0.10
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.50
+    lot_size: 100
+    min_amount: 0.0
+    buffer_k: 1
+    inverse_vol_weighting: false
+
+trading_rules:
+  t_plus: 1
+  lot_size: 100
+
+# 放宽引擎层风控——ETF无退市/ST风险, 让策略层止损自行管理
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.60
+  max_drawdown: 0.50
+  drawdown_peak_reset_days: 30
+  enable_audit_log: true

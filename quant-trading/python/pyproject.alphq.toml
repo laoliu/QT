@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aipha-q"
+version = "0.1.0"
+description = "A-share quant + AI trading system (MVP modules)."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "Proprietary" }
+authors = [{ name = "Aipha-Q" }]
+dependencies = [
+  "pydantic>=2.6",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.5",
+]
+data = [
+  "tushare>=1.2.89",
+  "akshare>=1.10.0",
+]
+optimize = [
+  "cvxpy>=1.4",
+  "scipy>=1.11",
+]
+ml = [
+  "lightgbm>=4.0",
+  "xgboost>=2.0",
+  "scikit-learn>=1.3",
+]
+tracker = [
+  "pyyaml>=6.0",
+  "playwright>=1.40",
+]
+all = [
+  "aipha-q[dev,data,optimize,ml,tracker]",
+]
+
+[project.scripts]
+aipha-tracker = "aipha.tracker.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aipha"]

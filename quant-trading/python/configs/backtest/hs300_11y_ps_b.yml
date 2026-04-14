@@ -1,0 +1,104 @@
+# HS300 11年 动态仓位管理方案B (2014-2024)
+# top_k=8, 更温和的DrawdownControl: 20%开始减仓, 45%到最低
+# 更宽的波动率目标
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact]
+  output_dir: reports/hs300_11y_ps_b
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.60
+  max_sector_pct: 0.40
+  max_single_position_pct: 0.20
+risk:
+  enabled: true
+  stop_loss_pct: 0.50
+  trailing_stop_pct: 0.0
+  circuit_breaker_enabled: false
+  market_regime_enabled: false
+  position_sizing:
+    volatility_target:
+      enabled: true
+      target_vol: 0.30
+      lookback_days: 20
+      min_scale: 0.30
+      max_scale: 1.0
+    drawdown_control:
+      enabled: true
+      threshold: 0.20
+      max_threshold: 0.45
+      min_scale: 0.35
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2014-01-02'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 3
+  name: fixed_bps
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 8
+    rebalance_days: 5
+    min_mv: 50000.0
+    max_mv: 5000000.0
+    min_price: 1.0
+    max_price: 9999.0
+    min_turnover: 300.0
+    min_listed_days: 60
+    stop_loss_pct: 0.50
+    buffer_k: 5
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.20
+    momentum_lookback: 20
+    volatility_lookback: 20
+    momentum_invert: false
+    momentum_skip_recent: 1
+    momentum_multi_period: true
+    regime_adaptive: false
+    weight_small_cap: 0.75
+    weight_momentum: 0.12
+    weight_turnover: 0.00
+    weight_volatility: 0.08
+    weight_quality: 0.03
+    weight_value: 0.02
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

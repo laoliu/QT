@@ -1,0 +1,133 @@
+# 短期反转+小盘策略 �?回测配置
+
+# ============================================================
+
+# 策略思路: 买入�?日跌幅最大的小规模转债，
+
+# 利用散户过度反应带来的短期均值回归alpha�?
+# �?天换仓，高频捕捉反转收益�?
+
+
+name: "cb_reversal_small"
+
+description: >
+
+  可转债短期反�?小盘策略 �?反转(70%) + 小规�?30%)
+
+  双因子轮动，�?天换仓�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "cb_reversal_small"
+
+  params:
+
+    top_k: 8
+
+    rebalance_days: 3
+
+    buffer_k: 2
+
+    max_price: 150.0
+
+    max_issue_size: 30000.0       # 万元 (3亿以�?
+
+    min_issue_size: 0.0
+
+    min_turnover: 10.0
+
+    min_days_to_maturity: 60
+
+    exclude_st: true
+
+    exclude_called: true
+
+    max_premium: 80.0
+
+    reversal_lookback: 5
+
+    warmup_bars: 10
+
+    size_weight: 0.30
+
+    reversal_weight: 0.70
+
+    stop_loss_pct: 0.12
+
+    min_positions: 3
+
+    max_single_drop: -0.20
+
+    lot_size: 10
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  min_commission: 5  # §13.1 CB minimum
+
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+
+
+# ------ 滑点 ------
+
+slippage:
+  model: "linear_impact"
+  base_bps: 5.0          # CB 最低买卖价差
+  impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+  fallback_bps: 8.0      # 无成交量数据时的回退值
+  max_bps: 40.0          # 单笔滑点上限
+
+
+
+# ------ 资金 ------
+
+capital:
+
+  initial: 1000000.0
+
+  currency: "CNY"
+

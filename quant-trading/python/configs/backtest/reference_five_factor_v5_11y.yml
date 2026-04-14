@@ -1,0 +1,115 @@
+# 参考组合五因子策略 V5 — 反向波动率加权 + 止损 (R76 Phase 1)
+# ============================================================
+# 基于V2(best): 扁平5因子等权, 增加:
+#   - inverse_vol_weighting=true (波动率越低权重越高)
+#   - stop_loss_pct=0.15 (15%单票止损)
+#   - trailing_stop_pct=0.10 (10%追踪止损)
+#   - base_bps=5.0 (真实滑点)
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar,
+            sortino, turnover, win_rate, cost_impact]
+  output_dir: output/ref_5f_ivw_sl_11y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.70
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: false
+
+run:
+  start_date: "2015-01-05"
+  end_date: "2025-12-31"
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 30.0
+  fallback_bps: 10.0
+  max_bps: 50.0
+
+strategy:
+  name: reference_five_factor
+  parameters:
+    base_index: "000906.SH"
+    top_k: 30
+    rebalance_days: 21
+    min_mv: 100000.0
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    max_industry_pct: 0.12
+    inverse_vol_weighting: true
+    weight_ep: 0.20
+    weight_bp: 0.20
+    weight_roe: 0.20
+    weight_dy: 0.20
+    weight_lv: 0.20
+    weight_momentum: 0.0
+    quadrant_enabled: false
+    min_industries: 6
+    ep_metric: pe_ttm
+    bp_metric: pb
+    roe_metric: roe
+    dy_metric: dv_ratio
+    lv_lookback: 60
+    momentum_lookback: 65
+    volatility_lookback: 65
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,17 @@
+# double_low_plus 参数扫描配置
+# ============================================================
+# 目标: 降低 MDD (当前 22.71%) + 验证健壮性
+# 关键维度: top_k, weight_size, stop_loss_pct
+# 网格: 4×4×3 = 48 组
+# ============================================================
+
+base_config: "configs/cb_strategies/double_low_plus_v4_7y.yml"
+
+param_ranges:
+  top_k: [3, 5, 6, 8]
+  weight_size: [0.20, 0.25, 0.30, 0.35]
+  stop_loss_pct: [0.08, 0.10, 0.12]
+
+max_workers: 4
+output_dir: "output/sweep_double_low_plus_7y"
+top_n: 20

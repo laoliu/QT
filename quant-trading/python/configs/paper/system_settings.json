@@ -1,0 +1,22 @@
+{
+  "paper_trading_enabled": true,
+  "live_trading_enabled": false,
+  "paper_auto_start": false,
+  "selected_portfolios": [],
+  "daily_batch_portfolios": [
+    "r106_attack",
+    "r106_steady",
+    "r106_defend",
+    "r107_v19_cb40",
+    "r115_combo",
+    "r124_combo",
+    "tiered_combo_v3"
+  ],
+  "disabled_portfolios": {
+    "plan_a_5comp": "AKShare realtime 在云端不稳定 (RemoteDisconnected), 已禁用",
+    "cb_aggressive_5s": "AKShare realtime 在云端不稳定, 已禁用",
+    "plan_a3_4comp": "AKShare realtime 不稳定, bars_received=0, 已迁移至日频批处理或废弃"
+  },
+  "updated_at": "2026-04-07T18:00:00",
+  "notes": "P0-5修复: 移除plan_a3_4comp实时引擎(AKShare已禁用), 仅保留日频批处理组合"
+}

@@ -1,0 +1,83 @@
+# ML 预测策略 — 20 年回测 (2005-2025)
+#
+# 覆盖 2005.1 ~ 2024.12。
+# 注意：model_path 为空时自动回退为多因子线性打分（fallback_weights），
+# 此模式下本质是等权多因子策略。预训练模型需要额外部署。
+#
+# 费率说明：
+#   当前配置使用 2023.8.28 后费率（印花税千0.5），对 2005-2023 期间
+#   历史实际印花税（最高时双边千3）有所低估。这是已知的近似。
+
+strategy:
+  name: ml_predict
+  params:
+    model_path: ""  # 空 → 使用 fallback_weights 回退
+
+    feature_columns:
+      - pe_ttm
+      - pb
+      - roe
+      - circ_mv
+      - turnover_rate
+      - dt_netprofit_yoy
+      - momentum_20d
+      - volatility_20d
+
+    fallback_weights:
+      pe_ttm: -1.0
+      pb: -1.0
+      roe: 1.0
+      circ_mv: -0.5
+      turnover_rate: -0.3
+      dt_netprofit_yoy: 0.5
+      momentum_20d: 0.5
+      volatility_20d: -0.5
+
+    top_k: 30
+    rebalance_days: 5
+    buffer_k: 5
+
+    min_price: 3.0
+    max_price: 100.0
+    min_mv: 100000
+    min_turnover: 500
+    min_listed_days: 60
+    exclude_st: true
+
+    stop_loss_pct: 0.15
+    max_single_pct: 0.08
+    cash_reserve_pct: 0.05
+
+    momentum_lookback: 20
+    volatility_lookback: 20
+
+    winsorize: true
+    winsorize_lower: 0.02
+    winsorize_upper: 0.98
+
+data:
+  source: tushare_pro
+  start_date: "2005-01-04"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 5.0
+
+risk:
+  max_drawdown: 0.25
+  max_position_pct: 0.08
+  max_sector_pct: 0.25
+  max_turnover_daily: 0.30
+  industry_neutral_enabled: false
+  market_regime_enabled: true
+  trailing_stop_pct: 0.12
+  momentum_skip_recent: 1
+  momentum_multi_period: true
+  inverse_vol_weighting: true

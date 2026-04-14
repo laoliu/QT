@@ -1,0 +1,208 @@
+# R75 Plan A 五组件跨资产组合 — S4 模拟盘配置
+# ============================================================
+# 方案: R75 方案A（12项对抗测试全PASS, A级 9.2/10）
+# 组件:
+#   ┌───────────────┬──────┬──────────┬─────────┬──────┐
+#   │ 组件           │ 权重 │ AR(回测) │ 说明     │ 验证 │
+#   ├───────────────┼──────┼──────────┼─────────┼──────┤
+#   │ CB 三策略      │  30% │ ~24.9%   │ 防御SR+α │ R13  │
+#   │ ML CSI2000     │  30% │ ~37.9%   │ 核心alpha│ R72  │
+#   │ ETF Cross V5   │  15% │ ~15%     │ +海外+红利│ R85  │
+#   │ Bond 多久期    │  10% │ ~4%      │ +国开债  │ R85  │
+#   │ Gold 黄金ETF   │  15% │ ~8%      │ 零相关   │ R74  │
+#   └───────────────┴──────┴──────────┴─────────┴──────┘
+# 组合回测: AR=21.2%, SR=2.04, MDD=-10.7%, 6年连正
+# ============================================================
+# 启动: python -m aipha paper --config configs/paper/plan_a_5comp.yml
+# 状态: data/paper_state/plan_a_5comp/
+# ============================================================
+
+paper_engine:
+  strategy_name: "plan_a_5comp"
+  description: >
+    R75 Plan A 五组件跨资产组合 — 12项对抗测试全PASS
+    CB(30%) + ML(30%) + ETF(15%) + Bond(10%) + Gold(15%)
+
+  # ── 数据源 ─────────────────────────────────────────────────
+  market_type: "multi_asset"
+  poll_interval: 10.0
+  bar_interval_sec: 60
+
+  # ── 资金与交易规则 ─────────────────────────────────────────
+  # R91 修复 NEW-2: Gateway 全局用最小粒度(CB lot_size=10)，避免 CB 拒单
+  # PillarOrchestrator 在虚拟层对各 pillar 做 per-asset lot_size 取整
+  initial_capital: 1000000.0
+  lot_size: 10           # 全局最小粒度（CB=10, A股=100，GCD=10）
+  t_plus_n: 0            # Gateway 层不强制 T+1，由 PillarOrchestrator 分 pillar 过滤
+  commission_rate: 0.0000854  # 多资产混合费率（CB万1×60% + A股万2.5×40%），非单一资产§13.1预设
+  commission_min: 5.0
+  stamp_tax_rate: 0.0    # Gateway 层 CB 默认（免印花税）— A股印花税由 PillarOrchestrator.on_fill 按 market_type 补充
+  slippage_bps: 5.0  # §13.1 混合资产取CB最小值5bps作为下限
+  fill_model:
+    name: "next_bar_open"
+  # §4.3 滑点模型：与回测引擎共享 SquareRootImpactSlippageModel
+  slippage_model: "square_root_impact"
+  slippage_params:
+    impact_coeff: 0.1         # 无量纲冲击系数 (Almgren-Chriss)
+    sigma_daily: 0.02         # 默认日波动率 2%
+    fallback_bps: 10.0        # bar 缺失时回退滑点
+    max_bps: 200.0            # 单笔滑点上限
+
+  # ── 组合权重 (R75 最优配置) ────────────────────────────────
+  portfolio_weights:
+    cb: 0.300
+    ml: 0.300
+    etf: 0.150
+    bond: 0.100
+    gold: 0.150
+
+  # ── 再平衡 ────────────────────────────────────────────────
+  rebalance_freq_days: 20
+  rebalance_threshold: 0.05
+
+  # ── 风控 ──────────────────────────────────────────────────
+  max_drawdown_alert: 0.12
+  max_daily_loss_alert: 0.04
+  max_single_stock_pct: 0.05
+  max_industry_pct: 0.30
+  vol_target: 0.15
+
+  # ── 状态持久化 ────────────────────────────────────────────
+  state_dir: "data/paper_state/plan_a_5comp"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/plan_a_5comp"
+
+  # ── 监控 ──────────────────────────────────────────────────
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.12
+  alert_daily_loss_threshold: 0.04
+  alert_data_stale_seconds: 300.0
+  alert_inactivity_minutes: 480.0
+
+  # ── 指标 ──────────────────────────────────────────────────
+  metrics_enabled: true
+  metrics:
+    export_interval_sec: 60
+    export_format: "json"
+    export_dir: "data/metrics/plan_a_5comp"
+
+  # ── ML 风控共享模块 (R81 §4.3.1 · 回测/模拟盘共享) ───────
+  ml_risk_controls_enabled: true
+  ml_risk_vol_target: 0.20
+  ml_risk_vol_lookback: 60
+  ml_risk_max_stock_pct: 0.03
+  # ml_risk_mdd_levels: null → 使用默认 5 级梯度
+
+  # ── B1: ML Rolling SR 降权触发器 (R88) ───────────────────
+  # rolling 60d SR < 0 时自动将 ML 权重从 30% 降至 20%
+  ml_sr_downweight_enabled: true
+  ml_sr_downweight_lookback: 60
+  ml_sr_downweight_threshold: 0.0
+  ml_sr_downweight_normal: 0.30
+  ml_sr_downweight_reduced: 0.20
+
+  # ── C2: CB Pillar 动态降权 (R89) ─────────────────────────
+  # CB SR 跌破 0.5 连续 4 月时，CB 权重从 30% 降权 33.3%（→20%）
+  # 多余 10% 等分给 Bond + Gold（防御性配置）
+  cb_pillar_downweight_enabled: true
+  cb_pillar_downweight_sr_threshold: 0.5
+  cb_pillar_downweight_consecutive_months: 4
+  cb_pillar_downweight_reduction: 0.333
+  cb_pillar_downweight_recovery_months: 3
+  cb_pillar_downweight_rolling_window: 252
+  cb_pillar_downweight_redistribute:
+    - bond
+    - gold
+
+  # ── C3: ML 模型切换器 CSI2000/CSI1000 (R89) ─────────────
+  # CSI2000 rolling 60d SR < 0.5 连续 2 月 → 21天过渡期 → 切换到 CSI1000
+  # CSI2000 SR 恢复 > 1.0 连续 2 月 → 21天恢复期 → 切回 CSI2000
+  ml_model_switcher_enabled: true
+  ml_model_switcher_sr_threshold: 0.5
+  ml_model_switcher_consecutive_months: 2
+  ml_model_switcher_recovery_sr: 1.0
+  ml_model_switcher_recovery_months: 2
+  ml_model_switcher_transition_days: 21
+  ml_model_switcher_rolling_window: 60
+  ml_model_switcher_primary_model: "models/ml_csi2000_lgb_fund"
+  ml_model_switcher_backup_model: "models/ml_csi1000_lgb_fund"
+
+  # ── Barra 风格暴露监控 (O6 · B6 接入生产) ────────────────
+  barra_monitor_enabled: true
+  barra_alert_thresholds:
+    SIZE: 1.5
+    BM: 1.5
+    MOM: 2.0
+    VOL: 2.0
+    LIQUIDITY: 1.5
+
+# ── 子组件配置 ──────────────────────────────────────────────
+pillars:
+  cb:
+    name: "CB 三策略最大夏普优化 (O8)"
+    description: "triple_low + cb_comprehensive + small_size, max-sharpe权重"
+    market_type: "convertible_bond"
+    weight: 0.300
+    source_config: "configs/paper/cb_paper_v2.yml"
+    sub_strategies:
+      - name: triple_low
+        weight: 0.500     # R87: 从0.480→0.500 (移除cb_comprehensive后重分配)
+        top_k: 20
+        rebalance_days: 1
+      # cb_comprehensive 已移除: R87 CB Jaccard修复
+      # 原因: cb_comprehensive vs small_size Jaccard=0.401>0.30阈值
+      # 4%权重对AR贡献<0.1%, 移除后Jaccard违规消除
+      - name: small_size
+        weight: 0.500     # R87: 从0.480→0.500 (移除cb_comprehensive后重分配)
+        top_k: 4
+        rebalance_days: 1
+
+  ml:
+    name: "ML CSI2000 LGB Fund"
+    description: "LightGBM 24-fold WF, risk_controlled_csi2000"
+    model_dir: "models/ml_csi2000_lgb_fund"
+    market_type: "a_stock"
+    weight: 0.300
+    top_k: 50
+    rebalance_days: 5
+    vol_target: 0.20
+    universe: "csi2000"
+
+  etf:
+    name: "ETF Cross Asset V5"
+    description: "行业轮动+宽基+海外权益+红利低波ETF(竞品对标扩池)"
+    strategy_name: "etf_cross_v5"
+    market_type: "etf"
+    weight: 0.150
+    # NOTE: V5池含511010/511020/511130, 与bond篮子重叠;
+    # risk-off时债券实际暴露可达~25%; 设计意图: ETF动态配置+Bond静态底仓
+
+  bond:
+    name: "多久期债券篮子 (O9+竞品对标)"
+    description: "国债+国开债，短/中/长/超长四久期分散(对标竞品16%债券配置)"
+    market_type: "bond"
+    weight: 0.100
+    symbols:
+      - code: "511010.SH"     # 国债ETF (短久期 ~5年, 上市2013)
+        weight: 0.25
+        duration_bucket: "short"
+      - code: "511260.SH"     # 十年国债ETF (中久期 ~10年)
+        weight: 0.25
+        duration_bucket: "mid"
+      - code: "511020.SH"     # 活跃国债ETF (中长久期 ~7年, 上市2019)
+        weight: 0.20
+        duration_bucket: "mid_long"
+      - code: "159650.SZ"     # 国开债ETF博时 (准主权信用利差, 上市2022)
+        weight: 0.15
+        duration_bucket: "policy_bank"
+      - code: "511130.SH"     # 30年国债ETF (超长久期, 上市2024)
+        weight: 0.15
+        duration_bucket: "ultra_long"
+    rebalance_days: 20        # 每月再平衡
+
+  gold:
+    name: "黄金ETF"
+    description: "黄金ETF零相关对冲"
+    market_type: "etf"
+    weight: 0.150
+    symbol: "518880.SH"

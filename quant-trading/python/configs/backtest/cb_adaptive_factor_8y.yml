@@ -1,0 +1,193 @@
+# CB 自适应因子策略回测配置 — 全量期
+# ============================================================
+# 目标：验证 IC 驱动的 22 因子(17CB+5正股)自适应权重策略全量期表现
+# 核心创新：因子权重基于滚动 IC 动态调整，自动降权失效因子
+# 回测区间：2018-01-02 ~ 2026-03-04
+# ============================================================
+
+name: "cb_adaptive_factor_8y"
+description: >
+  可转债自适应因子策略回测（全量期 8 年）。
+  17 因子 IC 驱动动态权重，对比静态权重策略的 post-2022 衰减。
+  关注新规后因子 IC 变化及权重自适应效果。
+
+# ---------------------------------------------------------------------------
+# 数据源
+# ---------------------------------------------------------------------------
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date:   "2026-03-04"
+  frequency:  "1d"
+  adjust:     "none"
+  cache_dir:  "data/cache/cb_tushare"
+
+# ---------------------------------------------------------------------------
+# 成交模型
+# ---------------------------------------------------------------------------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.20
+    lot_size: 10
+
+# ---------------------------------------------------------------------------
+# 成本模型（CB 费率）
+# ---------------------------------------------------------------------------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 10.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 10.0
+    max_bps: 40.0
+
+# ---------------------------------------------------------------------------
+# 市场规则
+# ---------------------------------------------------------------------------
+trading_rules:
+  t_plus_n: 0
+  lot_size: 10
+  allow_short: false
+
+initial_capital: 500000.0
+random_seed: 42
+output_dir: "output/cb_adaptive_factor_8y"
+
+# ---------------------------------------------------------------------------
+# 股票池
+# ---------------------------------------------------------------------------
+universe_policy:
+  name: "cb_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+    - "FORCE_REDEEMED"
+    - "NEAR_MATURITY"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+
+# ---------------------------------------------------------------------------
+# 策略配置
+# ---------------------------------------------------------------------------
+strategy:
+  name: "cb_adaptive_factor"
+  config:
+    top_k: 20
+    rebalance_days: 5
+    buffer_k: 3
+    max_price: 130.0
+    max_issue_size: 30000.0
+    min_issue_size: 1000.0
+    min_turnover: 35.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.20
+    lot_size: 10
+    # 次新过滤
+    use_age_filter: true
+    min_age_days: 3
+    max_age_days: 1500
+    fallback_max_age_days: 2500
+    max_premium: 70.0
+    # 技术指标参数
+    lookback: 20
+    bb_k: 2.0
+    momentum_lookback: 10
+    premium_pct_lookback: 40
+    putback_trigger_ratio: 0.85
+    # 新因子参数
+    risk_free_rate: 0.025
+    maturity_sweet_spot: 3.0
+    maturity_half_range: 3.0
+    # IC 自适应核心参数
+    ic_lookback: 60
+    ic_update_interval: 3      # 更快IC响应 (每9交易日)
+    ic_floor: 0.02
+    blend_ratio: 0.7
+    min_ic_samples: 20
+    ic_method: "spearman"
+    # IC 方向感知 + 衰减休眠
+    enable_ic_direction_flip: true
+    ic_flip_threshold: 0.65
+    enable_ic_decay_dormancy: true
+    ic_decay_slope_threshold: -0.003
+    # 正股数据 — bridge已实现但当前配置关闭（经验证: 正股因子稀释CB alpha）
+    use_stock_bridge: false
+    vol_lookback: 60
+    # RSRS 择时 overlay — 谨慷模式，仅bear信号减仓
+    use_rsrs_timing: false
+    rsrs_regression_window: 18
+    rsrs_zscore_window: 600
+    rsrs_bull_threshold: 0.7
+    rsrs_bear_threshold: -0.7
+    rsrs_bull_scale: 1.0
+    rsrs_bear_scale: 0.5
+    rsrs_neutral_scale: 1.0
+    # 波动率目标 overlay
+    use_vol_targeting: false
+    vol_target: 0.20
+    vol_target_lookback: 20
+    vol_scale_floor: 0.5
+    vol_scale_cap: 1.5
+    # 基线权重 — CB因子主导 + 正股因子辅助,总和=1.0
+    # 基线权重 — 恢复R24原始CB权重, stock bridge仅作增量
+    base_weight_price: 0.09
+    base_weight_premium: 0.09
+    base_weight_ytm: 0.08
+    base_weight_credit_spread: 0.07
+    base_weight_mean_reversion: 0.08
+    base_weight_gamma_convexity: 0.07
+    base_weight_delta: 0.06
+    base_weight_premium_pct: 0.06
+    base_weight_maturity_convexity: 0.06
+    base_weight_rating: 0.05
+    base_weight_iv_bias: 0.05
+    base_weight_liquidity_activity: 0.05
+    base_weight_turnover: 0.04
+    base_weight_putback: 0.04
+    base_weight_size: 0.02
+    base_weight_age: 0.01
+    base_weight_momentum: 0.02
+    base_weight_stock_roe: 0.02
+    base_weight_stock_ep: 0.02
+    base_weight_stock_vol: 0.01
+    base_weight_stock_growth: 0.01
+    base_weight_stock_safety: 0.00
+
+# ---------------------------------------------------------------------------
+# 风控
+# ---------------------------------------------------------------------------
+risk_control:
+  drawdown_limit:
+    max_drawdown_pct: 0.20
+    action: "reduce_to_50pct"
+  force_redeem_exposure:
+    enabled: true
+    max_exposure: 0.30
+  concentration:
+    max_single_pct: 0.12
+    max_top5_pct: 0.50
+
+# ---------------------------------------------------------------------------
+# 报告
+# ---------------------------------------------------------------------------
+report:
+  benchmark: "000832.CSI"
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "yearly_returns"
+    - "cost_impact"
+  universe_summary: true

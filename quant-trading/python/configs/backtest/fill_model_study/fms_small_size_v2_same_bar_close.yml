@@ -1,0 +1,51 @@
+name: fms_small_size_v2_same_bar_close
+description: '小规模因子轮动策略 v2。基于 60 组参数扫描选出最优风险调整参数。 top_k=4 集中持仓, max_price=145, max_issue_size=20000。
+
+  '
+data:
+  source: tushare_cb
+  start_date: '2018-01-01'
+  end_date: '2024-12-31'
+  frequency: 1d
+  adjust: none
+  cache_dir: data/cache/cb_tushare
+strategy:
+  name: small_size
+  params:
+    top_k: 4
+    rebalance_days: 1
+    max_price: 145.0
+    max_issue_size: 20000.0
+    min_issue_size: 0.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.1
+    lot_size: 10
+fill_model:
+  name: same_bar_close
+  volume_constraint:
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.15
+    lot_size: 10
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0  # §13.1 MarketRulesConvertibleBond CB默认5bps
+  slippage_model: linear_impact
+  slippage_params:
+    base_bps: 5.0  # §13.1 CB默认
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+risk:
+  enabled: true
+  max_position_weight: 0.3
+  max_drawdown: 0.5
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: J:\work\Aipha-Q\output\fill_model_study\fms_small_size_v2_same_bar_close

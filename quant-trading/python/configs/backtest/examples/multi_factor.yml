@@ -1,0 +1,84 @@
+# 因子策略配置示例：多因子组合
+# 
+# 用法: python scripts/run_backtest.py --config configs/backtest/examples/multi_factor.yml --html
+
+name: "multi_factor_strategy"
+description: |
+  多因子组合策略示例
+  - 动量 + 价值 + 低波动 三因子组合
+  - 因子权重: 动量40%, 价值30%, 低波动30%
+  - 每两周调仓
+
+# ============================================================================
+# 数据配置
+# ============================================================================
+data:
+  source: "tushare"  # 使用TuShare真实数据
+  start_date: "2024-01-01"
+  end_date: "2024-06-30"
+  cache_dir: "data/cache/tushare"
+  frequency: "1d"
+  symbols:
+    - "000001.SZ"
+    - "000002.SZ"
+    - "000063.SZ"
+    - "000333.SZ"
+    - "000568.SZ"
+    - "000725.SZ"
+    - "000858.SZ"
+    - "002415.SZ"
+    - "600000.SH"
+    - "600036.SH"
+    - "600519.SH"
+    - "601318.SH"
+    - "600276.SH"
+    - "601166.SH"
+    - "600887.SH"
+
+# ============================================================================
+# 股票池配置
+# ============================================================================
+universe:
+  policy: "a_share_default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 0
+
+# ============================================================================
+# 策略配置
+# ============================================================================
+strategy:
+  name: "multifactor_enhance"  # A股多因子指数增强策略
+  params:
+    # 选股参数
+    top_k: 8
+    rebalance_days: 10
+    # 因子权重（合计=1.0）
+    weight_momentum: 0.4
+    weight_value: 0.3
+    weight_volatility: 0.3
+    weight_quality: 0.0
+    weight_size: 0.0
+    # 因子计算参数
+    value_metric: "pe_ttm"
+    volatility_lookback: 20
+
+# ============================================================================
+# 成本配置
+# ============================================================================
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万一佣金
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+# ============================================================================
+# 回测设置
+# ============================================================================
+initial_capital: 2000000.0
+lot_size: 100
+t_plus_n: 1
+random_seed: 2024
+output_dir: "output/multi_factor"

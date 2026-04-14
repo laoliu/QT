@@ -1,0 +1,111 @@
+# ────────────────────────────────────────────────────────────
+# 因子挖掘统一字段注册表（单一来源）
+# 被引用方：MiningConfig / factor_mining_daemon / ICTrapGuard
+# ────────────────────────────────────────────────────────────
+
+# ── 可用字段 (按类别) ──────────────────────────────────────
+fields:
+  price:
+    - open
+    - high
+    - low
+    - close
+    - pre_close
+  volume:
+    - volume        # TuShare 原始列名 vol, load_daily_data 已映射
+    - amount
+  daily_indicator:
+    - turnover_rate  # 统一用 turnover_rate（TuShare daily_basic 原始列名）
+    - pct_chg
+    - pe_ttm
+    - pb
+    - total_mv
+    - circ_mv
+    - dv_ratio
+    - dv_ttm
+  # 财务指标（PIT 对齐 via _pit_merge_fina，已接入）
+  fundamentals:
+    - roe
+    - roa
+    - grossprofit_margin
+    - netprofit_margin
+    - debt_to_assets
+    - current_ratio
+    - quick_ratio
+    - dt_netprofit_yoy
+    - op_yoy
+    - cfps
+    - eps
+    - bps
+
+# ── 算子白名单 ────────────────────────────────────────────
+operators:
+  ts_unary:
+    - ts_mean
+    - ts_std
+    - ts_sum
+    - ts_min
+    - ts_max
+    - ts_rank
+    - ts_decay_linear
+    - ts_slope
+    - ts_argmax
+    - ts_argmin
+    - ts_delta
+    - ts_delay
+    - ts_product
+    - ts_resi
+    - ts_rsquare
+  ts_transform:
+    - ts_log
+    - ts_abs
+    - ts_sign
+  ts_binary:
+    - ts_corr
+    - ts_cov
+  cs:
+    - cs_rank
+    - cs_zscore
+    - cs_scale
+  math:
+    - safe_div
+    - pow1
+    - pow2
+    - quesval
+
+# ── Guard 阈值 (统一, 折中方案) ────────────────────────────
+guard_thresholds:
+  ic_threshold: 0.03
+  icir_threshold: 0.40
+  ast_similarity_threshold: 0.85
+  correlation_threshold: 0.70
+  ar_drop_tolerance: 0.03
+  hlz_t_threshold: 2.0
+  total_trials: 100
+  max_ast_depth: 5
+  max_ast_node_count: 15
+  # daemon 专用
+  post_ic_threshold: 0.02
+  winner_icir: 1.0
+  ic_cv_max: 2.0
+
+# ── Daemon 运行参数 ────────────────────────────────────────
+daemon:
+  candidates_per_round: 20
+  interval_min: 15
+  seg_cutoff: "2022-08-01"
+  windows: [3, 5, 10, 15, 20, 30, 60, 120]
+
+# ── 挖掘方向（仅含有数据支撑的方向）──────────────────────
+directions:
+  - "价量动量"
+  - "波动率均值回复"
+  - "流动性异常"
+  - "量价背离"
+  - "价值-动量交互"
+  - "规模-流动性交互"
+  - "事件驱动"
+  # 基本面方向（财务数据已接入）
+  - "基本面价值"
+  - "盈利质量"
+  - "基本面动量"

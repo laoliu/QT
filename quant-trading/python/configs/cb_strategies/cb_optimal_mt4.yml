@@ -1,0 +1,74 @@
+# CB 四策略动量倾斜组合 — Phase 1.4 推荐生产配置
+# ============================================================
+# 验证结果:
+#   Full 8y (2018~2026):  AR=25.8%, SR=1.450, MDD=17.9%, Calmar=1.44
+#   Post-2022 (2022-08~): AR=7.9%,  SR=0.647, MDD=12.3%
+#   逐年: 2022=+13.5%, 2023=+10.9%, 2024=+13.3%, 2025=+10.6%
+#
+# 相比旧3策略等权:
+#   Post-2022 SR: 0.568 → 0.647 (+14%)
+#   Post-2022 AR: 6.94% → 7.9%  (+14%)
+#   Full SR:      1.449 → 1.450 (maintained)
+# ============================================================
+
+combo:
+  name: "cb_optimal_mt4"
+  description: >
+    可转债四策略动量倾斜组合。
+    cb_stock_quality 提供正股基本面 alpha,
+    triple_low 提供估值安全垫 alpha,
+    small_size 提供小盘流动性溢价 alpha,
+    cb_adaptive_factor 提供 IC 自适应多因子 alpha。
+    动量倾斜根据近期表现动态调整权重，
+    实现策略间的自适应配权。
+
+  method: "momentum_tilt"
+  lookback: 90           # 动量回看窗口 (天)
+  rebalance_freq: 20     # 权重再平衡频率 (天)
+  tilt_strength: 0.3     # 倾斜强度 (保守,处于扫描范围中位)
+
+  strategies:
+    - name: "cb_stock_quality"
+      variant: "v4b_balanced"
+      nav_path: "output/cb_stock_quality_v4b_balanced_8y/daily_snapshots.csv"
+      config_path: "configs/backtest/cb_stock_quality_v4b_balanced_8y.yml"
+      base_weight: 0.25
+      description: "正股基本面驱动, P22 AR=9.0% SR=0.86"
+
+    - name: "triple_low"
+      variant: "v3"
+      nav_path: "output/triple_low_v3_8y/daily_snapshots.csv"
+      config_path: "configs/backtest/triple_low_v3_8y.yml"
+      base_weight: 0.25
+      description: "三低选债, P22 AR=7.3% SR=0.66"
+
+    - name: "small_size"
+      variant: "v2"
+      nav_path: "output/small_size_v2_7y/daily_snapshots.csv"
+      config_path: "configs/backtest/small_size_v2_7y.yml"
+      base_weight: 0.25
+      description: "小盘高换手, Full AR=39.7% SR=1.32"
+
+    - name: "cb_adaptive_factor"
+      variant: "22factor_ic"
+      nav_path: "output/cb_adaptive_factor_8y/daily_snapshots.csv"
+      config_path: "configs/backtest/cb_adaptive_factor_8y.yml"
+      base_weight: 0.25
+      description: "22因子IC自适应, P22 AR=7.0% SR=0.43"
+
+  # 策略相关性矩阵 (日收益率, 2018~2026)
+  correlation_matrix:
+    note: "低相关性 = 好的分散化"
+    af_vs_sq_v4b: 0.611
+    af_vs_ss_v2: 0.571
+    af_vs_tl_v3: 0.626
+    sq_v4b_vs_ss_v2: 0.664
+    sq_v4b_vs_tl_v3: 0.417
+    ss_v2_vs_tl_v3: 0.327  # 最低相关
+
+  # 参数稳定性分析 (tilt_strength ±33% 范围 SR 变化)
+  parameter_stability:
+    tilt_0.2_lb90: { full_sr: 1.451, p22_sr: 0.634 }
+    tilt_0.3_lb90: { full_sr: 1.450, p22_sr: 0.647 }  # 推荐
+    tilt_0.4_lb90: { full_sr: 1.447, p22_sr: 0.658 }
+    note: "SR 变化 < 1%, 参数高度稳健"

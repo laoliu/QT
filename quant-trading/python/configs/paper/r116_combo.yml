@@ -1,0 +1,134 @@
+# R116 四组件跨资产组合 — 日频模拟盘配置
+# ====================================================================
+# 方案: R116 A_dual_ml (ML2000:35/ML1000:15/CB:25/ETF:25)
+# 基于 R115 小盘暴露评审，降低 CSI2000 权重并引入 CSI1000
+# 组件:
+#   ┌──────────────────────┬──────┬──────────┬──────────────┐
+#   │ 组件                  │ 权重 │ AR(回测)  │ 调仓频率      │
+#   ├──────────────────────┼──────┼──────────┼──────────────┤
+#   │ ML CSI2000 Fund       │  35% │ ~37.3%   │ 5 交易日      │
+#   │ ML CSI1000 Fund       │  15% │ ~26.3%   │ 5 交易日      │
+#   │ CB Stock Quality      │  25% │ ~22.7%   │ 每交易日      │
+#   │ ETF Cross V6 FAA      │  25% │ ~10.9%   │ 10 交易日     │
+#   └──────────────────────┴──────┴──────────┴──────────────┘
+# Combo: AR=25.8%, MDD=-12.9%, SR=1.743, Calmar=2.00
+# 较 R115: AR -2.7pp, MDD +3.9pp, 小盘暴露 74%→57%, 压力损失 -13.2%→-10.6%
+# ====================================================================
+# 运行: python scripts/ops/r116_paper_daily.py
+# 状态: data/paper_state/r116_combo/
+# ====================================================================
+
+profile_name: "r116_combo"
+description: >
+  R116 四组件跨资产组合 — 双ML引擎+CB+ETF
+  降低小盘暴露方案 (A_dual_ml)
+  日频 TuShare EOD 批处理模拟盘
+
+initial_capital: 10000000.0  # 1000万
+
+# ── 组合权重 ──
+portfolio_weights:
+  ml_csi2000: 0.35
+  ml_csi1000: 0.15
+  cb: 0.25
+  etf: 0.25
+
+# ── ML CSI2000 Fund 配置 ──
+ml_csi2000:
+  asset_type: "a_stock"
+  model_dir: "models/ml_csi2000_lgb_fund"
+  universe: "csi2000"
+  top_k: 50
+  rebalance_freq: "every_5d"
+  max_industry_pct: 0.15
+  max_stock_pct: 0.03
+  vol_target: 0.20
+  vol_lookback: 60
+  lot_size: 100
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_sell: 0.0005
+  transfer_fee: 0.00001
+  slippage_bps: 5.0
+
+# ── CB Stock Quality 配置 ──
+cb:
+  asset_type: "convertible_bond"
+  top_k: 10
+  rebalance_freq: "daily"
+  max_price: 145.0
+  max_issue_size: 20000.0
+  min_turnover: 20.0
+  max_premium: 60.0
+  min_age_days: 3
+  min_days_to_maturity: 30
+  factor_weights:
+    price: 0.18
+    premium: 0.12
+    stock_roe: 0.25
+    stock_ep: 0.20
+    stock_vol: 0.15
+    issue_size: 0.10
+  lot_size: 10
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  slippage_bps: 5.0
+
+# ── ETF Cross V6 FAA 配置 ──
+etf:
+  asset_type: "etf"
+  top_k: 3
+  rebalance_freq: "every_10d"
+  symbols:
+    - "510300.SH"   # 沪深300
+    - "510500.SH"   # 中证500
+    - "159915.SZ"   # 创业板
+    - "512100.SH"   # 中证1000
+    - "510050.SH"   # 上证50
+    - "510880.SH"   # 红利
+    - "512010.SH"   # 医药
+    - "512690.SH"   # 酒
+    - "512660.SH"   # 军工
+    - "513100.SH"   # 纳指
+    - "159920.SZ"   # 恒生
+    - "518880.SH"   # 黄金
+    - "511010.SH"   # 国债# ── ML CSI1000 Fund 配置（新增）──
+ml_csi1000:
+  asset_type: "a_stock"
+  model_dir: "models/ml_csi1000_lgb_fund"
+  universe: "csi1000"
+  top_k: 50
+  rebalance_freq: "every_5d"
+  max_industry_pct: 0.15
+  max_stock_pct: 0.03
+  vol_target: 0.20
+  vol_lookback: 60
+  lot_size: 100
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_sell: 0.0005
+  transfer_fee: 0.00001
+  slippage_bps: 5.0
+
+# ── 组合健康监控配置 (R116 Expert Eval S7/S8) ──
+monitoring:
+  # A2: 风险贡献监控 — CSI2000 风险贡献不得超过 50%
+  risk_contribution:
+    ml_csi2000_max: 0.50
+    ml_csi2000_warn: 0.45
+    check_frequency: weekly
+  # A3: Alpha 衰减触发器 — 滚动12月SR<0连续6月触发强制审查
+  alpha_decay:
+    rolling_sr_window: 252
+    sr_threshold: 0.0
+    max_consecutive_months: 6
+    check_frequency: monthly
+  # C2: MDD 分级预警
+  drawdown:
+    warn_level: -0.20
+    halt_level: -0.25
+  # C4: PBO 季度复检
+  pbo_review:
+    max_pbo: 0.50
+    min_decay_ratio: 0.25
+    check_frequency: quarterly

@@ -1,0 +1,76 @@
+# 挖掘因子 CSI2000 回测 v2 — 月频调仓 + 保守滑点
+# ============================================================
+# 优化项:
+#   1. rebalance_days: 5 → 20 (月频，减少换手)
+#   2. slippage: 3bps → 15bps (更保守)
+#   3. top_k: 50 → 30 (集中头部信号)
+#   4. buffer_k: 5 (缓冲区减少不必要调仓)
+# ============================================================
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0000854}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/mined_factor_csi2000_11y_v2
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标已禁用 (death spiral root cause)
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 15.0
+  impact_coeff: 10.0
+  fallback_bps: 30.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 30
+    rebalance_days: 20
+    buffer_k: 5
+    oos_predictions_path: output/mined_factor_signals.parquet
+    model_objective: regression
+    model_type: lightgbm
+    model_path: ''
+    train_years: 3
+    predict_months: 3
+    forward_days: 5

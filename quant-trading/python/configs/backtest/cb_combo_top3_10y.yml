@@ -1,0 +1,208 @@
+# CB 最优三策略组合 — 10年回测配置（B1/B4）
+# ============================================================
+# 目标：验证组合层 10y AR≥30%、MDD≤25%、Sharpe≥1.0 的可行性
+#
+# 策略选择依据（R13 WF 验证）：
+#   - cb_comprehensive : 7y WF OOS AR=45.4%, score=6.97
+#   - double_low_plus  : 7y WF OOS AR=48.9%, score=6.87
+#   - small_size       : 10y WF OOS AR=16.8%, score=7.23（最高鲁棒性）
+#
+# 相关性（B3 验证）：
+#   - double_low_plus vs cb_comprehensive ≈ 0.85（同类）
+#   - 两者 vs small_size  → 待本次测量
+#
+# 分配策略：inverse_volatility 权重（低波动量分配更多资金）
+# 风控：DrawdownLimit(15%) + ForceRedeemExposure + Concentration
+#
+# 回测区间：2015-01-01 ~ 2024-12-31（10年，含牛熊震荡完整周期）
+# ============================================================
+
+name: "cb_combo_top3_10y"
+description: >
+  CB 最优三策略 10 年组合回测（B1/B4）。
+  使用最优 10y 参数 cb_comprehensive + double_low_plus + small_size，
+  inverse_volatility 动态权重，覆盖 2015-2024 全周期。
+
+# ---------------------------------------------------------------------------
+# 共享数据配置
+# ---------------------------------------------------------------------------
+data:
+  source: "tushare_cb"
+  start_date: "2015-01-01"
+  end_date:   "2024-12-31"
+  frequency:  "1d"
+  adjust:     "none"
+  cache_dir:  "data/cache/cb_tushare"
+
+# ---------------------------------------------------------------------------
+# 成交模型（保守：next bar open，参与率15%开盘量）
+# ---------------------------------------------------------------------------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15   # E-3 保守默认
+    lot_size: 10
+
+# ---------------------------------------------------------------------------
+# 成本（CB：无印花税，保守滑点10bps）
+# ---------------------------------------------------------------------------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 10.0            # A3 验证：10bps 下各策略仍≥30%AR
+
+# ---------------------------------------------------------------------------
+# 市场规则
+# ---------------------------------------------------------------------------
+trading_rules:
+  t_plus_n: 0
+  lot_size: 10
+  allow_short: false
+
+initial_capital: 1500000.0    # 150万（=3倍单策略 50万）
+random_seed: 42
+output_dir: "output/cb_combo_top3_10y"
+
+# ---------------------------------------------------------------------------
+# 股票池（强制排除强赎/到期）
+# ---------------------------------------------------------------------------
+universe_policy:
+  name: "cb_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+    - "FORCE_REDEEMED"
+    - "NEAR_MATURITY"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+
+# ---------------------------------------------------------------------------
+# 多策略组合编排
+# ---------------------------------------------------------------------------
+portfolio:
+  allocation_mode: "inverse_volatility"  # 低波动→高权重，降低回撤
+  rebalance_freq: 20                     # 每月重平衡
+
+  strategies:
+    # ── S1: CBComprehensive 10因子综合（高 Alpha，中等波动）──────────────
+    - name: "cb_comprehensive"
+      weight: 0.35                       # 初始名义权重（动态模式下会被覆盖）
+      config:
+        top_k: 10
+        rebalance_days: 3
+        max_price: 145.0
+        max_issue_size: 30000.0
+        min_issue_size: 1000.0
+        min_turnover: 15.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.30
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_age_days: 180
+        fallback_max_age_days: 730
+        max_premium: 70.0
+        lookback: 20
+        bb_k: 2.0
+        momentum_lookback: 10
+        weight_price: 0.12
+        weight_premium: 0.12
+        weight_size: 0.10
+        weight_age: 0.06
+        weight_mean_reversion: 0.15
+        weight_rating: 0.10
+        weight_delta: 0.10
+        weight_ytm: 0.10
+        weight_turnover: 0.05
+        weight_momentum: 0.10
+        min_candidates: 5
+
+    # ── S2: DoubleLow+ 6因子增强（中等 Alpha，较低波动）─────────────────
+    - name: "double_low_plus"
+      weight: 0.35
+      config:
+        top_k: 10
+        rebalance_days: 3
+        max_price: 145.0
+        max_issue_size: 30000.0
+        min_issue_size: 1000.0
+        min_turnover: 15.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.30
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_age_days: 180
+        fallback_max_age_days: 730
+        max_premium: 70.0
+        lookback: 20
+        bb_k: 2.0
+        weight_price: 0.20
+        weight_premium: 0.20
+        weight_size: 0.15
+        weight_age: 0.10
+        weight_mean_reversion: 0.20
+        weight_rating: 0.15
+        min_candidates: 5
+
+    # ── S3: SmallSize 小盘纯规模因子（最高鲁棒性，低相关性）────────────
+    - name: "small_size"
+      weight: 0.30
+      config:
+        top_k: 20
+        rebalance_days: 1
+        buffer_k: 0
+        max_price: 130.0
+        max_issue_size: 50000.0
+        min_turnover: 20.0
+        min_days_to_maturity: 30
+        stop_loss_pct: 0.15
+        force_redeem_threshold: 130.0
+        force_redeem_days: 8
+        lot_size: 10
+        exclude_called: true
+        exclude_st: true
+
+# ---------------------------------------------------------------------------
+# 组合级风控（B4：实测含风控约束效果）
+# ---------------------------------------------------------------------------
+risk_control:
+  # 市场状态检测（跟踪 CB 市场大盘）
+  market_regime:
+    enabled: true
+    index: "000932.CSI"
+    bull_threshold: 0.08
+    bear_threshold: -0.06
+    high_vol_threshold: 0.025
+    actions:
+      BEAR:
+        position_scale: 0.55    # 熊市减仓至55%
+      BULL:
+        position_scale: 1.0
+      NEUTRAL:
+        position_scale: 0.80
+
+  # CB 强赎暴露限制（M-8）
+  force_redeem_exposure:
+    enabled: true
+    max_weight: 0.30            # 强赎暴露≤30%
+    cb_value_threshold: 125.0
+
+  # 组合回撤熔断
+  drawdown_limit:
+    enabled: true
+    max_drawdown: 0.18          # 触发 18%→开始线性减仓
+    soft_limit: 0.15
+    hard_limit: 0.22
+    recovery_days: 10
+
+  # 集中度约束
+  concentration:
+    enabled: true
+    max_single_strategy_weight: 0.55  # 单策略最大权重
+    min_active_strategies: 2

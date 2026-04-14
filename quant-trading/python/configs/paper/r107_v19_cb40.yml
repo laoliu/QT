@@ -1,0 +1,71 @@
+# R107 激进型跨资产组合 — v19_hgro 60% + 双低转债 40%
+# 启动: python -m aipha paper --config configs/paper/r107_v19_cb40.yml
+
+paper_engine:
+  strategy_name: "r107_v19_cb40"
+  description: "R107 激进型跨资产组合：微盘成长 60% + 可转债双低 40%"
+  market_type: "multi_asset"
+  poll_interval: 10.0
+  bar_interval_sec: 60
+
+  initial_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0
+  slippage_bps: 10.0
+  fill_model:
+    name: "next_bar_open"
+
+  slippage_model: "fixed"
+  portfolio_weights:
+    equity: 0.60
+    cb: 0.40
+
+  state_dir: "data/paper_state/r107_v19_cb40"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/r107_v19_cb40"
+
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.18
+  alert_daily_loss_threshold: 0.04
+  alert_data_stale_seconds: 300.0
+  alert_inactivity_minutes: 240.0
+
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/r107_v19_cb40"
+    write_interval_sec: 60
+
+pillars:
+  equity:
+    name: "v19_hgro 微盘成长"
+    strategy_name: "v19_hgro"
+    market_type: "a_stock"
+    weight: 0.60
+    top_k: 15
+    rebalance_days: 20
+    buffer_k: 5
+    min_mv: 20000.0
+    max_mv: 300000.0
+    min_price: 2.0
+    max_price: 100.0
+    min_turnover: 200.0
+    min_listed_days: 120
+    max_pb: 5.0
+
+  cb:
+    name: "双低可转债"
+    strategy_name: "double_low"
+    market_type: "convertible_bond"
+    weight: 0.40
+    top_k: 10
+    rebalance_days: 5
+    max_price: 135.0
+    max_premium: 50.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10

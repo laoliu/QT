@@ -1,0 +1,136 @@
+# ============================================================
+# A 股小盘质量策略 — CSI1000 选股 (9 年回测)
+# ============================================================
+# 核心假说：
+#   1) CSI1000 小盘股(20-80亿)有最强的小市值效应(IC 5-8%)
+#   2) 在小盘宇宙中用 quality+low_vol 过滤垃圾股，避免"小而差"陷阱
+#   3) STR 在小盘股中反转效应更强(散户主导,过度反应)
+#   4) 低换手过滤掉高投机标的，捕捉散户回避溢价
+# 之前 CSI1000 策略失败原因：
+#   - 用的是 smallcap_rotation 策略(不同因子实现)，不是 balanced_multifactor
+#   - 持仓太集中(top_k=3-5)，单票风险巨大
+#   - 调仓太频繁(3天)，交易成本侵蚀
+# 本次改进：
+#   - 使用验证过的 balanced_multifactor 框架
+#   - top_k=20 分散持仓
+#   - 10天调仓 + buffer_k=8 控制换手
+#   - 更保守的滑点(小盘冲击成本更高)
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000852.SH
+  region: CN
+
+report:
+  benchmark: 000852.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/balanced_mf_csi1000_quality_9y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.30
+  max_single_position_pct: 0.08
+  market_regime_enabled: false
+  stop_loss_pct: 1.0
+  trailing_stop_pct: 1.0
+  circuit_breaker_enabled: false
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+
+run:
+  start_date: '2016-01-04'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 8.0
+  impact_coeff: 60.0
+  fallback_bps: 15.0
+  max_bps: 100.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 20
+    rebalance_days: 10
+    min_mv: 100_000.0
+    max_mv: 2_000_000.0
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 500.0
+    min_listed_days: 180
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.15
+    buffer_k: 8
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.08
+    inverse_vol_weighting: true
+    # --- 因子权重 (合计=1.0) ---
+    weight_value: 0.15
+    weight_quality: 0.30
+    weight_momentum: 0.0
+    weight_volatility: 0.20
+    weight_dividend: 0.0
+    weight_earnings_growth: 0.0
+    weight_turnover: 0.15
+    weight_size: 0.0
+    weight_str: 0.20
+    # --- 因子参数 ---
+    str_lookback: 5
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+    regime_adaptive: false
+    base_index: 000852.SH
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000852.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

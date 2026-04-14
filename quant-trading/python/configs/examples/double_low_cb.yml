@@ -1,0 +1,44 @@
+# 可转债双低轮动策略配置示例
+# 适用于 Aipha-Q 可转债套利模块
+# ⚠ 这是教学示例; 推荐部署配置见: configs/cb_strategies/double_low.yml
+
+# 数据源配置
+data:
+  provider: tushare_cb  # 可转债数据提供者
+  cache_dir: data/cache/cb
+  symbols: []  # 空表示全市场可转债
+  adjust: none  # 可转债通常不需要复权
+  start_date: "2024-01-01"
+  end_date: "2024-12-31"
+
+# 策略配置
+strategy:
+  name: double_low  # 双低轮动策略
+  params:
+    top_k: 20  # 持仓前20只双低最低的可转债
+    rebalance_days: 5  # 每5个交易日轮动一次
+    max_price: 130.0  # 最高价格限制（排除高价债）
+    max_premium: 50.0  # 最高溢价率限制（排除高溢价债）
+
+# 交易成本配置（可转债特有）
+cost:
+  commission_rate: 0.0001  # 佣金万1
+  commission_min: 5  # §13.1 MarketRulesConvertibleBond
+  stamp_tax_rate: 0  # 可转债免印花税
+  transfer_fee_rate: 0  # 可转债无过户费
+  slippage_bps: 5.0  # §13.1 CB default 5bps
+
+# 资金与交易规则
+initial_capital: 500000.0  # 50万初始资金
+lot_size: 10  # 可转债10张为1手
+t_plus_n: 0  # T+0交易
+
+# 风控参数
+risk:
+  max_single_position: 0.1  # 单只最大持仓10%
+  stop_loss: -0.1  # 单只止损-10%
+  exclude_redeemed: true  # 排除已公告强赎的可转债
+
+# 回测输出
+output_dir: output/double_low_cb
+random_seed: 42

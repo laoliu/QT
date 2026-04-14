@@ -16,6 +16,7 @@ import {
   DAILY_PICK_STRATEGY_LABELS,
   CTA_SCREEN_STRATEGY_MAP,
 } from "./_helpers.js";
+import { parseJsonBody } from "../parse-body.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -499,16 +500,20 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
             selected: index < finalStockLimit,
           }));
 
-        // Backtest all candidates so every stock gets a proper composite score
-        const backtestPoolSize = combinedList.length;
+        // Backtest top candidates – cap pool to avoid spawning too many Python processes
+        const backtestPoolSize = Math.min(combinedList.length, finalStockLimit * 2);
         const backtestPool = combinedList.slice(0, backtestPoolSize);
         const backtestPoolSymbols = backtestPool.map((item) => item.symbol);
 
         let stockBacktestRanking: StockBacktestEntry[] = [];
         if (backtestPool.length > 0) {
           const benchmark = selectedStrategies[0]!;
-          stockBacktestRanking = await Promise.all(
-            backtestPool.map(async (stock): Promise<StockBacktestEntry> => {
+
+          // Concurrency limiter: run at most 4 Python backtests in parallel
+          const CONCURRENCY = 4;
+          const queue = [...backtestPool];
+          const results: StockBacktestEntry[] = [];
+          const runOne = async (stock: (typeof backtestPool)[number]): Promise<StockBacktestEntry> => {
               const btResult = await runPythonScript<Record<string, unknown>>(
                 "scripts/backtest_engine.py",
                 {
@@ -524,7 +529,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                   stamp_tax: stampTax,
                 },
                 config,
-                { timeoutMs: 360_000 },
+                { timeoutMs: 180_000 },
               );
 
               if (!btResult.ok) {
@@ -601,8 +606,20 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 trades,
                 monthlyReturns,
               };
-            }),
+            };
+
+          // Run with concurrency limit
+          async function drainQueue() {
+            while (queue.length > 0) {
+              const item = queue.shift()!;
+              results.push(await runOne(item));
+            }
+          }
+          const workers = Array.from({ length: Math.min(CONCURRENCY, backtestPool.length) }, () =>
+            drainQueue(),
           );
+          await Promise.all(workers);
+          stockBacktestRanking = results;
 
           stockBacktestRanking.sort((a, b) => {
             const aOk = a.summary && !a.error;
@@ -1062,7 +1079,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         return;
       }
       try {
-        const body = await parseObjectBody(req);
+        const body = await parseJsonBody<Record<string, unknown>>(req, 10_485_760);
         const id = String(body.id ?? "");
         const createdAt = String(body.createdAt ?? new Date().toISOString());
         const params = body.params ?? {};

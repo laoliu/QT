@@ -1,0 +1,97 @@
+# 动量策略回测配置
+# 目标：验证动量因子在 HS300 成分股上的有效性
+# 策略：买入过去 20 日涨幅最大的 top N 只股票，持有 5 日后调仓
+
+run:
+  mode: backtest
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    index: "000300.SH"  # 沪深300成分股
+    boards:
+      - "A"
+
+frequency:
+  data_frequency: "1d"  # 日频策略
+  matching_resolution: "1d"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe_policy:
+  name: "hs300_momentum"
+  base_index: "000300.SH"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+  suspended_long:
+    lookback_days: 20
+    suspended_ratio_threshold: 0.8
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default  # 万一佣金
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005  # 2023-08-28 起印花税减半：千分之一 → 千分之0.5
+  transfer_fee:
+    rate: 0.00001
+
+slippage_model:
+  name: "fixed_bps"
+  bps: 5  # 日频策略滑点略高
+
+initial_capital: 1000000
+
+strategy:
+  name: "demo_momentum"
+  type: "factor"
+  parameters:
+    lookback_period: 20  # 过去 20 天收益率计算动量
+    holding_period: 5    # 持仓周期（天）
+    top_n: 20            # 持有 top N 只股票
+    weight_method: "equal"  # 等权重
+    # 可选: "min_variance", "risk_parity", "max_sharpe"
+    rebalance_freq: "weekly"  # 调仓频率
+
+risk_constraints:
+  max_single_position_pct: 0.10  # 单票最大 10%
+  max_drawdown_pct: 0.20         # 最大回撤 20%
+  daily_loss_limit_pct: 0.05     # 日亏损限制 5%
+
+report:
+  benchmark: "000300.SH"  # 对比沪深300
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+    - "alpha"
+    - "beta"
+    - "information_ratio"
+  universe_summary: true
+  output_dir: "reports/momentum_hs300"

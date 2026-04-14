@@ -1,0 +1,161 @@
+# CB 集成策略组合 — Paper Trading 配置
+# ============================================================
+# 用法: python -m aipha paper --config configs/paper/cb_ensemble_portfolio.yml
+#
+# 组合逻辑:
+#   将 3 个参数集成（Ensemble）策略组合运行，各自独立持仓与风控。
+#   通过策略分散化降低单一 Alpha 源（小+新）集中风险。
+#
+# 权重分配:
+#   - small_size_ensemble: 40% — 最稳定的单因子策略
+#   - new_small_ensemble:  35% — 年化最高但复合依赖
+#   - new_bond_ensemble:   25% — 独立新债效应，分散化贡献
+#
+# 信用风控:
+#   所有子策略均启用 min_rating="AA" + exclude_unrated=true
+# ============================================================
+
+paper_engine:
+  strategy_name: "multi_strategy"
+
+  # 数据源
+  market_type: "convertible_bond"
+  poll_interval: 3.0
+  bar_interval_sec: 60
+
+  # 资金与交易规则（总资金，由各策略按权重分配）
+  initial_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+  fill_model:
+    name: "next_bar_open"
+    volume_constraint:
+      max_participation_rate: 0.10
+      lot_size: 10
+
+  # 状态持久化
+  state_dir: "data/paper_state/ensemble_portfolio"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/ensemble_portfolio"
+
+  # 动态标的池
+  universe:
+    enabled: true
+    max_price: 150.0
+    min_amount: 0.5
+    min_rating: "AA"
+    exclude_unrated: true
+    refresh_interval_sec: 3600
+
+  # 监控告警
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.08
+  alert_daily_loss_threshold: 0.025
+  alert_data_stale_seconds: 120.0
+  alert_inactivity_minutes: 120.0
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/ensemble_portfolio"
+    write_interval_sec: 60
+
+# 多策略配置
+multi_strategy:
+  total_capital: 1000000
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+
+  # 组合级风控
+  portfolio_max_drawdown: 0.20
+  stop_on_strategy_breach: false  # 单策略止损不停止其他策略
+
+  strategies:
+    - name: small_size_ensemble
+      weight: 0.40
+      max_drawdown: 0.15
+      params:
+        top_k: 15
+        rebalance_days: 5
+        max_price: 125.0
+        max_issue_size: 32000.0
+        min_issue_size: 5000.0
+        min_turnover: 50.0
+        min_days_to_maturity: 60
+        stop_loss_pct: 0.10
+        lot_size: 10
+        min_rating: "AA"
+        exclude_unrated: true
+        aggregation: "reciprocal_rank"
+        variants:
+          - { top_k: 12, max_price: 115.0, max_issue_size: 27000.0 }
+          - { top_k: 13, max_price: 118.0, max_issue_size: 28000.0 }
+          - { top_k: 14, max_price: 120.0, max_issue_size: 30000.0 }
+          - { top_k: 15, max_price: 122.0, max_issue_size: 31000.0 }
+          - { top_k: 15, max_price: 125.0, max_issue_size: 32000.0 }
+
+    - name: new_small_ensemble
+      weight: 0.35
+      max_drawdown: 0.15
+      params:
+        top_k: 10
+        rebalance_days: 5
+        max_price: 130.0
+        max_age_days: 180
+        max_issue_size: 35000.0
+        min_issue_size: 5000.0
+        min_turnover: 50.0
+        min_days_to_maturity: 60
+        stop_loss_pct: 0.10
+        lot_size: 10
+        min_rating: "AA"
+        exclude_unrated: true
+        aggregation: "reciprocal_rank"
+        variants:
+          - { top_k: 8,  max_age_days: 150, max_issue_size: 28000.0 }
+          - { top_k: 9,  max_age_days: 160, max_issue_size: 30000.0 }
+          - { top_k: 10, max_age_days: 170, max_issue_size: 32000.0 }
+          - { top_k: 10, max_age_days: 180, max_issue_size: 33000.0 }
+          - { top_k: 11, max_age_days: 190, max_issue_size: 35000.0 }
+
+    - name: new_bond_ensemble
+      weight: 0.25
+      max_drawdown: 0.15
+      params:
+        top_k: 10
+        rebalance_days: 5
+        max_price: 125.0
+        max_age_days: 60
+        min_turnover: 50.0
+        min_days_to_maturity: 30
+        stop_loss_pct: 0.10
+        lot_size: 10
+        min_rating: "AA"
+        exclude_unrated: true
+        aggregation: "reciprocal_rank"
+        variants:
+          - { top_k: 8,  max_age_days: 45,  max_price: 125.0 }
+          - { top_k: 9,  max_age_days: 50,  max_price: 128.0 }
+          - { top_k: 10, max_age_days: 55,  max_price: 130.0 }
+          - { top_k: 10, max_age_days: 60,  max_price: 133.0 }
+          - { top_k: 12, max_age_days: 65,  max_price: 135.0 }
+
+# 自适应权重配置（可选，用于动态调权）
+adaptive_weights:
+  method: "composite_adaptive"
+  lookback: 60
+  rebalance_freq: 5
+  min_weight: 0.10
+  max_weight: 0.60
+  risk_free_rate: 0.02
+
+# 实验指纹
+random_seed: 42

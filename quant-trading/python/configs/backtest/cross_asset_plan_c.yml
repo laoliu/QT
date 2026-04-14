@@ -1,0 +1,85 @@
+# Aipha-Q 跨资产组合回测配置 (R32 修复版)
+# B-02 Fix: CSI1000 权重从 40% 降至 30% (风险贡献 63%→<50%)
+# 采用 R27 方案C: CB=40%, CSI1000=30%, ETF=30%
+# 回测资金: 100万/500万/1000万 三档
+
+portfolio:
+  name: cross_asset_plan_c
+  description: "Plan C: CB40+CSI1000_30+ETF30 (B-02 fix)"
+
+  # --- 资产配置权重 (R27 Plan C, 原则E合规) ---
+  allocation:
+    cb_combo:
+      weight: 0.40
+      source: output/cb_combo_3s_9y/summary.json
+      description: "CB 三策略风险平价组合"
+    ml_csi1000:
+      weight: 0.30
+      source: output/ml_csi1000_10y_regularized/summary.json
+      description: "CSI1000 ML 强正则化"
+    etf_cross:
+      weight: 0.30
+      source: output/etf_cross_v3_11y/summary.json
+      description: "ETF 跨资产轮动 v3"
+
+  rebalance:
+    frequency: monthly
+    method: fixed_weight
+    drift_threshold: 0.05
+
+  # --- 回测资金档位 ---
+  capital_tiers:
+    - label: "100万(基础)"
+      initial_capital: 1000000
+    - label: "500万(中等)"
+      initial_capital: 5000000
+    - label: "1000万(大资金)"
+      initial_capital: 10000000
+
+  default_capital: 5000000
+
+# --- 回测期间 ---
+run:
+  start_date: '2018-01-02'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+# --- 绩效门槛 ---
+thresholds:
+  min_annual_return: 0.20
+  max_drawdown: 0.30
+  min_sharpe_ratio: 0.80
+  min_calmar_ratio: 0.60
+  max_single_strategy_risk_contribution: 0.50
+  max_pairwise_correlation: 0.75
+  max_avg_correlation: 0.60
+
+# --- 风控 ---
+risk_management:
+  drawdown_circuit_breaker: 0.20
+  max_participation_rate: 0.10
+  market_state_detection:
+    index: 000932.CSI
+    bear_threshold: -0.06
+    cb_bear_weight: 0.60
+
+# --- 费用模型汇总 ---
+cost_models:
+  cb:
+    commission_rate: 0.0000854   # §13.1 MarketRulesConvertibleBond 万1
+    commission_min: 5        # §13.1 MarketRulesConvertibleBond
+    stamp_tax: 0.0
+    slippage_bps: 5.0
+  equity:
+    commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+    commission_min: 5.0
+    stamp_tax_sell: 0.0005
+    transfer_fee: 0.00001
+    slippage_model: linear_impact
+    impact_coeff: 60.0
+  etf:
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    stamp_tax: 0.0
+    slippage_bps: 3.0

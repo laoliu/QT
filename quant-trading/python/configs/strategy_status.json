@@ -1,0 +1,107 @@
+{
+  "_doc": "策略质量状态管理。status: active(活跃)/archived(下架)/deprecated(观察期)/experimental(实验性)。archived策略默认从列表隐藏。",
+  "_updated": "2026-03-27",
+  "overrides": {
+    "cb_gamma_convexity": {
+      "status": "archived",
+      "reason": "R56评审: 全量SR=0.324, 近3年SR=0.149, Alpha衰减FAIL",
+      "archived_date": "2026-03-14"
+    },
+    "cb_mean_reversion": {
+      "status": "archived",
+      "reason": "AR=-2.7%, SR=-0.67, 可靠性评分1.8, 波动率压缩后完全失效",
+      "archived_date": "2026-03-27"
+    },
+    "cb_momentum": {
+      "status": "archived",
+      "reason": "AR=0.3%, SR=0.00, MDD=33%, 可靠性评分2.4, 动量因子新规后失效",
+      "archived_date": "2026-03-27"
+    },
+    "vol_breakout": {
+      "status": "archived",
+      "reason": "AR=0.3%, SR=-0.84, R41专家面板明确建议淘汰: 高换手+新规限制",
+      "archived_date": "2026-03-27"
+    },
+    "turnover_surge": {
+      "status": "archived",
+      "reason": "AR=5.4%, SR=0.26, MDD=36.1%, 可靠性评分2.4, 换手信号不稳定",
+      "archived_date": "2026-03-27"
+    },
+    "conversion_arbitrage": {
+      "status": "archived",
+      "reason": "AR=3.1%, SR=0.33, 可靠性评分3.5, 套利机会稀疏难持续",
+      "archived_date": "2026-03-27"
+    },
+    "defensive_value": {
+      "status": "archived",
+      "reason": "AR=3.1%, SR=0.24, 可靠性评分3.5, 防御型因子收益不足",
+      "archived_date": "2026-03-27"
+    },
+    "negative_premium": {
+      "status": "archived",
+      "reason": "AR=11.8%, SR=0.83但P1代码缺陷(缺少卖出逻辑), 负溢价机会减少",
+      "archived_date": "2026-03-27"
+    },
+    "sector_momentum": {
+      "status": "archived",
+      "reason": "AR=-5.7%, SR=-0.27, MDD=46.3%, 可靠性评分1.0, 行业轮动A股失效",
+      "archived_date": "2026-03-27"
+    },
+    "pead_event": {
+      "status": "archived",
+      "reason": "AR=-2.1%, 可靠性评分1.0, 事件驱动因子数据频率不足",
+      "archived_date": "2026-03-27"
+    },
+    "multifactor_enhance": {
+      "status": "archived",
+      "reason": "AR=3.8%, 可靠性评分2.4, 增强因子组合收益不足",
+      "archived_date": "2026-03-27"
+    },
+    "forced_redeem_play": {
+      "status": "deprecated",
+      "reason": "AR=18%/SR=0.93但WF FAIL(3.82), R41评价机会稀疏, 需重新验证",
+      "archived_date": "2026-03-27"
+    },
+    "low_premium": {
+      "status": "deprecated",
+      "reason": "AR=13.9%/SR=0.76, 可靠性3.8, R41评价新规后转债供给减少+量化拥挤",
+      "archived_date": "2026-03-27"
+    },
+    "cb_value_momentum": {
+      "status": "deprecated",
+      "reason": "AR=13.4%/SR=0.63, MDD=27.8%, 可靠性3.8, 无WF验证",
+      "archived_date": "2026-03-27"
+    },
+    "cb_clause_play": {
+      "status": "deprecated",
+      "reason": "无回测数据, 无paper使用, 条款博弈机会稀疏",
+      "archived_date": "2026-03-27"
+    },
+    "cb_multi_layer": {
+      "status": "deprecated",
+      "reason": "无paper引用, 无8年回测结果, 多层架构待验证",
+      "archived_date": "2026-03-27"
+    },
+    "small_size_gated": {
+      "status": "deprecated",
+      "reason": "AR=11.0%/SR=0.65, 可靠性4.2, 无WF验证, 门控逻辑待优化",
+      "archived_date": "2026-03-27"
+    },
+    "new_bond": {
+      "status": "deprecated",
+      "reason": "无8年回测, 依赖新债发行节奏, 标的供给不确定",
+      "archived_date": "2026-03-27"
+    },
+    "earnings_momentum": {
+      "status": "deprecated",
+      "reason": "R41评价: 数据频率低, AR 8-12%, P22期0-3%",
+      "archived_date": "2026-03-27"
+    },
+    "balanced_multifactor": {
+      "status": "deprecated",
+      "reason": "AR=7.5%, 可靠性2.8, 均衡因子收益不足",
+      "archived_date": "2026-03-27"
+    }
+  },
+  "experimental_categories": ["demo", "other"]
+}

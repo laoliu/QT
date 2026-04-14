@@ -1,0 +1,60 @@
+# 次新债策略 — 10年回测配置
+# ============================================================
+# 基于 new_bond.yml 推荐配置，扩展至 10 年
+# ============================================================
+
+name: "new_bond"
+description: >
+  次新债效应策略 10 年回测。
+  买入上市不久低价可转债，利用 IPO 定价偏差与流动性溢价。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2015-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "new_bond"
+  params:
+    top_k: 10
+    rebalance_days: 5
+    max_age_days: 60
+    min_age_days: 5
+    max_price: 120.0
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/top5_cb_new_bond_10y"

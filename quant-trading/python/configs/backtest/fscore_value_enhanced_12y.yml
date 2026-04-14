@@ -1,0 +1,106 @@
+# Piotroski F-Score 增强价值 — 12年回测 (2014-2025)
+# 防御型策略 G1-3: 低PB池 + F-Score选改善方向
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0003
+  stamp_tax:
+    sell_rate: 0.001
+  transfer_fee:
+    rate: 0.00002
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/fscore_value_enhanced_12y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.35
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.12
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.25
+  benchmark_symbol: 000300.SH
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2014-01-02'
+  timezone: Asia/Shanghai
+
+strategy:
+  name: fscore_value_enhanced
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 800.0
+    min_listed_days: 250
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    buffer_k: 8
+    max_single_pct: 0.05
+    min_mv: 300000.0
+    max_industry_pct: 0.25
+    weight_fscore: 0.45
+    weight_value_bp: 0.35
+    weight_accruals: 0.20
+    max_pb: 4.0
+    max_pe: 40.0
+    min_roe: 0.0
+    piotroski_min_dims: 4
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: fscore_value_enhanced

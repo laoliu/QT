@@ -1,0 +1,174 @@
+# R110/R111 Plan A3 四组件跨资产组合 — S4 模拟盘配置
+# ============================================================
+# 方案: A3 权重方案（R110 评审确认, R111 对抗审计修复后）
+# 组件:
+#   ┌───────────────┬──────┬───────────┬──────────┬───────┐
+#   │ 组件           │ 权重 │ AR(回测)  │ 说明      │ 验证  │
+#   ├───────────────┼──────┼───────────┼──────────┼───────┤
+#   │ ML CSI2000     │  35% │ ~37.3%    │ 核心alpha │ R110  │
+#   │ V19 高成长轮动 │  10% │ ~39.0%    │ 微盘增强  │ R103  │
+#   │ CB 三策略      │  45% │ ~23.7%    │ 防御SR+α  │ R13   │
+#   │ ETF 跨资产 V3  │  10% │ ~10.0%    │ 分散化    │ R111  │
+#   └───────────────┴──────┴───────────┴──────────┴───────┘
+# R111 修复: ETF rank-normalize + 滑点5bps + 印花税时变
+# ============================================================
+# 启动: python -m aipha paper --config configs/paper/plan_a3_4comp.yml
+# 状态: data/paper_state/plan_a3_4comp/
+# ============================================================
+
+paper_engine:
+  strategy_name: "plan_a3_4comp"
+  description: >
+    R110 Plan A3 四组件跨资产组合 — R111 对抗审计修复后
+    ML(35%) + V19(10%) + CB(45%) + ETF(10%)
+
+  # ── 数据源 ──
+  market_type: "multi_asset"
+  poll_interval: 10.0
+  bar_interval_sec: 60
+
+  # ── 资金与交易规则 ──
+  initial_capital: 10000000.0  # 1000万
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+  fill_model:
+    name: "next_bar_open"
+  slippage_model: "square_root_impact"
+  slippage_params:
+    impact_coeff: 0.1
+    sigma_daily: 0.02
+    fallback_bps: 10.0
+    max_bps: 200.0
+
+  # ── 组合权重 (A3 方案) ──
+  portfolio_weights:
+    ml: 0.350
+    v19: 0.100
+    cb: 0.450
+    etf: 0.100
+
+  # ── 再平衡 ──
+  rebalance_freq_days: 20
+  rebalance_threshold: 0.05
+
+  # ── 风控 ──
+  max_drawdown_alert: 0.15
+  max_daily_loss_alert: 0.04
+  max_single_stock_pct: 0.05
+  max_industry_pct: 0.30
+  vol_target: 0.15
+
+  # ── 状态持久化 ──
+  state_dir: "data/paper_state/plan_a3_4comp"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/plan_a3_4comp"
+
+  # ── 监控 ──
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.15
+  alert_daily_loss_threshold: 0.04
+  alert_data_stale_seconds: 300.0
+  alert_inactivity_minutes: 480.0
+
+  # ── 指标 ──
+  metrics_enabled: true
+  metrics:
+    export_interval_sec: 60
+    export_format: "json"
+    export_dir: "data/metrics/plan_a3_4comp"
+
+  # ── ML 风控共享模块 (§4.3.1) ──
+  ml_risk_controls_enabled: true
+  ml_risk_vol_target: 0.20
+  ml_risk_vol_lookback: 60
+  ml_risk_max_stock_pct: 0.03
+
+  # ── ML Rolling SR 降权触发器 ──
+  ml_sr_downweight_enabled: true
+  ml_sr_downweight_lookback: 60
+  ml_sr_downweight_threshold: 0.0
+  ml_sr_downweight_normal: 0.35
+  ml_sr_downweight_reduced: 0.25
+
+  # ── CB Pillar 动态降权 ──
+  cb_pillar_downweight_enabled: true
+  cb_pillar_downweight_sr_threshold: 0.5
+  cb_pillar_downweight_consecutive_months: 4
+  cb_pillar_downweight_reduction: 0.333
+  cb_pillar_downweight_recovery_months: 3
+  cb_pillar_downweight_rolling_window: 252
+  cb_pillar_downweight_redistribute:
+    - etf
+
+  # ── ML 模型切换器 CSI2000/CSI1000 ──
+  ml_model_switcher_enabled: true
+  ml_model_switcher_sr_threshold: 0.5
+  ml_model_switcher_consecutive_months: 2
+  ml_model_switcher_recovery_sr: 1.0
+  ml_model_switcher_recovery_months: 2
+  ml_model_switcher_transition_days: 21
+  ml_model_switcher_rolling_window: 60
+  ml_model_switcher_primary_model: "models/ml_csi2000_lgb_fund"
+  ml_model_switcher_backup_model: "models/ml_csi1000_lgb_fund"
+
+  # ── Barra 风格暴露监控 ──
+  barra_monitor_enabled: true
+  barra_alert_thresholds:
+    SIZE: 1.5
+    BM: 1.5
+    MOM: 2.0
+    VOL: 2.0
+    LIQUIDITY: 1.5
+
+# ── 子组件配置 ──
+pillars:
+  ml:
+    name: "ML CSI2000 LGB Fund"
+    description: "LightGBM 24-fold WF, risk_controlled_csi2000"
+    model_dir: "models/ml_csi2000_lgb_fund"
+    market_type: "a_stock"
+    weight: 0.350
+    top_k: 50
+    rebalance_days: 5
+    vol_target: 0.20
+    universe: "csi2000"
+
+  v19:
+    name: "V19 高成长微盘轮动"
+    description: "微盘2-30亿, 多因子月频轮动"
+    strategy_name: "v19_hgro"
+    market_type: "a_stock"
+    weight: 0.100
+    top_k: 15
+    rebalance_days: 20
+    min_mv: 20000.0
+    max_mv: 300000.0
+    source_config: "configs/backtest/v19_hgro_8y.yml"
+
+  cb:
+    name: "CB 三策略最大夏普优化"
+    description: "triple_low + small_size, 双策等权"
+    market_type: "convertible_bond"
+    weight: 0.450
+    source_config: "configs/paper/cb_paper_v2.yml"
+    sub_strategies:
+      - name: triple_low
+        weight: 0.500
+        top_k: 20
+        rebalance_days: 1
+      - name: small_size
+        weight: 0.500
+        top_k: 4
+        rebalance_days: 1
+
+  etf:
+    name: "ETF Cross Asset V3"
+    description: "ETF跨资产动量低波轮动, R111修复rank-normalize+5bps滑点"
+    strategy_name: "etf_cross_v3"
+    market_type: "etf"
+    weight: 0.100
+    source_config: "configs/backtest/etf_cross_v3_11y.yml"

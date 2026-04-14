@@ -1,0 +1,96 @@
+# V7: 4-factor model (ROE excluded based on IC analysis showing negative IC)
+# BP(35%) > DY(25%) > EP(22%) > LV(18%) - renormalized without ROE
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  cache_dir: data/cache/tushare
+  provider: tushare_pro
+  snapshot: latest
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 100
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.1
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - sortino
+  - turnover
+  output_dir: output/ref_4f_noroe_11y
+  universe_summary: true
+risk_constraints:
+  circuit_breaker_enabled: false
+  market_regime_enabled: false
+  max_drawdown_pct: 0.7
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.0
+  trailing_stop_pct: 0.0
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2015-01-05'
+  timezone: Asia/Shanghai
+slippage_model:
+  base_bps: 2.0
+  fallback_bps: 8.0
+  impact_coeff: 30.0
+  max_bps: 50.0
+  name: linear_impact
+strategy:
+  name: reference_five_factor
+  parameters:
+    base_index: 000906.SH
+    quadrant_enabled: false
+    top_k: 30
+    rebalance_days: 21
+    # 4-factor: ROE excluded (IC=-0.01), rest renormalized
+    weight_bp: 0.35
+    weight_ep: 0.22
+    weight_dy: 0.25
+    weight_lv: 0.18
+    weight_roe: 0.0
+    weight_momentum: 0.0
+    inverse_vol_weighting: false
+    min_listed_days: 120
+    min_mv: 100000.0
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    max_industry_pct: 0.12
+    min_industries: 6
+    cash_reserve_pct: 0.03
+    stop_loss_pct: 0.0
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml

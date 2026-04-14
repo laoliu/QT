@@ -1,0 +1,63 @@
+# 放量突破策略 — 初始配置
+# ============================================================
+# 策略逻辑:
+#   监测成交额的突变（放量比 = 当日 / 历史均值）
+#   放量 > min_surge_ratio 倍均值 → 可能有主力介入或事件驱动
+#   可选过滤: 仅在当日收涨时介入（避免恐慌放量）
+# ============================================================
+
+name: "turnover_surge"
+description: >
+  放量突破策略 — 捕捉成交额异常放大信号。
+  主力资金进场或重大事件催化时成交额突增。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "turnover_surge"
+  params:
+    top_k: 10
+    lookback_days: 20
+    rebalance_days: 3
+    min_surge_ratio: 2.0
+    require_positive_return: true
+    max_price: 150.0
+    min_turnover: 30.0
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/turnover_surge"

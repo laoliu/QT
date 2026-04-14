@@ -1,0 +1,72 @@
+# 可转债防守价值策略 — 大盘低估值 + 到期催化
+# ============================================================
+# 策略核心: 大发行规模(信用优) + 低价低溢价(安全垫) + 临近到期(下修催化)
+# 与 small_size/new_small 天然负相关，在小盘杀跌期提供对冲保护
+#
+# Alpha 来源:
+# 1. 大发行规模 → 信用质量高（大公司违约概率低）
+# 2. 低价低溢价 → 债底安全垫 + 保留正股弹性
+# 3. 临近到期 → 下修预期 + 回售保护
+#
+# 评分公式（排名融合法）:
+#   rank_score = ytm_weight * ytm_rank + premium_weight * premium_rank
+#                + maturity_weight * maturity_rank
+
+name: "defensive_value"
+description: >
+  可转债防守价值策略，选取大发行规模、低价低溢价、临近到期的优质转债，
+  通过YTM/溢价率/到期年限三因子排名融合评分，定期轮动持有。
+  与small_size天然低相关，在小盘杀跌期提供对冲保护。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "defensive_value"
+  params:
+    top_k: 25
+    rebalance_days: 10
+    buffer_k: 5
+    min_issue_size: 30000.0       # 最小3亿发行规模，排除小盘
+    max_price: 115.0
+    max_premium: 40.0             # 溢价率上限(%)
+    max_years_to_maturity: 5.0
+    ytm_weight: 0.40
+    premium_weight: 0.35
+    maturity_weight: 0.25
+    stop_loss_pct: 0.12
+    min_turnover: 50.0
+    exclude_st: true
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15  # 开盘集合竞价仅占全天成交量15%(修复F-E2)
+    lot_size: 10
+
+# ------ 成本 (可转债免印花税) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  min_commission: 5  # §13.1 CB minimum
+  stamp_tax_rate: 0.0             # 可转债免印花税
+  transfer_fee_rate: 0.0
+
+# ------ 滑点 ------
+slippage:
+  model: "fixed_bps"
+  bps: 5.0
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"

@@ -1,0 +1,87 @@
+# ETF 轮动策略 V5-Regime — P0b: 制度自适应因子权重
+# 基于 V5 (AR=12.84%, SR=0.54) 增加 regime detection:
+#   BULL: 提高动量权重 (0.70), 降低波动权重 (0.30)
+#   BEAR: 降低动量 (0.30), 提高波动+防御 (0.70)
+#   NEUTRAL: 保持 V5 原始权重 (mom=0.60, vol=0.40)
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  max_missing_rate: 0.30
+  symbols:
+    - 510300.SH    # 沪深300ETF
+    - 510500.SH    # 中证500ETF
+    - 159915.SZ    # 创业板ETF
+    - 512100.SH    # 中证1000ETF
+    - 510050.SH    # 上证50ETF
+    - 510880.SH    # 红利ETF
+    - 512010.SH    # 医药ETF
+    - 512690.SH    # 酒ETF
+    - 512660.SH    # 军工ETF
+    - 513100.SH    # 纳指ETF
+    - 159920.SZ    # 恒生ETF
+    - 518880.SH    # 黄金ETF
+    - 511010.SH    # 国债ETF
+    - 513500.SH    # 标普500ETF
+    - 512890.SH    # 红利低波ETF
+    - 513050.SH    # 中概互联ETF
+    - 511130.SH    # 30年国债ETF
+    - 511020.SH    # 活跃国债ETF
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_cross_v5_regime_11y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  seed: 42
+
+slippage_model: {name: fixed, bps: 1.0}
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 10
+    # V5 基线权重 (NEUTRAL 模式下使用)
+    weight_momentum: 0.60
+    weight_volatility: 0.40
+    weight_reversion: 0.0
+    weight_volume: 0.0
+    weight_correlation: 0.0
+    momentum_lookback: 20
+    volatility_lookback: 20
+    trend_ma_period: 0
+    stop_loss_pct: 0.0
+    trailing_stop_pct: 0.0
+    cash_reserve_pct: 0.02
+    # P0b: Regime Detection
+    regime_enabled: true
+    regime_reference: "510300.SH"
+    regime_momentum_window: 60
+    regime_bull_threshold: 0.03
+    regime_bear_threshold: -0.10
+    bull_weight_momentum: 0.70
+    bull_weight_volatility: 0.30
+    bull_weight_correlation: 0.0
+    bull_weight_volume: 0.0
+    bear_weight_momentum: 0.45
+    bear_weight_volatility: 0.55
+    bear_weight_correlation: 0.0
+    bear_weight_volume: 0.0

@@ -1,0 +1,107 @@
+# 现金牛精选 — 12年回测 (2014-2025)
+# 防御型策略 G1-4: 现金流质量 + ROE + 价值 + 低换手
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0003
+  stamp_tax:
+    sell_rate: 0.001
+  transfer_fee:
+    rate: 0.00002
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/cash_cow_select_12y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.35
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.06
+  stop_loss_pct: 0.12
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.25
+  benchmark_symbol: 000300.SH
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2014-01-02'
+  timezone: Asia/Shanghai
+
+strategy:
+  name: cash_cow_select
+  parameters:
+    top_k: 25
+    rebalance_days: 20
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 1500.0
+    min_listed_days: 250
+    stop_loss_pct: 0.12
+    trailing_stop_pct: 0.10
+    buffer_k: 8
+    max_single_pct: 0.06
+    min_mv: 800000.0
+    inverse_vol_weighting: true
+    max_industry_pct: 0.20
+    weight_cash_quality: 0.35
+    weight_roe: 0.25
+    weight_value: 0.25
+    weight_turnover: 0.15
+    min_roe: 8.0
+    max_pe: 35.0
+    max_debt_to_assets: 65.0
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: cash_cow_select

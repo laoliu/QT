@@ -1,0 +1,75 @@
+# Paper Trading 配置 — A 股 PEAD 事件驱动策略
+# 用法: python -m aipha paper --config configs/paper/equity_pead.yml
+#
+# 基于 pead_event 策略（R7 唯一 WF PASS，Sharpe 0.92）
+# 利用财报公告后的价格漂移效应
+
+paper_engine:
+  # 策略
+  strategy_name: "pead_event"
+
+  # 策略参数（与 configs/backtest/pead_event_5y.yml 对齐）
+  strategy_params:
+    top_k: 20
+    rebalance_days: 10
+    min_roe: 5.0
+    min_sue: 0.0
+    min_listed_days: 120
+    exclude_st: true
+    lot_size: 100
+
+  # 标的列表 — 全市场候选（PEAD 需要财报事件驱动）
+  symbols:
+    - "600519.SH"
+    - "601318.SH"
+    - "600036.SH"
+    - "000858.SZ"
+    - "601166.SH"
+    - "600276.SH"
+    - "000333.SZ"
+    - "002475.SZ"
+    - "600900.SH"
+    - "601888.SH"
+    - "300750.SZ"
+    - "600585.SH"
+    - "000568.SZ"
+    - "002714.SZ"
+    - "601012.SH"
+    - "600809.SH"
+    - "000001.SZ"
+    - "002594.SZ"
+    - "601899.SH"
+    - "000725.SZ"
+
+  # 数据源
+  market_type: "a_stock"
+  poll_interval: 5.0
+  bar_interval_sec: 60
+
+  # 资金与交易规则（A 股）
+  initial_capital: 1000000.0
+  lot_size: 100
+  t_plus_n: 1
+  commission_rate: 8.54e-05  # 13.1 MarketRulesCNEquity
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+  # 状态持久化
+  state_dir: "data/paper_state/equity_pead"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/equity_pead"
+
+  # 监控告警
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.10
+  alert_daily_loss_threshold: 0.05
+  alert_data_stale_seconds: 180.0
+  alert_inactivity_minutes: 240.0
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    export_interval_sec: 60
+    export_format: "json"
+    export_dir: "data/metrics/equity_pead"

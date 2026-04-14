@@ -1,0 +1,75 @@
+# 条款博弈策略 v2 — 8年回测 (统一 linear_impact)
+# ============================================================
+# 经济学基础:
+#   - 回售条款 = put option for holder → 正股跌破触发线时下修概率上升
+#   - 到期催化 = 发行人行动压力 → 1-3年期限为催化高峰
+#   - 结合低价+低溢价兜底 → 安全边际 + 条款博弈 alpha
+# v2 调整:
+#   - rebalance_days: 5 (周频, 条款事件不需要日频)
+#   - 降低 issue_size 权重到 0.05 (弱化小盘因子)
+#   - 提升 putback 和 maturity 权重 (策略核心)
+# ============================================================
+
+name: "cb_clause_play_v2_8y"
+description: >
+  条款博弈策略 v2 — 回售接近度+到期催化+低价+低溢价。
+  5因子: putback(0.30) + maturity(0.30) + price(0.20) + premium(0.15) + size(0.05)。
+  利用回售条款给持有人的"put option"价值。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_clause_play"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 130.0
+    max_premium: 50.0
+    min_age_days: 30
+    weight_price: 0.20
+    weight_premium: 0.15
+    weight_putback: 0.30
+    weight_maturity: 0.30
+    weight_issue_size: 0.05
+    putback_trigger_ratio: 0.70
+    min_catalyst_score: 0.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.15
+    lot_size: 10
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_clause_play_v2_8y"
+
+report:
+  benchmark: "000300.SH"

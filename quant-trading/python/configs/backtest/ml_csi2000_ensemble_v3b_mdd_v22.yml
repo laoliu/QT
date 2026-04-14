@@ -1,0 +1,99 @@
+# ============================================================
+# CSI2000 ML V3b Ensemble — MDD V2.2 (Relaxed Start Threshold)
+# ============================================================
+# V2→V2.2 changes:
+#   MDD gradient start: 10% → 15% (recover alpha from over-protection)
+#   Expected: AR ~18-22%, MDD ~28-30% (vs V2: AR=14.3%, MDD=24.6%)
+# ============================================================
+
+cost_model:
+  commission: { min_fee: 5.0, rate: 0.0000854 }
+  stamp_tax: { sell_rate: 0.0005 }
+  transfer_fee: { rate: 0.00001 }
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: { asset_type: stock, boards: [A], index: 399303.SZ }
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_ensemble_v3b_mdd_v22
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.18
+  circuit_breaker_enabled: false
+  drawdown_allow_rotation: true
+  drawdown_peak_reset_days: 60
+  position_sizing:
+    mdd_gradient:
+      enabled: true
+      levels:
+        - [0.15, 1.00]
+        - [0.20, 0.85]
+        - [0.25, 0.60]
+        - [0.30, 0.35]
+        - [1.00, 0.10]
+    volatility_target:
+      enabled: true
+      target_vol: 0.20
+      lookback_days: 60
+      min_scale: 0.4
+      max_scale: 1.2
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 8.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 10
+    buffer_k: 5
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    model_objective: regression
+    model_type: lightgbm
+    ensemble_method: rank_average
+    ensemble_weights:
+      ml_csi2000_lgb_20d_r40: 1.87
+      ml_csi2000_de_10d: 1.46
+      ml_csi2000_lgb_b3_sizeneutral: 1.46
+      ml_csi2000_lgb_fund_t1aligned: 1.20
+      ml_csi2000_lgb_20d_neutral_p1: 2.15
+      ml_csi2000_master_v2: 0.70
+    oos_predictions_paths:
+      - models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet
+      - models/ml_csi2000_de_10d/oos_predictions.parquet
+      - models/ml_csi2000_lgb_b3_sizeneutral/oos_predictions.parquet
+      - models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet
+      - models/ml_csi2000_lgb_20d_neutral_p1/oos_predictions.parquet
+      - models/ml_csi2000_master_v2/oos_predictions.parquet

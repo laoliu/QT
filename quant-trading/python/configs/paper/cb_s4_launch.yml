@@ -1,0 +1,138 @@
+# S4 模拟盘正式启动配置 — 双策略组合（small_size_v2 + cb_comprehensive_opt）
+# ============================================================
+# S4 阶段: 2026-02-27 启动，持续至少 3 个月（评估 S5 准入最早 2026-05-27）
+# 策略组合:
+#   - small_size v2 (60%): 7y WF Score=8.0, OOS AR=75%, Win=100%
+#   - cb_comprehensive opt (40%): 7y WF Score=6.97, OOS AR=45.4%, Win=75%
+# 组合 10y WF: Score=5.75 (PASS), OOS AR=15.7%, Win=90.9%
+# ============================================================
+# 用法: python -m aipha paper --config configs/paper/cb_s4_launch.yml
+# ============================================================
+
+paper_engine:
+  strategy_name: "multi_strategy"
+
+  # 数据源
+  market_type: "convertible_bond"
+  poll_interval: 3.0
+  bar_interval_sec: 60
+
+  # 资金与交易规则（与回测一致）
+  initial_capital: 1000000.0  # 100 万，两策略各配 50 万
+  lot_size: 10
+  t_plus_n: 0                 # CB T+0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+  fill_model:
+    name: "next_bar_open"
+    volume_constraint:
+      max_participation_rate: 0.10
+      lot_size: 10
+
+  # 状态持久化
+  state_dir: "data/paper_state/s4_launch"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/s4_launch"
+
+  # 动态 Universe
+  universe:
+    enabled: true
+    max_price: 200.0
+    min_amount: 0.5
+    refresh_interval_sec: 3600
+
+  # 监控告警（基于组合 WF MDD）
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.18        # 组合 10y WF OOS 历史最大回撤对应值
+  alert_daily_loss_threshold: 0.03
+  alert_data_stale_seconds: 120.0
+  alert_inactivity_minutes: 60.0
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/s4_launch"
+    write_interval_sec: 60
+
+# 多策略配置
+multi_strategy:
+  total_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+
+  strategies:
+    # 策略一: small_size v2（主要 alpha 来源）
+    - name: small_size
+      source_config: configs/cb_strategies/small_size_v2_7y.yml
+      weight: 0.60                     # 60% 资金
+      max_drawdown: 0.22               # WF MDD 18.82% + buffer
+      params:
+        top_k: 4                       # v2 集中持仓
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+
+    # 策略二: cb_comprehensive opt（多因子组合，提供分散化）
+    - name: cb_comprehensive
+      source_config: configs/cb_strategies/cb_comprehensive_v2_7y.yml
+      weight: 0.40                     # 40% 资金
+      max_drawdown: 0.25               # WF MDD < 20%
+      params:
+        top_k: 5                       # 集中持仓
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 500.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_age_days: 180
+        fallback_max_age_days: 730
+        max_premium: 60.0
+        lookback: 20
+        bb_k: 2.0
+        momentum_lookback: 10
+        weight_price: 0.10
+        weight_premium: 0.10
+        weight_size: 0.20
+        weight_age: 0.03
+        weight_mean_reversion: 0.20
+        weight_rating: 0.07
+        weight_delta: 0.08
+        weight_ytm: 0.07
+        weight_turnover: 0.05
+        weight_momentum: 0.10
+        min_candidates: 3
+
+# S4 阶段里程碑
+# ============================================================
+# 入场条件（已满足）:
+#   ✅ small_size 7y WF PASS (Score=8.0, OOS AR=75%, Win=100%)
+#   ✅ cb_comprehensive 7y WF PASS (Score=6.97, OOS AR=45.4%, Win=75%)
+#   ✅ 组合 10y WF PASS (Score=5.75, Win=90.9%)
+#   ✅ 6780 测试通过，0 失败
+#
+# 监控频率: 每日收盘后回顾
+# 月度评审: 月末对比模拟盘与 IS 回测指标（年化、回撤、SR）
+#
+# S5 准入条件（最早 2026-05-27）:
+#   - 持续时间 ≥3 个月
+#   - 模拟盘实际 SR ≥ 0.8
+#   - 模拟盘最大回撤 ≤ 25%
+#   - 月度胜率 ≥ 2/3

@@ -1,0 +1,85 @@
+# 自适应组合权重配置
+# 不同策略在不同市场环境下表现差异大，通过动态权重分配提升组合稳健性
+#
+# 支持的方法:
+#   equal               - 等权（基线）
+#   rolling_risk_parity  - 滚动风险平价（权重与波动率成反比）
+#   inverse_volatility   - 逆波动率加权
+#   momentum             - 动量追踪（近期表现好的策略获更多权重）
+#   rolling_max_sharpe   - 滚动最大夏普（基于窗口内夏普比率分配）
+#   regime_adaptive      - Regime 自适应（牛/熊/震荡市切换逻辑）
+#   drawdown_penalty     - 回撤惩罚（正在回撤的策略降权）
+#   composite_adaptive   - 综合自适应（融合逆波动率+动量+回撤惩罚+风险平价）
+
+# 默认参数
+default:
+  method: composite_adaptive
+  lookback: 60                # 回看窗口（交易日）
+  rebalance_freq: 5           # 再平衡频率（每 N 交易日）
+  min_weight: 0.05            # 单策略最低权重
+  max_weight: 0.80            # 单策略最高权重
+  risk_free_rate: 0.02        # 无风险利率
+  trading_days_per_year: 252
+
+# 综合自适应的子方法融合权重
+composite_weights:
+  inv_vol: 0.30       # 逆波动率
+  momentum: 0.25      # 动量追踪
+  dd_penalty: 0.25    # 回撤惩罚
+  risk_parity: 0.20   # 风险平价
+
+# 动量追踪参数
+momentum:
+  temperature: 1.0    # softmax 温度参数，越小越集中
+
+# 滚动最大夏普参数
+max_sharpe:
+  temperature: 1.0
+
+# Regime 自适应参数
+regime:
+  vol_threshold: 0.015  # 日波动率阈值，超过视为震荡市
+
+# 回撤惩罚参数
+drawdown_penalty:
+  max_tolerable_dd: 0.15  # 最大可容忍回撤（超过则权重降至最低）
+
+# 预置策略组合（可在看板中直接选择）
+portfolios:
+  # 核心组合：当前3个主力集成策略（参数鲁棒化后）
+  core:
+    strategies:
+      - small_size_ensemble
+      - new_small_ensemble
+      - new_bond_ensemble
+    method: composite_adaptive
+    description: "核心三策略组合（小规模+次新小+次新债 集成版）"
+
+  # 兼容组合：原始策略版本
+  core_legacy:
+    strategies:
+      - small_size_best
+      - new_small_best
+      - new_bond_best
+    method: composite_adaptive
+    description: "核心三策略组合（兼容旧版配置）"
+
+  # 防守组合
+  defensive:
+    strategies:
+      - defensive_value
+      - pseudo_ytm
+      - ytm_plus
+    method: rolling_risk_parity
+    description: "防守型组合（重视安全边际）"
+
+  # 全天候组合（集成版 + 防守）
+  all_weather:
+    strategies:
+      - small_size_ensemble
+      - new_small_ensemble
+      - new_bond_ensemble
+      - defensive_value
+      - double_low
+    method: composite_adaptive
+    description: "全天候组合（集成进攻+防守混合）"

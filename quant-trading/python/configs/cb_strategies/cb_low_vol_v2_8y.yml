@@ -1,0 +1,81 @@
+# 低波动均值回归策略 v2 — 8年回测 (统一 linear_impact)
+# ============================================================
+# 经济学基础:
+#   - 低波动异象(Low Volatility Anomaly): 低波动标的风险调整后收益更高
+#   - 债底距离(Bond Floor): 接近面值 → 下行空间有限
+#   - 正股质量过滤: ROE筛选排除低质量正股的"价值陷阱"
+# v2 调整:
+#   - reversal权重 0.0→0.15 (启用短期反转信号)
+#   - 降低 issue_size 权重 0.10→0.05
+#   - low_vol 权重从 0.30→0.25, 均衡各因子
+#   - vol_lookback: 20 (短期波动率, 避免路径依赖)
+# ============================================================
+
+name: "cb_low_vol_v2_8y"
+description: >
+  低波动均值回归策略 v2 — 反动量/逆向策略。
+  6因子: low_vol(0.25)+reversal(0.15)+bond_floor(0.20)+premium(0.15)+ROE(0.20)+size(0.05)。
+  与动量策略低相关, 目标MDD<15%。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_low_vol_reversion"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 130.0
+    min_turnover: 20.0
+    stop_loss_pct: 0.15
+    buffer_k: 5
+    max_premium: 50.0
+    min_age_days: 5
+    # 6因子权重
+    weight_low_vol: 0.25
+    weight_reversal: 0.15
+    weight_bond_floor: 0.20
+    weight_premium: 0.15
+    weight_stock_roe: 0.20
+    weight_issue_size: 0.05
+    # 辅助参数
+    vol_lookback: 20
+    reversal_lookback: 10
+    use_stock_bridge: true
+    min_days_to_maturity: 30
+    lot_size: 10
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_low_vol_v2_8y"
+
+report:
+  benchmark: "000300.SH"

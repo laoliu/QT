@@ -1,0 +1,690 @@
+# ==========================================================================
+# Aipha-Q 备选池注册表 (Candidate Pool Registry)
+# ==========================================================================
+# 维护目的：记录所有经过验证的因子、策略和组合方案，
+#           包含历史绩效、状态评级和迭代关键记录。
+# 更新规则：每轮迭代 (R-N) 完成后更新此文件。
+# 禁止行为：不得删除历史记录，仅可追加或修改 status 字段。
+# ==========================================================================
+
+# ------ 元数据 ------
+metadata:
+  version: "1.0.0"
+  created: "2026-03-15"
+  last_updated: "2026-03-15"
+  last_review: "R58"
+  maintainer: "Aipha-Q Team"
+
+# ======================================================================
+# 第一层：因子池 (Factor Pool)
+# ======================================================================
+# status: proven / experimental / deprecated / failed
+# tier: T1(核心,经验证) / T2(备选,有潜力) / T3(实验,待验证)
+# ======================================================================
+
+factor_pool:
+
+  # ── T1: 核心因子（经回测验证，已在生产策略中使用）──
+
+  EP:
+    tier: T1
+    status: proven
+    module: equity_factors.py
+    function: compute_ep_factor
+    description: "盈利收益率 (1/PE)，价值因子核心"
+    asset_class: [A_stock, CB_stock_quality]
+    used_in_strategies: [a_stock_multifactor, balanced_multifactor, a_stock_enhanced_v2]
+    evidence: "baseline 10y SR=0.67, 四因子等权组合稳定"
+    notes: "A 股最稳定的因子之一，低换手率"
+
+  ROE_quality:
+    tier: T1
+    status: proven
+    module: equity_factors.py
+    function: compute_quality_factor
+    description: "ROE 质量因子，高盈利能力优先"
+    asset_class: [A_stock]
+    used_in_strategies: [a_stock_multifactor, balanced_multifactor]
+    evidence: "与 EP 低相关，组合后提升 SR"
+
+  MOM_12_1:
+    tier: T1
+    status: proven
+    module: equity_factors.py
+    function: compute_momentum_factor
+    description: "12 月动量跳过近 1 月 (Jegadeesh-Titman)"
+    asset_class: [A_stock]
+    used_in_strategies: [a_stock_multifactor, earnings_momentum]
+    evidence: "经典动量因子，A 股 IC 约 3-5%"
+    params: {lookback: 250, skip_recent: 20}
+
+  IVOL:
+    tier: T1
+    status: proven
+    module: equity_factors.py
+    function: compute_ivol_factor
+    description: "特质波动率反转（低波优先）"
+    asset_class: [A_stock]
+    used_in_strategies: [a_stock_multifactor, low_vol_value]
+    evidence: "低 IVOL 异象在 A 股显著"
+    params: {lookback: 60}
+
+  double_low:
+    tier: T1
+    status: proven
+    module: "(内置于 CB 策略)"
+    description: "双低指标 = 价格 + 溢价率(%)"
+    asset_class: [CB]
+    used_in_strategies: [double_low, double_low_plus, triple_low]
+    evidence: "CB 最经典因子，P22avg=8-11%"
+
+  small_size_cb:
+    tier: T1
+    status: proven
+    module: "(内置于 CB 策略)"
+    description: "CB 小盘因子，选择小规模转债"
+    asset_class: [CB]
+    used_in_strategies: [small_size, small_size_enhanced]
+    evidence: "P22avg=20.4%, 全策略最高"
+
+  # ── T2: 备选因子（有理论支撑，需进一步验证）──
+
+  STR_reversal:
+    tier: T2
+    status: experimental
+    module: equity_factors.py
+    function: compute_str_factor
+    description: "短期反转因子 (10 日收益率反转)"
+    asset_class: [A_stock]
+    used_in_strategies: [a_stock_enhanced_v2]
+    evidence: "R58 测试: 单独使用导致换手率从 0.69→5.66x，需调参"
+    risk_notes: "10 日 lookback 过短导致信号翻转频繁，建议测试 40-60 日 lookback"
+    iteration_log:
+      - "R58(2026-03-15): V3 回测 STR@15% 权重, TO=5.66x, 判定需降权或加长 lookback"
+
+  analyst_revision:
+    tier: T2
+    status: experimental
+    module: analyst_factors.py
+    function: compute_analyst_revision_factor
+    description: "分析师 EPS 一致预期修正率"
+    asset_class: [A_stock]
+    data_source: data/cache/alternative/
+    used_in_strategies: [a_stock_enhanced_v2]
+    evidence: "R58 测试: 覆盖率仅 56%，需单因子 IC 测试"
+    risk_notes: "覆盖率不足可能导致选股偏差(倾向大盘有研报覆盖的股票)"
+    iteration_log:
+      - "R58(2026-03-15): 23/23 单元测试通过, PIT 合规"
+      - "R58(2026-03-15): 集成到 V2 后覆盖率仅 56%, 未做独立 IC 测试"
+
+  holder_change:
+    tier: T2
+    status: experimental
+    module: analyst_factors.py
+    function: compute_holder_change_factor
+    description: "股东户数环比变化率（减少=筹码集中=正信号）"
+    asset_class: [A_stock]
+    data_source: data/cache/reference/stk_holdernumber/
+    evidence: "散户集中度下降是 A 股已知有效信号"
+    risk_notes: "数据公布滞后 1-2 月，信号时效性存疑"
+    iteration_log:
+      - "R58(2026-03-15): 23/23 单元测试通过, PIT 合规"
+
+  forecast_surprise:
+    tier: T2
+    status: experimental
+    module: analyst_factors.py
+    function: compute_forecast_surprise_factor
+    description: "业绩预告类型评分（预增/预减/扭亏/首亏）"
+    asset_class: [A_stock]
+    data_source: data/cache/advanced/
+    evidence: "PEAD 效应在 A 股有学术支撑"
+    risk_notes: "季度性数据，信号间隔长"
+    iteration_log:
+      - "R58(2026-03-15): 23/23 单元测试通过, PIT 合规"
+
+  cb_delta_gamma:
+    tier: T2
+    status: proven
+    module: cb_delta_zone.py
+    function: compute_delta_proxy / compute_gamma_proxy
+    description: "CB Delta/Gamma 代理因子"
+    asset_class: [CB]
+    used_in_strategies: [cb_gamma_convexity, cb_stock_quality]
+
+  rsrs_timing:
+    tier: T2
+    status: experimental
+    module: rsrs_timing.py
+    function: compute_rsrs_series
+    description: "RSRS 阻力支撑择时指标"
+    asset_class: [A_stock, ETF]
+    risk_notes: "择时因子不稳定，需与选股因子配合"
+
+  # ── T3: 实验因子（待实现或初步探索）──
+
+  alpha101_set:
+    tier: T3
+    status: experimental
+    module: alpha101.py
+    function: compute_alpha101
+    description: "WorldQuant Alpha#101 因子集"
+    risk_notes: "大量因子需筛选, 计算量大"
+
+  alpha158_set:
+    tier: T3
+    status: experimental
+    module: alpha158.py
+    function: compute_alpha158
+    description: "Qlib Alpha158 因子集"
+    risk_notes: "生成因子后需 IC 筛选"
+
+  chips_flow:
+    tier: T3
+    status: experimental
+    module: alternative_factors.py
+    function: compute_chips_factors / compute_flow_factors
+    description: "筹码分布 + 资金流因子"
+    asset_class: [A_stock]
+
+  margin_factors:
+    tier: T3
+    status: experimental
+    module: alternative_factors.py
+    function: compute_margin_factors
+    description: "融资融券因子"
+    asset_class: [A_stock]
+
+  maturity_catalyst:
+    tier: T3
+    status: experimental
+    module: maturity_catalyst.py
+    function: compute_maturity_catalyst
+    description: "CB 到期催化因子"
+    asset_class: [CB]
+
+  # ── 已废弃/失败因子 ──
+
+  STR_10d_high_weight:
+    tier: T2
+    status: failed
+    description: "STR@15% 权重 + 10 日 lookback 在 A 股多因子中"
+    evidence: "R58: V2 回测 TO=12.53x, AR=-5.1%; V3 回测 TO=5.66x, AR=3.4%"
+    failure_reason: "信号翻转频率过高, 换手率灾难性增长"
+    iteration_log:
+      - "R58(2026-03-15): 两次回测均证明不可用，需大幅降权或加长 lookback"
+
+# ======================================================================
+# 第二层：策略池 (Strategy Pool)
+# ======================================================================
+# status: production / candidate / experimental / deprecated / failed
+# tier: S1(生产就绪) / S2(候选,接近达标) / S3(实验,需迭代)
+# ======================================================================
+
+strategy_pool:
+
+  # ── S1: 生产就绪（通过回测验证 + WF，可纳入组合）──
+
+  small_size:
+    tier: S1
+    status: production
+    asset_class: CB
+    registry_name: small_size
+    config: configs/cb_strategies/small_size_10y.yml
+    output: output/small_size_10y
+    metrics:
+      full_period: {ar_pct: 20.6, mdd_pct: 22.8, sr: 1.31, turnover: 6.5}
+      p22avg_pct: 20.4
+      yearly_2022: 26.5
+      yearly_2023: 16.6
+      yearly_2024: 18.2
+    strengths: "P22avg 最高(20.4%), SR>1.3, CB T+0 高流动性"
+    weaknesses: "2020 年 AR=87.8% 严重右尾依赖, 策略容量受限"
+    iteration_log:
+      - "R13(2026-02-24): 全量 SR=1.31, MDD=22.8%"
+      - "R57(2026-03-12): P22avg 全策略第一"
+      - "R58(2026-03-15): 纳入 3 层组合核心腿"
+
+  etf_cross_v3:
+    tier: S1
+    status: production
+    asset_class: ETF
+    registry_name: etf_rotation
+    config: configs/backtest/etf_cross_v3_11y.yml
+    output: output/etf_cross_v3_11y
+    metrics:
+      full_period: {ar_pct: 12.3, mdd_pct: 22.4, sr: 0.54, turnover: 6.3}
+      p22avg_pct: 19.6
+      yearly_2022: 41.9
+      yearly_2023: -1.3
+      yearly_2024: 18.3
+    strengths: "ETF 高流动性, 2022 年 +41.9% 表现突出, 与 CB 低相关(ρ=0.44)"
+    weaknesses: "2021 年 AR=-8.2%, SR 仅 0.54"
+    iteration_log:
+      - "R17(2026-03-08): ETF 轮动评估报告"
+      - "R58(2026-03-15): 与 CB 组合后 P22avg=20.1%"
+
+  a_stock_multifactor_baseline:
+    tier: S1
+    status: production
+    asset_class: A_stock
+    registry_name: a_stock_multifactor
+    config: configs/backtest/a_stock_multifactor_baseline_10y.yml
+    output: output/a_stock_multifactor_baseline_10y
+    metrics:
+      full_period: {ar_pct: 8.4, mdd_pct: 16.4, sr: 0.67, turnover: 0.69}
+      p22avg_pct: 4.6
+      yearly_2022: -4.2
+      yearly_2023: 4.9
+      yearly_2024: 13.1
+    strengths: "极低换手率(0.69x), 与 CB/ETF 负相关(ρ=-0.19~-0.33)"
+    weaknesses: "P22avg 仅 4.6%, 单独不达标"
+    role_in_combo: "天然对冲工具, 提升组合 SR"
+    iteration_log:
+      - "R56(2026-03-14): 首次 10y 回测, SR=0.67"
+      - "R58(2026-03-15): 确认组合层价值(负相关对冲)"
+
+  # ── S2: 候选策略（P22avg > 10%, 需进一步验证后可纳入组合）──
+
+  cb_stock_quality_v4a:
+    tier: S2
+    status: candidate
+    asset_class: CB
+    registry_name: cb_stock_quality
+    config: configs/cb_strategies/cb_stock_quality_v4a_fundamental_8y.yml
+    output: output/cb_stock_quality_v4a_fundamental_8y
+    metrics:
+      full_period: {ar_pct: 21.8, mdd_pct: 22.5, sr: 1.21, turnover: 6.2}
+      p22avg_pct: 14.7
+    strengths: "正股基本面选债, SR=1.21"
+    weaknesses: "与 small_size 高相关(ρ=0.94), 纳入组合分散化贡献有限"
+    next_action: "测试替代 small_size 的收益/风险权衡"
+
+  cb_adaptive_factor:
+    tier: S2
+    status: candidate
+    asset_class: CB
+    registry_name: cb_adaptive_factor
+    output: output/cb_adaptive_factor_8y
+    metrics:
+      full_period: {ar_pct: 18.4, sr: 1.11}
+      p22avg_pct: 10.4
+    strengths: "自适应因子权重, 自动调整市场风格"
+    weaknesses: "P22avg 10.4%, 低于 small_size"
+
+  double_low_plus_v4:
+    tier: S2
+    status: candidate
+    asset_class: CB
+    registry_name: double_low_plus
+    output: output/double_low_plus_v4_7y
+    metrics:
+      full_period: {ar_pct: 30.4, sr: 1.03}
+      p22avg_pct: 10.3
+    strengths: "全量期 AR=30.4%, 双低经典策略增强版"
+    weaknesses: "与 small_size 相关性待测"
+
+  four_pillar_portfolio:
+    tier: S2
+    status: candidate
+    asset_class: CB
+    registry_name: "(组合策略, 4 支柱)"
+    output: output/four_pillar_portfolio
+    metrics:
+      full_period: {ar_pct: 30.5, sr: 1.57}
+      p22avg_pct: 16.7
+    strengths: "SR=1.57 极高, 4 策略内部分散"
+    weaknesses: "均为 CB, 无跨资产分散"
+
+  lightweight_csi2000_oos:
+    tier: S2
+    status: candidate
+    asset_class: A_stock_ML
+    output: output/lightweight_csi2000_oos
+    metrics:
+      full_period: {ar_pct: 62.0, sr: 2.18}
+      p22avg_pct: 37.2
+    strengths: "P22avg 全策略最高(37.2%), SR=2.18"
+    weaknesses: "ML OOS 结果, 需验证前视偏差/过拟合风险; 换手率极高"
+    risk_notes: "极高收益通常伴随过拟合, 须 WF+PBO 验证"
+    next_action: "严格 WF/PBO 检验, 确认 IS→OOS 衰减 ≤50%"
+
+  low_vol_value_v2:
+    tier: S2
+    status: candidate
+    asset_class: A_stock
+    output: output/low_vol_value_v2_10y
+    metrics:
+      full_period: {ar_pct: 5.8, mdd_pct: 37.3, sr: 0.29, turnover: 3.07}
+      p22avg_pct: 8.5
+    strengths: "2024 年 +31.3%, P22avg=8.5%"
+    weaknesses: "全量 AR=5.8%, SR=0.29 偏低"
+
+  # ── S3: 实验策略（需重大改进或首次验证）──
+
+  a_stock_enhanced_v2:
+    tier: S3
+    status: failed
+    asset_class: A_stock
+    registry_name: a_stock_enhanced_v2
+    config: configs/backtest/a_stock_enhanced_v2_10y.yml
+    output: output/a_stock_enhanced_v2_10y
+    metrics:
+      full_period: {ar_pct: -5.1, mdd_pct: 58.8, sr: -0.28, turnover: 12.53}
+      p22avg_pct: -6.2
+    failure_reason: "8 因子 + 10 日调仓 → 换手率 12.53x, 交易成本消耗所有 alpha"
+    iteration_log:
+      - "R58(2026-03-15): 首次回测, 8 因子版本彻底失败"
+      - "R58(2026-03-15): V3 保守版(5因子+20日调仓)仍失败(TO=5.66x, AR=3.4%)"
+    next_action: "废弃当前版本, 从 baseline 出发做增量单因子 IC 测试"
+
+  ml_csi2000_oos_v2:
+    tier: S3
+    status: experimental
+    asset_class: A_stock_ML
+    output: output/ml_csi2000_oos_replay_11y_v2
+    metrics:
+      full_period: {ar_pct: 5.6, mdd_pct: 74.4, sr: 0.26, turnover: 24.7}
+      p22avg_pct: -2.1
+    weaknesses: "AR=5.6%, 换手率 24.7x, MDD=74.4%"
+    next_action: "降低换手率(增大 rebalance 间隔), 或换用轻量模型"
+
+# ======================================================================
+# 第三层：组合池 (Combination Pool)
+# ======================================================================
+# 组合针对不同风险偏好，全部纳入后续迭代选项。
+# risk_profile: aggressive / balanced / conservative
+# ======================================================================
+
+combination_pool:
+
+  plan_a_aggressive:
+    name: "激进型 — 最大化 P22avg"
+    risk_profile: aggressive
+    status: candidate
+    weights:
+      CB_small_size: 0.60
+      ETF_cross_v3: 0.40
+      A_stock_baseline: 0.00
+    expected_metrics:
+      ar_pct: 18.4
+      sr: 0.87
+      mdd_approx_pct: 6.5
+      p22avg_pct: 20.1
+    yearly_returns:
+      2016: -2.6
+      2017: 5.2
+      2018: -6.5
+      2019: 37.5
+      2020: 59.3
+      2021: 12.2
+      2022: 32.7
+      2023: 9.4
+      2024: 18.2
+    correlation_matrix:
+      CB_vs_ETF: 0.44
+    strengths:
+      - "P22avg=20.1%, 达到 20% 硬性目标"
+      - "仅 2 层, 执行简单"
+      - "2022 年 +32.7%, 新规后表现强"
+    weaknesses:
+      - "无 A 股对冲, SR=0.87 偏低"
+      - "2016/2018 年负收益"
+      - "2020 年 +59.3% 严重右尾依赖"
+    target_investor: "追求高收益, 可承受单年 -7% 回撤"
+    iteration_log:
+      - "R58(2026-03-15): 首次组合分析, 基于年度收益加权模拟"
+
+  plan_b_balanced:
+    name: "均衡型 — 最佳风险调整收益"
+    risk_profile: balanced
+    status: candidate
+    weights:
+      CB_small_size: 0.45
+      ETF_cross_v3: 0.30
+      A_stock_baseline: 0.25
+    expected_metrics:
+      ar_pct: 16.2
+      sr: 1.07
+      mdd_approx_pct: 5.9
+      p22avg_pct: 16.2
+    yearly_returns:
+      2016: 4.3
+      2017: 12.0
+      2018: -5.9
+      2019: 31.6
+      2020: 44.6
+      2021: 10.5
+      2022: 23.5
+      2023: 8.3
+      2024: 17.0
+    correlation_matrix:
+      CB_vs_ETF: 0.44
+      CB_vs_Astock: -0.33
+      ETF_vs_Astock: -0.19
+    strengths:
+      - "SR=1.07, 风险调整后最优"
+      - "3 层分散, 仅 2018 年负收益"
+      - "A 股负相关对冲, 降低尾部风险"
+    weaknesses:
+      - "P22avg=16.2%, 未达 20% 目标"
+      - "需管理 3 个策略, 执行复杂度更高"
+    target_investor: "追求稳健增长, 最大回撤控制在 6% 以内"
+    iteration_log:
+      - "R58(2026-03-15): 首次组合分析"
+
+  plan_c_conservative:
+    name: "保守型 — 最高夏普比率"
+    risk_profile: conservative
+    status: candidate
+    weights:
+      CB_small_size: 0.35
+      ETF_cross_v3: 0.25
+      A_stock_baseline: 0.40
+    expected_metrics:
+      ar_pct: 14.7
+      sr: 1.24
+      mdd_approx_pct: 5.6
+      p22avg_pct: 13.9
+    yearly_returns:
+      2016: 8.4
+      2017: 16.1
+      2018: -5.6
+      2019: 27.7
+      2020: 35.0
+      2021: 9.1
+      2022: 18.1
+      2023: 7.4
+      2024: 16.2
+    strengths:
+      - "SR=1.24, 全方案最高"
+      - "A 股 40% 权重充分对冲"
+      - "年化波动率最低"
+    weaknesses:
+      - "P22avg=13.9%, 远低于 20% 目标"
+      - "A 股腿 P22avg 仅 4.6%, 拖累组合"
+    target_investor: "风险厌恶型, 优先控制回撤和波动"
+    iteration_log:
+      - "R58(2026-03-15): 首次组合分析"
+
+  plan_d_cb_internal:
+    name: "CB 多策略内部组合"
+    risk_profile: aggressive
+    status: pending_analysis
+    weights:
+      CB_small_size: 0.40
+      CB_four_pillar: 0.30
+      CB_double_low_plus: 0.30
+    expected_metrics:
+      p22avg_pct: "(待计算 — CB 策略间高相关 ρ=0.89-0.99)"
+    strengths:
+      - "全 CB, T+0 高流动性"
+    weaknesses:
+      - "CB 策略间高相关, 分散化有限"
+    next_action: "计算 CB 内部策略年度相关性 + 组合模拟"
+    iteration_log:
+      - "R58(2026-03-15): 标记待分析"
+
+  plan_e_ml_enhanced:
+    name: "ML 增强型 — 高频 Alpha + 传统对冲"
+    risk_profile: aggressive
+    status: pending_validation
+    weights:
+      ML_csi2000_lightweight: 0.30
+      CB_small_size: 0.40
+      ETF_cross_v3: 0.30
+    expected_metrics:
+      p22avg_pct: "(待计算 — lightweight_csi2000 P22=37.2% 但需验证)"
+    strengths:
+      - "ML 策略 P22avg=37.2% 极高"
+    weaknesses:
+      - "ML 策略过拟合风险极高, 须 WF+PBO 验证"
+      - "ML 换手率可能极高"
+    next_action: "完成 lightweight_csi2000 的 WF/PBO 验证后再纳入"
+    iteration_log:
+      - "R58(2026-03-15): 标记待验证"
+
+# ======================================================================
+# 第四层：关键历史记录 (Key Historical Log)
+# ======================================================================
+
+history_log:
+
+  - date: "2026-02-24"
+    review: R13
+    event: "CB 组合年化确认"
+    finding: "全量期 AR=24.9%, 前瞻预期 10-13%, SR 单调下行 1.97→0.96"
+
+  - date: "2026-03-06"
+    review: R56
+    event: "系统就绪度评估 + A1-A9 基础设施完成"
+    finding: "就绪度 5.2→7.6/10, 全部 9 项基础设施任务完成"
+
+  - date: "2026-03-12"
+    review: R57
+    event: "多专家评审 — 数据盘点 + 策略方向"
+    finding: >
+      920K+ 文件, 107 策略, 37 因子; 3 个新因子实现;
+      small_size P22=20.4%, etf_cross P22=19.6%
+
+  - date: "2026-03-15"
+    review: R58
+    event: "A 股因子扩展 + 跨资产组合分析"
+    finding: >
+      V2(8因子)失败(TO=12.5x), V3(5因子)失败(TO=5.66x);
+      跨资产组合 CB60/ETF40 达 P22avg=20.1%;
+      3 种风险偏好组合方案建立; 备选池注册表创建
+
+  - date: "2026-03-15"
+    review: R59
+    event: "备选池建立 + 多专家组合优化评审"
+    finding: "(进行中)"
+
+  - date: "2026-03-25"
+    review: R99+
+    event: "全系统组合费率审计 + 扩展优化 + 严格分段验证"
+    finding: >
+      全系统 112 个组合目录扫描,发现 CB 旧费率(comm_min=0.1)
+      影响 ~60 个组合; fusion_r99 全部 MDD>98% 废弃;
+      用r99 ML+修正CB+v19重新搜索48378个权重组合,
+      最终 4 个 Tier A + 2 个 Tier B 通过全部硬性门槛;
+      SR=2.10-2.12, 全年正收益(Tier A), post-22 AR=27-29%
+
+# ======================================================================
+# 第五层：R99+ 验证组合池 (Verified Combo Pool)
+# ======================================================================
+# 所有组合使用 r99 ML + 修正后 CB + 验证 v19/ETF 数据
+# 详细验证：docs/reports/combo_pool_verification_20260325.md
+# ======================================================================
+
+verified_combo_pool:
+
+  C1_simple_2s:
+    tier: A
+    score: 9.0
+    status: verified
+    weights:
+      ml_csi2000_fund: 0.55
+      cb_stock_quality: 0.45
+    full_period: {ar: 0.352, sr: 2.12, mdd: 0.193, calmar: 1.82}
+    ex_2020: {ar: 0.300, sr: 1.97}
+    post_2022_08: {ar: 0.288, sr: 1.87}
+    dep_2020_pct: 14.8
+    neg_years: 0
+    strengths: "最简,SR最高,全年正收益,无相关性问题"
+    risks: "仅2策略,fund风险贡献~75%"
+
+  C2_ml2_cb:
+    tier: A
+    score: 8.8
+    status: verified
+    weights:
+      ml_csi2000_fund: 0.50
+      ml_csi1000_fund: 0.05
+      cb_stock_quality: 0.45
+    full_period: {ar: 0.346, sr: 2.12, mdd: 0.187, calmar: 1.85}
+    ex_2020: {ar: 0.293, sr: 1.97}
+    post_2022_08: {ar: 0.277, sr: 1.85}
+    dep_2020_pct: 15.4
+    neg_years: 0
+
+  C4_4way:
+    tier: A
+    score: 8.5
+    status: verified
+    weights:
+      ml_csi2000_fund: 0.35
+      v19_hgro: 0.15
+      cb_stock_quality: 0.45
+      etf_cross_v3: 0.05
+    full_period: {ar: 0.349, sr: 2.11, mdd: 0.181, calmar: 1.92}
+    ex_2020: {ar: 0.287, sr: 1.88}
+    post_2022_08: {ar: 0.288, sr: 1.82}
+    dep_2020_pct: 17.8
+    neg_years: 0
+    strengths: "4策略分散,MDD低,全年正收益"
+
+  C5_5way:
+    tier: A
+    score: 8.3
+    status: verified
+    weights:
+      ml_csi2000_fund: 0.35
+      ml_csi1000_fund: 0.05
+      v19_hgro: 0.10
+      cb_stock_quality: 0.45
+      etf_cross_v3: 0.05
+    full_period: {ar: 0.338, sr: 2.10, mdd: 0.177, calmar: 1.91}
+    ex_2020: {ar: 0.277, sr: 1.89}
+    post_2022_08: {ar: 0.269, sr: 1.79}
+    dep_2020_pct: 18.1
+    neg_years: 0
+    strengths: "最大分散,MDD最低17.7%"
+
+  C3_v19_blend:
+    tier: B
+    score: 7.5
+    status: verified_minor_issue
+    weights:
+      ml_csi2000_fund: 0.40
+      v19_hgro: 0.15
+      cb_stock_quality: 0.45
+    full_period: {ar: 0.360, sr: 2.11, mdd: 0.190}
+    issue: "2022年AR=-2.0%(负收益)"
+
+  C7_v19_ml_cb_full:
+    tier: B
+    score: 7.3
+    status: verified_minor_issue
+    weights:
+      ml_csi2000_fund: 0.35
+      ml_csi1000_fund: 0.05
+      v19_hgro: 0.15
+      cb_stock_quality: 0.45
+    full_period: {ar: 0.354, sr: 2.11, mdd: 0.185}
+    issue: "2022年AR=-1.2%(微亏)"
+
+
+
+
+

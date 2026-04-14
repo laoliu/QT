@@ -1,0 +1,122 @@
+# PEAD (Post-Earnings Announcement Drift) 事件驱动策略回测配置
+# 策略：捕捉财报超预期后的价格漂移获取超额
+# 核心因子：SUE (45%) + 盈利增长 (20%) + 质量 (15%) + 动量 (10%) + 低波动(10%)
+# 股票池：全 A 股（排除 ST/退市/次新）
+# 频率：日频数据 + NBO 成交
+
+run:
+  mode: backtest
+  start_date: "2020-01-01"
+  end_date: "2025-09-05"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"
+  equity_data:
+    stock_basic: true
+    daily_basic: true
+    fina_indicator: true   # 必须：ROE、EPS 等
+    income: true           # 盈利增长
+  pit_data:
+    enabled: true          # 启用 PIT 财务数据
+    ann_date_aligned: true # 按公告日对齐（避免前视偏差）
+
+market:
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    boards:
+      - "A"
+
+frequency:
+  data_frequency: "1d"
+  matching_resolution: "1d"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe_policy:
+  name: "pead_event"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+  filters:
+    min_listed_days: 120   # 排除次新（PEAD 需稳定历史）
+    min_circ_mv: 200000    # 最小 20 亿（万元），保证流动性
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 1000     # 最小日成交额 1000 万
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+slippage_model:
+  name: "fixed_bps"
+  bps: 5
+
+initial_capital: 1000000
+
+strategy:
+  name: "pead_event"
+  type: "event_driven"
+  parameters:
+    top_k: 20
+    rebalance_days: 20     # 财报季后持有约 20 天
+    buffer_k: 5
+    stop_loss_pct: 0.15
+    cash_reserve_pct: 0.05  # 现金缓冲比例（显式声明，避免依赖默认值）
+
+    # PEAD 特有参数
+    min_sue: 0.0           # 仅取正向超预期
+    min_roe: 3.0           # ROE 下限（排除盈利基数极低的伪超预期）
+    earnings_growth_field: "dt_netprofit_yoy"
+
+    # 因子权重
+    weight_sue: 0.45             # SUE 核心
+    weight_earnings_growth: 0.20 # 盈利增长确认
+    weight_quality: 0.15         # ROE 质量等
+    weight_momentum: 0.10        # 趋势确认
+    weight_volatility: 0.10      # 低波动偏好
+
+    # 因子参数
+    momentum_lookback: 20
+    volatility_lookback: 20
+
+risk_constraints:
+  max_single_position_pct: 0.05
+  max_drawdown_pct: 0.20
+
+report:
+  benchmark: "000300.SH"
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+  universe_summary: true
+  output_dir: "reports/pead_event"
+

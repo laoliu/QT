@@ -1,0 +1,114 @@
+# 最优 4 策略组合 — Paper Trading 配置
+# ============================================================
+# 用法: python -m aipha paper --config configs/paper/cb_optimal_portfolio.yml
+#
+# 组合: triple_low + new_small + small_size_enh + cb_ultra_noage (各 25%)
+# 回测 Sharpe 1.975, 年化 24.36%, 回撤 11.83%
+# ============================================================
+
+paper_engine:
+  strategy_name: "multi_strategy"
+
+  # 数据源
+  market_type: "convertible_bond"
+  poll_interval: 3.0
+  bar_interval_sec: 60
+
+  # 资金与交易规则
+  initial_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+  fill_model:
+    name: "next_bar_open"
+    volume_constraint:
+      max_participation_rate: 0.10
+      lot_size: 10
+
+  # 状态持久化
+  state_dir: "data/paper_state/optimal_portfolio"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/optimal_portfolio"
+
+  # 动态标的池
+  universe:
+    enabled: true
+    max_price: 200.0
+    min_amount: 0.5
+    refresh_interval_sec: 3600
+
+  # 监控告警
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.12
+  alert_daily_loss_threshold: 0.03
+  alert_data_stale_seconds: 120.0
+  alert_inactivity_minutes: 120.0
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/optimal_portfolio"
+    write_interval_sec: 60
+
+# 多策略配置
+multi_strategy:
+  total_capital: 1000000
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+  strategies:
+    - name: triple_low
+      weight: 0.25
+      max_drawdown: 0.20
+      params:
+        top_k: 20
+        rebalance_days: 1
+        max_price: 130.0
+        max_premium: 35.0
+        min_turnover: 20.0
+        stop_loss_pct: 0.10
+        lot_size: 10
+
+    - name: new_small
+      weight: 0.25
+      max_drawdown: 0.20
+      params:
+        top_k: 10
+        rebalance_days: 5
+        max_age_days: 90
+        min_age_days: 5
+        max_issue_size: 50000.0
+        max_price: 130.0
+        stop_loss_pct: 0.15
+        lot_size: 10
+
+    - name: small_size_enhanced
+      weight: 0.25
+      max_drawdown: 0.20
+      params:
+        top_k: 20
+        rebalance_days: 1
+        max_price: 115.0
+        max_issue_size: 30000.0
+        min_issue_size: 3000.0
+        min_turnover: 50.0
+        stop_loss_pct: 0.10
+        lot_size: 10
+
+    - name: cb_ultra_noage
+      weight: 0.25
+      max_drawdown: 0.25
+      params:
+        top_k: 5
+        rebalance_days: 1
+        max_price: 200.0
+        max_issue_size: 20000.0
+        min_issue_size: 2000.0
+        stop_loss_pct: 0.10
+        lot_size: 10

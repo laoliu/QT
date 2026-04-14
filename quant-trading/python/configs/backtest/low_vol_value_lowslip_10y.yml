@@ -1,0 +1,95 @@
+# 低波价值 — 真实费率+真实滑点版 10年回测
+# HS300大盘股: 1M资金, 每只~33K, 参与率<0.05%
+# 实际买卖价差: 1-2bps, 市场冲击: 接近零
+# 佣金: 万0.86(用户实际), 滑点: base_bps=2, impact=5
+# 对标original 12y(万一, impact=0.1): AR=12.7%
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.000086}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  output_dir: output/low_vol_value_lowslip_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 2.0
+  impact_coeff: 5.0
+  fallback_bps: 3.0
+  max_bps: 15.0
+
+strategy:
+  name: low_vol_value
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.25
+    trailing_stop_pct: 0.0
+    buffer_k: 10
+    max_single_pct: 0.05
+    min_mv: 500000.0
+    inverse_vol_weighting: true
+    max_industry_pct: 0.20
+    weight_volatility: 0.35
+    weight_value: 0.30
+    weight_quality: 0.20
+    weight_turnover: 0.15
+    value_ep_weight: 0.50
+    value_bp_weight: 0.50
+    min_roe: 5.0
+    max_pe: 50.0
+    max_pb: 10.0
+    ewma_halflife: 20
+    volatility_lookback: 60
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH

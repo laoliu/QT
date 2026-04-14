@@ -1,0 +1,34 @@
+# CSI2000 滚动重训管线配置
+# 由 scripts/retrain_csi2000_rolling.py 读取
+# ============================================================
+
+retrain:
+  universe: csi2000
+  model_type: lightgbm
+  train_start: "2017-01-03"
+  train_years: 3
+  predict_months: 3
+  forward_days: 5
+  deep_fundamental: true
+
+  # 模型目录
+  model_dir: "models/ml_csi2000_lgb_fund"
+  archive_dir: "models/_archive"
+
+  # 重训触发条件
+  triggers:
+    psi_threshold: 0.20         # PSI 超此值触发
+    max_age_days: 90            # 模型超龄触发
+    ic_threshold: 0.10          # 新模型 IC 下限
+    ic_improvement_min: -0.005  # 允许 IC 微降幅度
+
+  # 增量训练 (P1-1): WF 折间 warm-start
+  enable_incremental: false     # 设为 true 启用增量训练
+
+  # LightGBM 正则化参数
+  lgb_params:
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8

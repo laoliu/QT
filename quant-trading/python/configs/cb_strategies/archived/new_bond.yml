@@ -1,0 +1,115 @@
+# 次新债策略 — 推荐部署配置
+# ============================================================
+# 验证日期: 2025-01
+# 数据范围: 2022-01-04 ~ 2024-12-31 (726 交易日)
+# 成交模型: next_bar_open (NBO)
+#
+# 验证指标 (NBO, 5bps, reb=5):
+#   年化收益: 12.75% | 最大回撤: 15.93% | Sharpe: 0.852
+#   交易次数: 307 | 全年正收: 2022:19.44% 2023:6.35% 2024:7.68%
+#
+# OOS 验证 (2025-02, 训练:2022-2023, 测试:2024):
+#   IS: 年化=11.05% Sharpe=0.842 | OOS: 年化=15.58% Sharpe=0.827
+#   OOS 比 IS 更好 (衰减=-41%), 策略具有样本外泛化能力
+#
+# 参数变更 (2025-02): reb=7→5
+#   reb=7 OOS 仅 4.81% (Sharpe=0.250), reb=5 OOS 15.58% (Sharpe=0.827)
+#   精细扫描也确认 reb=5 是全局最优
+#
+# 策略逻辑:
+#   买入上市时间 ≤ max_age_days 的"次新"可转债中
+#   价格最低的 top_k 只，等权持有，定期轮动
+# ============================================================
+
+name: "new_bond"
+description: >
+  次新债效应策略 — 买入新上市低价可转债。
+  利用次新债的流动性溢价与关注度效应获取超额收益。
+  稳健参数 (k=10, reb=5) — OOS 验证 (2024) Sharpe=0.827, Calmar=1.108。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "new_bond"
+  params:
+    top_k: 10
+    rebalance_days: 5             # OOS 验证最优: reb=5 (vs reb=7 OOS 仅 4.81%)
+    max_age_days: 60              # 上市 ≤60 天的"次新"
+    min_age_days: 5               # 排除上市首日波动
+    max_price: 120.0              # 价格上限
+    min_turnover: 50.0            # 最低成交额 50 万
+    min_issue_size: 0.0            # 发行规模下限 (静态字段, 无前视偏差)
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5             # 可转债无最低佣金
+  stamp_tax_rate: 0.0             # 可转债免印花税
+  transfer_fee_rate: 0.0          # 可转债无过户费
+  slippage_bps: 5.0               # 滑点 5bps
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0          # CB 最低买卖价差
+    impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+    fallback_bps: 8.0      # 无成交量数据时的回退值
+    max_bps: 40.0          # 单笔滑点上限
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/new_bond"
+
+# ============================================================
+# 验证结果
+# ============================================================
+verified_metrics:
+  annual_return_pct: 12.75
+  max_drawdown_pct: 15.93
+  sharpe: 0.852
+  total_trades: 307
+  capacity_test: "10万~1000万无明显衰减"
+  slippage_robust: true           # 0~30bps: 14.94%~11.69%
+  all_years_positive: true        # 2022:19.44% 2023:6.35% 2024:7.68%
+  oos_validation:
+    train_period: "2022-01-04 ~ 2023-12-29"
+    test_period: "2024-01-02 ~ 2024-12-31"
+    is_annual_return_pct: 11.05
+    oos_annual_return_pct: 15.58
+    oos_sharpe: 0.827
+    oos_calmar: 1.108
+    oos_max_dd_pct: 14.06
+    decay_pct: -41.0
+
+# ============================================================
+# 已知风险
+# ============================================================
+risks:
+  - "候选池稀疏: 部分月份仅0~5只候选,可能空仓"
+  - "数据仅3年: 样本外验证不足"
+  - "2024年表现趋弱: 7.68%远低于2022的19.44%"
+  - "min_remain_size=0 实质上禁用了规模过滤, 小规模债流动性风险未控制"

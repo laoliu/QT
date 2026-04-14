@@ -249,7 +249,7 @@ function runDailyCompositePick(){
   setDailyPickLoading(true,'正在执行：策略筛选 → 策略回测排行 → 合并候选 → 8股内回测排行（约1-4分钟）…');
   toast('正在运行每日综合选股…');
 
-  api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:900000})
+  api('/quant/admin/api/daily-picks',{method:'POST',body:JSON.stringify(body),_timeout:1800000})
     .then(function(d){
       _dailyPickRunning=false;
       if(d.error){

@@ -1,0 +1,49 @@
+# G6-3 价值成长切换 (Value-Growth Switch) 12 年回测
+backtest:
+  start_date: "2014-01-02"
+  end_date:   "2025-06-01"
+  initial_capital: 1_000_000
+  benchmark: "000905.SH"
+
+cost_model:
+  commission_rate: 8.54e-05  # 13.1 MarketRulesCNEquity
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005  # 13.1 MarketRulesCNEquity (2023-08-28+; auto_schedule handles pre-2023)
+  transfer_fee_rate: 1.0e-05  # §13.1 MarketRulesCNEquity
+
+fill_model:
+  method: next_bar_open
+
+slippage:
+  model: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+
+strategy:
+  name: value_growth_switch
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.18
+    trailing_stop_pct: 0.15
+    buffer_k: 8
+    max_single_pct: 0.05
+    min_mv: 300_000.0
+    max_industry_pct: 0.20
+
+    value_weight_ep: 0.35
+    value_weight_bp: 0.25
+    value_weight_quality: 0.25
+    value_weight_vol: 0.15
+    growth_weight_earnings: 0.35
+    growth_weight_momentum: 0.25
+    growth_weight_quality: 0.25
+    growth_weight_size: 0.15
+    pe_median_high: 35.0
+    pe_median_low: 20.0
+    max_pe: 100.0
+    momentum_lookback: 60

@@ -1,0 +1,109 @@
+# Paper Trading 配置 — 四支柱 ML+CB+ETF 组合
+# 用法: python -m aipha paper --config configs/paper/four_pillar_ml.yml
+#
+# R56 A3 更新: 替换 ML-A (CSI2000→CSI1000) 解决相关性>0.75问题
+# 原版: ML-A=CSI2000_10d_r40(21.8%) + ML-B=CSI2000_fund(22.4%) corr>0.75
+# 新版: ML-A=CSI1000_fund(20.0%) + ML-B=CSI2000_fund(22.0%) 不同universe降低相关性
+#
+# ML-A (CSI1000 LGB Fund): 20.0%  [R56 A3: 替换自 CSI2000 10d_r40]
+# ML-B (CSI2000 LGB Fund): 22.0%
+# CB (cb_stock_quality_v3): 33.0%  [略微增加填补 ML-A 降权]
+# ETF (etf_cross_v3): 25.0%
+#
+# P1 统计验证: PBO=0.20 PASS, DSR(FourPillar) p=0.005 PASS
+# P3 容量: 保守 100M, 当前 1M 无容量压力
+# P4 ERC: 待权重更新后重新验证
+
+paper_engine:
+  strategy_name: "four_pillar_ml_erc"
+  description: >
+    四支柱组合 (ERC 最优权重) — ML-A + ML-B + CB + ETF
+    R46 五阶段验证后推荐配置
+
+  # 数据源（多资产）
+  market_type: "multi_asset"  # A 股 + CB + ETF
+  poll_interval: 10.0
+  bar_interval_sec: 60
+
+  # 资金与交易规则
+  initial_capital: 1000000.0
+  lot_size: 100
+  t_plus_n: 1
+  commission_rate: 0.0000854  # 多资产混合费率（CB万1×60% + A股万2.5×40%），非单一资产§13.1预设
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  slippage_bps: 5.0  # §13.1 混合资产取CB最小值5bps作为下限
+  impact_coeff: 10.0
+
+  # 组合权重 (R56 A3: 去相关更新)
+  portfolio_weights:
+    ml_a: 0.200
+    ml_b: 0.220
+    cb: 0.330
+    etf: 0.250
+
+  # 再平衡
+  rebalance_freq_days: 20
+  rebalance_threshold: 0.05  # 偏离 >5% 触发再平衡
+
+  # 风控
+  max_drawdown_alert: 0.12
+  max_daily_loss_alert: 0.04
+  max_single_stock_pct: 0.05
+  max_industry_pct: 0.30
+  vol_target: 0.20
+
+  # 状态持久化
+  state_dir: "data/paper_state/four_pillar_ml"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/four_pillar_ml"
+
+  # 监控
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.12
+  alert_daily_loss_threshold: 0.04
+  alert_data_stale_seconds: 300.0
+  alert_inactivity_minutes: 480.0
+
+  # 指标
+  metrics_enabled: true
+  metrics:
+    export_interval_sec: 60
+    export_format: "json"
+    export_dir: "data/metrics/four_pillar_ml"
+
+# 子策略配置
+pillars:
+  ml_a:
+    name: "ML-A (CSI1000 LGB Fund)"
+    model_dir: "models/ml_csi1000_lgb_fund"
+    market_type: "a_stock"
+    top_k: 50
+    rebalance_days: 5
+    vol_target: 0.25
+    universe: "csi1000"
+    weight: 0.200
+
+  ml_b:
+    name: "ML-B (CSI2000 LGB Fund)"
+    model_dir: "models/ml_csi2000_lgb_fund"
+    market_type: "a_stock"
+    top_k: 50
+    rebalance_days: 5
+    vol_target: 0.20
+    universe: "csi2000"
+    weight: 0.220
+
+  cb:
+    name: "CB Stock Quality V3"
+    strategy_name: "cb_stock_quality_v3"
+    market_type: "convertible_bond"
+    top_k: 15
+    rebalance_days: 5
+    weight: 0.330
+
+  etf:
+    name: "ETF Cross Asset V3"
+    strategy_name: "etf_cross_v3"
+    market_type: "etf"
+    weight: 0.250

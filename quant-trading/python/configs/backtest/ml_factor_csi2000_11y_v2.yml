@@ -1,0 +1,85 @@
+# CSI2000 ML OOS Replay — 11年配置 v2（放宽组合回撤限制）
+# ============================================================
+# v1 问题: max_drawdown_pct=0.5 在2015牛市后回撤超50%触发熔断
+#   -> 2019H2~2025六年零交易, 无法评估模型在近期的实际表现
+# v2 修改: max_drawdown_pct 放宽至 0.90, 保留个股止损/追踪止损
+# ============================================================
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0001}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_oos_replay_11y_v2
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.90
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.02
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标
+  # R94: MDD 梯度减仓 + 波动率目标已禁用 (death spiral root cause)
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 8.0
+  impact_coeff: 60.0
+  fallback_bps: 15.0
+  max_bps: 100.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 5
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi2000_lgb_fund_11y
+    oos_predictions_path: models/ml_csi2000_lgb_fund_11y/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    purge_days: 10

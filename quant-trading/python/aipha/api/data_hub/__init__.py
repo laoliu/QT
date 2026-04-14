@@ -1,0 +1,1 @@
+"""Data hub API router."""

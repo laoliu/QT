@@ -1,0 +1,75 @@
+# 三低策略 v3 — 8年回测 (降低调仓频率 + 保留小盘加分)
+# ============================================================
+# v2 的问题：rebalance_days=1 导致 linear_impact 下换手成本过高 (SR=0.14)
+# v3 改进：
+#   - rebalance_days 从 1 改为 5（周频调仓）
+#   - 恢复 low_size_bonus=0.05（轻微小盘偏好，低于 v1 的 0.1）
+#   - 放宽 max_price 到 135 增大选择空间
+# ============================================================
+
+name: "triple_low_v3_8y"
+description: >
+  三低策略 v3 — 低价格 + 低溢价率 + 低转债价值综合评分。
+  周频调仓以控制换手成本，轻微小盘偏好。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "triple_low"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    buffer_k: 2
+    max_price: 135.0
+    min_price: 0.0
+    max_premium: 40.0
+    min_issue_size: 0.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    price_weight: 0.35
+    premium_weight: 0.35
+    cb_value_weight: 0.30
+    low_size_threshold: 30000.0
+    low_size_bonus: 0.05
+    stop_loss_pct: 0.10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    lot_size: 10
+    equal_weight: true
+    exclude_called: true
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/triple_low_v3_8y"
+
+report:
+  benchmark: "000300.SH"

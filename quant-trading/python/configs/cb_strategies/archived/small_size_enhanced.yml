@@ -1,0 +1,125 @@
+# 增强型小规模策略 �?回测配置
+
+# ============================================================
+
+# 策略思路: 在小规模基础上增加溢价率和价格动量因�?
+
+# 多维度加权打分选股, 追求更稳健的超额收益�?
+
+
+name: "small_size_enhanced"
+
+description: >
+
+  增强型小规模可转债策�?�?综合发行规模(50%)、溢价率(30%)�?
+  价格动量(20%) 三因子打分排序�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2022-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "small_size_enhanced"
+
+  params:
+
+    top_k: 20
+
+    rebalance_days: 1
+
+    max_price: 115.0
+
+    max_issue_size: 30000.0       # 万元 (3亿以�?
+
+    min_issue_size: 3000.0        # 万元
+
+    min_turnover: 50.0
+
+    min_days_to_maturity: 60
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10             # C-7: 收紧止损
+
+    trailing_stop_pct: 0.05          # C-7: 追踪止损
+
+    buffer_k: 5
+
+    lot_size: 10
+
+    size_weight: 0.50
+
+    premium_weight: 0.30
+
+    momentum_weight: 0.20
+
+    max_premium: 50.0             # 溢价率上�?(%)
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  min_commission: 5  # §13.1 CB minimum
+
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+
+
+# ------ 滑点 ------
+
+slippage:
+  model: "linear_impact"
+  base_bps: 5.0          # CB 最低买卖价差
+  impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+  fallback_bps: 8.0      # 无成交量数据时的回退值
+  max_bps: 40.0          # 单笔滑点上限
+
+
+
+# ------ 资金 ------
+
+capital:
+
+  initial: 1000000.0
+
+  currency: "CNY"
+

@@ -1,0 +1,73 @@
+# CB低波动均值回归策略 — 7年回测配置 (v1)
+# 经济学理论: 低波动异象(Ang 2006) + 有界均值回归(post-2022 ±20%限制)
+# 目标: 与现有策略低相关(reversal信号), post-2022稳定alpha
+
+name: "cb_low_vol_reversion_v1_7y"
+description: >
+  可转债低波动均值回归策略 v1: 低波动率+短期反转+债底距离+低溢价.
+  4因子排名加权, 周频调仓. 与动量/价值策略低相关.
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_low_vol_reversion"
+  params:
+    top_k: 15
+    rebalance_days: 5         # 周频
+    max_price: 130.0          # 聚焦债性转债
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+    buffer_k: 5
+    max_premium: 50.0
+    use_age_filter: true
+    min_age_days: 5
+    # 因子权重
+    weight_low_vol: 0.30
+    weight_reversal: 0.30
+    weight_bond_floor: 0.25
+    weight_premium: 0.15
+    # 因子参数
+    vol_lookback: 20
+    reversal_lookback: 10
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.50
+  enable_audit_log: true
+
+random_seed: 42
+output_dir: "output/cb_low_vol_reversion_v1_7y"

@@ -1,0 +1,125 @@
+# 参考组合五因子策略 V7 — ROE 过滤 + 小市值因子 + IC 加权
+# ============================================================
+# 核心改进 (基于 R85 诊断):
+#   1. ROE 从排名因子改为入池过滤 (IC=-0.01, A股高ROE已被定价)
+#   2. 增加小市值因子 weight_size=0.15 (对标竞品40-50%小盘alpha)
+#   3. IC 加权: BP(28%) > LV(22%) > EP(20%) > DY(15%) > Size(15%)
+#   4. 扁平模式 (quadrant 模式 AR 损失 7pts)
+#   5. 降低 min_mv 到 50亿, 扩大选股范围
+#   6. impact_coeff 降至 15 (CSI800+ 流动性充足)
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  cache_dir: data/cache/tushare
+  provider: tushare_pro
+  snapshot: latest
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 100
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - sortino
+    - turnover
+    - win_rate
+    - cost_impact
+  output_dir: output/ref_5f_v7_11y
+  universe_summary: true
+
+risk_constraints:
+  circuit_breaker_enabled: false
+  market_regime_enabled: false
+  max_drawdown_pct: 0.7
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.0
+  trailing_stop_pct: 0.0
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2015-01-05'
+  timezone: Asia/Shanghai
+
+slippage_model:
+  base_bps: 2.0
+  fallback_bps: 8.0
+  impact_coeff: 15.0
+  max_bps: 50.0
+  name: linear_impact
+
+strategy:
+  name: reference_five_factor
+  parameters:
+    base_index: 000906.SH
+    quadrant_enabled: false
+    top_k: 30
+    rebalance_days: 21
+    # IC-weighted (无ROE): BP(28%) LV(22%) EP(20%) DY(15%) Size(15%)
+    weight_bp: 0.28
+    weight_ep: 0.20
+    weight_lv: 0.22
+    weight_dy: 0.15
+    weight_roe: 0.0
+    weight_size: 0.15
+    # ROE 作为入池过滤条件 (IC=-0.01不适合排名)
+    roe_as_filter: true
+    min_roe: 5.0
+    # 动量因子 (默认不启用)
+    weight_momentum: 0.0
+    inverse_vol_weighting: false
+    min_listed_days: 120
+    min_mv: 50000.0
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    max_industry_pct: 0.12
+    min_industries: 6
+    cash_reserve_pct: 0.03
+    stop_loss_pct: 0.0
+    buffer_k: 10
+    lv_lookback: 60
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+    - ST
+    - DELISTING
+    - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml

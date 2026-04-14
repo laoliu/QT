@@ -1,0 +1,75 @@
+# 挖掘因子 CSI2000 回测 — Top-8 ICIR 加权因子组合
+# ============================================================
+# 使用 precompute_mined_signals.py 预计算的多因子合成信号
+# 通过 ml_factor 策略的 OOS 回放模式运行回测
+# 对齐 §1.2 A股策略 ≥10 年回测要求 (2015-01-05 ~)
+# ============================================================
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0000854}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/mined_factor_csi2000_11y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标已禁用 (death spiral root cause)
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 10.0
+  fallback_bps: 15.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 5
+    # 使用预计算的挖掘因子信号
+    oos_predictions_path: output/mined_factor_signals.parquet
+    # ML 参数 (不使用，但需要声明)
+    model_objective: regression
+    model_type: lightgbm
+    model_path: ''
+    train_years: 3
+    predict_months: 3
+    forward_days: 5

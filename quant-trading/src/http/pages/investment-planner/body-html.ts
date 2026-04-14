@@ -1187,6 +1187,138 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="mean-reversion" checked style="vertical-align:middle;margin-right:4px">均值回归</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-confirmation" checked style="vertical-align:middle;margin-right:4px">MACD确认</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-kdj" checked style="vertical-align:middle;margin-right:4px">KDJ随机</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">组合/增强</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="composite" checked style="vertical-align:middle;margin-right:4px">综合投票</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="enhanced-composite" checked style="vertical-align:middle;margin-right:4px">增强综合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="rsi-filter" checked style="vertical-align:middle;margin-right:4px">RSI动量过滤</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="rsi-enhanced" checked style="vertical-align:middle;margin-right:4px">RSI增强选股</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="rsi-macd-combined" checked style="vertical-align:middle;margin-right:4px">RSI+MACD组合</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">扩展技术指标</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="trix-momentum" checked style="vertical-align:middle;margin-right:4px">TRIX动量</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="mfi-oscillator" checked style="vertical-align:middle;margin-right:4px">MFI资金流</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="aroon-trend" checked style="vertical-align:middle;margin-right:4px">阿隆趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cmf-divergence" checked style="vertical-align:middle;margin-right:4px">蔡金资金流背离</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="elder-ray" checked style="vertical-align:middle;margin-right:4px">Elder Ray力量</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="supertrend" checked style="vertical-align:middle;margin-right:4px">超级趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="hull-ma-crossover" checked style="vertical-align:middle;margin-right:4px">Hull MA交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="dema-crossover" checked style="vertical-align:middle;margin-right:4px">DEMA交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="triple-ma-crossover" checked style="vertical-align:middle;margin-right:4px">三重均线交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ma-envelope" checked style="vertical-align:middle;margin-right:4px">MA包络</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="connors-rsi" checked style="vertical-align:middle;margin-right:4px">Connors RSI</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="kama-trend" checked style="vertical-align:middle;margin-right:4px">KAMA自适应趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="demarker" checked style="vertical-align:middle;margin-right:4px">DeMARK指标</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">CTA经典</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-trend" checked style="vertical-align:middle;margin-right:4px">CTA趋势跟踪</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="dual-thrust" checked style="vertical-align:middle;margin-right:4px">Dual Thrust双推力</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="turtle-breakout" checked style="vertical-align:middle;margin-right:4px">海龟突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-trend" checked style="vertical-align:middle;margin-right:4px">MACD趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="bollinger-breakout" checked style="vertical-align:middle;margin-right:4px">布林带突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="keltner-channel" checked style="vertical-align:middle;margin-right:4px">肯特纳通道</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="r-breaker" checked style="vertical-align:middle;margin-right:4px">R-Breaker反转</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="aberration" checked style="vertical-align:middle;margin-right:4px">标准差偏离</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ttm-squeeze" checked style="vertical-align:middle;margin-right:4px">TTM挤压</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="dmi-adx" checked style="vertical-align:middle;margin-right:4px">DMI+ADX</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="parabolic-sar" checked style="vertical-align:middle;margin-right:4px">抛物线SAR</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="volatility-target" checked style="vertical-align:middle;margin-right:4px">波动率目标</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="momentum-rotation" checked style="vertical-align:middle;margin-right:4px">动量轮动</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="obv-trend" checked style="vertical-align:middle;margin-right:4px">OBV趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ichimoku" checked style="vertical-align:middle;margin-right:4px">一目均衡表</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="grid-trading" checked style="vertical-align:middle;margin-right:4px">网格交易</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="multi-ma-convergence" checked style="vertical-align:middle;margin-right:4px">多均线收敛</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="donchian-mid-reversion" checked style="vertical-align:middle;margin-right:4px">唐奇安中线回归</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="pivot-point" checked style="vertical-align:middle;margin-right:4px">枢轴点</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="chandelier-exit" checked style="vertical-align:middle;margin-right:4px">烛台止损</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="roc-momentum" checked style="vertical-align:middle;margin-right:4px">ROC动量</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cci-divergence" checked style="vertical-align:middle;margin-right:4px">CCI背离</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ema-crossover" checked style="vertical-align:middle;margin-right:4px">EMA均线交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="atr-trailing" checked style="vertical-align:middle;margin-right:4px">ATR追踪止损</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="stochastic-rsi" checked style="vertical-align:middle;margin-right:4px">随机RSI</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-histogram-reversal" checked style="vertical-align:middle;margin-right:4px">MACD柱状反转</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="bollinger-bandwidth" checked style="vertical-align:middle;margin-right:4px">布林带带宽</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">CTA扩展</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-awesome-oscillator" checked style="vertical-align:middle;margin-right:4px">AO振荡器</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-elder-force" checked style="vertical-align:middle;margin-right:4px">Elder力量指数</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-demarker" checked style="vertical-align:middle;margin-right:4px">CTA DeMARK</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-ultimate-oscillator" checked style="vertical-align:middle;margin-right:4px">终极振荡器</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-adx-breakout" checked style="vertical-align:middle;margin-right:4px">ADX突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-trix-trend" checked style="vertical-align:middle;margin-right:4px">TRIX趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-hull-ma-trend" checked style="vertical-align:middle;margin-right:4px">Hull MA趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-mass-index" checked style="vertical-align:middle;margin-right:4px">质量指数</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-chaikin-oscillator" checked style="vertical-align:middle;margin-right:4px">蔡金振荡器</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-coppock" checked style="vertical-align:middle;margin-right:4px">Coppock曲线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-rsi-divergence" checked style="vertical-align:middle;margin-right:4px">RSI背离</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-volume-breakout" checked style="vertical-align:middle;margin-right:4px">成交量突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-adaptive-ma" checked style="vertical-align:middle;margin-right:4px">自适应均线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-ma-envelope" checked style="vertical-align:middle;margin-right:4px">CTA MA包络</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-connors-rsi" checked style="vertical-align:middle;margin-right:4px">CTA Connors RSI</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-aroon-oscillator" checked style="vertical-align:middle;margin-right:4px">阿隆振荡器</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-mfi-trend" checked style="vertical-align:middle;margin-right:4px">MFI趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-dema-crossover" checked style="vertical-align:middle;margin-right:4px">CTA DEMA交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-triple-ma" checked style="vertical-align:middle;margin-right:4px">CTA三重均线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-supertrend" checked style="vertical-align:middle;margin-right:4px">CTA超级趋势</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">T0日内</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="t0-day-trading" checked style="vertical-align:middle;margin-right:4px">T0日内交易</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="t0-enhanced" checked style="vertical-align:middle;margin-right:4px">T0增强</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python趋势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ema-cross" checked style="vertical-align:middle;margin-right:4px">EMA均线交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="adx-trend" checked style="vertical-align:middle;margin-right:4px">ADX趋势强度</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="aroon" checked style="vertical-align:middle;margin-right:4px">阿隆指标</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="vortex" checked style="vertical-align:middle;margin-right:4px">漩涡指标</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cci" checked style="vertical-align:middle;margin-right:4px">CCI顺势</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="trix" checked style="vertical-align:middle;margin-right:4px">TRIX平滑</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="dmi" checked style="vertical-align:middle;margin-right:4px">趋向指标DMI</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="dema-cross" checked style="vertical-align:middle;margin-right:4px">DEMA交叉</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="tema-cross" checked style="vertical-align:middle;margin-right:4px">TEMA交叉</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python通道</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="donchian-breakout" checked style="vertical-align:middle;margin-right:4px">唐奇安突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="atr-channel" checked style="vertical-align:middle;margin-right:4px">ATR通道</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="envelope" checked style="vertical-align:middle;margin-right:4px">包络线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="price-channel-breakout" checked style="vertical-align:middle;margin-right:4px">价格通道突破</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python指标</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="stochastic" checked style="vertical-align:middle;margin-right:4px">随机振荡器</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="mfi" checked style="vertical-align:middle;margin-right:4px">MFI资金流</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cmf" checked style="vertical-align:middle;margin-right:4px">蔡金资金流</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="adl" checked style="vertical-align:middle;margin-right:4px">聚散指标ADL</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="roc" checked style="vertical-align:middle;margin-right:4px">变化率ROC</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="vwap" checked style="vertical-align:middle;margin-right:4px">VWAP均价</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="adaptive-ma" checked style="vertical-align:middle;margin-right:4px">自适应均线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="obv" checked style="vertical-align:middle;margin-right:4px">能量潮OBV</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python形态</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="engulfing" checked style="vertical-align:middle;margin-right:4px">吞没形态</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="hammer" checked style="vertical-align:middle;margin-right:4px">锤子线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="doji" checked style="vertical-align:middle;margin-right:4px">十字星</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="morning-star" checked style="vertical-align:middle;margin-right:4px">启明星</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="three-soldiers" checked style="vertical-align:middle;margin-right:4px">三兵三鸦</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="harami" checked style="vertical-align:middle;margin-right:4px">孕线形态</label>
+      </div>
+      <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="macd-rsi-combo" checked style="vertical-align:middle;margin-right:4px">MACD+RSI组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="bollinger-rsi-combo" checked style="vertical-align:middle;margin-right:4px">布林+RSI组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ma-volume-combo" checked style="vertical-align:middle;margin-right:4px">均线+量能组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="kdj-macd-combo" checked style="vertical-align:middle;margin-right:4px">KDJ+MACD组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="ichimoku-adx-combo" checked style="vertical-align:middle;margin-right:4px">一目+ADX组合</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="multi-tf-ma" checked style="vertical-align:middle;margin-right:4px">多周期均线</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="volatility-breakout" checked style="vertical-align:middle;margin-right:4px">波动率突破</label>
+        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="regime-switch" checked style="vertical-align:middle;margin-right:4px">趋势/震荡切换</label>
         <span id="dp-composed-strategies"></span>
       </div>
       <div class="form-row">

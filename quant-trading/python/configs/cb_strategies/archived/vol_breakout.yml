@@ -1,0 +1,69 @@
+# 可转债波动率压缩突破策略 — 默认配置
+# ============================================================
+# 策略逻辑: 在波动率收窄 (短期ATR/长期ATR < squeeze_threshold) 后
+#           突破近期高点时买入，利用 CB 面值锚定使突破概率向上偏
+# 需要 atr_long 个 bar 预热
+# ============================================================
+
+name: "vol_breakout"
+description: >
+  可转债波动率压缩突破策略 — 在波动率收窄后突破高点时买入。
+  利用 CB 面值锚定使突破概率向上偏，双条件入场 (波动率压缩 + 价格突破)。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "vol_breakout"
+  params:
+    top_k: 10
+    rebalance_days: 3
+    atr_short: 5                   # 短期 ATR 窗口
+    atr_long: 20                   # 长期 ATR 窗口
+    squeeze_threshold: 0.6         # 短/长 ATR 比值低于此 = 波动率压缩
+    breakout_lookback: 10          # 突破参考的高点回看天数
+    max_price: 135.0
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/vol_breakout"
+
+# ------ 报告 ------
+report:
+  benchmark: "000300.SH"

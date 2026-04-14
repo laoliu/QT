@@ -1,0 +1,54 @@
+# ============================================================
+# ETF 候选池主列表 (R71 Phase 3)
+# ============================================================
+# 分类: 宽基 / 风格 / 行业 / 跨境 / 商品 / 债券
+# 筛选标准: 规模 > 5 亿、成立 > 3 年、日均成交 > 5000 万
+
+etf_universe:
+  # 宽基 ETF (核心配置)
+  broad_market:
+    - {code: "510300.SH", name: "沪深300ETF", class: "large_cap"}
+    - {code: "510500.SH", name: "中证500ETF", class: "mid_cap"}
+    - {code: "512100.SH", name: "中证1000ETF", class: "small_cap"}
+    - {code: "510050.SH", name: "上证50ETF", class: "mega_cap"}
+    - {code: "159915.SZ", name: "创业板ETF", class: "growth"}
+
+  # 风格 ETF
+  style:
+    - {code: "510880.SH", name: "红利ETF", class: "dividend"}
+    - {code: "512890.SH", name: "红利低波ETF华泰", class: "dividend_low_vol"}
+
+  # 行业 ETF
+  sector:
+    - {code: "512010.SH", name: "医药ETF", class: "healthcare"}
+    - {code: "512690.SH", name: "酒ETF", class: "consumer"}
+    - {code: "512660.SH", name: "军工ETF", class: "defense"}
+    - {code: "515050.SH", name: "5GETF", class: "tech"}
+
+  # 跨境 ETF
+  cross_border:
+    - {code: "513100.SH", name: "纳指ETF", class: "us_equity"}
+    - {code: "159920.SZ", name: "恒生ETF", class: "hk_equity"}
+    - {code: "513500.SH", name: "标普500ETF博时", class: "us_equity"}
+    - {code: "513050.SH", name: "中概互联ETF", class: "hk_equity"}
+
+  # 商品 ETF
+  commodity:
+    - {code: "518880.SH", name: "黄金ETF", class: "gold"}
+
+  # 债券 ETF
+  bond:
+    - {code: "511010.SH", name: "国债ETF", class: "treasury_short"}
+    - {code: "511260.SH", name: "十年国债ETF", class: "treasury_mid"}
+    - {code: "511020.SH", name: "活跃国债ETF", class: "treasury_mid_long"}
+    - {code: "511130.SH", name: "30年国债ETF", class: "treasury_ultra_long"}
+    - {code: "159650.SZ", name: "国开债ETF博时", class: "policy_bank"}
+
+# 使用规则
+rules:
+  min_aum_billion: 5       # 最低规模 5 亿
+  min_age_years: 3         # 最低成立 3 年
+  exceptions:              # 年龄豁免标的及理由
+    - code: "511130.SH"    # 30年国债ETF (2024-03上市, ~2年)
+      reason: "超长久期覆盖需求, 竞品对标(ZH1400599持有3.6%), 跟踪30年国债指数流动性充足"
+  min_daily_amount_million: 50  # 日均成交 5000 万

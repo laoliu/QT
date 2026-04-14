@@ -1,0 +1,110 @@
+# A 股增强多因子策略 v3 — 5 因子保守增强配置
+# ============================================================
+# 基于 baseline (CSI800, 4因子, 月度调仓, AR=8.36%, SR=0.67)
+# 新增: STR (短期反转) 因子，权重 0.15
+# 其余 4 因子相应降权：EP(0.22) ROE(0.22) MOM(0.21) IVOL(0.20) STR(0.15)
+# 关键改动：CSI800→CSI1000 (更多中小盘alpha), 月度调仓不变
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, sortino,
+            turnover, win_rate, positions_count_distribution, cost_impact]
+  output_dir: output/a_stock_enhanced_v3_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.90
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.06
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.0
+  circuit_breaker_enabled: false
+
+run:
+  start_date: "2015-01-05"
+  end_date: "2024-12-31"
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 10.0
+  impact_coeff: 30.0
+  fallback_bps: 15.0
+  max_bps: 50.0
+
+strategy:
+  name: a_stock_enhanced_v2
+  parameters:
+    base_index: "000906.SH"       # CSI800 — 经验证的基线 Universe
+    top_k: 30                     # 持仓 30 只（与 baseline 一致）
+    rebalance_days: 20            # 月度调仓（~20 交易日，与 baseline 一致）
+    min_mv: 300000.0              # 30亿市值下限
+    max_mv: 50000000.0            # 500亿市值上限
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0          # 最低日成交额（万元）
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.0        # 关闭追踪止损
+    buffer_k: 10                  # 调仓缓冲（与 baseline 一致）
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: false
+    # ── 保守 5 因子权重 ── 基线四因子降权 + STR 小幅引入
+    weight_ep: 0.22
+    weight_roe: 0.22
+    weight_mom: 0.21
+    weight_ivol: 0.20
+    weight_str: 0.15              # 唯一新增因子
+    weight_analyst: 0.0           # 暂关闭 — 需单独验证
+    weight_holder: 0.0            # 暂关闭
+    weight_forecast: 0.0          # 暂关闭
+    # ── 动量参数（与 baseline 一致）──
+    mom_lookback: 250
+    mom_skip_recent: 20
+    momentum_lookback: 270
+    # ── IVOL / STR 参数 ──
+    ivol_lookback: 60
+    volatility_lookback: 60
+    str_lookback: 10
+    # ── 替代数据路径（不使用但需声明）──
+    analyst_cache_dir: "data/cache/alternative"
+    holder_cache_dir: "data/cache/reference/stk_holdernumber"
+    forecast_cache_dir: "data/cache/advanced"

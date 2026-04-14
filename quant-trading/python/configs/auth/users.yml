@@ -1,0 +1,43 @@
+cookie:
+  expiry_days: 7
+  key: AiPHa-Q_s3cr3t_k3y_2026!
+  name: aipha_q_session
+credentials:
+  usernames:
+    admin:
+      email: admin@aipha-q.local
+      failed_login_attempts: 0
+      logged_in: false
+      name: 系统管理员
+      password: $2b$12$nPjuXDePHA9xO0uYXfQGYOb1Wc8ljaXyINe2aPRIMEnIdae5AZTMy
+      role: admin
+    ops1:
+      email: ops@aipha-q.local
+      failed_login_attempts: 0
+      logged_in: false
+      name: 模型运营
+      password: $2b$12$pqcexs3ZttUsEUU/yGPl2uyS65cbOvFPgZ1RBofW8sF8xrWTTyBtG
+      role: ops
+    researcher1:
+      email: quant@aipha-q.local
+      failed_login_attempts: 0
+      logged_in: false
+      name: 量化研究员
+      password: $2b$12$l9I0Skyu9YlgjGI8S59.NOVE9dP5f7bc9XehnwkH8iqkfxcfie4CW
+      role: researcher
+    risk1:
+      email: risk@aipha-q.local
+      failed_login_attempts: 0
+      logged_in: false
+      name: 风控审核员
+      password: $2b$12$p9L17c4o0oeW2YUNS6WWiOu4bnM.Q6nmsgfkQ50ymGUVT1X1bX/xG
+      role: risk_approver
+    viewer1:
+      email: viewer@aipha-q.local
+      failed_login_attempts: 0
+      logged_in: false
+      name: 只读观察者
+      password: $2b$12$VIVIS1e2LzdPcdBvDJ6dqe1NX3PTPdi1KZcpyxyCwSxCU46I7D4.a
+      role: viewer
+pre-authorized:
+  emails: []

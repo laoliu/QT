@@ -119,6 +119,7 @@ import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
 import { TradeJournal } from "./src/services/trade-journal.js";
+import { createAiphaBacktestTool } from "./src/tools/aipha-backtest.js";
 import { createBacktestTool } from "./src/tools/backtest.js";
 import { createBreakoutMonitorTool } from "./src/tools/breakout-monitor.js";
 import { createCfoAssistantTool } from "./src/tools/cfo-assistant.js";
@@ -131,6 +132,7 @@ import { createDataCacheTool } from "./src/tools/data-cache.js";
 import { createDcaScheduleTool } from "./src/tools/dca-schedule.js";
 import { createDragonTigerTool } from "./src/tools/dragon-tiger.js";
 import { createEarningsCalendarTool } from "./src/tools/earnings-calendar.js";
+import { createFactorAnalysisTool } from "./src/tools/factor-analysis.js";
 import { createFavoritesTool } from "./src/tools/favorites.js";
 import { createFinancialCalculatorTool } from "./src/tools/financial-calculator.js";
 import { createFundFlowTool } from "./src/tools/fund-flow.js";
@@ -140,6 +142,7 @@ import { createLianbanAnalysisTool } from "./src/tools/lianban-analysis.js";
 import { createLiveTradingTool } from "./src/tools/live-trading.js";
 import { createMacroDataTool } from "./src/tools/macro-data.js";
 import { createMarketDataTool } from "./src/tools/market-data.js";
+import { createMLRankingTool } from "./src/tools/ml-ranking.js";
 import { createNewsSummaryTool } from "./src/tools/news-summary.js";
 import { createOptionsDataTool } from "./src/tools/options-data.js";
 import { createOptionsStrategyTool } from "./src/tools/options-strategy.js";
@@ -147,6 +150,11 @@ import { createOptionsTradingTool } from "./src/tools/options-trading.js";
 import { createPerformanceAttributionTool } from "./src/tools/performance-attribution.js";
 import { createPolymarketOddsTool } from "./src/tools/polymarket-odds.js";
 import { createPortfolioBacktestTool } from "./src/tools/portfolio-backtest.js";
+import { createPortfolioOptimizerTool } from "./src/tools/portfolio-optimizer.js";
+import { createCBAnalysisTool } from "./src/tools/cb-analysis.js";
+import { createStrategyValidationTool } from "./src/tools/strategy-validation.js";
+import { createEquityScreeningTool } from "./src/tools/equity-screening.js";
+import { createAiphaMonitorTool } from "./src/tools/aipha-monitor.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
 import { createPortfolioTool } from "./src/tools/portfolio.js";
 import { createPositionSizingTool } from "./src/tools/position-sizing.js";
@@ -680,6 +688,15 @@ const quantTradingPlugin = {
         }
       }),
       tech_moat: createTechMoatTool(api, config),
+      // ── Aipha 高级分析工具 ──
+      factor_analysis: createFactorAnalysisTool(api, config),
+      ml_ranking: createMLRankingTool(api, config),
+      aipha_backtest: createAiphaBacktestTool(api, config),
+      portfolio_optimizer: createPortfolioOptimizerTool(api, config),
+      cb_analysis: createCBAnalysisTool(api, config),
+      strategy_validation: createStrategyValidationTool(api, config),
+      equity_screening: createEquityScreeningTool(api, config),
+      aipha_monitor: createAiphaMonitorTool(api, config),
     };
 
     const toolLabels: Record<string, string> = {
@@ -731,6 +748,14 @@ const quantTradingPlugin = {
       custom_strategy: "自定义策略",
       position_sizing: "仓位管理",
       breakout_monitor: "突破监控",
+      factor_analysis: "因子分析",
+      ml_ranking: "ML选股排序",
+      aipha_backtest: "高级回测",
+      portfolio_optimizer: "组合优化",
+      cb_analysis: "可转债分析",
+      strategy_validation: "策略验证",
+      equity_screening: "AI选股筛选",
+      aipha_monitor: "因子策略监控",
     };
     for (const [name, tool] of Object.entries(toolInstances)) {
       api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });

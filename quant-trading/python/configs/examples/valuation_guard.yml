@@ -1,0 +1,44 @@
+# R28-A3: 估值过热风控层配置模板
+# 用于 CrossAssetAllocator 的 valuation_guard 参数
+#
+# 四层风控：预警(80%分位) → 减仓(90%) → 清仓(95%+PB) → 回补(<70%)
+
+valuation_guard:
+  enabled: true
+  sectors:
+    - sector_id: csi1000
+      metric: pe_ttm
+      lookback_days: 1260   # 5年
+      warn_percentile: 0.80
+      reduce_percentile: 0.90
+      clear_percentile: 0.95
+      clear_pb_multiplier: 3.0
+      recover_percentile: 0.70
+      reduce_weight_scale: 0.50
+      clear_weight_floor: 0.05
+      smooth_days: 5
+
+    - sector_id: etf
+      metric: pe_ttm
+      lookback_days: 1260
+      warn_percentile: 0.80
+      reduce_percentile: 0.90
+      clear_percentile: 0.95
+      clear_pb_multiplier: 3.0
+      recover_percentile: 0.70
+      reduce_weight_scale: 0.50
+      clear_weight_floor: 0.05
+      smooth_days: 5
+
+    # CB 板块使用转股溢价率作为过热指标
+    - sector_id: cb
+      metric: premium_rate
+      lookback_days: 1260
+      warn_percentile: 0.85
+      reduce_percentile: 0.92
+      clear_percentile: 0.97
+      clear_pb_multiplier: 3.0
+      recover_percentile: 0.70
+      reduce_weight_scale: 0.60
+      clear_weight_floor: 0.10
+      smooth_days: 5

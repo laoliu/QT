@@ -1,0 +1,21 @@
+# ETF V5 四因子权重 + 结构参数扫描
+# ============================================================
+# 基础: etf_cross_v5_11y.yml (18只ETF, AR=12.84%, SR=0.542)
+# 目标: 寻找最优因子权重、top_k、调仓周期、趋势过滤
+# 阶段1: 因子权重扫描 (momentum × volatility × reversion)
+#   网格: 5×5×3 = 75 组
+# 阶段2: 结构参数扫描 (top_k × rebalance × trend_ma)
+#   使用阶段1最优权重，网格: 4×4×3 = 48 组
+# ============================================================
+
+base_config: "configs/backtest/etf_cross_v5_11y.yml"
+
+# ── 阶段 1: 因子权重 ────────────────────────────────────────
+param_ranges:
+  weight_momentum: [0.30, 0.40, 0.50, 0.60, 0.70]
+  weight_volatility: [0.10, 0.20, 0.30, 0.40, 0.50]
+  weight_reversion: [0.00, 0.10, 0.20]
+
+max_workers: 4
+output_dir: "output/sweep_etf_v5_factors"
+top_n: 20

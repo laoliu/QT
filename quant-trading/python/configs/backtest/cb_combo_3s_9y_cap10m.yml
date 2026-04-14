@@ -1,0 +1,155 @@
+# CB 多策略组合 — 1000万资金阶梯测试 (R56 A1)
+# ============================================================
+# 基于 cb_combo_3s_9y.yml，initial_capital 升至 10,000,000
+# 目的：验证大资金下 SR 衰减、滑点冲击、参与率约束影响
+# ============================================================
+
+name: "cb_combo_3s_9y_cap10m"
+description: >
+  可转债三策略组合（至2025-12-31），1000万资金阶梯测试。
+  组合策略：cb_multi_alpha + small_size_gated + double_low
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date:   "2025-12-31"
+  frequency:  "1d"
+  adjust:     "none"
+  cache_dir:  "data/cache/cb_tushare"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 10.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 10.0
+    max_bps: 40.0
+
+trading_rules:
+  t_plus_n: 0
+  lot_size: 10
+  allow_short: false
+
+initial_capital: 10000000.0
+random_seed: 42
+output_dir: "output/cb_combo_3s_9y_cap10m"
+
+universe_policy:
+  name: "cb_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+    - "FORCE_REDEEMED"
+    - "NEAR_MATURITY"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+
+portfolio:
+  allocation_mode: "risk_parity"
+  rebalance_days: 20
+
+  strategies:
+    - name: "cb_multi_alpha"
+      weight: 0.40
+      config:
+        top_k: 8
+        rebalance_days: 1
+        buffer_k: 3
+        max_price: 150.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 10.0
+        min_days_to_maturity: 60
+        exclude_st: true
+        exclude_called: true
+        max_premium: 80.0
+        momentum_lookback: 10
+        surge_lookback: 20
+        warmup_bars: 25
+        w_size: 0.30
+        w_momentum: 0.20
+        w_surge: 0.20
+        w_premium: 0.15
+        w_price: 0.15
+        stop_loss_pct: 0.12
+        min_positions: 3
+        lot_size: 10
+
+    - name: "small_size_gated"
+      weight: 0.35
+      config:
+        top_k: 5
+        rebalance_days: 1
+        buffer_k: 0
+        max_price: 150.0
+        max_issue_size: 20000.0
+        min_issue_size: 2000.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        exclude_called: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+        force_redeem_threshold: 130.0
+        force_redeem_days: 8
+        regime_lookback: 10
+        bear_threshold: -0.03
+        recovery_threshold: 0.0
+        cooldown_bars: 3
+        use_distress_signal: false
+        use_volume_signal: false
+
+    - name: "double_low"
+      weight: 0.25
+      config:
+        top_k: 10
+        rebalance_days: 5
+        exclude_called: true
+        max_price: 130.0
+        max_premium: 50.0
+        min_turnover: 5.0
+        min_days_to_maturity: 60
+        price_weight: 0.5
+        premium_weight: 0.5
+        lot_size: 10
+
+risk_control:
+  market_regime:
+    enabled: true
+    index: "000932.CSI"
+    bull_threshold: 0.08
+    bear_threshold: -0.06
+    high_vol_threshold: 0.025
+    actions:
+      BEAR:
+        position_scale: 0.60
+      BULL:
+        position_scale: 1.0
+      NEUTRAL:
+        position_scale: 0.85
+  force_redeem_exposure:
+    enabled: true
+    max_exposure: 0.30
+  drawdown_limit:
+    max_drawdown_pct: 0.20
+    action: "reduce_to_50pct"
+  concentration:
+    max_single_pct: 0.08
+    max_top5_pct: 0.30
+
+report:
+  benchmark: "000832.CSI"
+  compare_sub_strategies: true
+  universe_summary: true

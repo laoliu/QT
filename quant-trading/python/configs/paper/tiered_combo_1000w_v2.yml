@@ -1,0 +1,103 @@
+# Tiered Portfolio V2 — 1000万级（MDD优化版）
+# ====================================================================
+# 稳健型: CSI2000(35%) + CB(15%) + ETF(50%)
+# P22实测: AR=17.5%  MDD=14.0%  SR=1.369  Calmar=1.248
+# 前瞻预期 AR: 14-16%
+#
+# 对比V1(CSI2000 35%+CB 15%+CSI300 15%+ETF 35%):
+#   V1: AR=15.3%, MDD=14.1%, SR=1.298
+#   V2: AR=17.5%, MDD=14.0%, SR=1.369 — 去掉CSI300后更优
+#
+# CSI300 在 P22 段仅 1.0% AR，是组合的拖累项
+# ====================================================================
+
+profile_name: "tiered_combo_1000w_v2"
+description: >
+  MDD优化三组件跨资产组合（1000万级）:
+  CSI2000(35%) + CB(15%) + ETF(50%)
+  去除CSI300（P22 AR=1.0%，拖累组合）
+
+initial_capital: 10000000.0
+
+portfolio_weights:
+  ml_csi2000: 0.35
+  cb_stock_quality: 0.15
+  etf: 0.50
+
+pillars:
+  ml_csi2000:
+    name: "ML CSI2000 V3b 6-Model Ensemble"
+    description: "LGB x5 + MASTER V2, rank_average融合"
+    market_type: "a_stock"
+    weight: 0.35
+    model_dir: "models/ml_csi2000_lgb_20d_r40"
+    ensemble_predictions:
+      - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"
+      - "models/ml_csi2000_de_10d/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_b3_sizeneutral/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_20d_neutral_p1/oos_predictions.parquet"
+      - "models/ml_csi2000_master_v2/oos_predictions.parquet"
+    ensemble_method: "rank_average"
+    ensemble_weights:
+      ml_csi2000_lgb_20d_r40: 1.87
+      ml_csi2000_de_10d: 1.46
+      ml_csi2000_lgb_b3_sizeneutral: 1.46
+      ml_csi2000_lgb_fund_t1aligned: 1.20
+      ml_csi2000_lgb_20d_neutral_p1: 2.15
+      ml_csi2000_master_v2: 0.70
+    universe: "csi2000"
+    top_k: 50
+    rebalance_days: 5
+    max_industry_pct: 0.15
+    max_stock_pct: 0.03
+    vol_target: 0.20
+    vol_lookback: 60
+    lot_size: 100
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.18
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    stamp_tax_sell: 0.0005
+    transfer_fee: 0.00001
+    slippage_bps: 8.0
+    max_participation_rate: 0.10
+
+  cb_stock_quality:
+    name: "CB Stock Quality V4b Balanced"
+    description: "正股质量增强6因子CB策略"
+    market_type: "convertible_bond"
+    weight: 0.15
+    strategy_name: "cb_stock_quality"
+    strategy_config: "configs/cb_strategies/cb_stock_quality_v4b_balanced_8y.yml"
+    top_k: 10
+    rebalance_days: 1
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0
+    slippage_model: "linear_impact"
+
+  etf:
+    name: "ETF Cross Asset V5 FAA"
+    description: "10只ETF Flexible Asset Allocation"
+    market_type: "etf"
+    weight: 0.50
+    strategy_name: "etf_cross_v5"
+    top_k: 3
+    rebalance_days: 10
+    symbols:
+      - "510300.SH"
+      - "510500.SH"
+      - "159915.SZ"
+      - "512100.SH"
+      - "510050.SH"
+      - "510880.SH"
+      - "512010.SH"
+      - "512690.SH"
+      - "512660.SH"
+      - "513100.SH"
+      - "159920.SZ"
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0
+    max_participation_rate: 0.10

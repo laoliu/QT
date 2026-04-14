@@ -1,0 +1,91 @@
+"""可转债市场状态轮动策略（牛/熊/中性动态权重）"""
+from __future__ import annotations
+import logging
+from collections import deque
+from dataclasses import dataclass
+from enum import Enum
+from aipha.strategy.base import StrategyContext
+from aipha.strategy.cb_rotation_base import CBRotationConfig, CBRotationStrategy, CandidateInfo
+logger = logging.getLogger(__name__)
+
+class MarketRegime(Enum):
+    BULL = "bull"; NEUTRAL = "neutral"; BEAR = "bear"
+
+@dataclass
+class CBRegimeRotationConfig(CBRotationConfig):
+    top_k: int = 8; rebalance_days: int = 1; buffer_k: int = 3; max_price: float = 150.0
+    max_issue_size: float = 30000.0; min_issue_size: float = 0.0; min_turnover: float = 10.0
+    min_days_to_maturity: int = 60; exclude_st: bool = True; exclude_called: bool = True
+    max_premium: float = 80.0; regime_lookback: int = 20; bull_threshold: float = 0.03
+    bear_threshold: float = -0.02; momentum_lookback: int = 10; surge_lookback: int = 20
+    reversal_lookback: int = 5; warmup_bars: int = 25
+    bull_w_size: float = 0.10; bull_w_momentum: float = 0.35; bull_w_surge: float = 0.30
+    bull_w_premium: float = 0.10; bull_w_price: float = 0.05; bull_w_reversal: float = 0.10
+    neutral_w_size: float = 0.25; neutral_w_momentum: float = 0.15; neutral_w_surge: float = 0.10
+    neutral_w_premium: float = 0.20; neutral_w_price: float = 0.15; neutral_w_reversal: float = 0.15
+    bear_w_size: float = 0.15; bear_w_momentum: float = 0.00; bear_w_surge: float = 0.05
+    bear_w_premium: float = 0.15; bear_w_price: float = 0.25; bear_w_reversal: float = 0.40
+    stop_loss_pct: float = 0.12; min_positions: int = 3; lot_size: int = 10
+
+class CBRegimeRotationStrategy(CBRotationStrategy):
+    name = "cb_regime_rotation"
+    def __init__(self, config: CBRegimeRotationConfig | None = None, **kw: object):
+        super().__init__(config=config or CBRegimeRotationConfig(), **kw)
+        self._regime: MarketRegime = MarketRegime.NEUTRAL
+        self._index_history: deque[float] = deque(maxlen=200)
+        self._close_history: dict[str, deque[float]] = {}
+        self._turnover_history: dict[str, deque[float]] = {}
+        self._bar_count: int = 0
+    @property
+    def config(self) -> CBRegimeRotationConfig: return self._config  # type: ignore
+    @property
+    def current_regime(self) -> MarketRegime: return self._regime
+    def _detect_regime(self) -> None:
+        cfg = self.config
+        if len(self._index_history) < cfg.regime_lookback: return
+        idx = list(self._index_history)
+        ret = (idx[-1] - idx[-cfg.regime_lookback]) / idx[-cfg.regime_lookback] if idx[-cfg.regime_lookback] > 0 else 0
+        if ret > cfg.bull_threshold: self._regime = MarketRegime.BULL
+        elif ret < cfg.bear_threshold: self._regime = MarketRegime.BEAR
+        else: self._regime = MarketRegime.NEUTRAL
+    def _get_regime_weights(self) -> dict[str, float]:
+        cfg = self.config; r = self._regime
+        prefix = {"BULL": "bull", "NEUTRAL": "neutral", "BEAR": "bear"}[r.name]
+        return {k: getattr(cfg, f"{prefix}_w_{k}", 0.0) for k in ("size", "momentum", "surge", "premium", "price", "reversal")}
+    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
+        self._bar_count += 1; bars = getattr(ctx, "bars", {})
+        idx_val = getattr(ctx, "index_close", None)
+        if idx_val: self._index_history.append(idx_val)
+        self._detect_regime()
+        maxlen = max(self.config.momentum_lookback, self.config.surge_lookback, self.config.reversal_lookback) + 5
+        for sym, bar in bars.items():
+            close = getattr(bar, "close", None); tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
+            if close:
+                if sym not in self._close_history: self._close_history[sym] = deque(maxlen=maxlen)
+                self._close_history[sym].append(close)
+            if tv is not None:
+                if sym not in self._turnover_history: self._turnover_history[sym] = deque(maxlen=maxlen)
+                self._turnover_history[sym].append(tv)
+    def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
+        prem = getattr(c, "premium_rate", None)
+        if prem is not None and prem > self.config.max_premium: return False
+        return True
+    def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        from aipha.strategy.cb_ultra import _rank_scores
+        cfg = self.config; w = self._get_regime_weights()
+        size = {c.code: -(getattr(c, "issue_size", 1e9) or 1e9) for c in candidates}
+        mom: dict[str, float] = {}; surge: dict[str, float] = {}; rev: dict[str, float] = {}
+        for c in candidates:
+            h = self._close_history.get(c.code); prices = list(h) if h else []
+            mom[c.code] = (prices[-1] - prices[-cfg.momentum_lookback]) / prices[-cfg.momentum_lookback] if len(prices) >= cfg.momentum_lookback and prices[-cfg.momentum_lookback] > 0 else 0
+            to = self._turnover_history.get(c.code); tvs = list(to) if to else []
+            if len(tvs) >= cfg.surge_lookback:
+                r5 = sum(tvs[-5:]) / 5; base = sum(tvs) / len(tvs); surge[c.code] = (r5 - base) / base if base > 0 else 0
+            else: surge[c.code] = 0
+            rev[c.code] = -((prices[-1] - prices[-cfg.reversal_lookback]) / prices[-cfg.reversal_lookback]) if len(prices) >= cfg.reversal_lookback and prices[-cfg.reversal_lookback] > 0 else 0
+        prem = {c.code: -(getattr(c, "premium_rate", 50.0) or 50.0) for c in candidates}
+        price = {c.code: -(getattr(c, "close", 200.0) or 200.0) for c in candidates}
+        factors = {"size": size, "momentum": mom, "surge": surge, "premium": prem, "price": price, "reversal": rev}
+        ranked = {n: _rank_scores(v) for n, v in factors.items()}
+        composite = {c.code: sum(w.get(n, 0) * ranked[n].get(c.code, 0) for n in ranked) for c in candidates}
+        return sorted(composite, key=composite.get, reverse=True)[:cfg.top_k]  # type: ignore

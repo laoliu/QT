@@ -1,0 +1,136 @@
+# 多Alpha动态因子融合策�?�?回测配置
+
+# ============================================================
+
+# 策略思路: 融合小规�?动量+放量+低溢�?低价 5个独立alpha�?
+# �?个动态时序因子（momentum+surge），突破单因�?4%的天花板�?
+# 目标年化30%+�?
+
+
+name: "cb_multi_alpha"
+
+description: >
+
+  可转债多Alpha动态因子融合策�?�?综合小规�?30%)、动�?20%)�?
+  放量突破(20%)、低溢价(15%)、低�?15%) 五因子加权打分�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "cb_multi_alpha"
+
+  params:
+
+    top_k: 8
+
+    rebalance_days: 1
+
+    buffer_k: 3
+
+    max_price: 150.0
+
+    max_issue_size: 20000.0       # 万元 (2亿以�?
+
+    min_issue_size: 0.0
+
+    min_turnover: 10.0
+
+    min_days_to_maturity: 60
+
+    exclude_st: true
+
+    exclude_called: true
+
+    max_premium: 80.0
+
+    momentum_lookback: 10
+
+    surge_lookback: 20
+
+    warmup_bars: 25
+
+    w_size: 0.30
+
+    w_momentum: 0.20
+
+    w_surge: 0.20
+
+    w_premium: 0.15
+
+    w_price: 0.15
+
+    stop_loss_pct: 0.12
+
+    min_positions: 3
+
+    lot_size: 10
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  min_commission: 5  # §13.1 CB minimum
+
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+
+
+# ------ 滑点 ------
+
+slippage:
+
+  model: "fixed_bps"
+
+  bps: 5.0
+
+
+
+# ------ 资金 ------
+
+capital:
+
+  initial: 1000000.0
+
+  currency: "CNY"
+

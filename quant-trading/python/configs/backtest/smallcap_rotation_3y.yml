@@ -1,0 +1,99 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000852.SH
+  region: CN
+report:
+  benchmark: 000852.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  - alpha
+  - beta
+  - information_ratio
+  output_dir: reports/smallcap_rotation_3y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.25
+  max_sector_pct: 0.3
+  max_single_position_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: 000852.SH
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2022-01-01'
+  timezone: Asia/Shanghai
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 50.0
+  fallback_bps: 10.0
+  max_bps: 100.0
+strategy:
+  name: smallcap_rotation
+  # ---------- 仅暴露核心可调参数，其余使用 dataclass 默认值 ----------
+  # 已移除重复/可派生参数：benchmark(已在 report 块), exclude_st(由 universe_policy 管理),
+  # lot_size(由 trading_rules 管理), max_single_pct(由 risk_constraints 管理),
+  # min_price/max_price/min_turnover/min_listed_days/momentum_lookback/volatility_lookback
+  # /cash_reserve_pct/buffer_k → 基类默认值足够。
+  parameters:
+    top_k: 30
+    rebalance_days: 15
+    min_mv: 100000.0
+    max_mv: 2000000.0
+    stop_loss_pct: 0.15
+    momentum_invert: false
+    regime_adaptive: true
+    # ---------- 因子权重（总和应为 1.0） ----------
+    weight_small_cap: 0.30
+    weight_momentum: 0.15
+    weight_turnover: 0.10
+    weight_volatility: 0.15
+    weight_quality: 0.15
+    weight_value: 0.15
+    # ---------- 以下参数使用 dataclass 默认值（无需显式指定） ----------
+    # buffer_k: 8, cash_reserve_pct: 0.05, min_price: 3.0, max_price: 50.0
+    # min_turnover: 500, min_listed_days: 60, momentum_lookback: 20, volatility_lookback: 20
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000852.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: smallcap_rotation

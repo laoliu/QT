@@ -1,0 +1,78 @@
+# 回测配置（第一阶段基线，示例）
+# 目标：A股、T+1、秒级撮合（事件驱动）、绝对收益评估
+
+run:
+  mode: backtest
+  start_date: "2020-01-01"
+  end_date: "2021-12-31"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  # Phase 1 推荐：开发期、非实时，低成本且覆盖广。
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"  # 需要在落地数据指纹时替换为可追溯的快照标识
+
+market:
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    boards:
+      - "A"   # 先覆盖A股
+    future_boards:
+      - "STAR"  # 预留：后续覆盖科创
+
+frequency:
+  # 系统响应可达毫秒级，但第一阶段数据与撮合以秒/分钟为主
+  data_frequency: "1min"
+  matching_resolution: "1s"
+
+fill_model:
+  # V1 默认成交模型：next bar open（保守、避免同bar前视）
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe_policy:
+  name: "a_share_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+  suspended_long:
+    lookback_days: 20
+    suspended_ratio_threshold: 0.8
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default  # 万一佣金
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005  # 2023-08-28 起印花税减半：千分之一 → 千分之0.5
+  transfer_fee:
+    # 过户费口径各券商/市场可能不同，上线前需要固化口径与数据源
+    rate: 0.00001
+
+slippage_model:
+  name: "fixed_bps"
+  bps: 2
+
+report:
+  benchmark: null
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "turnover"
+    - "positions_count_distribution"
+    - "cost_impact"
+  universe_summary: true

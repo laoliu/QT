@@ -1,0 +1,46 @@
+# 可转债双低策略回测配置
+
+name: cb_double_low_backtest
+
+data:
+  source: akshare
+  start_date: "2021-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: qfq
+
+universe:
+  policy: default
+  exclude_suspended: true
+
+strategy:
+  name: cb_double_low
+  params:
+    top_k: 20
+    rebalance_days: 5
+    price_threshold: 130
+    premium_threshold: 0.30
+    exclude_below_100: true
+    weight_price: 0.5
+    weight_premium: 0.5
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 0.1          # 可转债最低佣金更低
+  stamp_tax_rate: 0.0          # 可转债无印花税
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: fixed
+
+fill_model:
+  name: next_bar_open
+
+risk:
+  enabled: true
+  max_position_weight: 0.08
+  max_drawdown: 0.15
+
+initial_capital: 500000
+lot_size: 10                   # 可转债 10 张一手
+t_plus_n: 0                    # T+0
+output_dir: output/cb_double_low

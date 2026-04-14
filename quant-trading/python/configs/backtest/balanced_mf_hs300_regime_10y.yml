@@ -1,0 +1,120 @@
+# ============================================================
+# A 股均衡多因子 — HS300 + 市场择时 (10 年回测)
+# ============================================================
+# 核心改进：启用 MarketRegimeDetector 市场择时
+# 机制：3信号投票(趋势动量+均线交叉+波动率)
+#   - 牛市: position_scale=1.0 → 满仓
+#   - 中性: position_scale=0.8 → 20%现金
+#   - 熊市: position_scale=0.5 → 50%现金(高波时更低)
+# 预期效果：
+#   - 2018(-16.7%) → 减仓后约-8%
+#   - 2022(-15.9%) → 减仓后约-8%
+#   - 牛市年份(2019+48%, 2020+53%) → 保持高仓位
+# 估算年化提升: 从8.2% → 12-15%（减少熊市损失）
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+slippage_model:
+  name: fixed
+  bps: 10.0
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover,
+            win_rate, positions_count_distribution, cost_impact]
+  output_dir: output/balanced_mf_hs300_regime_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+  max_sector_pct: 0.30
+  max_single_position_pct: 0.06
+  # === 核心改进：启用市场择时 ===
+  market_regime_enabled: true
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 300_000.0
+    max_mv: 50_000_000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: true
+    weight_value: 0.25
+    weight_quality: 0.25
+    weight_momentum: 0.25
+    weight_volatility: 0.25
+    weight_dividend: 0.0
+    weight_earnings_growth: 0.0
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+    regime_adaptive: false
+    base_index: 000300.SH
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

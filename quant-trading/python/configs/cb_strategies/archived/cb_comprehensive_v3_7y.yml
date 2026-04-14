@@ -1,0 +1,88 @@
+# CBComprehensive v3 — 整改版（专家组建议）
+# ============================================================
+# 变更：top_k 5→10, rebalance_days 1→3, 因子精简 10→6
+# 原因：降低过拟合风险(原则A)，降低集中度(原则C)
+# ============================================================
+
+name: "cb_comprehensive_v3_7y"
+description: >
+  综合策略 v3。根据专家组评审整改：
+  - top_k 从 5 上调至 10（降低集中度风险）
+  - rebalance_days 从 1 上调至 3（降低换手率和流动性冲击）
+  - 因子从 10 精简至 6（剔除 turnover/momentum 等理论薄弱因子）
+  - weight_size 从 0.25 下调至 0.15（减少规模因子主导）
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_comprehensive"
+  params:
+    top_k: 10
+    rebalance_days: 3
+    max_price: 145.0
+    max_issue_size: 20000.0
+    min_issue_size: 500.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+    use_age_filter: true
+    min_age_days: 3
+    max_age_days: 180
+    fallback_max_age_days: 730
+    max_premium: 60.0
+    lookback: 20
+    bb_k: 2.0
+    momentum_lookback: 10
+    # 整改后因子权重：精简为 6 个有经济理论支撑的因子
+    weight_price: 0.20
+    weight_premium: 0.15
+    weight_size: 0.15
+    weight_age: 0.05
+    weight_mean_reversion: 0.20
+    weight_rating: 0.10
+    weight_delta: 0.10
+    weight_ytm: 0.05
+    weight_turnover: 0.00    # 关闭：理论支撑不足
+    weight_momentum: 0.00    # 关闭：CB 日频动量理论薄弱
+    min_candidates: 3
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+risk:
+  enabled: true
+  max_position_weight: 0.15
+  max_drawdown: 0.50
+  enable_audit_log: true
+
+random_seed: 42
+output_dir: "output/cb_comprehensive_v3_7y"

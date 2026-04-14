@@ -1,0 +1,91 @@
+# A 股小盘质量低波策略 — 全市场 10 年回测
+# 核心逻辑：小市值溢价（A 股最强异象）+ 质量过滤（避免垃圾股）+ 低波动（降回撤）
+# 学术基础：Liu-Stambaugh-Yuan (2019 JFE), Ang et al (2006), Novy-Marx (2013)
+# 与 HS300 版本的核心差异：
+#   1) 无 base_index → 全市场选股，不限于指数成分
+#   2) 市值范围 20-200 亿（中小盘），而非 300-50000 亿
+#   3) 新增 size 因子 25% + turnover 因子 15%（A 股实证 top2/top5 有效因子）
+#   4) 调仓频率 10 天（双周），比双月频更好捕捉因子信号
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0001}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05      # 小盘参与率更保守
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A]}
+  region: CN
+  # 无 index 字段 → 全市场模式
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0           # 小盘滑点高于大盘
+  impact_coeff: 50.0
+  fallback_bps: 12.0
+  max_bps: 80.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 20
+    rebalance_days: 10          # 双周调仓
+    min_mv: 200000.0            # 20 亿（万元）
+    max_mv: 2000000.0           # 200 亿
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 500.0         # 万元
+    min_listed_days: 250        # 至少上市 1 年
+    buffer_k: 8
+
+    # 核心因子配比 — 小盘+质量+低波+低换手+价值
+    weight_size: 0.25           # 小市值因子（A 股 IC 5-8%）
+    weight_quality: 0.25        # ROE 质量因子
+    weight_volatility: 0.25     # 低波动因子
+    weight_turnover: 0.15       # 低换手（行为因子）
+    weight_value: 0.10          # EP 价值因子
+
+    # 关闭的因子
+    weight_momentum: 0.0        # A 股中期动量弱
+    weight_str: 0.0             # 另一策略用
+    weight_dividend: 0.0
+    weight_earnings_growth: 0.0
+
+    # 因子参数
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+
+    # 风控
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    inverse_vol_weighting: true
+    max_single_pct: 0.08
+    cash_reserve_pct: 0.03
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  # 无 base_index → 全市场模式

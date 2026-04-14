@@ -1,0 +1,72 @@
+# 纯多因子小盘策略 (CB Ultra No-Age) - 回测配置
+# ============================================================
+# 三因子排名加权选股: 规模(60%) + 溢价率(20%) + 价格(20%)
+# 无次新限制，候选池更大，不受次新债供给波动影响
+
+name: "cb_ultra_noage"
+
+description: >
+  纯多因子小盘可转债策略，综合发行规模(60%)、溢价率(20%)、
+  价格(20%)三因子打分排序。去除次新限制后候选池更大，
+  适合在次新标的不足时使用。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_ultra_noage"
+  params:
+    top_k: 5
+    rebalance_days: 1
+    max_price: 200.0                # 宽松，让高价小盘也能入选
+    max_issue_size: 20000.0         # 万元 (2亿以下)
+    min_issue_size: 2000.0          # 万元
+    min_turnover: 5.0               # 万元
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10             # C-7: 收紧止损
+    trailing_stop_pct: 0.05          # C-7: 追踪止损
+    lot_size: 10
+
+    # 溢价率过滤
+    max_premium: 100.0
+
+    # 因子权重 (排名法加权)
+    weight_size: 0.60               # 规模主导
+    weight_premium: 0.20            # 溢价率
+    weight_price: 0.20              # 价格
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  min_commission: 5  # §13.1 CB minimum
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+
+# ------ 滑点 ------
+slippage:
+  model: "linear_impact"
+  base_bps: 5.0          # CB 最低买卖价差
+  impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+  fallback_bps: 8.0      # 无成交量数据时的回退值
+  max_bps: 40.0          # 单笔滑点上限
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"

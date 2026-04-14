@@ -1,0 +1,27 @@
+# 可转债双低策略配置示例
+strategy:
+  name: cb_double_low
+  type: convertible_bond
+
+universe:
+  source: tushare        # tushare / akshare
+  status: L              # L=上市
+  prefilter:
+    max_price: 130.0
+    min_turnover: 50.0   # 万元
+    min_days_to_maturity: 30
+    exclude_st: true
+
+params:
+  top_k: 20
+  rebalance_days: 5
+  lot_size: 10
+
+risk:
+  stop_loss_pct: 0.15
+  max_position_weight: 0.10   # 单票上限
+
+# 可转债T+0交易规则
+market_rules:
+  settlement: T0
+  price_limit: false     # 可转债无涨跌停限制（首日除外）

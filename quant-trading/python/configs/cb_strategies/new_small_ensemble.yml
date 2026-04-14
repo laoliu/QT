@@ -1,0 +1,194 @@
+# 次新小盘复合策略 (参数集成�? �?降低悬崖效应
+
+# ============================================================
+
+# 设计目标:
+
+#   new_small 是当前年化最高的策略 (24.9%)，同时也叠加�?small_size �?
+
+#   new_bond 两个策略的悬崖效应风险。参数集成版旨在平滑这种复合敏感性�?
+#
+
+# 解决方案:
+
+#   用多组近优参数生成多个排名列表，�?倒数排名"加权聚合�?
+#
+
+# 信用风控:
+
+#   默认启用 min_rating="AA"，剔�?AA- 及以下评级转债�?
+# ============================================================
+
+
+
+name: "new_small_ensemble"
+
+description: >
+
+  次新小盘复合策略（参数集成版）�?通过多组近优参数投票聚合�?
+  平滑 top_k/max_age_days/max_issue_size 的悬崖效应，
+
+  同时启用信用评级过滤（AA 及以上）降低信用事件风险�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2022-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "new_small_ensemble"
+
+  params:
+
+    top_k: 10
+
+    rebalance_days: 5
+
+    min_age_days: 5
+
+    max_age_days: 70
+
+    max_price: 130.0
+
+    max_issue_size: 45000.0       # 主配置使用中位�?
+    min_issue_size: 3000.0
+
+    min_turnover: 30.0
+
+    min_days_to_maturity: 0
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10             # C-7: 收紧止损
+
+    trailing_stop_pct: 0.05          # C-7: 追踪止损
+
+    lot_size: 10
+
+    # --- 信用风控 ---
+
+    min_rating: "AA"
+
+    exclude_unrated: true
+
+    # --- 参数集成 ---
+
+    aggregation: "reciprocal_rank"
+
+    variants:
+
+      - top_k: 8
+
+        max_age_days: 60
+
+        max_issue_size: 35000.0
+
+      - top_k: 9
+
+        max_age_days: 70
+
+        max_issue_size: 40000.0
+
+      - top_k: 10
+
+        max_age_days: 80
+
+        max_issue_size: 45000.0
+
+      - top_k: 10
+
+        max_age_days: 90
+
+        max_issue_size: 50000.0
+
+      - top_k: 12
+
+        max_age_days: 90
+
+        max_issue_size: 55000.0
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0
+
+
+
+# ------ 资金与规�?------
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+# ------ 实验指纹 ------
+
+random_seed: 42
+
+
+
+# ------ 输出 ------
+
+output_dir: "output/new_small_ensemble"
+
+
+
+# ============================================================
+
+# 预期效果
+
+# ============================================================
+
+expected_improvements:
+
+  - "Sharpe 对参数变化的敏感性降�?50%+"
+
+  - "保持高年?(目标 > 20%) 同时降低参数脆弱?"
+
+  - "2023 年信用违约事件损失减少（AA 以下剔除?"
+

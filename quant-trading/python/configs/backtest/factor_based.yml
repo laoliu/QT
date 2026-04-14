@@ -1,0 +1,66 @@
+# 模型因子策略 — 回测配置
+# ============================================================
+# 策略思路: 利用多因子模型（PE、PB、动量等）对标的进行打分排序。
+# 适用于中长期因子投资。
+
+name: "factor_based"
+description: >
+  基于多因子模型的选股策略 — 构建 PE/PB/动量 等因子组合，
+  采用 Z-Score 标准化加权打分，选取 Top-N 持仓。
+
+# ------ 数据 ------
+data:
+  source: "tushare_pro"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "factor_based"
+  params:
+    top_k: 30
+    rebalance_days: 20
+    # 因子权重（合计 1.0）：
+    # PE(0.3) + PB(0.2) 归入 value; momentum(0.3); ROE(0.2) 归入 quality
+    weight_value: 0.50            # PE + PB 综合
+    weight_momentum: 0.30         # 动量
+    weight_quality: 0.20          # ROE
+    weight_volatility: 0.0
+    weight_size: 0.0
+    value_metric: "pe_ttm"        # 价值因子使用 PE(TTM)
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+# ------ 股票池 ------
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 60
+
+# ------ 成本 (A股) ------
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005            # 2023-08-28 起印花税减半（千分之0.5，卖出）
+  transfer_fee_rate: 0.00001        # 2022-04-29 起统一过户费（万分之0.1）
+
+# ------ 滑点 ------
+slippage:
+  model: "fixed_bps"
+  bps: 5.0
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"
+

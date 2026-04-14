@@ -1,0 +1,63 @@
+# 强赎临门博弈策略 — 初始配置
+# ============================================================
+# 策略逻辑:
+#   筛选转股价值在 [lower, upper] 区间的可转债
+#   cb_value 接近 130（典型强赎触发线）时，转债大概率上涨
+#   低溢价率确保转债跟涨能力；止盈卖出突破上限的标的
+# ============================================================
+
+name: "forced_redeem_play"
+description: >
+  强赎临门博弈策略 — 捕捉 cb_value 接近130强赎触发线的机会。
+  在强赎压力区持有低溢价率转债，等待正股带动转债突破。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "forced_redeem_play"
+  params:
+    top_k: 10
+    rebalance_days: 5
+    lower_cb_value: 100.0
+    upper_cb_value: 130.0
+    max_premium: 20.0
+    max_price: 150.0
+    min_turnover: 30.0
+    exclude_st: true
+    stop_loss_pct: 0.12
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/forced_redeem_play"

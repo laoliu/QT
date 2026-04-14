@@ -1,0 +1,74 @@
+# R118 双低五因子增强评估 — DL主导 + 增强因子辅助
+# ============================================================
+# 变体 C: DL仍为主(0.40), 各增强因子适度加入
+# 折中思路: 保留DL主驱动力, 增强因子作为alpha增量
+# ============================================================
+
+name: "r118_dl5f_variant_c"
+description: >
+  R118 DL主导+增强辅助: DL(0.40)+DL_pct(0.15)+momentum(0.25)+RV_pct(0.10)+rating(0.10)
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-15"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_dl_enhanced_5f"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 135.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    max_premium: 40.0
+    exclude_st: true
+    exclude_called: true
+    stop_loss_pct: 0.10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    buffer_k: 2
+    dl_percentile_window: 120
+    reversal_window: 20
+    rv_window: 20
+    rv_percentile_window: 120
+    min_history: 20
+    premium_weight_in_dl: 1.0
+    # DL主导 + 增强因子辅助
+    w_double_low: 0.40
+    w_dl_percentile: 0.15
+    w_reversal: 0.25
+    w_rv_percentile: 0.10
+    w_rating: 0.10
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/r118_dl5f_variant_c"
+
+report:
+  generate_html: true

@@ -1,0 +1,39 @@
+capital:
+  currency: CNY
+  initial: 1000000.0
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  min_commission: 0.1  # 13.1 CB权威值
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+data:
+  adjust: none
+  cache_dir: data/cache/cb_tushare
+  end_date: '2025-12-31'
+  frequency: 1d
+  source: tushare_cb
+  start_date: '2018-01-01'
+description: '
+
+  可转债转股套利策�?�?买入可转债、转股卖出正�?
+
+  捕捉转换价值与市场价格之间的价差�?
+
+  '
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 10
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.15
+name: conversion_arbitrage
+output_dir: conversion_arbitrage_8y
+slippage:
+  bps: 5.0
+  model: fixed_bps
+strategy:
+  name: conversion_arbitrage
+  params:
+    lot_size: 10
+    max_position_pct: 0.1
+    min_spread: 0.5

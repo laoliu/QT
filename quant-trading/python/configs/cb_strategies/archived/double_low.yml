@@ -1,0 +1,82 @@
+# 双低轮动策略 — 8年回测配置
+# ============================================================
+# 数据范围: 2017-01-01 ~ 2024-12-31 (8年)
+# 成交模型: next_bar_open (NBO)
+#
+# 策略逻辑:
+#   经典双低: 低价格 + 低溢价率
+#   买入双低排名最优的 K 只可转债, 等权持有
+# ============================================================
+
+name: "double_low"
+description: >
+  经典双低策略 — 低价格 + 低溢价率综合评分。
+  基线参考策略; NBO 下收益有限, 可作为其他策略的对比基准。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2017-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "double_low"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 130.0
+    max_premium: 50.0
+    equal_weight: true
+    stop_loss_pct: 0.10             # C-7: 止损
+    trailing_stop_pct: 0.05          # C-7: 追踪止损
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/double_low_8y"
+
+# ------ 报告 ------
+report:
+  benchmark: null
+  custom_benchmark: "000832.CSI"
+
+# ============================================================
+# 基线结果 (默认参数, NBO)
+# ============================================================
+verified_metrics:
+  annual_return_pct: 2.78
+  max_drawdown_pct: 19.26
+  sharpe: 0.125
+
+# ============================================================
+# 已知风险
+# ============================================================
+risks:
+  - "NBO 下收益有限, 主要作为对比基准"
+  - "参数未经精细调优"

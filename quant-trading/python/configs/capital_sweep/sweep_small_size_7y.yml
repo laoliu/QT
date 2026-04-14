@@ -1,0 +1,17 @@
+# small_size 参数扫描配置
+# ============================================================
+# 目标: 从 26.30% 提升至 30%+ (MDD ≤ 25%)
+# 关键维度: top_k (集中度), max_price (价格上限), max_issue_size (规模过滤)
+# 网格: 5×4×3 = 60 组
+# ============================================================
+
+base_config: "configs/cb_strategies/small_size_optimized_7y.yml"
+
+param_ranges:
+  top_k: [3, 4, 5, 6, 8]
+  max_price: [130.0, 145.0, 155.0, 170.0]
+  max_issue_size: [10000.0, 15000.0, 20000.0]
+
+max_workers: 4
+output_dir: "output/sweep_small_size_7y"
+top_n: 20

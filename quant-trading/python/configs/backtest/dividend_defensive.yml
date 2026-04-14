@@ -1,0 +1,100 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  - alpha
+  - beta
+  - information_ratio
+  output_dir: reports/dividend_defensive
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.2
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: 000300.SH
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2024-01-01'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 5
+  name: fixed_bps
+strategy:
+  name: dividend_defensive
+  # ---------- 仅暴露核心可调参数，其余使用 dataclass 默认值 ----------
+  # 已移除: benchmark(report 块), exclude_st(universe_policy), lot_size(trading_rules),
+  # max_single_pct(risk_constraints), min_price/max_price/min_turnover/min_listed_days
+  # /buffer_k/cash_reserve_pct → 基类默认值。
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 200000.0
+    stop_loss_pct: 0.15
+    # ---------- 因子权重（总和应为 1.0） ----------
+    weight_dividend: 0.35
+    weight_quality: 0.25
+    weight_volatility: 0.20
+    weight_value: 0.10
+    weight_momentum: 0.10
+    # ---------- 质量复合因子内部权重 ----------
+    quality_roe_weight: 0.60
+    quality_debt_weight: 0.40
+    # ---------- 硬性过滤门槛 ----------
+    min_dividend_yield: 0.5
+    min_roe: 5.0
+    max_pe: 60.0
+    max_debt_to_assets: 75.0
+    # ---------- 以下参数使用 dataclass 默认值（无需显式指定） ----------
+    # dividend_field: "dv_ratio", volatility_lookback: 60, momentum_lookback: 20
+    # min_price: 3.0, max_price: 200.0, min_turnover: 500.0
+    # min_listed_days: 120, buffer_k: 8, max_single_pct: 0.05
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: dividend_defensive

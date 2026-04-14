@@ -1,0 +1,205 @@
+# CB 多策略组合回测配置（B3）
+# ============================================================
+# 目标：评估 3 个低相关 CB 策略组合后的 Sharpe 与回撤表现
+# 策略：cb_multi_alpha(均衡多因子) + small_size_gated(小盘门控)
+#       + double_low(双低经典)
+# 回测区间：2017-01-01 ~ 2024-12-31（8年，覆盖2022新规前后）
+# 配置方式：risk_parity 动态权重（基于 AdaptiveWeightAllocator）
+# ============================================================
+
+name: "cb_combo_3s_8y"
+description: >
+  可转债三策略组合回测（B3）。
+  组合策略：cb_multi_alpha + small_size_gated + double_low，
+  使用 risk_parity 动态权重分配，组合级风控覆盖回撤与集中度限制。
+
+# ---------------------------------------------------------------------------
+# 数据源配置（CB 专用）
+# ---------------------------------------------------------------------------
+data:
+  source: "tushare_cb"
+  start_date: "2017-01-01"
+  end_date:   "2024-12-31"
+  frequency:  "1d"
+  adjust:     "none"
+  cache_dir:  "data/cache/cb_tushare"
+
+# ---------------------------------------------------------------------------
+# 成交模型（保守假设，符合 A3/A2 修正后标准）
+# ---------------------------------------------------------------------------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15  # A2 修正：避免小盘 CB 成交量高估
+    lot_size: 10
+
+# ---------------------------------------------------------------------------
+# 成本模型（CB 费率：无印花税、低过户费）
+# ---------------------------------------------------------------------------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0          # CB 无印花税
+  transfer_fee_rate: 0.0
+  slippage_bps: 10.0           # A3 修正：保守滑点 10bps（原 5bps）
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 10.0
+    max_bps: 40.0
+
+# ---------------------------------------------------------------------------
+# 市场规则
+# ---------------------------------------------------------------------------
+trading_rules:
+  t_plus_n: 0         # CB 支持 T+0
+  lot_size: 10
+  allow_short: false
+
+initial_capital: 1500000.0    # 150万，3 子策略共享资金池
+random_seed: 42
+output_dir: "output/cb_combo_3s_8y"
+
+# ---------------------------------------------------------------------------
+# 股票池（CB 专用，强制排除强赎/到期标的）
+# ---------------------------------------------------------------------------
+universe_policy:
+  name: "cb_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+    - "FORCE_REDEEMED"  # 已公告强赎
+    - "NEAR_MATURITY"   # 距到期 ≤30 天
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+
+# ---------------------------------------------------------------------------
+# 多策略组合编排
+# ---------------------------------------------------------------------------
+portfolio:
+  # risk_parity: 基于各子策略历史波动率的风险贡献均等化
+  # 由 AdaptiveWeightAllocator.risk_parity() 计算
+  allocation_mode: "risk_parity"
+  rebalance_days: 20           # 每月重新计算权重
+
+  strategies:
+    - name: "cb_multi_alpha"
+      weight: 0.40             # 初始名义权重（risk_parity 模式下动态覆盖）
+      config:
+        top_k: 8
+        rebalance_days: 1
+        buffer_k: 3
+        max_price: 150.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 10.0
+        min_days_to_maturity: 60
+        exclude_st: true
+        exclude_called: true
+        max_premium: 80.0
+        momentum_lookback: 10
+        surge_lookback: 20
+        warmup_bars: 25
+        w_size: 0.30
+        w_momentum: 0.20
+        w_surge: 0.20
+        w_premium: 0.15
+        w_price: 0.15
+        stop_loss_pct: 0.12
+        min_positions: 3
+        lot_size: 10
+
+    - name: "small_size_gated"
+      weight: 0.35
+      config:
+        top_k: 5
+        rebalance_days: 1
+        buffer_k: 0
+        max_price: 150.0
+        max_issue_size: 20000.0
+        min_issue_size: 2000.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        exclude_called: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+        force_redeem_threshold: 130.0
+        force_redeem_days: 8
+        regime_lookback: 10
+        bear_threshold: -0.03
+        recovery_threshold: 0.0
+        cooldown_bars: 3
+        use_distress_signal: false
+        use_volume_signal: false
+
+    - name: "double_low"
+      weight: 0.25
+      config:
+        top_k: 10
+        rebalance_days: 5
+        exclude_called: true
+        max_price: 130.0
+        max_premium: 50.0
+        min_turnover: 5.0
+        min_days_to_maturity: 60
+        price_weight: 0.5
+        premium_weight: 0.5
+        lot_size: 10
+
+# ---------------------------------------------------------------------------
+# 组合级风控（risk_control — B2 已确认消费路径）
+# ---------------------------------------------------------------------------
+risk_control:
+  # 市场状态检测（CB 市场参考 CSI 中证可转债指数）
+  market_regime:
+    enabled: true
+    index: "000932.CSI"        # 中证可转债及可交换债指数
+    bull_threshold: 0.08
+    bear_threshold: -0.06
+    high_vol_threshold: 0.025
+    actions:
+      BEAR:
+        position_scale: 0.60   # 熊市减仓至 60%
+      BULL:
+        position_scale: 1.0
+      NEUTRAL:
+        position_scale: 0.85
+
+  # 强赎暴露约束（转股价值 ≥125 的持仓占比上限）
+  force_redeem_exposure:
+    enabled: true
+    max_exposure: 0.30         # ≤30% 总仓位可处于强赎临界区
+
+  # 全组合回撤熔断
+  drawdown_limit:
+    max_drawdown_pct: 0.20     # 组合最大回撤 20% 触发
+    action: "reduce_to_50pct"
+
+  # 集中度约束
+  concentration:
+    max_single_pct: 0.08       # 组合级单票最多 8%
+    max_top5_pct: 0.30         # 组合级 top5 最多 30%
+
+# ---------------------------------------------------------------------------
+# 报告设置
+# ---------------------------------------------------------------------------
+report:
+  benchmark: "000832.CSI"      # 中证可转债指数（净价）
+  compare_sub_strategies: true
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+    - "strategy_correlation"
+    - "sub_strategy_contribution"
+    - "yearly_returns"
+  universe_summary: true

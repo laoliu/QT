@@ -1,0 +1,75 @@
+# Paper Trading 配置 — CB small_size v2 策略（优化版）
+# ============================================================
+# 启动日期: 2026-02-27（S4 阶段，至少持续 3 个月到 2026-05-27）
+# 策略: small_size（小规模因子轮动）
+# 参数来源: small_size_v2_7y.yml（7年参数扫描最优）
+# 7年 WF 验证: IS 30.0% → OOS 75.0%, WF Score=8.0, Win=100%
+# 7年回测: AR=48.46%, MDD=18.82%, SR=1.55, Calmar=2.58
+# ============================================================
+# 用法: python -m aipha paper --config configs/paper/cb_small_size_v2.yml
+# ============================================================
+
+paper_engine:
+  strategy_name: "small_size"
+
+  # 策略参数 — 来自 small_size_v2_7y.yml（参数扫描最优）
+  strategy_params:
+    top_k: 4                   # v2 集中持仓（v1=15）
+    rebalance_days: 1          # 日频调仓（T+0 CB）
+    max_price: 145.0           # 溢价过高则排除
+    max_issue_size: 20000.0    # 万元，小规模偏好（≤2亿）
+    min_issue_size: 0.0
+    min_turnover: 10.0         # 最低日成交额（万元）
+    min_days_to_maturity: 30   # 临近到期排除
+    exclude_st: true
+    stop_loss_pct: 0.10        # 10% 止损
+    lot_size: 10               # 可转债最小交易单位（张）
+
+  # 数据源
+  market_type: "convertible_bond"
+  poll_interval: 3.0           # 行情轮询间隔（秒）
+  bar_interval_sec: 60         # 分钟 K 线
+
+  # 资金与交易规则（与回测一致）
+  initial_capital: 500000.0    # 50 万启动资金
+  lot_size: 10
+  t_plus_n: 0                  # CB T+0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5          # 可转债无最低佣金
+  stamp_tax_rate: 0.0          # CB 免印花税
+  slippage_bps: 5.0            # 5 bps 滑点（保守估计）
+
+  # 状态持久化
+  state_dir: "data/paper_state/small_size_v2"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/small_size_v2"
+
+  # 动态标的池（Universe）
+  universe:
+    enabled: true
+    max_price: 145.0           # 与策略参数对齐
+    min_amount: 0.5            # 最低日成交额 0.5 百万
+    refresh_interval_sec: 3600 # 每小时刷新
+
+  # 监控告警
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.20        # WF MDD 18.82%，设 20% 警戒线
+  alert_daily_loss_threshold: 0.03      # 单日 3% 告警
+  alert_data_stale_seconds: 120.0
+  alert_inactivity_minutes: 60.0
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/small_size_v2"
+    write_interval_sec: 60
+
+# S4 阶段记录
+# ============================================================
+# 启动条件: 7年 WF Score=8.0 (PASS), OOS AR=75%, Win=100%
+# 最低持续时间: ≥3 个月（到 2026-05-27 方可评估 S5）
+# 关键指标监控:
+#   - 月度收益是否持续正向
+#   - 最大回撤是否超过 20%（接近 WF MDD 18.82%）
+#   - 日均换手率是否与回测一致（约 70-80%）
+# 下一里程碑: S5 小规模实盘（资金 ≤5万，≥3 个月模拟盘合格后）

@@ -1,0 +1,124 @@
+# 小盘转�?�?扩展回测 (2018-2025)
+
+
+
+name: "small_size"
+
+description: >
+
+  小盘转债策略扩展回�?�?2018-2025
+
+
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+strategy:
+
+  name: "small_size"
+
+  params:
+
+    top_k: 20
+
+    rebalance_days: 1
+
+    buffer_k: 0
+
+    max_price: 130.0
+
+    max_issue_size: 50000.0
+
+    min_turnover: 20.0
+
+    min_days_to_maturity: 30
+
+    stop_loss_pct: 0.15
+
+    force_redeem_threshold: 130.0
+
+    force_redeem_days: 8
+
+    lot_size: 10
+
+    exclude_called: true
+
+    exclude_st: true
+
+
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0
+
+
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+risk_constraints:
+
+  force_redeem_enabled: true
+
+  force_redeem_max_weight: 0.30
+
+  force_redeem_cb_value_threshold: 125.0
+
+  stop_loss_pct: 0.15
+
+  circuit_breaker_enabled: true
+
+  circuit_breaker_drawdown: 0.10
+
+
+
+random_seed: 42
+
+output_dir: "output/small_size_7y"
+
+
+
+report:
+
+  benchmark: null
+
+  custom_benchmark: "000832.CSI"
+

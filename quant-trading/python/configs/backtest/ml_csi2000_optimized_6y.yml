@@ -1,0 +1,102 @@
+# ============================================================
+# CSI2000 ML OOS Replay — Optimized (No Death Spiral)
+# ============================================================
+# Fixes vs ml_factor_csi2000_6y.yml:
+#   1. MDD gradient + vol target DISABLED (prior death spiral root cause)
+#   2. rebalance_days 5→10 (target: TO ~15x)
+#   3. buffer_k=5 (reduce unnecessary churn)
+#   4. Fixed 8bps slippage (cleaner than linear_impact for evaluation)
+#   5. MDD hard limit 30% (risk control without death spiral)
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0000854    # 万0.854 (统一费率)
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05   # 小盘股参与率限5%
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 399303.SZ
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_optimized_6y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30          # MDD 30% hard limit
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  position_sizing:
+    mdd_gradient:
+      enabled: false              # DISABLED: 防止 death spiral
+    volatility_target:
+      enabled: false              # DISABLED: 防止 death spiral
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 8.0                        # CSI2000 小盘固定 8bps
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 10             # 5→10: 降换手率
+    buffer_k: 5                    # 缓冲区: 减少不必要换手
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    min_mv: 30000                  # ≥3亿
+    max_mv: 2000000                # ≤200亿
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.15
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.03
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi2000_lgb_fund
+    oos_predictions_path: models/ml_csi2000_lgb_fund/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 399303.SZ

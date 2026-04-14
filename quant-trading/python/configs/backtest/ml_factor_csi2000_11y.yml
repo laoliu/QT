@@ -1,0 +1,86 @@
+# CSI2000 ML OOS Replay — 10年A股门槛配置 (R56 A5)
+# ============================================================
+# 将 ML 回测开始日期从 2020-01-17 延长至 2015-01-05
+# 满足 §1.2 A股策略 ≥10 年回测要求
+# 前提: 需先用 train_ml_factor.py --start 2012-01-01 重训练模型
+# OOS predictions 需覆盖 2015-01-05 ~ 2025-12-31
+# ============================================================
+
+# NOTE: ML 策略实际通过 risk_controlled_replay.py → fee_config.py → .env 加载费率
+# 以下值与 .env 保持同步，作为参考文档（R115 审查后修正）
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0000854}  # 万0.854 (与 .env COMMISSION_RATE 一致)
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10  # 与 .env MAX_PARTICIPATION=0.10 一致 (R115修正)
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_oos_replay_11y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.15   # 行业≤15% (与 runtime config 一致, R115修正)
+  max_single_position_pct: 0.03  # 个股≤3% (与 runtime config 一致, R115修正)
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标已禁用 (prior death spiral root cause)
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0        # 与 .env SLIPPAGE_SPREAD_BPS=3.0 一致 (R115修正)
+  impact_coeff: 10.0   # 与 .env IMPACT_COEFF=10.0 一致 (R115修正)
+  fallback_bps: 15.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 5
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi2000_lgb_fund_11y
+    oos_predictions_path: models/ml_csi2000_lgb_fund_11y/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    purge_days: 10

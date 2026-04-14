@@ -1,0 +1,94 @@
+# ============================================================
+# CSI300 ML - T+1 Aligned + Low Turnover Optimization
+# ============================================================
+# 目标: 换手率从 26.5x 降至 ~15x
+# 手段: rebalance_days 5→10, buffer_k=5, 5bps fixed slippage
+# 基线: ml_csi300_t1aligned_5bps (AR=19.3%, SR=0.84, TO=26.5x)
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0000854
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.25
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  output_dir: output/ml_csi300_t1a_low_turnover
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30       # MDD 30% hard limit
+  max_sector_pct: 0.25         # 行业≤25%
+  max_single_position_pct: 0.10
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2018-01-16'
+  end_date: '2025-12-15'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: fixed
+  bps: 5.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 30
+    rebalance_days: 10           # 5→10: 降低换手率 ~50%
+    buffer_k: 5                  # 已持仓标的在 top_k+5 内保留
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    min_mv: 100000
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.15
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.10
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi300_lgb_p3_t1aligned
+    oos_predictions_path: models/ml_csi300_lgb_p3_t1aligned/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5

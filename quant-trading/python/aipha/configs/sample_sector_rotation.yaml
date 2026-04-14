@@ -1,0 +1,38 @@
+# 行业轮动策略回测配置
+
+name: sector_rotation_backtest
+
+data:
+  source: akshare
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: qfq
+
+universe:
+  policy: default
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 120
+
+strategy:
+  name: sector_rotation
+  params:
+    top_sectors: 6
+    momentum_window: 20
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  slippage_bps: 10.0
+
+risk:
+  enabled: true
+  max_position_weight: 0.05
+  max_drawdown: 0.20
+  max_sector_weight: 0.25
+
+initial_capital: 1000000
+output_dir: output/sector_rotation

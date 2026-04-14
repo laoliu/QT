@@ -1,0 +1,93 @@
+# ============================================================
+# CSI2000 ML T+1 Aligned — MDD Controlled
+# ============================================================
+# Same as ml_csi2000_t1a_6y.yml but with MDD gradient + vol target enabled
+# Target: reduce MDD from 37.4% to ≤30% while maintaining AR/SR
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0000854
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 399303.SZ
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_t1a_mdd_ctrl
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.25
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  drawdown_scale_factor_floor: 0.3
+  drawdown_allow_rotation: true
+  drawdown_peak_reset_days: 20
+  position_sizing:
+    mdd_gradient:
+      enabled: true
+      levels:
+        - [0.08, 1.00]
+        - [0.12, 0.75]
+        - [0.18, 0.50]
+        - [0.25, 0.25]
+        - [1.00, 0.10]
+    volatility_target:
+      enabled: true
+      target_vol: 0.20
+      lookback_days: 20
+      min_scale: 0.3
+      max_scale: 1.0
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 8.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 10
+    buffer_k: 5
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi2000_lgb_fund_t1aligned
+    oos_predictions_path: models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet

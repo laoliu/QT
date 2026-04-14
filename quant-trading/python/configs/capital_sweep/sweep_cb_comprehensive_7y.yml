@@ -1,0 +1,17 @@
+# cb_comprehensive 参数扫描配置
+# ============================================================
+# 目标: 验证健壮性 + 寻找更优参数 (当前 32.75%/MDD 17.96%)
+# 关键维度: top_k, weight_size, weight_mean_reversion
+# 网格: 4×4×3 = 48 组
+# ============================================================
+
+base_config: "configs/cb_strategies/cb_comprehensive_opt_7y.yml"
+
+param_ranges:
+  top_k: [3, 5, 6, 8]
+  weight_size: [0.15, 0.20, 0.25, 0.30]
+  weight_mean_reversion: [0.15, 0.20, 0.25]
+
+max_workers: 4
+output_dir: "output/sweep_cb_comprehensive_7y"
+top_n: 20

@@ -1,0 +1,101 @@
+# 跨资产组合配置 — CB + ETF + A股 三层组合
+# ============================================================
+# 推荐方案 A（追求 P22avg ≥ 20%）: CB 60% + ETF 40%
+# 推荐方案 B（风险调整最优）: CB 45% + ETF 30% + A股 25%
+#
+# 基于 2016-2024 年度收益相关性分析:
+#   CB(small_size) vs ETF(cross_v3): ρ = 0.44 (低相关)
+#   CB(small_size) vs A股(baseline): ρ = -0.33 (负相关)
+#   ETF(cross_v3) vs A股(baseline): ρ = -0.19 (负相关)
+# ============================================================
+
+combination:
+  name: "cross_asset_3layer"
+  description: "CB + ETF + A股 跨资产多策略组合"
+  rebalance_frequency: "monthly"
+  
+  # ── 方案 A: 最大化 P22avg (≥ 20%) ──
+  plan_a:
+    name: "max_p22avg"
+    target: "P22avg ≥ 20%"
+    weights:
+      cb_small_size: 0.60
+      etf_cross_v3: 0.40
+      a_stock_baseline: 0.00
+    expected_metrics:
+      p22avg_pct: 20.1
+      full_period_ar_pct: 18.4
+      sharpe_ratio: 0.87
+      yearly_mdd_approx_pct: 6.5
+    notes:
+      - "2 层结构, CB+ETF 相关系数 0.44"
+      - "2016/2018 年出现负收益 (-2.6%, -6.5%)"
+      - "2022 年强势 +32.7%"
+
+  # ── 方案 B: 最大化风险调整收益 ──
+  plan_b:
+    name: "max_risk_adjusted"
+    target: "最高 SR 同时保持 P22avg ≥ 15%"
+    weights:
+      cb_small_size: 0.45
+      etf_cross_v3: 0.30
+      a_stock_baseline: 0.25
+    expected_metrics:
+      p22avg_pct: 16.2
+      full_period_ar_pct: 16.2
+      sharpe_ratio: 1.07
+      yearly_mdd_approx_pct: 5.9
+    notes:
+      - "3 层结构, A股提供负相关对冲"
+      - "仅 2018 年负收益 (-5.9%)"
+      - "SR 比方案 A 高 23% (1.07 vs 0.87)"
+
+  # ── 方案 C: 保守型 (最高 SR) ──
+  plan_c:
+    name: "conservative"
+    target: "最高 SR"
+    weights:
+      cb_small_size: 0.35
+      etf_cross_v3: 0.25
+      a_stock_baseline: 0.40
+    expected_metrics:
+      p22avg_pct: 13.9
+      full_period_ar_pct: 14.7
+      sharpe_ratio: 1.24
+      yearly_mdd_approx_pct: 5.6
+    notes:
+      - "A股权重最高, 充分利用负相关"
+      - "SR 1.24 为所有方案最高"
+      - "P22avg 仅 13.9%, 不达 20% 目标"
+
+# ── 组合成分策略 ──
+legs:
+  cb_small_size:
+    config: "configs/cb_strategies/small_size_10y.yml"
+    output: "output/small_size_10y"
+    metrics:
+      ar_pct: 20.6
+      mdd_pct: 22.8
+      sharpe: 1.31
+      p22avg_pct: 20.4
+      turnover: 6.5
+
+  etf_cross_v3:
+    config: "configs/backtest/etf_cross_v3_11y.yml"
+    output: "output/etf_cross_v3_11y"
+    metrics:
+      ar_pct: 12.3
+      mdd_pct: 22.4
+      sharpe: 0.54
+      p22avg_pct: 19.6
+      turnover: 6.3
+
+  a_stock_baseline:
+    config: "configs/backtest/a_stock_multifactor_baseline_10y.yml"
+    output: "output/a_stock_multifactor_baseline_10y"
+    metrics:
+      ar_pct: 8.4
+      mdd_pct: 16.4
+      sharpe: 0.67
+      p22avg_pct: 4.6
+      turnover: 0.7

@@ -1,0 +1,104 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  cache_dir: data/cache/tushare
+  provider: tushare_pro
+  snapshot: latest
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 100
+    max_participation_rate: 0.1
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: reports/r3_vol_only_wide
+  universe_summary: true
+risk:
+  circuit_breaker_enabled: false
+  enabled: true
+  market_regime_enabled: false
+  position_sizing:
+    drawdown_control:
+      enabled: false
+    volatility_target:
+      enabled: true
+      lookback_days: 20
+      max_scale: 1.0
+      min_scale: 0.3
+      target_vol: 0.3
+  stop_loss_pct: 0.5
+  trailing_stop_pct: 0.0
+risk_constraints:
+  max_drawdown_pct: 0.6
+  max_sector_pct: 0.4
+  max_single_position_pct: 0.25
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2013-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 3
+  name: fixed_bps
+strategy:
+  name: smallcap_rotation
+  parameters:
+    buffer_k: 3
+    cash_reserve_pct: 0.02
+    max_mv: 5000000.0
+    max_price: 9999.0
+    max_single_pct: 0.25
+    min_listed_days: 60
+    min_mv: 50000.0
+    min_price: 1.0
+    min_turnover: 300.0
+    momentum_invert: false
+    momentum_lookback: 20
+    momentum_multi_period: true
+    momentum_skip_recent: 1
+    rebalance_days: 5
+    regime_adaptive: false
+    stop_loss_pct: 0.5
+    top_k: 5
+    volatility_lookback: 20
+    weight_momentum: 0.12
+    weight_quality: 0.03
+    weight_small_cap: 0.8
+    weight_turnover: 0.0
+    weight_value: 0.0
+    weight_volatility: 0.05
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

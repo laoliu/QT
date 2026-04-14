@@ -1,0 +1,53 @@
+# V2 ML 5-Model Ensemble Paper Config
+# 5 个预训练 ML 模型 rank_average 集成选股, CSI2000 近似股票池
+
+paper_engine:
+  strategy_name: "v2_ml_ensemble"
+  description: "V2: 5-model LGB+DE rank_average ensemble, CSI2000 top50"
+  market_type: "a_stock"
+  initial_capital: 1000000.0
+  lot_size: 100
+  t_plus_n: 1
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005  # 卖出万5
+  transfer_fee_rate: 0.00001
+  slippage_bps: 8.0
+  fill_model:
+    name: "next_bar_open"
+  slippage_model: "fixed"
+  state_dir: "data/paper_state/v2_ensemble"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/v2_ensemble"
+
+# 选股参数
+strategy:
+  name: ml_factor
+  parameters:
+    top_k: 50
+    rebalance_days: 10
+    buffer_k: 5
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    universe: "csi2000"
+
+# 5个 V2 集成模型
+models:
+  ensemble_method: rank_average
+  model_dirs:
+    - models/ml_csi2000_lgb_20d_r40
+    - models/ml_csi2000_de_10d
+    - models/ml_csi2000_lgb_b3_sizeneutral
+    - models/ml_csi2000_lgb_fund_t1aligned
+    - models/ml_csi2000_lgb_20d_neutral_p1
+
+# 风控 (与回测对齐)
+risk:
+  max_drawdown: 0.30
+  mdd_gradient:
+    enabled: false  # V2 回测表明 MDD 梯度减仓对 V 形回撤策略反效果
+  vol_target:
+    enabled: false
+  position_limit:
+    max_single_pct: 0.05  # 单票不超 5%

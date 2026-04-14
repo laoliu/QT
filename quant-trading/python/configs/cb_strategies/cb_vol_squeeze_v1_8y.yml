@@ -1,0 +1,76 @@
+# 波动压缩策略 v1 — 8年回测 (2018-2026)
+# ============================================================
+# 灵感来源: 国金证券 2025 报告「期权策略」——振幅差因子
+# 经济学基础:
+#   - 振幅压缩 = 期权隐含波动率被低估 → 波动扩张空间大
+#   - 短窗口/长窗口振幅比 < 1 → 当前波动异常低 → 即将爆发
+#   - 配合低价+低溢价+高评级 → 安全边际 + 期权价值
+# 参考 AR=14%, MDD<10%, SR/Calmar>1.5 (国金证券)
+# ============================================================
+
+name: "cb_vol_squeeze_v1_8y"
+description: >
+  波动压缩策略 v1 — 基于振幅压缩比的期权价值策略。
+  5因子: amplitude(0.30) + price(0.20) + premium(0.20) + size(0.15) + rating(0.15)。
+  捕捉波动率即将扩张的低估可转债。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_vol_squeeze"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 135.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    max_premium: 40.0
+    exclude_st: true
+    exclude_called: true
+    stop_loss_pct: 0.10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    buffer_k: 2
+    short_window: 10
+    long_window: 60
+    min_history: 20
+    w_amplitude: 0.15
+    w_price: 0.35
+    w_premium: 0.30
+    w_size: 0.05
+    w_rating: 0.15
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_vol_squeeze_v1_8y"
+
+report:
+  benchmark: "000300.SH"

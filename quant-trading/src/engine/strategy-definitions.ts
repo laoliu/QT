@@ -1477,7 +1477,7 @@ const backtraderStrategies: StrategyDefinition[] = [
       "利用A股T+1制度下的过度反应回归特性，适合震荡行情。",
     version: "1.0.0",
     engine: "backtrader",
-    entryFile: "strategies/mean_reversion_cn.py",
+    entryFile: "strategies/mean_reversion_cn_strategy.py",
     parameters: [
       {
         name: "ma_period",
@@ -1516,7 +1516,7 @@ const backtraderStrategies: StrategyDefinition[] = [
       "定期轮动持仓。适合股票池量化筛选和组合再平衡。",
     version: "1.0.0",
     engine: "backtrader",
-    entryFile: "strategies/multi_factor.py",
+    entryFile: "strategies/multi_factor_strategy.py",
     parameters: [
       {
         name: "momentum_weight",
@@ -1563,6 +1563,695 @@ const backtraderStrategies: StrategyDefinition[] = [
       },
     ],
     markets: ["cn_stock", "us_stock"],
+  },
+  {
+    id: "bollinger",
+    name: "布林带均值回归 (Bollinger Band)",
+    description:
+      "布林带策略：价格触及下轨时买入（超卖反弹），触及上轨时卖出（超买回落）。" +
+      "内置挤压检测：当布林带收窄（波动率低）时暂停开仓，避免假信号。适合震荡行情。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/bollinger_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "布林带周期", min: 10, max: 50 },
+      {
+        name: "devfactor",
+        type: "number",
+        default: 2.0,
+        description: "标准差倍数",
+        min: 1.0,
+        max: 3.5,
+        step: 0.1,
+      },
+      {
+        name: "squeeze_pct",
+        type: "number",
+        default: 50,
+        description: "挤压阈值（%中位带宽）",
+        min: 20,
+        max: 80,
+        step: 5,
+      },
+    ],
+  },
+  {
+    id: "dragon_master",
+    name: "真龙战法 (Dragon Master)",
+    description:
+      "真龙战法回测策略：3板打板买入，要求放量换手板确认。" +
+      "核心逻辑：一板不买、二板确认、三板打板最安全。" +
+      "多层退出：跌停紧急→止损5%→时间3天→晋级持有→止盈15%→MA5追踪。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/dragon_master_strategy.py",
+    parameters: [
+      { name: "target_board", type: "number", default: 3, description: "目标板数(几板打板)", min: 2, max: 5 },
+      { name: "allow_2board", type: "boolean", default: false, description: "是否允许2板换手板入场" },
+      { name: "max_holding_days", type: "number", default: 3, description: "最长持有天数", min: 1, max: 10 },
+      { name: "stop_loss_pct", type: "number", default: 0.05, description: "止损比例", min: 0.02, max: 0.15, step: 0.01 },
+      { name: "take_profit_pct", type: "number", default: 0.15, description: "分步止盈阈值", min: 0.05, max: 0.30, step: 0.05 },
+      { name: "volume_mult", type: "number", default: 1.5, description: "放量倍数(vs前3日均量)", min: 1.0, max: 3.0, step: 0.1 },
+      { name: "min_turnover", type: "number", default: 3.0, description: "最低换手率(%)", min: 1.0, max: 10.0, step: 0.5 },
+    ],
+    markets: ["cn_stock"],
+  },
+  {
+    id: "lianban_relay",
+    name: "连板接力二进三 (Limit-Up Relay)",
+    description:
+      "连板接力策略：买入已连续涨停N天的股票，目标捕捉第N+1板。" +
+      "默认二进三（买入2连板股，博第3板）。" +
+      "多层退出：跌停紧急退出、止损、最长持有天数、晋级继续持有、高开未封分步止盈。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/lianban_relay_strategy.py",
+    parameters: [
+      { name: "min_boards", type: "number", default: 2, description: "最低连板数", min: 1, max: 5 },
+      { name: "max_holding_days", type: "number", default: 3, description: "最长持有天数", min: 1, max: 10 },
+      { name: "stop_loss_pct", type: "number", default: 0.05, description: "止损比例", min: 0.02, max: 0.15, step: 0.01 },
+      { name: "take_profit_pct", type: "number", default: 0.15, description: "分步止盈阈值", min: 0.05, max: 0.30, step: 0.05 },
+      { name: "min_turnover", type: "number", default: 3.0, description: "最低换手率(%)", min: 1.0, max: 10.0, step: 0.5 },
+      { name: "max_turnover", type: "number", default: 25.0, description: "最高换手率(%)", min: 10.0, max: 50.0, step: 1.0 },
+      { name: "min_quality", type: "number", default: 40, description: "最低板质评分", min: 10, max: 80, step: 5 },
+    ],
+    markets: ["cn_stock"],
+  },
+  {
+    id: "qmt-lianban-relay",
+    name: "QMT连板接力实盘 (QMT Limit-Up Relay)",
+    description:
+      "QMT平台连板接力实盘监控策略：盘中订阅候选股1分钟K线，" +
+      "实时监控封板状态，封板确认+量能配合时推送信号或自动下单。" +
+      "与连板接力回测策略互补，用于盘中实时执行。",
+    version: "1.0.0",
+    engine: "qmt",
+    entryFile: "strategies/qmt_lianban_monitor.py",
+    parameters: [
+      { name: "min_seal_minutes", type: "number", default: 3, description: "最低封板时长(分钟)", min: 1, max: 10 },
+      { name: "auto_order", type: "boolean", default: false, description: "是否自动下单" },
+    ],
+    markets: ["cn_stock"],
+  },
+  {
+    id: "qmt-dual-ma-5m",
+    name: "QMT 5分钟双均线 (QMT Dual MA 5min)",
+    description:
+      "QMT平台5分钟双均线策略：基于EMA12/EMA26交叉信号，" +
+      "在QMT环境中实时运行，信号输出到OpenClaw webhook。适合日内短线交易。",
+    version: "1.0.0",
+    engine: "qmt",
+    entryFile: "strategies/qmt_dual_ma_5m.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 12, description: "快速EMA周期", min: 5, max: 30 },
+      { name: "slow_period", type: "number", default: 26, description: "慢速EMA周期", min: 10, max: 60 },
+      { name: "confidence", type: "number", default: 0.8, description: "信号置信度", min: 0.5, max: 1.0, step: 0.1 },
+    ],
+    markets: ["cn_stock"],
+  },
+  {
+    id: "sector-synergy-chase",
+    name: "板块协同大单追涨 (Sector Synergy Chase)",
+    description:
+      "板块协同大单追涨策略：在涨停封板前的6%~9%区间介入。" +
+      "买入条件：板块有≥2只涨停股、换手率5-20%、攻击斜率>60°、大单净额>5000万。" +
+      "与连板接力（封板后确认）互补，本策略在封板前介入。",
+    version: "1.0.0",
+    engine: "qmt",
+    entryFile: "strategies/sector_synergy_strategy.py",
+    parameters: [
+      { name: "gain_low", type: "number", default: 6.0, description: "最低涨幅(%)", min: 3.0, max: 8.0, step: 0.5 },
+      { name: "gain_high", type: "number", default: 9.0, description: "最高涨幅(%)", min: 7.0, max: 9.9, step: 0.1 },
+      { name: "min_sector_limit_up", type: "number", default: 2, description: "板块最低涨停数", min: 1, max: 5 },
+      { name: "min_big_order", type: "number", default: 5000, description: "大单净额阈值(万)", min: 1000, max: 20000, step: 1000 },
+      { name: "stop_loss_pct", type: "number", default: 0.03, description: "止损比例", min: 0.01, max: 0.10, step: 0.01 },
+      { name: "take_profit_pct", type: "number", default: 0.10, description: "止盈比例", min: 0.05, max: 0.20, step: 0.01 },
+    ],
+    markets: ["cn_stock"],
+  },
+
+  // ── CTA趋势策略 (Python Backtrader) ────────────────────────────
+  {
+    id: "ema-cross",
+    name: "EMA均线交叉 (EMA Crossover)",
+    description: "EMA双均线交叉策略：快速EMA上穿慢速EMA买入（金叉），下穿卖出（死叉）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/ema_cross_strategy.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 10, description: "快速EMA周期", min: 3, max: 50 },
+      { name: "slow_period", type: "number", default: 30, description: "慢速EMA周期", min: 10, max: 120 },
+    ],
+  },
+  {
+    id: "adx-trend",
+    name: "ADX趋势强度 (ADX Trend)",
+    description: "ADX趋势强度策略：+DI上穿-DI且ADX大于阈值时买入，反之卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/adx_trend_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "ADX/DI计算周期", min: 7, max: 30 },
+      { name: "adx_threshold", type: "number", default: 25, description: "ADX趋势确认阈值", min: 15, max: 40 },
+    ],
+  },
+  {
+    id: "parabolic-sar",
+    name: "抛物线SAR (Parabolic SAR)",
+    description: "抛物线SAR策略：SAR点在价格下方时做多，翻转到上方时平仓。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/parabolic_sar_strategy.py",
+    parameters: [
+      { name: "af_start", type: "number", default: 0.02, description: "加速因子起始值", min: 0.01, max: 0.05, step: 0.01 },
+      { name: "af_step", type: "number", default: 0.02, description: "加速因子步进", min: 0.01, max: 0.05, step: 0.01 },
+      { name: "af_max", type: "number", default: 0.20, description: "加速因子最大值", min: 0.10, max: 0.40, step: 0.02 },
+    ],
+  },
+  {
+    id: "ichimoku",
+    name: "一目均衡表 (Ichimoku Cloud)",
+    description:
+      "一目均衡表策略：价格位于云层之上且转换线上穿基准线时买入，" +
+      "价格破入云层或转换线下穿基准线时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/ichimoku_strategy.py",
+    parameters: [
+      { name: "tenkan_period", type: "number", default: 9, description: "转换线周期", min: 2, max: 50 },
+      { name: "kijun_period", type: "number", default: 26, description: "基准线周期", min: 5, max: 100 },
+      { name: "senkou_period", type: "number", default: 52, description: "先行带B周期", min: 10, max: 200 },
+    ],
+  },
+  {
+    id: "supertrend",
+    name: "超级趋势 (Supertrend)",
+    description: "超级趋势策略：基于ATR构建动态支撑/阻力线。价格突破上轨做多，跌破下轨平仓。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/supertrend_strategy.py",
+    parameters: [
+      { name: "atr_period", type: "number", default: 10, description: "ATR计算周期", min: 5, max: 30 },
+      { name: "multiplier", type: "number", default: 3.0, description: "ATR倍数", min: 1.0, max: 5.0, step: 0.1 },
+    ],
+  },
+  {
+    id: "dema-cross",
+    name: "DEMA双重指数均线 (DEMA Crossover)",
+    description: "DEMA双均线交叉策略：快速DEMA上穿慢速DEMA买入（金叉），下穿卖出（死叉）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/dema_strategy.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 10, description: "快速DEMA周期", min: 3, max: 50 },
+      { name: "slow_period", type: "number", default: 30, description: "慢速DEMA周期", min: 10, max: 120 },
+    ],
+  },
+  {
+    id: "tema-cross",
+    name: "TEMA三重指数均线 (TEMA Crossover)",
+    description: "TEMA双均线交叉策略：快速TEMA上穿慢速TEMA买入（金叉），下穿卖出（死叉）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/tema_strategy.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 10, description: "快速TEMA周期", min: 3, max: 50 },
+      { name: "slow_period", type: "number", default: 30, description: "慢速TEMA周期", min: 10, max: 120 },
+    ],
+  },
+  {
+    id: "aroon",
+    name: "阿隆指标 (Aroon)",
+    description: "阿隆指标策略：Aroon Up上穿70且Aroon Down低于30时买入，反之卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/aroon_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 25, description: "阿隆计算周期", min: 10, max: 50 },
+      { name: "upper_threshold", type: "number", default: 70, description: "上阈值", min: 60, max: 90 },
+      { name: "lower_threshold", type: "number", default: 30, description: "下阈值", min: 10, max: 40 },
+    ],
+  },
+  {
+    id: "vortex",
+    name: "漩涡指标 (Vortex)",
+    description: "漩涡指标策略：VI+上穿VI-时买入，VI-上穿VI+时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/vortex_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "漩涡指标计算周期", min: 7, max: 30 },
+    ],
+  },
+  {
+    id: "cci",
+    name: "CCI顺势指标 (CCI Trend)",
+    description: "CCI顺势指标策略：CCI突破+100买入，跌破0卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/cci_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "CCI计算周期", min: 10, max: 40 },
+      { name: "upper_level", type: "number", default: 100, description: "买入阈值", min: 50, max: 200 },
+      { name: "lower_level", type: "number", default: -100, description: "强空阈值", min: -200, max: -50 },
+    ],
+  },
+  {
+    id: "trix",
+    name: "三重指数平滑 (TRIX)",
+    description: "TRIX策略：TRIX上穿信号线买入，下穿信号线卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/trix_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 15, description: "TRIX周期", min: 5, max: 30 },
+      { name: "signal_period", type: "number", default: 9, description: "信号线周期", min: 3, max: 15 },
+    ],
+  },
+  {
+    id: "momentum",
+    name: "动量策略 (Momentum)",
+    description: "动量策略：N日动量转正且加速时买入，转负时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/momentum_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 12, description: "动量周期", min: 5, max: 30 },
+      { name: "ma_period", type: "number", default: 6, description: "动量平滑周期", min: 3, max: 15 },
+    ],
+  },
+  {
+    id: "dmi",
+    name: "趋向指标 (DMI)",
+    description: "DMI趋向指标策略：+DI上穿-DI买入，-DI上穿+DI卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/dmi_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "DI计算周期", min: 7, max: 30 },
+    ],
+  },
+
+  // ── CTA通道策略 (Python Backtrader) ────────────────────────────
+  {
+    id: "keltner-channel",
+    name: "肯特纳通道 (Keltner Channel)",
+    description: "肯特纳通道策略：价格突破上轨买入，跌破下轨或回到中轨卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/keltner_channel_strategy.py",
+    parameters: [
+      { name: "ema_period", type: "number", default: 20, description: "EMA中轨周期", min: 10, max: 50 },
+      { name: "atr_period", type: "number", default: 20, description: "ATR周期", min: 10, max: 50 },
+      { name: "atr_mult", type: "number", default: 2.0, description: "ATR乘数", min: 1.0, max: 4.0, step: 0.5 },
+    ],
+  },
+  {
+    id: "donchian-breakout",
+    name: "唐奇安通道突破 (Donchian Breakout)",
+    description: "唐奇安通道突破策略：价格突破N日最高价买入，跌破M日最低价卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/donchian_breakout_strategy.py",
+    parameters: [
+      { name: "upper_period", type: "number", default: 20, description: "上轨突破周期", min: 5, max: 60 },
+      { name: "lower_period", type: "number", default: 10, description: "下轨突破周期", min: 5, max: 30 },
+    ],
+  },
+  {
+    id: "atr-channel",
+    name: "ATR通道突破 (ATR Channel)",
+    description: "ATR通道突破策略：价格突破均线+N倍ATR上轨买入，跌破下轨卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/atr_channel_strategy.py",
+    parameters: [
+      { name: "ma_period", type: "number", default: 20, description: "均线周期", min: 10, max: 60 },
+      { name: "atr_period", type: "number", default: 14, description: "ATR周期", min: 7, max: 30 },
+      { name: "atr_mult", type: "number", default: 2.5, description: "ATR乘数", min: 1.0, max: 4.0, step: 0.5 },
+    ],
+  },
+  {
+    id: "envelope",
+    name: "百分比包络线 (Envelope)",
+    description: "百分比包络线策略：价格触及下轨买入，触及上轨卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/envelope_strategy.py",
+    parameters: [
+      { name: "ma_period", type: "number", default: 20, description: "均线周期", min: 5, max: 60 },
+      { name: "pct", type: "number", default: 3.0, description: "包络百分比(%)", min: 1.0, max: 10.0, step: 0.5 },
+    ],
+  },
+  {
+    id: "price-channel-breakout",
+    name: "价格通道突破 (Price Channel Breakout)",
+    description: "价格通道突破策略：价格放量突破N日高点买入，跌破M日低点卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/price_channel_breakout_strategy.py",
+    parameters: [
+      { name: "breakout_period", type: "number", default: 20, description: "突破检测周期", min: 5, max: 60 },
+      { name: "exit_period", type: "number", default: 10, description: "出场通道周期", min: 3, max: 30 },
+      { name: "vol_confirm", type: "boolean", default: true, description: "需要量能确认" },
+    ],
+  },
+
+  // ── CTA指标策略 (Python Backtrader) ────────────────────────────
+  {
+    id: "stochastic",
+    name: "随机振荡器 (Stochastic Oscillator)",
+    description: "随机振荡器策略：%K在超卖区上穿%D买入，在超买区下穿%D卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/stochastic_strategy.py",
+    parameters: [
+      { name: "k_period", type: "number", default: 14, description: "%K周期", min: 5, max: 30 },
+      { name: "d_period", type: "number", default: 3, description: "%D平滑周期", min: 2, max: 10 },
+      { name: "overbought", type: "number", default: 80, description: "超买阈值", min: 70, max: 90 },
+      { name: "oversold", type: "number", default: 20, description: "超卖阈值", min: 10, max: 30 },
+    ],
+  },
+  {
+    id: "williams-r",
+    name: "威廉指标 (Williams %R)",
+    description: "威廉%R指标策略：%R低于-80（超卖）买入，高于-20（超买）卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/williams_r_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "计算周期", min: 5, max: 30 },
+      { name: "overbought", type: "number", default: -20, description: "超买阈值", min: -30, max: -10 },
+      { name: "oversold", type: "number", default: -80, description: "超卖阈值", min: -90, max: -70 },
+    ],
+  },
+  {
+    id: "obv",
+    name: "能量潮 (OBV)",
+    description: "OBV能量潮策略：OBV突破均线买入，跌破均线卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/obv_strategy.py",
+    parameters: [
+      { name: "obv_ma_period", type: "number", default: 20, description: "OBV均线周期", min: 5, max: 60 },
+    ],
+  },
+  {
+    id: "mfi",
+    name: "资金流量指标 (MFI)",
+    description: "MFI资金流量策略：MFI低于20（超卖）买入，高于80（超买）卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/mfi_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 14, description: "MFI计算周期", min: 5, max: 30 },
+      { name: "overbought", type: "number", default: 80, description: "超买阈值", min: 70, max: 90 },
+      { name: "oversold", type: "number", default: 20, description: "超卖阈值", min: 10, max: 30 },
+    ],
+  },
+  {
+    id: "cmf",
+    name: "蔡金资金流 (Chaikin Money Flow)",
+    description: "蔡金资金流策略：CMF上穿零轴买入（资金净流入），下穿零轴卖出（资金净流出）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/cmf_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "CMF计算周期", min: 10, max: 40 },
+    ],
+  },
+  {
+    id: "adl",
+    name: "聚散指标 (ADL)",
+    description: "聚散指标策略：ADL上穿均线买入（资金聚集），下穿均线卖出（资金分散）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/adl_strategy.py",
+    parameters: [
+      { name: "ma_period", type: "number", default: 20, description: "ADL均线周期", min: 5, max: 60 },
+    ],
+  },
+  {
+    id: "roc",
+    name: "变化率 (ROC)",
+    description: "ROC变化率策略：ROC上穿零轴买入（动能转正），下穿零轴卖出（动能转负）。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/roc_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 12, description: "ROC计算周期", min: 5, max: 30 },
+    ],
+  },
+  {
+    id: "vwap",
+    name: "成交量加权均价 (VWAP)",
+    description: "VWAP策略：价格上穿VWAP买入，下穿VWAP卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/vwap_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 20, description: "VWAP周期", min: 5, max: 60 },
+    ],
+  },
+  {
+    id: "adaptive-ma",
+    name: "自适应均线 (Adaptive MA / KAMA)",
+    description: "自适应均线策略：价格上穿KAMA且KAMA上行时买入，下穿KAMA时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/adaptive_ma_strategy.py",
+    parameters: [
+      { name: "period", type: "number", default: 10, description: "效率比率周期", min: 5, max: 30 },
+      { name: "fast_period", type: "number", default: 2, description: "快速EMA常数", min: 2, max: 5 },
+      { name: "slow_period", type: "number", default: 30, description: "慢速EMA常数", min: 20, max: 60 },
+    ],
+  },
+
+  // ── CTA形态策略 (Python Backtrader) ────────────────────────────
+  {
+    id: "engulfing",
+    name: "吞没形态 (Engulfing Pattern)",
+    description: "吞没形态策略：看涨吞没买入，看跌吞没卖出。经典K线反转形态。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/engulfing_strategy.py",
+    parameters: [
+      { name: "trend_period", type: "number", default: 10, description: "趋势判断周期", min: 5, max: 30 },
+    ],
+  },
+  {
+    id: "hammer",
+    name: "锤子线/射击之星 (Hammer/Shooting Star)",
+    description: "锤子线/射击之星策略：底部锤子线买入，顶部射击之星卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/hammer_strategy.py",
+    parameters: [
+      { name: "shadow_ratio", type: "number", default: 2.0, description: "影线/实体最小比值", min: 1.5, max: 4.0, step: 0.5 },
+      { name: "trend_period", type: "number", default: 10, description: "趋势判断周期", min: 5, max: 30 },
+    ],
+  },
+  {
+    id: "doji",
+    name: "十字星形态 (Doji Pattern)",
+    description: "十字星策略：下跌末端十字星买入，上涨末端十字星卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/doji_strategy.py",
+    parameters: [
+      { name: "body_pct", type: "number", default: 10, description: "实体/振幅最大比例(%)", min: 3, max: 20, step: 1 },
+      { name: "trend_period", type: "number", default: 10, description: "趋势判断周期", min: 5, max: 30 },
+    ],
+  },
+  {
+    id: "morning-star",
+    name: "启明星/黄昏星 (Morning/Evening Star)",
+    description: "启明星/黄昏星策略：三根K线组合反转形态。底部启明星买入，顶部黄昏星卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/morning_star_strategy.py",
+    parameters: [
+      { name: "trend_period", type: "number", default: 10, description: "趋势判断周期", min: 5, max: 30 },
+      { name: "small_body_pct", type: "number", default: 30, description: "中间K线最大实体比(%)", min: 10, max: 50, step: 5 },
+    ],
+  },
+  {
+    id: "three-soldiers",
+    name: "三兵三鸦 (Three Soldiers/Crows)",
+    description: "三兵三鸦策略：三连阳兵买入，三连阴鸦卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/three_soldiers_strategy.py",
+    parameters: [
+      { name: "min_body_pct", type: "number", default: 50, description: "最小实体占比(%)", min: 30, max: 80, step: 5 },
+    ],
+  },
+  {
+    id: "harami",
+    name: "孕线形态 (Harami Pattern)",
+    description: "孕线形态策略：看涨孕线买入，看跌孕线卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/harami_strategy.py",
+    parameters: [
+      { name: "trend_period", type: "number", default: 10, description: "趋势判断周期", min: 5, max: 30 },
+    ],
+  },
+
+  // ── 基础组合策略 (Python Backtrader) ───────────────────────────
+  {
+    id: "macd-rsi-combo",
+    name: "MACD+RSI组合 (MACD+RSI Combo)",
+    description: "MACD+RSI组合策略：MACD金叉+RSI超卖区双重确认买入，减少单指标假信号。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/macd_rsi_combo_strategy.py",
+    parameters: [
+      { name: "macd_fast", type: "number", default: 12, description: "MACD快速周期", min: 5, max: 30 },
+      { name: "macd_slow", type: "number", default: 26, description: "MACD慢速周期", min: 15, max: 60 },
+      { name: "macd_signal", type: "number", default: 9, description: "MACD信号周期", min: 3, max: 15 },
+      { name: "rsi_period", type: "number", default: 14, description: "RSI周期", min: 5, max: 30 },
+      { name: "rsi_oversold", type: "number", default: 40, description: "RSI超卖阈值", min: 20, max: 50 },
+      { name: "rsi_overbought", type: "number", default: 70, description: "RSI超买阈值", min: 60, max: 85 },
+    ],
+  },
+  {
+    id: "bollinger-rsi-combo",
+    name: "布林带+RSI组合 (Bollinger+RSI Combo)",
+    description: "布林带+RSI组合策略：价格触及布林下轨且RSI超卖时买入，触及上轨且RSI超买时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/bollinger_rsi_combo_strategy.py",
+    parameters: [
+      { name: "bb_period", type: "number", default: 20, description: "布林带周期", min: 10, max: 50 },
+      { name: "bb_dev", type: "number", default: 2.0, description: "标准差倍数", min: 1.0, max: 3.0, step: 0.5 },
+      { name: "rsi_period", type: "number", default: 14, description: "RSI周期", min: 5, max: 30 },
+      { name: "rsi_oversold", type: "number", default: 30, description: "RSI超卖阈值", min: 15, max: 40 },
+      { name: "rsi_overbought", type: "number", default: 70, description: "RSI超买阈值", min: 60, max: 85 },
+    ],
+  },
+  {
+    id: "ma-volume-combo",
+    name: "均线+量能组合 (MA+Volume Combo)",
+    description: "均线+量能组合策略：均线金叉且放量确认买入，死叉卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/ma_volume_combo_strategy.py",
+    parameters: [
+      { name: "fast_period", type: "number", default: 10, description: "快速均线周期", min: 3, max: 30 },
+      { name: "slow_period", type: "number", default: 30, description: "慢速均线周期", min: 15, max: 120 },
+      { name: "vol_mult", type: "number", default: 1.5, description: "放量确认倍数", min: 1.0, max: 3.0, step: 0.1 },
+    ],
+  },
+  {
+    id: "kdj-macd-combo",
+    name: "KDJ+MACD组合 (KDJ+MACD Combo)",
+    description: "KDJ+MACD组合策略：KDJ超卖金叉+MACD柱状图为正/上升时买入，双指标交叉确认。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/kdj_macd_combo_strategy.py",
+    parameters: [
+      { name: "k_period", type: "number", default: 9, description: "KDJ K周期", min: 5, max: 20 },
+      { name: "d_period", type: "number", default: 3, description: "KDJ D周期", min: 2, max: 10 },
+      { name: "overbought", type: "number", default: 80, description: "KDJ超买阈值", min: 70, max: 90 },
+      { name: "oversold", type: "number", default: 20, description: "KDJ超卖阈值", min: 10, max: 30 },
+      { name: "macd_fast", type: "number", default: 12, description: "MACD快速周期", min: 5, max: 20 },
+      { name: "macd_slow", type: "number", default: 26, description: "MACD慢速周期", min: 15, max: 50 },
+    ],
+  },
+
+  // ── 高阶组合策略 (Python Backtrader) ───────────────────────────
+  {
+    id: "ichimoku-adx-combo",
+    name: "一目均衡表+ADX组合 (Ichimoku+ADX)",
+    description: "一目均衡表+ADX组合策略：价格在云层上方+转换线>基准线+ADX确认趋势时买入。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/ichimoku_adx_combo_strategy.py",
+    parameters: [
+      { name: "tenkan_period", type: "number", default: 9, description: "转换线周期", min: 5, max: 20 },
+      { name: "kijun_period", type: "number", default: 26, description: "基准线周期", min: 15, max: 40 },
+      { name: "adx_period", type: "number", default: 14, description: "ADX周期", min: 7, max: 30 },
+      { name: "adx_threshold", type: "number", default: 25, description: "ADX确认阈值", min: 15, max: 40 },
+    ],
+  },
+  {
+    id: "multi-tf-ma",
+    name: "多周期均线 (Multi-Timeframe MA)",
+    description: "多周期均线策略：短期>中期>长期均线（多头排列）时买入，空头排列时卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/multi_timeframe_ma_strategy.py",
+    parameters: [
+      { name: "short_period", type: "number", default: 5, description: "短期均线周期", min: 3, max: 15 },
+      { name: "medium_period", type: "number", default: 20, description: "中期均线周期", min: 10, max: 40 },
+      { name: "long_period", type: "number", default: 60, description: "长期均线周期", min: 40, max: 120 },
+    ],
+  },
+  {
+    id: "volatility-breakout",
+    name: "波动率突破 (Volatility Breakout)",
+    description: "波动率突破策略：当价格突破开盘价+k×昨日振幅时买入，ATR追踪止损。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/volatility_breakout_strategy.py",
+    parameters: [
+      { name: "k_factor", type: "number", default: 0.6, description: "波动率乘数k", min: 0.3, max: 1.0, step: 0.1 },
+      { name: "atr_period", type: "number", default: 14, description: "ATR周期", min: 7, max: 30 },
+      { name: "stop_mult", type: "number", default: 2.0, description: "止损ATR倍数", min: 1.0, max: 3.0, step: 0.5 },
+    ],
+  },
+  {
+    id: "regime-switch",
+    name: "趋势+均值回归切换 (Regime Switch)",
+    description: "趋势+均值回归自适应切换策略：通过ADX判断市场状态，趋势模式用EMA交叉，震荡模式用RSI反转。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/regime_switch_strategy.py",
+    parameters: [
+      { name: "adx_period", type: "number", default: 14, description: "ADX周期", min: 7, max: 30 },
+      { name: "adx_threshold", type: "number", default: 25, description: "趋势/震荡切换阈值", min: 15, max: 35 },
+      { name: "ema_fast", type: "number", default: 10, description: "趋势模式快速EMA", min: 3, max: 20 },
+      { name: "ema_slow", type: "number", default: 30, description: "趋势模式慢速EMA", min: 15, max: 60 },
+      { name: "rsi_period", type: "number", default: 14, description: "RSI周期", min: 5, max: 30 },
+      { name: "rsi_oversold", type: "number", default: 30, description: "RSI超卖阈值", min: 15, max: 40 },
+      { name: "rsi_overbought", type: "number", default: 70, description: "RSI超买阈值", min: 60, max: 85 },
+    ],
+  },
+  {
+    id: "dual-thrust",
+    name: "双推力策略 (Dual Thrust)",
+    description:
+      "Dual Thrust策略：经典CTA突破策略，由Michael Chalek开发。" +
+      "根据前N日最高最低价和收盘价计算上下突破口，当日突破即开仓。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/dual_thrust_strategy.py",
+    parameters: [
+      { name: "lookback", type: "number", default: 4, description: "回看天数", min: 2, max: 10 },
+      { name: "k1", type: "number", default: 0.5, description: "上突破乘数", min: 0.2, max: 1.0, step: 0.1 },
+      { name: "k2", type: "number", default: 0.5, description: "下突破乘数", min: 0.2, max: 1.0, step: 0.1 },
+    ],
+  },
+  {
+    id: "r-breaker",
+    name: "R-Breaker突破反转 (R-Breaker)",
+    description: "R-Breaker策略：经典CTA日内策略，根据昨日OHLC计算6个枢轴位，支持突破和反转模式。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/r_breaker_strategy.py",
+    parameters: [
+      { name: "mode", type: "string", default: "breakout", description: "模式(breakout/reversal/both)" },
+    ],
+  },
+  {
+    id: "pivot-point",
+    name: "枢轴点策略 (Pivot Point)",
+    description: "枢轴点策略：价格突破R1阻力位买入，跌破S1支撑位卖出。",
+    version: "1.0.0",
+    engine: "backtrader",
+    entryFile: "strategies/pivot_point_strategy.py",
+    parameters: [],
   },
 ];
 

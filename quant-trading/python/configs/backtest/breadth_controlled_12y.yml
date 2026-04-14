@@ -1,0 +1,46 @@
+backtest:
+  start_date: '2014-01-02'
+  end_date: '2025-06-01'
+  initial_capital: 1000000
+  benchmark: 000905.SH
+cost_model:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 1.0e-05  # §13.1 MarketRulesCNEquity
+fill_model:
+  method: next_bar_open
+slippage:
+  model: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+strategy:
+  name: breadth_controlled
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.18
+    trailing_stop_pct: 0.15
+    buffer_k: 8
+    max_single_pct: 0.05
+    min_mv: 300000.0
+    max_industry_pct: 0.2
+    weight_quality: 0.25
+    weight_value: 0.25
+    weight_momentum: 0.25
+    weight_size: 0.25
+    breadth_bullish: 0.6
+    breadth_bearish: 0.4
+    bear_scale: 0.5
+    breadth_lookback: 5
+    max_pe: 80.0
+    momentum_lookback: 60
+risk_constraints:
+  max_drawdown_pct: 0.5
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5

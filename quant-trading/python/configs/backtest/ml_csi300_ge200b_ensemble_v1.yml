@@ -1,0 +1,87 @@
+# CSI300 ≥200B Ensemble V1 — LGB + MASTER rank_average
+# LGB: ml_csi300_lgb_p3_t1a_open (IC=0.066, ICIR=1.566)
+# MASTER: ml_csi300_master_v1 (IC=0.013, ICIR=0.091, rho=0.251)
+# Ensemble: ICIR-proportional rank_average
+
+cost_model:
+  commission: { min_fee: 5.0, rate: 0.0000854 }
+  stamp_tax: { sell_rate: 0.0005 }
+  transfer_fee: { rate: 1.0e-05 }
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.15
+
+frequency: { data_frequency: 1d, matching_resolution: 1d }
+initial_capital: 1000000
+
+market:
+  instruments: { asset_type: stock, boards: [A], index: 000300.SH }
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, cost_impact]
+  output_dir: output/ml_csi300_ge200b_ensemble_v1
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30
+  drawdown_allow_rotation: true
+  drawdown_peak_reset_days: 60
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0
+  trailing_stop_pct: 0
+  circuit_breaker_enabled: false
+  position_sizing:
+    mdd_gradient:
+      enabled: true
+      levels: [[0.10, 1.0], [0.15, 0.80], [0.20, 0.55], [0.25, 0.30], [1.00, 0.10]]
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2018-01-16'
+  end_date: '2025-12-15'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: fixed
+  bps: 5.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 30
+    rebalance_days: 5
+    min_mv: 2_000_000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0
+    trailing_stop_pct: 0
+    buffer_k: 5
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    model_objective: regression
+    model_type: lightgbm
+    ensemble_method: rank_average
+    ensemble_weights:
+      ml_csi300_lgb_p3_t1a_open: 1.57
+      ml_csi300_master_v1: 0.09
+    oos_predictions_paths:
+      - models/ml_csi300_lgb_p3_t1a_open/oos_predictions.parquet
+      - models/ml_csi300_master_v1/oos_predictions.parquet

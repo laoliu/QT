@@ -1,0 +1,99 @@
+# 价值质量 — 20 年回测 (2005-2025)
+#
+# 价值因子（低 PE/PB）+ 质量因子（高 ROE/低杠杆）
+# 在 2016-2017 蓝筹行情和 2005-2007 价值回归期表现突出
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact, alpha, beta, information_ratio]
+  output_dir: output/value_quality_20y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.2
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: 000300.SH
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.12
+  momentum_skip_recent: 1
+  momentum_multi_period: true
+  inverse_vol_weighting: true
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.10
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2005-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 5
+  name: fixed_bps
+strategy:
+  name: value_quality
+  # ---------- 仅暴露核心可调参数，其余使用 dataclass 默认值 ----------
+  # 已移除重复/可派生参数：benchmark(已在 report 块), exclude_st(由 universe_policy 管理),
+  # lot_size(由 trading_rules 管理), max_single_pct(由 risk_constraints 管理),
+  # min_price/max_price/min_turnover/min_listed_days/momentum_lookback/buffer_k
+  # /cash_reserve_pct → 基类默认值足够。
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 200000.0
+    stop_loss_pct: 0.18
+    volatility_lookback: 60
+    # ---------- 因子权重（总和应为 1.0） ----------
+    weight_quality: 0.30
+    weight_value: 0.30
+    weight_momentum: 0.20
+    weight_volatility: 0.10
+    weight_size: 0.10
+    # ---------- 质量/价值复合因子内部权重 ----------
+    quality_roe_weight: 0.50
+    quality_margin_weight: 0.30
+    quality_debt_weight: 0.20
+    value_pe_weight: 0.60
+    value_pb_weight: 0.40
+    # ---------- 以下参数使用 dataclass 默认值（无需显式指定） ----------
+    # buffer_k: 10, cash_reserve_pct: 0.05, min_price: 5.0, max_price: 200.0
+    # min_turnover: 1000, min_listed_days: 120, momentum_lookback: 20
+    # min_roe: 8.0, max_pe: 80.0, max_debt_to_assets: 70.0
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: value_quality

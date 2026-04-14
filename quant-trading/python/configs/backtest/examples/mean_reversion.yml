@@ -1,0 +1,65 @@
+# 回测配置示例：均值回归策略
+# 用法: run_backtest_from_config("configs/backtest/examples/mean_reversion.yml")
+
+name: "mean_reversion_example"
+description: |
+  均值回归策略示例
+  - 基于布林带/ATR的超卖超买信号
+  - 日频调仓
+  - 逆向投资风格
+
+# ============================================================================
+# 数据配置
+# ============================================================================
+data:
+  source: "tushare"
+  start_date: "2022-01-01"
+  end_date: "2022-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache"
+
+# ============================================================================
+# 股票池配置
+# ============================================================================
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  exclude_list_path: "configs/universe/exclude_list.yml"
+  min_listing_days: 120  # 需要更多历史数据计算均值
+
+# ============================================================================
+# 策略配置
+# ============================================================================
+strategy:
+  name: "mean_reversion"
+  params:
+    # 均值回归参数
+    lookback_days: 20       # 均值计算回望期
+    entry_std: 2.0          # 低于均值2个标准差买入
+    exit_std: 0.0           # 回归均值时卖出
+    
+    # 仓位
+    max_positions: 20
+    position_pct: 0.05      # 单票仓位 5%
+
+# ============================================================================
+# 成本配置
+# ============================================================================
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万一佣金
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+# ============================================================================
+# 回测设置
+# ============================================================================
+initial_capital: 2000000.0  # 200万（逆向策略需要更多资金）
+lot_size: 100
+t_plus_n: 1
+random_seed: 123
+output_dir: "output/mean_reversion"

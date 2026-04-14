@@ -1,0 +1,208 @@
+# CB 可转债五策略旗舰组合 v2 — S4 模拟盘正式配置
+# ============================================================
+# 策略组合 (总权重=100%):
+#   ┌─────────────────────────────┬──────┬──────────┬─────────┬──────┬──────┐
+#   │ 策略                        │ 权重 │ AR(回测) │ MDD(BT) │  SR  │  WF  │
+#   ├─────────────────────────────┼──────┼──────────┼─────────┼──────┼──────┤
+#   │ small_size_v2               │  30% │  39.6%   │ 21.7%   │ 1.27 │ 8.00 │
+#   │ double_low_plus_v5          │  30% │  39.8%   │ 18.6%   │ 1.42 │ 7.17 │
+#   │ cb_comprehensive_v2         │  20% │  36.5%   │ 13.1%   │ 1.28 │ 7.13 │  ← 低 MDD 锚点
+#   │ triple_low                  │  10% │  21.6%   │ 14.1%   │ 1.64 │ 8.00 │  ← 高 SR 分散
+#   │ multi_factor                │  10% │  24.5%   │ 16.0%   │ 1.57 │ 8.00 │  ← 多因子对冲
+#   └─────────────────────────────┴──────┴──────────┴─────────┴──────┴──────┘
+# 组合期望: AR≈32~36%, 组合 MDD≈15~20% (相关性折价 ~30%)
+# 配置参照: configs/cb_strategies/ 下对应 *_7y.yml 与 *.yml
+# ============================================================
+# 上线流程: S4 启动 → 持续 ≥3 月 → 评估 → S5 准入
+# 启动命令: python -m aipha paper --config configs/paper/cb_paper_v2.yml
+# 状态存储: data/paper_state/cb_paper_v2/
+# ============================================================
+
+paper_engine:
+  strategy_name: "multi_strategy"
+
+  # ── 数据源 ─────────────────────────────────────────────────
+  market_type: "convertible_bond"
+  poll_interval: 3.0        # 实时数据轮询间隔（秒）
+  bar_interval_sec: 60      # 合成 1 分钟 Bar
+
+  # ── 资金与交易规则（与回测完全一致） ──────────────────────────
+  initial_capital: 1000000.0  # 100 万总资金，五策略按权重分配
+  lot_size: 10
+  t_plus_n: 0               # 可转债 T+0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0       # 可转债免印花税
+  slippage_bps: 5.0         # 模拟盘适当上调滑点（保守）
+  fill_model:
+    name: "next_bar_open"
+    volume_constraint:
+      max_participation_rate: 0.10
+      lot_size: 10
+
+  # ── 状态持久化 ─────────────────────────────────────────────
+  state_dir: "data/paper_state/cb_paper_v2"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/cb_paper_v2"
+
+  # ── 动态标的池（每小时更新可转债全市场池） ──────────────────────
+  universe:
+    enabled: true
+    max_price: 145.0        # 与各策略 max_price 一致的宽松上限
+    min_amount: 0.5         # 最小日成交额（亿元），过滤极低流动性
+    refresh_interval_sec: 3600
+
+  # ── 监控告警 ────────────────────────────────────────────────
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.18     # 允许 MDD 上限（参考组合历史最大）
+  alert_daily_loss_threshold: 0.03   # 单日亏损超 3% 告警
+  alert_data_stale_seconds: 120.0    # 数据超过 120s 未更新告警
+  alert_inactivity_minutes: 90.0     # 90min 无交易告警（非全天无量时）
+
+  # ── 指标收集 ───────────────────────────────────────────────
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/cb_paper_v2"
+    write_interval_sec: 60
+
+# ── 多策略组合配置 ──────────────────────────────────────────────────────────
+multi_strategy:
+  total_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+
+  strategies:
+    # ── 策略 1: small_size v2（alpha 主力，30%）──────────────────────
+    - name: small_size
+      source_config: configs/cb_strategies/small_size_v2_7y.yml
+      weight: 0.30
+      max_drawdown: 0.25         # 回测 MDD=21.7% + 缓冲 → 触发则暂停该子策略
+      params:
+        top_k: 4
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+
+    # ── 策略 2: double_low_plus v5（alpha 主力，30%）───────────────────
+    - name: double_low_plus
+      source_config: configs/cb_strategies/double_low_plus_v5_7y.yml
+      weight: 0.30
+      max_drawdown: 0.23         # 回测 MDD=18.6% + 缓冲
+      params:
+        top_k: 6
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 500.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.08
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_age_days: 180
+        fallback_max_age_days: 730
+        max_premium: 60.0
+        lookback: 20
+        bb_k: 2.0
+        weight_price: 0.10
+        weight_premium: 0.10
+        weight_size: 0.35
+        weight_age: 0.05
+        weight_mean_reversion: 0.25
+        weight_rating: 0.15
+        min_candidates: 3
+
+    # ── 策略 3: cb_comprehensive v2（低回撤锚点，20%）─────────────────
+    - name: cb_comprehensive
+      source_config: configs/cb_strategies/cb_comprehensive_v2_7y.yml
+      weight: 0.20
+      max_drawdown: 0.18         # 回测 MDD=13.1% + 缓冲
+      params:
+        top_k: 5
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 500.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_age_days: 180
+        fallback_max_age_days: 730
+        max_premium: 60.0
+        lookback: 20
+        bb_k: 2.0
+        momentum_lookback: 10
+        weight_price: 0.10
+        weight_premium: 0.10
+        weight_size: 0.25
+        weight_age: 0.03
+        weight_mean_reversion: 0.20
+        weight_rating: 0.07
+        weight_delta: 0.05
+        weight_ytm: 0.05
+        weight_turnover: 0.05
+        weight_momentum: 0.10
+        min_candidates: 3
+
+    # ── 策略 4: triple_low（高 SR 分散，10%）──────────────────────────
+    - name: triple_low
+      weight: 0.10
+      max_drawdown: 0.20         # 回测 MDD=14.1% + 大缓冲（多持仓策略）
+      params:
+        top_k: 20
+        rebalance_days: 1
+        buffer_k: 0
+        max_price: 130.0
+        max_premium: 35.0
+        min_issue_size: 0.0
+        min_turnover: 20.0
+        min_days_to_maturity: 30
+        price_weight: 0.33
+        premium_weight: 0.33
+        cb_value_weight: 0.34
+        low_size_threshold: 30000.0
+        low_size_bonus: 0.1
+        stop_loss_pct: 0.10
+        force_redeem_threshold: 130.0
+        force_redeem_days: 8
+        lot_size: 10
+        equal_weight: true
+        exclude_called: true
+        exclude_st: true
+
+    # ── 策略 5: multi_factor（多因子对冲，10%）────────────────────────
+    - name: multi_factor
+      weight: 0.10
+      max_drawdown: 0.22         # 回测 MDD=16.0% + 缓冲
+      params:
+        top_k: 20
+        rebalance_days: 3
+        price_weight: 0.35
+        premium_weight: 0.30
+        cb_value_weight: 0.15
+        size_weight: 0.20
+        max_price: 130.0
+        max_premium: 40.0
+        min_turnover: 50.0
+        min_issue_size: 0.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.15
+        buffer_k: 0
+        lot_size: 10

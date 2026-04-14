@@ -1,0 +1,65 @@
+# 可转债动量轮动策略 — 默认配置
+# ============================================================
+# 策略逻辑: 持有过去 lookback_days 日涨幅最大的 top_k 只转债
+# 需要 lookback_days 个 bar 预热
+# ============================================================
+
+name: "cb_momentum"
+description: >
+  可转债动量轮动策略 — 持有过去 N 日涨幅最大的 top_k 只转债。
+  利用转债市场动量效应 (趋势延续)，在流动性充足的标的中追强。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_momentum"
+  params:
+    top_k: 10
+    rebalance_days: 5
+    lookback_days: 20              # 动量回看窗口
+    max_price: 150.0               # 动量标的价格可能偏高，放宽上限
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/cb_momentum"
+
+# ------ 报告 ------
+report:
+  benchmark: "000300.SH"

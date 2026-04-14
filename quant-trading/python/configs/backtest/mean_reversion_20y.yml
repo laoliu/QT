@@ -1,0 +1,64 @@
+# 均值回归策略 — 20 年回测 (2005-2025)
+#
+# 覆盖 2005.1 ~ 2024.12，含 A 股多轮牛熊周期。
+# 均值回归策略在震荡市表现较好，在强趋势行情中可能逆势抄底亏损。
+# 20 年回测可验证该策略在不同市场状态下的鲁棒性。
+#
+# 费率说明：
+#   当前配置使用 2023.8.28 后费率（印花税千0.5），对 2005-2023 期间
+#   历史实际印花税（最高时双边千3）有所低估。这是已知的近似。
+
+name: "mean_reversion_20y"
+description: >
+  基于 RSI(14) 的均值回归策略 20 年回测 — RSI 低于超卖阈值（30）时买入，
+  高于超买阈值（70）时卖出。覆盖 2005-2024 完整牛熊周期。
+
+data:
+  source: "tushare_pro"
+  start_date: "2005-01-04"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+strategy:
+  name: "demo_mean_reversion"
+  params:
+    lookback_days: 14
+    entry_std: 2.0
+    exit_std: 0.5
+    position_pct: 0.10
+    max_positions: 10
+    target_symbols:
+      - "000001.SZ"   # 平安银行
+      - "600519.SH"   # 贵州茅台
+      - "000858.SZ"   # 五粮液
+      - "002594.SZ"   # 比亚迪
+      - "000333.SZ"   # 美的集团
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 60
+
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+
+slippage:
+  model: "fixed_bps"
+  bps: 5.0
+
+capital:
+  initial: 1000000.0
+  currency: "CNY"

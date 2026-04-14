@@ -1,0 +1,104 @@
+# 次新小盘策略 V2 �?参数边界研究文档
+# ============================================================
+# 研究结论�?025-02 实验验证�?
+#   new_small 策略类型�?�? 年回测窗口内无法满足 MDD<30% 硬性门槛�?
+#   根本原因: 2018 �?CB 市场系统性下跌，小盘债集中亏损形成策略回撤�?
+#
+# 参数扫描结果�?018-2024, top_k=5, stop_loss=10%�?
+#   max_age=90  (new_small_8y):  AR=32.98%, MDD=32.94%, SR=1.40  <- 基准
+#   max_age=95  (本文�?:        AR=27.90%, MDD=41.26%, SR=1.13  FAIL
+#   max_age=120 (v2 初版):       AR=26.42%, MDD=38.91%, SR=1.12  FAIL
+#
+# 时间窗口敏感性测�?
+#   2016-2024 (max_age=120): AR�?7%, MDD=36.25%  FAIL
+#   2017-2024 (max_age=120): AR�?7%, MDD=38.92%  FAIL
+#   2018-2024 (max_age=90):  AR=32.98%, MDD=32.94% PARTIAL-FAIL (>30%)
+#
+# 次新效应边界:
+#   max_age_days=90 是经�?CB 市场实证的次新效应自然终点�?
+#   超过 90 天（�?91-120 天）纳入候选池，实际上引入�?价值回�?阶段
+#   的债券，不再具备次新溢价，反而带来额外尾部风险�?
+#
+# 生产判断:
+#   new_small 系列策略 7 �?MDD �?33%，不满足 30% 硬性门槛�?
+#   �?不推荐进入模拟盘
+#   �?如需使用，需获得"MDD豁免"，因 CB 配有债底保护（历史极端值≈33%�?
+#   �?组合层面：与低回撤策略（double_low, triple_low）搭配可满足组合�?MDD
+#
+# 本文件保留为研究记录，不作为生产配置�?
+# ============================================================
+
+name: "new_small_v2"
+description: >
+  次新小盘策略 V2（参数边界研究版，非生产配置）�?
+  实验目的：测�?max_age_days 变化�?MDD 的边际影响，
+  最终结�?new_small 系列 7 年窗�?MDD �?33%，无法满�?30% 硬门槛�?
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "new_small"
+  params:
+    top_k: 5                       # �?�?10 降至 5：与 new_small_optimized 一致，已验�?MDD=28.9%
+    rebalance_days: 1              # 日频调仓，保持次新效应捕捉能�?
+    min_age_days: 5
+    max_age_days: 95               # 边界测试: 90(optimized,MDD=28.9%) vs 120(FAIL,MDD=38.9%) �?测试 95
+    max_issue_size: 60000.0        # 万元�? 亿以下）
+    max_price: 150.0
+    min_turnover: 10.0             # 最低成交额 10 万（保持宽松，避免过滤核心候选）
+    exclude_st: true
+    stop_loss_pct: 0.10            # �?�?0.15 收紧�?0.10：更早止损，控制单券最大损�?
+    min_positions: 1               # 允许少于 k 只时仍开�?
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本（可转债） ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0               # 保守滑点（CB 市场 3-8bps 区间�?
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+# ------ 资金与规�?------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 风控约束 ------
+# 调整说明:
+#   max_drawdown �?0.50（optimized）收�?0.40，比 0.20 宽松避免反馈循环�?
+#   但比 0.50 更保守，有助于在极端行情�?022 �?CB 熊市）触发减仓�?
+#   max_position_weight=0.16 匹配 k=7 等权�?4.3%/�?+ 1.7% 缓冲）�?
+risk:
+  enabled: true
+  max_position_weight: 0.22       # k=5 等权 20%，缓�?2%（与 optimized 对齐�?
+  max_drawdown: 0.40              # �?optimized(0.50) 保守，仍高于 0.20(反馈循环阈�?
+  enable_audit_log: true
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/new_small_v2"

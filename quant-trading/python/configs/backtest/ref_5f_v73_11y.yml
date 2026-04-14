@@ -1,0 +1,88 @@
+# V7.3: A/B test — Baseline + Size factor (小盘倾向)
+# 与 flat baseline 完全相同 + 10% size factor weight
+name: ref_5f_v73_size
+description: 'A/B test: size factor addition vs flat baseline'
+data:
+  source: tushare_pro
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  symbols: null
+  frequency: 1d
+  adjust: qfq
+  cache_dir: data/cache/tushare
+universe:
+  policy: default
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  exclude_list_path: configs/universe/exclude_list.yml
+  min_listing_days: 60
+strategy:
+  name: reference_five_factor
+  params:
+    base_index: 000906.SH
+    quadrant_enabled: false
+    top_k: 30
+    rebalance_days: 21
+    # 6 因子: 原 5 因子各 16.7% + size 16.7%
+    weight_bp: 0.167
+    weight_ep: 0.167
+    weight_lv: 0.167
+    weight_dy: 0.167
+    weight_roe: 0.167
+    weight_size: 0.167
+    roe_as_filter: false
+    bp_metric: pb
+    ep_metric: pe_ttm
+    roe_metric: roe
+    dy_metric: dv_ratio
+    lv_lookback: 60
+    inverse_vol_weighting: false
+    min_listed_days: 120
+    min_mv: 100000.0
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    max_industry_pct: 0.12
+    min_industries: 6
+    cash_reserve_pct: 0.03
+    stop_loss_pct: 0.0
+    trailing_stop_pct: 0.0
+    buffer_k: 10
+    momentum_lookback: 65
+    volatility_lookback: 65
+    mv_split_percentile: 50.0
+    style_split_method: bp
+    max_single_pct: 0.05
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 1.0e-05
+  slippage_bps: 10.0  # A股最低合理值
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    lot_size: 100
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.1
+risk:
+  enabled: true
+  max_position_weight: 0.05
+  max_drawdown: 0.7
+  max_sector_weight: 0.15
+  stop_loss_pct: 0.0
+  trailing_stop_pct: 0.0
+  circuit_breaker_enabled: false
+  circuit_breaker_drawdown: 0.1
+  enable_audit_log: true
+  market_regime_enabled: false
+  benchmark_symbol: 000300.SH
+initial_capital: 1000000
+lot_size: 100
+t_plus_n: 1
+random_seed: 42
+output_dir: output/ref_5f_v73_11y
+portfolio:
+  method: equal

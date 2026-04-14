@@ -1,0 +1,90 @@
+# A股价值反转策略 v2 — 放宽止损版 10年
+# 基于 R14 诊断修正 value_reversal_10y:
+#   1) trailing_stop 8% → 禁用（周频调仓本身控制风险）
+#   2) stop_loss 12% → 25%（中大盘常态波动 10-15%）
+#   3) commission 万一 → 万三（保守估计）
+#   4) 调仓 5d → 10d（降低换手率 ~50%）
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0003}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A]}
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  output_dir: output/value_reversal_v2_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 40.0
+  fallback_bps: 10.0
+  max_bps: 60.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_mv: 500000.0
+    max_mv: 50000000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 1500.0
+    min_listed_days: 120
+    buffer_k: 10
+    weight_str: 0.30
+    weight_value: 0.25
+    weight_quality: 0.25
+    weight_volatility: 0.20
+    weight_momentum: 0.0
+    weight_size: 0.0
+    weight_turnover: 0.0
+    weight_dividend: 0.0
+    weight_earnings_growth: 0.0
+    str_lookback: 5
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+    stop_loss_pct: 0.25
+    trailing_stop_pct: 0.0
+    inverse_vol_weighting: true
+    max_single_pct: 0.06
+    cash_reserve_pct: 0.03
+
+risk_constraints:
+  max_drawdown_pct: 0.45
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

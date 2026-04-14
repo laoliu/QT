@@ -1,0 +1,124 @@
+# A 股增强多因子策略 v2 — 10 年回测配置
+# ============================================================
+# 基线: EP + ROE + MOM + IVOL（4 因子）
+# 新增: STR + 分析师修正 + 股东户数 + 业绩预告（4 因子）
+# 总计: 8 因子加权合成
+# 回测区间: 2015-01-05 ~ 2024-12-31 (≥10 年)
+# Universe: CSI1000 域 20-300 亿市值，双周频调仓
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, sortino,
+            turnover, win_rate, positions_count_distribution, cost_impact]
+  output_dir: output/a_stock_enhanced_v2_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.90
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.06
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.0
+  circuit_breaker_enabled: false
+
+run:
+  start_date: "2015-01-05"
+  end_date: "2024-12-31"
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 10.0
+  impact_coeff: 30.0
+  fallback_bps: 15.0
+  max_bps: 50.0
+
+strategy:
+  name: a_stock_enhanced_v2
+  parameters:
+    # ── Universe ──
+    base_index: "000852.SH"
+    top_k: 25
+    rebalance_days: 10
+    min_mv: 200000.0
+    max_mv: 30000000.0
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    buffer_k: 5
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    inverse_vol_weighting: false
+    # ── 基线四因子 ──
+    weight_ep: 0.15
+    weight_roe: 0.15
+    weight_mom: 0.10
+    weight_ivol: 0.10
+    # ── 新增四因子 ──
+    weight_str: 0.15
+    weight_analyst: 0.15
+    weight_holder: 0.10
+    weight_forecast: 0.10
+    # ── 参数 ──
+    mom_lookback: 250
+    mom_skip_recent: 20
+    momentum_lookback: 270
+    ivol_lookback: 60
+    volatility_lookback: 60
+    str_lookback: 10
+    ep_pe_metric: pe_ttm
+    roe_metric: roe
+    # ── 风控 ──
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.0
+    # ── 数据路径 ──
+    analyst_cache_dir: data/cache/alternative
+    holder_cache_dir: data/cache/reference/stk_holdernumber
+    forecast_cache_dir: data/cache/advanced
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

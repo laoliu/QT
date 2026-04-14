@@ -1,0 +1,88 @@
+# ML 预测策略回测配置
+# 策略说明：使用机器学习模型进行 A 股横截面选股
+# 无模型时自动回退为多因子线性打分
+
+strategy:
+  name: ml_predict
+  params:
+    # --- 模型路径（空=使用线性回退）---
+    model_path: ""  # 例: "models/lgb_v1.pkl"
+
+    # --- 因子/特征列表 ---
+    feature_columns:
+      - pe_ttm
+      - pb
+      - roe
+      - circ_mv
+      - turnover_rate
+      - dt_netprofit_yoy
+      - momentum_20d
+      - volatility_20d
+
+    # --- 回退线性打分权重 ---
+    fallback_weights:
+      pe_ttm: -1.0        # 低 PE 偏好
+      pb: -1.0             # 低 PB 偏好
+      roe: 1.0             # 高 ROE 偏好
+      circ_mv: -0.5        # 偏小市值
+      turnover_rate: -0.3  # 低换手偏好
+      dt_netprofit_yoy: 0.5  # 高增长偏好
+      momentum_20d: 0.5    # 正向动量
+      volatility_20d: -0.5 # 低波动偏好
+
+    # --- 持仓 ---
+    top_k: 30
+    rebalance_days: 5
+    buffer_k: 5
+
+    # --- 股票池过滤 ---
+    min_price: 3.0
+    max_price: 100.0
+    min_mv: 100000     # 10 亿
+    min_turnover: 500
+    min_listed_days: 60
+    exclude_st: true
+
+    # --- 风控 ---
+    stop_loss_pct: 0.15
+    max_single_pct: 0.08
+    cash_reserve_pct: 0.05
+
+    # --- 衍生特征参数 ---
+    momentum_lookback: 20
+    volatility_lookback: 20
+
+    # --- 特征预处理 ---
+    winsorize: true
+    winsorize_lower: 0.02
+    winsorize_upper: 0.98
+
+data:
+  source: tushare
+  start_date: "2023-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005            # 2023-08-28 起印花税减半（千分之0.5，卖出）
+  transfer_fee_rate: 0.00001        # 2022-04-29 起统一过户费（万分之0.1）
+  slippage_bps: 5.0
+
+risk:
+  max_drawdown: 0.25
+  max_position_pct: 0.08
+  max_sector_pct: 0.25
+  max_turnover_daily: 0.30
+  industry_neutral_enabled: false
+  concentration_limit_enabled: true
+  concentration_top_n: 5
+  concentration_max_pct: 0.30
+  style_exposure_enabled: true
+  style_exposure_limits:
+    size: 0.30
+    value: 0.30
+    momentum: 0.30

@@ -1,0 +1,109 @@
+# ============================================================
+# CSI300 ML - Zero cost diagnostic
+# ============================================================
+# Purpose: Universe fix + ZERO costs/slippage = pure engine alpha
+# Expected: if engine logic is correct, should approach O2O theoretical 29%
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 0
+    rate: 0
+  stamp_tax:
+    sell_rate: 0
+  transfer_fee:
+    rate: 0
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 1.0
+    lot_size: 100
+    opening_volume_fraction: 1.0
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+  output_dir: output/ml_csi300_zerocost_diag
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 1.0
+  max_sector_pct: 1.0
+  max_single_position_pct: 1.0
+  stop_loss_pct: 0
+  trailing_stop_pct: 0
+  circuit_breaker_enabled: false
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2018-01-16'
+  end_date: '2025-12-15'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: fixed
+  base_bps: 0
+
+strategy:
+  name: ml_factor
+  parameters:
+    top_k: 30
+    rebalance_days: 5
+    check_index_member: false
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    min_mv: 100000
+    stop_loss_pct: 0
+    trailing_stop_pct: 0
+    buffer_k: 0
+    cash_reserve_pct: 0.0
+    max_single_pct: 1.0
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi300_lgb_p3
+    oos_predictions_path: models/ml_csi300_lgb_p3/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    purge_days: 10

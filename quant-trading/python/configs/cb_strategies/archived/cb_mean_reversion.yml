@@ -1,0 +1,66 @@
+# 可转债均值回归策略 — 默认配置
+# ============================================================
+# 策略逻辑: 价格跌破布林带下轨时买入超卖转债，按偏离程度排名
+# 需要 lookback 个 bar 预热
+# ============================================================
+
+name: "cb_mean_reversion"
+description: >
+  可转债均值回归策略 — 在波动率收窄后价格跌破布林带下轨时买入超卖转债。
+  按偏离程度降序排列，持有偏离最大的 top_k 只。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_mean_reversion"
+  params:
+    top_k: 15
+    rebalance_days: 3
+    lookback: 20                   # 布林带 MA 窗口
+    bb_k: 2.0                     # 布林带倍数 (标准差的倍数)
+    max_price: 130.0
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/cb_mean_reversion"
+
+# ------ 报告 ------
+report:
+  benchmark: "000300.SH"

@@ -1,0 +1,30 @@
+# R123 增强因子 CSI1000 训练配置
+# 包含: 行为因子 + 残差动量 + 价值盈利复合 + Du 2025 中性化
+# 基于 R122 改进, 目标: IC > 0.12, 组合 AR > 25%
+
+# 训练参数
+universe: csi1000
+model: lightgbm
+start: "2015-01-05"
+end: "2026-02-28"
+train_years: 3
+predict_months: 3
+forward_days: 5
+
+# 因子增强
+deep_fundamental: true
+advanced_alpha: true     # 残差动量 + 价值盈利复合
+neutralize: true         # Du 2025 行业+规模中性化
+
+# LightGBM 正则化 (R116 验证有效)
+reg_alpha: 0.1
+reg_lambda: 1.0
+min_child_samples: 50
+subsample: 0.8
+colsample_bytree: 0.8
+max_depth: 6
+num_leaves: 31
+n_estimators: 300
+
+# 输出
+output: models/ml_csi1000_lgb_enhanced

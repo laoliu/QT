@@ -1,0 +1,75 @@
+# 热度动量策略 v1 — 8年回测 (2018-2026)
+# ============================================================
+# 灵感来源: 国金证券 2025 报告「热度策略」——换手差因子
+#           + IF资产量化的轮动策略（成交活跃度追踪）
+# 经济学基础:
+#   - 成交额加速 = 市场关注度升温（机构资金进场/事件催化前兆）
+#   - 区别于 turnover_surge（绝对水平筛选），此策略关注趋势性加速
+#   - 配合低溢价+安全价格+高评级 → 升温中的低估值标的
+# ============================================================
+
+name: "cb_heat_momentum_v1_8y"
+description: >
+  热度动量策略 v1 — 成交额加速度+低溢价+安全价+评级。
+  4因子: accel(0.35) + premium(0.25) + price(0.25) + rating(0.15)。
+  捕捉成交从低位加速回升的低估转债。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_heat_momentum"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 135.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    max_premium: 40.0
+    exclude_st: true
+    exclude_called: true
+    stop_loss_pct: 0.10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    buffer_k: 2
+    accel_short_window: 5
+    accel_long_window: 20
+    min_history: 22
+    w_accel: 0.15
+    w_premium: 0.35
+    w_price: 0.35
+    w_rating: 0.15
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_heat_momentum_v1_8y"
+
+report:
+  benchmark: "000300.SH"

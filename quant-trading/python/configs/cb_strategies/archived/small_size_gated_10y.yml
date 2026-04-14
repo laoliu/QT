@@ -1,0 +1,63 @@
+# 市场状态门控型小盘轮动策略 — 10年回测配置
+# ============================================================
+# 策略逻辑: 纯小盘排序alpha + 市场择时门控（熊市减仓/空仓）
+# 回测区间: 2015-01-01 ~ 2024-12-31 (10年)
+# ============================================================
+
+name: "small_size_gated_10y"
+description: >
+  市场门控小盘转债策略 10年回测。基于市场指数的短期涨跌判断regime，
+  熊市自动减仓设防，牛市/震荡正常持仓。
+
+data:
+  source: "tushare_cb"
+  start_date: "2015-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "small_size_gated"
+  params:
+    top_k: 5
+    rebalance_days: 1
+    buffer_k: 0
+    max_price: 150.0
+    max_issue_size: 20000.0
+    min_issue_size: 2000.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    exclude_called: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    # 市场门控参数
+    regime_lookback: 10
+    bear_threshold: -0.03
+    recovery_threshold: 0.0
+    cooldown_bars: 3
+    use_distress_signal: false
+    use_volume_signal: false
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/small_size_gated_10y"

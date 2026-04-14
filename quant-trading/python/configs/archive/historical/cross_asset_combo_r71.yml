@@ -1,0 +1,77 @@
+# R71 Phase 3: 跨资产统一组合配置 — CB + ETF + A股(BucketMF)
+# ============================================================
+# 升级方案: 用 BucketMultiFactorStrategy 替代 a_stock_baseline
+# 预期改进: A股成分策略 AR 从 8.4% 提升至 15-20% 区间
+#           组合 SR 从 1.07 提升至 1.2+ (方案 B)
+#
+# 配权方法: CrossAssetAllocator（inverse_volatility / risk_parity）
+# ============================================================
+
+combination:
+  name: "cross_asset_r71_bucket"
+  description: "CB + ETF + A股(桶式多因子) 跨资产组合"
+  rebalance_frequency: "monthly"
+
+  # ── 方案 B-R71: 升级 A 股成分策略 ──
+  plan_b_r71:
+    name: "bucket_upgrade"
+    target: "P22avg >= 18%, SR >= 1.1"
+    weights:
+      cb_small_size: 0.45
+      etf_cross_v3: 0.25
+      a_stock_bucket_mf: 0.30
+    notes:
+      - "A 股从 baseline(SR 0.67) 升级为 bucket_multifactor"
+      - "A 股权重从 25% 升至 30%, ETF 降 5%"
+      - "组合日收益相关系数须 < 0.75 (原则 E)"
+
+  # ── 保守方案: 等权 ──
+  plan_conservative:
+    name: "equal_weight"
+    target: "最高 SR"
+    weights:
+      cb_small_size: 0.34
+      etf_cross_v3: 0.33
+      a_stock_bucket_mf: 0.33
+    notes:
+      - "等权分散, 风险贡献均衡"
+      - "依赖 CrossAssetAllocator 动态再平衡"
+
+# ── 组合成分策略 ──
+legs:
+  cb_small_size:
+    config: "configs/cb_strategies/small_size_10y.yml"
+    output: "output/small_size_10y"
+    metrics:
+      ar_pct: 20.6
+      mdd_pct: 22.8
+      sharpe: 1.31
+      p22avg_pct: 20.4
+
+  etf_cross_v3:
+    config: "configs/backtest/etf_cross_v3_11y.yml"
+    output: "output/etf_cross_v3_11y"
+    metrics:
+      ar_pct: 12.3
+      mdd_pct: 22.4
+      sharpe: 0.54
+      p22avg_pct: 19.6
+
+  a_stock_bucket_mf:
+    config: "configs/backtest/bt_bucket_multifactor_fullmarket.yml"
+    output: "output/bucket_mf_fullmarket"
+    metrics:
+      ar_pct: null
+      mdd_pct: null
+      sharpe: null
+      note: "待回测填入"
+
+# ── CrossAssetAllocator 参数 ──
+allocator:
+  method: "inverse_volatility"
+  lookback: 60
+  rebalance_freq: 20
+  min_class_weight: 0.15
+  max_class_weight: 0.60
+  vol_target: 0.15
+  risk_free_rate: 0.02

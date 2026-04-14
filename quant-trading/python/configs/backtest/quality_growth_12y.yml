@@ -1,0 +1,98 @@
+# A 股质量成长策略 — 12 年回测配置
+#
+# 两阶段选股：
+# 第一阶段：基本面质量池（ROE≥10%, 营收正增长, PE(0,50), 负债<65%）
+# 第二阶段：量化精选（盈利加速30% + 动量25% + 质量20% + 低波15% + 估值分位10%）
+#
+# 目标：年化 30%+，夏普 > 1.0
+
+name: "quality_growth_12y"
+description: "A 股质量成长策略 (12年回测, 目标年化30%+)"
+
+data:
+  source: "tushare"
+  start_date: "2014-01-01"
+  end_date: "2025-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+strategy:
+  name: "quality_growth"
+  params:
+    # 持仓设置
+    top_k: 25
+    rebalance_days: 15
+    buffer_k: 8
+    max_single_pct: 0.06
+    inverse_vol_weighting: true
+    max_industry_pct: 0.20
+
+    # 基本面硬性门槛
+    min_roe: 10.0
+    min_revenue_growth: 0.0
+    min_profit_growth: 0.0
+    max_pe: 50.0
+    max_debt_to_assets: 65.0
+
+    # 筛选条件
+    min_price: 5.0
+    max_price: 200.0
+    min_mv: 300000.0        # 30 亿
+    max_mv: 5000000.0       # 500 亿
+    min_turnover: 1500.0
+    min_listed_days: 120
+
+    # 风控
+    stop_loss_pct: 0.12
+    trailing_stop_pct: 0.15
+
+    # 因子权重
+    weight_earnings_growth: 0.30
+    weight_momentum: 0.25
+    weight_quality: 0.20
+    weight_volatility: 0.15
+    weight_valuation_pct: 0.10
+
+    # 动量参数
+    momentum_lookback: 20
+    momentum_skip_recent: 3
+    momentum_multi_period: true
+    volatility_lookback: 60
+
+fill_model:
+  name: "next_bar_open"
+  opening_volume_fraction: 0.10
+
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005      # 卖出千分之一印花税
+  stamp_tax_auto_schedule: true
+  transfer_fee_rate: 0.00001
+  slippage_model: "linear_impact"
+  slippage_base_bps: 3.0
+  slippage_impact_coeff: 30.0
+  slippage_max_bps: 50.0
+  slippage_fallback_bps: 8.0
+
+risk:
+  enabled: true
+  max_position_weight: 0.06
+  max_drawdown: 0.60              # A股 12 年覆盖 2015 股灾，宽松回撤限制不影响策略运行
+  drawdown_peak_reset_days: 20   # 全仓现金 20 日后重置 peak_nav，防止回撤死锁
+  drawdown_allow_rotation: true  # 有持仓时允许轮转
+  drawdown_scale_factor_floor: 0.5  # 减仓区间至少保留50%规模
+  enable_audit_log: true
+
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  base_index: "000905.SH"   # 中证500：中小盘甜蜜区，与策略 min_mv/max_mv 匹配
+
+initial_capital: 1000000.0
+lot_size: 100
+t_plus_n: 1
+random_seed: 42
+output_dir: "output/quality_growth_12y"

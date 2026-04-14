@@ -1,0 +1,102 @@
+# 双低Z-Score策略 �?纯溢价率 (0:100)
+
+# 等价于纯low_premium但保留统一过滤框架
+
+# 长期收益最高但回撤最�?
+
+
+name: "double_low_zscore_0_100"
+
+description: >-
+
+  双低Z-Score纯溢价率策略：price_weight=0，等价于low_premium�?
+
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+strategy:
+
+  name: "double_low_zscore"
+
+  params:
+
+    top_k: 20
+
+    rebalance_days: 5
+
+    max_price: 130.0
+
+    max_premium: 50.0
+
+    min_turnover: 20.0
+
+    min_days_to_maturity: 30
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10
+
+    lot_size: 10
+
+    price_weight: 0.0
+
+    premium_weight: 1.0
+
+    use_cb_value: false
+
+
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0
+
+
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+random_seed: 42
+
+
+
+output_dir: "output/dl_zscore_0_100"
+

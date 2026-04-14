@@ -1,0 +1,116 @@
+# 动量策略 — 20 年回测 (2005-2025)
+#
+# 覆盖 2005.1 ~ 2024.12，含以下关键市场周期：
+#   - 2005-2007: 股权分置改革牛市 (998→6124)
+#   - 2008: 全球金融危机 (6124→1664)
+#   - 2009-2010: 四万亿反弹与消化
+#   - 2013-2014: 创业板结构牛
+#   - 2015.6: 杠杆牛崩溃 (5178→2850)
+#   - 2016-2017: 蓝筹价值回归
+#   - 2018: 贸易战单边熊 (3587→2441)
+#   - 2019-2021: 核心资产牛市
+#   - 2022-2024: 震荡调整与 AI 行情
+#
+# 费率说明：
+#   当前配置使用 2023.8.28 后费率（印花税千0.5），对 2005-2023 期间
+#   历史实际印花税（最高时双边千3）有所低估。这是已知的近似。
+#   若实现时间分段 FeeModel 后应重新回测。
+
+run:
+  mode: backtest
+  start_date: "2005-01-04"
+  end_date: "2024-12-31"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    index: "000300.SH"
+    boards:
+      - "A"
+
+frequency:
+  data_frequency: "1d"
+  matching_resolution: "1d"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe_policy:
+  name: "hs300_momentum_20y"
+  base_index: "000300.SH"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+  suspended_long:
+    lookback_days: 20
+    suspended_ratio_threshold: 0.8
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+slippage_model:
+  name: "fixed_bps"
+  bps: 5
+
+initial_capital: 1000000
+
+strategy:
+  name: "demo_momentum"
+  type: "factor"
+  parameters:
+    lookback_period: 20
+    holding_period: 5
+    top_n: 20
+    weight_method: "equal"
+    rebalance_freq: "weekly"
+
+risk_constraints:
+  max_single_position_pct: 0.10
+  max_drawdown_pct: 0.20
+  daily_loss_limit_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: "000300.SH"
+  trailing_stop_pct: 0.12
+  momentum_skip_recent: 1
+  momentum_multi_period: true
+  inverse_vol_weighting: true
+
+report:
+  benchmark: "000300.SH"
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+    - "alpha"
+    - "beta"
+    - "information_ratio"
+  universe_summary: true
+  output_dir: "reports/momentum_20y"

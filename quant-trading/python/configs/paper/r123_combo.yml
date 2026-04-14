@@ -1,0 +1,121 @@
+# R123 四组件跨资产组合 — 增强因子版
+# ====================================================================
+# 改进要素 (vs R122):
+#   1. CSI1000 model 使用增强因子模型 (Du2025 neutralization
+#      + residual_momentum + value_profitability composite)
+#   2. CSI2000 权重提升至 40% (无衰减, IC稳定)
+#   3. CSI1000 权重维持 10% (专家评审共识: alpha衰减未逆转)
+#   4. ETF 维持 25% (专家评审共识: 不降权尾部对冲)
+#
+# 增强模型关键指标:
+#   PBO=0.0263 (极低过拟合), IC Positive=88.5% (最稳定)
+#   残差波动率因子排名#2, IS-OOS Decay=48.8% (<50%达标)
+#
+# 目标: AR > 25%, SR > 1.5
+# ====================================================================
+
+profile_name: "r123_combo"
+description: >
+  R123 四组件跨资产组合 — 增强因子版
+  CSI1000增强因子(Du2025中性化+残差动量+价值盈利)
+
+initial_capital: 10000000.0
+
+portfolio_weights:
+  ml_csi2000: 0.40
+  ml_csi1000: 0.10   # 专家评审共识: 维持10% (alpha衰减)
+  cb: 0.25
+  etf: 0.25           # 专家评审共识: 维持25% (尾部对冲)
+
+# ── ML CSI2000 (与R122一致) ──
+ml_csi2000:
+  asset_type: "a_stock"
+  model_dir: "models/ml_csi2000_lgb_fund"
+  universe: "csi2000"
+  top_k: 50
+  rebalance_freq: "every_5d"
+  max_industry_pct: 0.15
+  max_stock_pct: 0.03
+  vol_target: 0.20
+  vol_lookback: 60
+  lot_size: 100
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_sell: 0.0005
+  transfer_fee: 0.00001
+  slippage_bps: 5.0
+
+# ── ML CSI1000 增强因子模型 ──
+ml_csi1000:
+  asset_type: "a_stock"
+  model_dir: "models/ml_csi1000_lgb_enhanced"
+  universe: "csi1000"
+  top_k: 50
+  rebalance_freq: "every_5d"
+  max_industry_pct: 0.15
+  max_stock_pct: 0.03
+  vol_target: 0.20
+  vol_lookback: 60
+  lot_size: 100
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_sell: 0.0005
+  transfer_fee: 0.00001
+  slippage_bps: 5.0
+
+# ── CB Stock Quality (与R122一致) ──
+cb:
+  asset_type: "convertible_bond"
+  top_k: 10
+  rebalance_freq: "daily"
+  max_price: 145.0
+  max_issue_size: 20000.0
+  min_turnover: 20.0
+  max_premium: 60.0
+  min_age_days: 3
+  min_days_to_maturity: 30
+  factor_weights:
+    price: 0.18
+    premium: 0.12
+    stock_roe: 0.25
+    stock_ep: 0.20
+    stock_vol: 0.15
+    issue_size: 0.10
+  lot_size: 10
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  slippage_bps: 5.0
+
+# ── ETF Cross V6 FAA (与R122一致) ──
+etf:
+  asset_type: "etf"
+  top_k: 3
+  rebalance_freq: "every_10d"
+  symbols:
+    - "510300.SH"
+    - "510500.SH"
+    - "159915.SZ"
+    - "512100.SH"
+    - "510050.SH"
+    - "510880.SH"
+    - "512010.SH"
+    - "512690.SH"
+    - "512660.SH"
+    - "513100.SH"
+    - "159920.SZ"
+    - "518880.SH"
+    - "511010.SH"
+
+# ── 监控 ──
+monitoring:
+  risk_contribution:
+    ml_csi2000_max: 0.55
+    check_frequency: weekly
+  alpha_decay:
+    rolling_sr_window: 252
+    sr_threshold: 0.0
+    max_consecutive_months: 6
+    check_frequency: monthly
+  drawdown:
+    warn_level: -0.20
+    halt_level: -0.25

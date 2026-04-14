@@ -1,0 +1,49 @@
+# ============================================================
+# R71 跨资产组合配置 — CB + BucketMF + ETF 三层组合
+# ============================================================
+# 在 R70 组合基础上, 将 A 股策略升级为 BucketMultiFactorStrategy
+# 目标: CB alpha + 桶式因子 alpha + ETF 战术配置 = 组合 SR > 1.0
+
+combination:
+  name: "r71_cross_asset"
+  description: "CB + BucketMultiFactor + ETF 跨资产多策略组合"
+  rebalance_frequency: "monthly"
+
+  plan_default:
+    name: "balanced"
+    weights:
+      cb_small_size: 0.45
+      bucket_multifactor: 0.30
+      etf_rotation: 0.25
+    target: "AR >= 15%, SR >= 1.0, MDD <= 25%"
+
+legs:
+  cb_small_size:
+    config: "configs/cb_strategies/small_size_10y.yml"
+    output: "output/small_size_10y"
+    asset_class: "CB"
+
+  bucket_multifactor:
+    config: "configs/backtest/bucket_mf_all_a_10y.yml"
+    output: "output/bucket_mf_all_a_10y"
+    asset_class: "A_STOCK"
+
+  etf_rotation:
+    config: "configs/backtest/etf_rotation_10y.yml"
+    output: "output/etf_rotation_10y"
+    asset_class: "ETF"
+
+# 权重方案矩阵 (待回测结果确认后选择)
+weight_scenarios:
+  aggressive:
+    cb: 0.40
+    a_stock: 0.40
+    etf: 0.20
+  balanced:
+    cb: 0.45
+    a_stock: 0.30
+    etf: 0.25
+  conservative:
+    cb: 0.50
+    a_stock: 0.20
+    etf: 0.30

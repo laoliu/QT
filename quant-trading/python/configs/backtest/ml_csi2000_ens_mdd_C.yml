@@ -1,0 +1,84 @@
+# ============================================================
+# Ensemble + MDD Scheme C: Tail-only (20/25/30/35%)
+# ============================================================
+# Only triggers during severe drawdowns; no vol target
+# Tests whether light-touch is better than active management
+
+cost_model:
+  commission: { min_fee: 5.0, rate: 0.0000854 }
+  stamp_tax: { sell_rate: 0.0005 }
+  transfer_fee: { rate: 0.00001 }
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: { asset_type: stock, boards: [A], index: 399303.SZ }
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_ens_mdd_C
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.32
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.25
+  trailing_stop_pct: 0.20
+  circuit_breaker_enabled: false
+  drawdown_scale_factor_floor: 0.4
+  drawdown_allow_rotation: true
+  drawdown_peak_reset_days: 30
+  position_sizing:
+    mdd_gradient:
+      enabled: true
+      levels:
+        - [0.20, 1.00]   # MDD<20%: full
+        - [0.25, 0.75]   # 20-25%: 75%
+        - [0.30, 0.50]   # 25-30%: 50%
+        - [0.35, 0.30]   # 30-35%: 30%
+        - [1.00, 0.15]   # >35%: 15%
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model: { name: fixed, bps: 8.0 }
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 10
+    buffer_k: 5
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    model_objective: regression
+    model_type: lightgbm
+    ensemble_method: rank_average
+    oos_predictions_paths:
+      - models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet
+      - models/ml_csi2000_de_10d/oos_predictions.parquet
+      - models/ml_csi2000_lgb_b3_sizeneutral/oos_predictions.parquet
+      - models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet
+      - models/ml_csi2000_de_5d/oos_predictions.parquet

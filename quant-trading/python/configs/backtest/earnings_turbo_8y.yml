@@ -1,0 +1,97 @@
+# 盈利动量 — 激进版 (2016-2024)
+# 目标年化 30%+：极集中盈利加速 + 动量共振
+#
+# 核心思路: 重仓盈利加速因子 + 动量确认
+# top_k=12, rebalance=10, 无熔断
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact, alpha, beta, information_ratio]
+  output_dir: reports/earnings_turbo_8y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.60
+  max_sector_pct: 0.40
+  max_single_position_pct: 0.10
+  market_regime_enabled: false
+  stop_loss_pct: 0.50
+  trailing_stop_pct: 0.0
+  momentum_skip_recent: 1
+  momentum_multi_period: true
+  inverse_vol_weighting: false
+  circuit_breaker_enabled: false
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2016-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 3
+  name: fixed_bps
+strategy:
+  name: earnings_momentum
+  parameters:
+    benchmark: 000300.SH
+    top_k: 12
+    rebalance_days: 10
+    buffer_k: 5
+    min_listed_days: 60
+    exclude_st: true
+    max_single_pct: 0.10
+    stop_loss_pct: 0.50
+    cash_reserve_pct: 0.02
+    lot_size: 100
+    min_turnover: 500.0
+    min_price: 1.0
+    max_price: 9999.0
+    min_mv: 100000.0
+    momentum_lookback: 20
+    min_earnings_growth: 5.0
+    min_revenue_growth: 0.0
+    min_roe: 3.0
+    max_pe: 300.0
+    volatility_lookback: 20
+    weight_earnings_accel: 0.35
+    weight_revenue_growth: 0.15
+    weight_sue: 0.20
+    weight_momentum: 0.20
+    weight_quality: 0.05
+    weight_volatility: 0.05
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,103 @@
+# CBMultiLayer v1 — 全三层融合可转债策略
+# ============================================================
+# 首次将 Layer 1 (CB本体) + Layer 2 (正股传导) + Layer 3 (条款博弈)
+# 全部 8+1 因子融合为一个策略。
+#
+# 因子矩阵（8+1 因子，3 层）：
+#   Layer 1: price(0.15) + premium(0.12)
+#   Layer 2: stock_roe(0.15) + stock_ep(0.10) + stock_vol(0.08) + gamma(0.08)
+#   Layer 3: putback(0.15) + maturity_catalyst(0.10)
+#   Weak:    issue_size(0.07)
+#
+# 与子策略对比：
+#   - cb_stock_quality:    L1+L2 (5+1 因子)
+#   - cb_gamma_convexity:  L1+Delta (4+1 因子)
+#   - cb_clause_play:      L1+L3 (4+1 因子)
+#   - cb_multi_layer:      L1+L2+L3 (8+1 因子) ← 本策略
+# ============================================================
+
+name: "cb_multi_layer_v1_7y"
+description: >
+  全三层融合可转债策略 v1。
+  8+1 因子: price(0.15) + premium(0.12) + stock_roe(0.15) + stock_ep(0.10)
+  + stock_vol(0.08) + gamma(0.08) + putback(0.15) + maturity_catalyst(0.10)
+  + issue_size(0.07, 弱)。首次融合全部三个因子层。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_multi_layer"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 140.0
+    max_issue_size: .inf
+    min_issue_size: 0.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.22
+    lot_size: 10
+    # --- 过滤参数 ---
+    use_age_filter: true
+    min_age_days: 10
+    max_premium: 70.0
+    # --- Layer 1 权重 (CB 本体) ---
+    weight_price: 0.15
+    weight_premium: 0.12
+    # --- Layer 2 权重 (正股传导) ---
+    weight_stock_roe: 0.15
+    weight_stock_ep: 0.10
+    weight_stock_vol: 0.08
+    weight_gamma: 0.08
+    # --- Layer 3 权重 (条款博弈) ---
+    weight_putback: 0.15
+    weight_maturity: 0.10
+    # --- Weak ---
+    weight_issue_size: 0.07
+    # --- 正股数据参数 ---
+    vol_lookback: 60
+    use_stock_bridge: true
+    default_roe: 0.0
+    default_ep: 0.0
+    # --- 条款参数 ---
+    putback_trigger_ratio: 0.70
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+risk:
+  enabled: true
+  max_position_weight: 0.12
+  max_drawdown: 0.50
+  enable_audit_log: true
+
+random_seed: 42
+output_dir: "output/cb_multi_layer_v1_7y"

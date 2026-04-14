@@ -1,0 +1,62 @@
+# 转股价值动量策略 — 初始配置
+# ============================================================
+# 策略逻辑:
+#   追踪转股价值(cb_value)的变化趋势而非债券价格
+#   cb_value 上升 = 正股走强 → 转债有跟涨潜力
+#   结合低溢价率过滤，确保转股弹性
+# ============================================================
+
+name: "cb_value_momentum"
+description: >
+  转股价值动量策略 — 基于 cb_value 变化趋势追踪正股强度。
+  与传统价格动量相比，更纯粹地捕捉正股强度信号。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_value_momentum"
+  params:
+    top_k: 10
+    lookback_days: 20
+    rebalance_days: 5
+    max_premium: 30.0
+    max_price: 150.0
+    min_turnover: 30.0
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/cb_value_momentum"

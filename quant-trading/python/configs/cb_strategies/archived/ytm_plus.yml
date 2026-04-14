@@ -1,0 +1,70 @@
+# YTM 增强策略 — 初始配置
+# ============================================================
+# 策略逻辑:
+#   用伪 YTM 与溢价率进行多因子 rank 融合
+#   YTM 高 → 偏债保护强；溢价率低 → 转股弹性好
+#   双因子加权打分选出攻守兼备的可转债
+# ============================================================
+
+name: "ytm_plus"
+description: >
+  YTM 增强策略 — 伪 YTM + 溢价率的 rank 融合。
+  偏债保护与转股弹性兼顾，适合震荡市。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "ytm_plus"
+  params:
+    top_k: 15
+    rebalance_days: 10
+    max_price: 115.0
+    ytm_weight: 0.5
+    premium_weight: 0.5
+    min_years_to_maturity: 0.5
+    max_premium: 50.0
+    min_turnover: 30.0
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0          # CB 最低买卖价差
+    impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+    fallback_bps: 8.0      # 无成交量数据时的回退值
+    max_bps: 40.0          # 单笔滑点上限
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/ytm_plus"

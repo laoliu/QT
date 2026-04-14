@@ -1,0 +1,135 @@
+# CB 3-Way 等权组合 — S4 模拟盘配置
+# ============================================================
+# 组合：triple_low_v3 + sq_v4b_balanced + small_size_v2 (等权 EW)
+# 验证：WF Score=10 (PASS), Full AR=24.9%, SR=1.58
+#       Post-2022 AR=6.9%, 2025 OOS AR=7.76%
+# ============================================================
+# 启动：python -m aipha paper --config configs/paper/cb_3way_ew.yml
+# 状态：data/paper_state/cb_3way_ew/
+# ============================================================
+
+paper_engine:
+  strategy_name: "multi_strategy"
+
+  # ── 数据源 ─────────────────────────────────────────────────
+  market_type: "convertible_bond"
+  poll_interval: 3.0
+  bar_interval_sec: 60
+
+  # ── 资金与交易规则（与回测一致）──────────────────────────────
+  initial_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+
+  # ── 状态持久化 ─────────────────────────────────────────────
+  state_dir: "data/paper_state/cb_3way_ew"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/cb_3way_ew"
+
+  # ── 动态标的池 ─────────────────────────────────────────────
+  universe:
+    enabled: true
+    max_price: 200.0
+    min_amount: 0.5
+    refresh_interval_sec: 3600
+
+  # ── 监控告警 ────────────────────────────────────────────────
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.20
+  alert_daily_loss_threshold: 0.03
+  alert_data_stale_seconds: 120.0
+  alert_inactivity_minutes: 90.0
+
+  # ── 指标收集 ────────────────────────────────────────────────
+  metrics_enabled: true
+  metrics:
+    output_dir: "data/metrics/cb_3way_ew"
+    write_interval_sec: 60
+
+# ── 多策略组合配置（3-Way 等权）─────────────────────────────────
+multi_strategy:
+  total_capital: 1000000.0
+  lot_size: 10
+  t_plus_n: 0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  slippage_bps: 5.0
+
+  strategies:
+    # ── 策略 1: triple_low v3（高 SR 分散，33.3%）────────────
+    - name: triple_low
+      weight: 0.333
+      max_drawdown: 0.20
+      params:
+        top_k: 20
+        rebalance_days: 1
+        buffer_k: 0
+        max_price: 130.0
+        max_premium: 35.0
+        min_issue_size: 0.0
+        min_turnover: 20.0
+        min_days_to_maturity: 30
+        price_weight: 0.33
+        premium_weight: 0.33
+        cb_value_weight: 0.34
+        low_size_threshold: 30000.0
+        low_size_bonus: 0.1
+        stop_loss_pct: 0.10
+        force_redeem_threshold: 130.0
+        force_redeem_days: 8
+        lot_size: 10
+        equal_weight: true
+        exclude_called: true
+        exclude_st: true
+
+    # ── 策略 2: cb_stock_quality v4b（正股基本面，33.3%）─────
+    - name: cb_stock_quality
+      source_config: configs/cb_strategies/cb_stock_quality_v4b_balanced_8y.yml
+      weight: 0.334
+      max_drawdown: 0.25
+      params:
+        top_k: 10
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 20.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10
+        use_age_filter: true
+        min_age_days: 3
+        max_premium: 60.0
+        weight_price: 0.18
+        weight_premium: 0.12
+        weight_stock_roe: 0.25
+        weight_stock_ep: 0.20
+        weight_stock_vol: 0.15
+        weight_issue_size: 0.10
+        vol_lookback: 60
+        use_stock_bridge: true
+        default_roe: 0.0
+        default_ep: 0.0
+
+    # ── 策略 3: small_size v2（alpha 主力，33.3%）────────────
+    - name: small_size
+      source_config: configs/cb_strategies/small_size_v2_7y.yml
+      weight: 0.333
+      max_drawdown: 0.25
+      params:
+        top_k: 4
+        rebalance_days: 1
+        max_price: 145.0
+        max_issue_size: 20000.0
+        min_issue_size: 0.0
+        min_turnover: 10.0
+        min_days_to_maturity: 30
+        exclude_st: true
+        stop_loss_pct: 0.10
+        lot_size: 10

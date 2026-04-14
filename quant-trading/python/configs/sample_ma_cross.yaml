@@ -1,0 +1,41 @@
+# Aipha 回测配置模板 — 均线策略示例
+# 使用方式: aipha_backtest action=run_from_yaml yamlPath=configs/sample_ma_cross.yaml
+
+# ── 数据设置 ──
+data:
+  source: akshare          # 数据源: akshare / tushare
+  start: "2022-01-01"
+  end: "2024-01-01"
+  symbols:
+    - "600519"   # 贵州茅台
+    - "000858"   # 五粮液
+    - "000568"   # 泸州老窖
+  frequency: 1d
+  adjust: hfq              # 后复权
+
+# ── 策略设置 ──
+strategy:
+  name: ma_cross            # 双均线策略
+  params:
+    fast_period: 5
+    slow_period: 20
+
+# ── 成本设置 ──
+cost:
+  commission: 0.0000854     # 佣金万0.854
+  min_commission: 5.0       # 最低5元
+  stamp_tax: 0.0005         # 印花税千0.5 (卖出)
+  slippage_bps: 10          # 滑点10bps
+
+# ── 成交模型 ──
+fill_model:
+  name: next_bar_open       # next_bar_open / next_bar_close / vwap
+
+# ── 风控 ──
+risk:
+  max_position_pct: 0.25    # 单只最大25%仓位
+  max_drawdown: 0.15        # 最大回撤15%触发降仓
+  max_daily_turnover: 0.30  # 日换手上限30%
+
+# ── 回测金额 ──
+initial_capital: 1000000    # 100万初始资金

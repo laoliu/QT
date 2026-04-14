@@ -1,0 +1,132 @@
+# ============================================================
+# A 股均衡多因子增强 — HS300 + 新因子 (10 年回测)
+# ============================================================
+# 控制实验：基于 balanced_mf_hs300_10y (AR=13.54%) 的成功配置
+# 增量添加 size(10%) + STR(10%)，从4因子扩展到6因子
+# 目标：验证新因子是否能在HS300上进一步提升收益
+# 改变点(vs原配置)：
+#   - 添加 size 10%（HS300内偏小的股票有更高alpha）
+#   - 添加 STR 10%（短期反转捕捉机构过度反应）
+#   - 调仓15天(vs 20天) — 稍快以捕捉STR信号
+#   - 4核心因子各降至20%(从25%)来腾出权重
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.1
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/balanced_mf_hs300_enhanced_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.3
+  max_single_position_pct: 0.06
+  market_regime_enabled: false
+  stop_loss_pct: 1.0
+  trailing_stop_pct: 1.0
+  circuit_breaker_enabled: false
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 15
+    min_mv: 300_000.0
+    max_mv: 50_000_000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: true
+    # --- 6因子权重 (合计=1.0) ---
+    weight_value: 0.20
+    weight_quality: 0.20
+    weight_momentum: 0.20
+    weight_volatility: 0.20
+    weight_size: 0.10
+    weight_str: 0.10
+    weight_dividend: 0.0
+    weight_earnings_growth: 0.0
+    # --- 因子参数 ---
+    str_lookback: 5
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+    regime_adaptive: false
+    base_index: 000300.SH
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,67 @@
+# 均值回归策略 — 回测配置
+# ============================================================
+# 策略思路: RSI 超卖时买入, 超买时卖出。
+# 适用于震荡市场均值回复性强的品种。
+
+name: "mean_reversion"
+description: >
+  基于 RSI(14) 的均值回归策略 — RSI 低于超卖阈值（30）时买入，
+  高于超买阈值（70）时卖出。
+
+# ------ 数据 ------
+data:
+  source: "tushare_pro"
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "qfq"
+  cache_dir: "data/cache/tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "demo_mean_reversion"
+  params:
+    lookback_days: 14       # 均值计算回望期
+    entry_std: 2.0          # 低于均值2个标准差买入
+    exit_std: 0.5           # 回归均值0.5个标准差卖出
+    position_pct: 0.10
+    max_positions: 10
+    target_symbols:
+      - "000001.SZ"
+      - "600519.SH"
+      - "000858.SZ"
+      - "002594.SZ"
+      - "000333.SZ"
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+# ------ 股票池 ------
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 60
+
+# ------ 成本 (A股) ------
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005            # 2023-08-28 起印花税减半（千分之0.5，卖出）
+  transfer_fee_rate: 0.00001        # 2022-04-29 起统一过户费（万分之0.1）
+
+# ------ 滑点 ------
+slippage:
+  model: "fixed_bps"
+  bps: 5.0
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"
+

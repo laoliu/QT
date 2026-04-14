@@ -1,0 +1,90 @@
+# 全三层融合策略 v2 — 8年回测 (统一 linear_impact)
+# ============================================================
+# 经济学基础: CB定价三层分解
+#   L1 CB本体: price+premium → 安全边际/低估
+#   L2 正股传导: ROE+EP+vol+gamma → 正股质量+期权价值
+#   L3 条款博弈: putback+maturity → 发行人行为预测
+# 9因子全覆盖, 是因子架构的终极形态
+# v2 调整:
+#   - rebalance_days: 5 (周频, 降低换手成本)
+#   - 降低 issue_size 到 0.05 (弱化小盘依赖)
+#   - 适度调高 L3 条款博弈权重 (差异化因子)
+# ============================================================
+
+name: "cb_multi_layer_v2_8y"
+description: >
+  全三层融合策略 v2 — 9因子覆盖CB定价全维度。
+  L1(CB): price(0.12)+premium(0.10)=0.22
+  L2(正股): ROE(0.15)+EP(0.10)+vol(0.10)+gamma(0.10)=0.45
+  L3(条款): putback(0.18)+maturity(0.10)=0.28
+  Structural: issue_size(0.05)
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "cb_multi_layer"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 140.0
+    min_turnover: 20.0
+    stop_loss_pct: 0.22
+    min_age_days: 10
+    max_premium: 70.0
+    # L1 — CB 本体
+    weight_price: 0.12
+    weight_premium: 0.10
+    # L2 — 正股传导
+    weight_stock_roe: 0.15
+    weight_stock_ep: 0.10
+    weight_stock_vol: 0.10
+    weight_gamma: 0.10
+    # L3 — 条款博弈
+    weight_putback: 0.18
+    weight_maturity: 0.10
+    # Structural
+    weight_issue_size: 0.05
+    # 正股数据
+    vol_lookback: 60
+    use_stock_bridge: true
+    default_roe: 0.0
+    default_ep: 0.0
+    putback_trigger_ratio: 0.70
+    min_days_to_maturity: 30
+    lot_size: 10
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_multi_layer_v2_8y"
+
+report:
+  benchmark: "000300.SH"

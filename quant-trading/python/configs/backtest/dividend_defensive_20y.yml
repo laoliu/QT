@@ -1,0 +1,103 @@
+# A 股高股息防御 — 20 年回测 (2005-2025)
+#
+# 覆盖 2005.1 ~ 2024.12
+# 高股息防御策略：高股息率 + 质量过滤 + 低波动偏好
+# 适用于熊市/震荡市的绝对收益组合
+#
+# 注意：股息率数据(dv_ratio)在 TuShare daily_basic 中提供。
+# 早期年份（2005-2010）的 daily_basic 可能不完整，
+# 策略会自动将缺失 dv_ratio 的标的标记为 NaN 并排除。
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  - alpha
+  - beta
+  - information_ratio
+  output_dir: reports/dividend_defensive_20y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.2
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  market_regime_enabled: true
+  benchmark_symbol: 000300.SH
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.10
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2005-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 5
+  name: fixed_bps
+strategy:
+  name: dividend_defensive
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 200000.0
+    stop_loss_pct: 0.15
+    weight_dividend: 0.35
+    weight_quality: 0.25
+    weight_volatility: 0.20
+    weight_value: 0.10
+    weight_momentum: 0.10
+    quality_roe_weight: 0.60
+    quality_debt_weight: 0.40
+    min_dividend_yield: 0.5
+    min_roe: 5.0
+    max_pe: 60.0
+    max_debt_to_assets: 75.0
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: dividend_defensive

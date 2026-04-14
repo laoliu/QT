@@ -1,0 +1,178 @@
+# 小规模策�?(issue_size �? �?优化部署配置
+
+# ============================================================
+
+# 策略逻辑:
+
+#   买入发行规模最小的 top_k 只低价可转债，日频调仓�?
+#   纯小盘因子，利用小规模可转债的流动性溢价�?
+#
+
+# 优化历史 (2025-02):
+
+#   - 发现 RiskConfig 默认 max_drawdown=0.20 �?k=5 集中持仓触发反馈循环
+
+#   - max_position_weight 从默�?0.10 调整�?0.25（匹�?k=5�?
+#   - max_drawdown �?0.20 调整�?0.50（可转债有债底保护�?
+#
+
+# 验证指标 (2018-01-01 ~ 2024-12-31, NBO, 5bps):
+
+#   年化收益: 34.00% | 最大回�? 12.24% | Sharpe: 1.26
+
+#   交易次数: 271 | 年化换手�? ~309%
+
+#
+
+# 子区间验�?(dd=0.50, 5bps):
+
+#   2018-2022: 48.46%, MDD=12.24%, Sharpe=1.49
+
+#   2020-2024: 44.22%, MDD=12.44%, Sharpe=1.39
+
+#   2022-2024: 14.71%, MDD=11.76%, Sharpe=0.86
+
+#
+
+# 滑点敏感�?(dd=0.50, 7Y):
+
+#   3bps: 34.44%, 5bps: 34.00%, 8bps: 33.96% �?极其稳健
+
+#
+
+# �?new_small 对比:
+
+#   - small_size 不限上市时间窗口 �?候选池更大、更稳健
+
+#   - new_small �?5~90 �?�?候选池小但 alpha 更强
+
+#   - 建议: new_small 为主�? small_size 作备�?分散
+
+#
+
+# 已知风险:
+
+#   - 2022-2024 弱势期仅 11.64% �?策略 alpha �?CB 熊市衰减
+
+#   - 小规�?CB 流动性差，大资金不宜
+
+#   - issue_size 为发行时静态值，�?PIT 精确�?
+# ============================================================
+
+
+
+name: "small_size_optimized"
+
+description: >
+
+  小规模可转债策略（优化版）�?调整风控参数以匹配集中持仓特征�?
+  纯发行规模因子排序，日频调仓�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "small_size"
+
+  params:
+
+    top_k: 5
+
+    rebalance_days: 1
+
+    max_price: 150.0
+
+    max_issue_size: 20000.0       # 万元 (2亿以下的极小规模)
+
+    min_turnover: 10.0
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10  # CB��ծ�ױ���,10%ֹ�������(�޸�F-R3)
+
+    lot_size: 10
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0               # 保守滑点
+
+
+
+# ------ 资金与规�?------
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+# ------ 风控约束 ------
+
+risk:
+
+  enabled: true
+
+  max_position_weight: 0.25       # k=5 �?20%/�?+ 5% 缓冲
+
+  max_drawdown: 0.50              # 放宽以避免反馈循�?
+  enable_audit_log: true
+
+
+
+# ------ 实验指纹 ------
+
+random_seed: 42
+
+
+
+# ------ 输出 ------
+
+output_dir: "output/small_size_optimized"
+

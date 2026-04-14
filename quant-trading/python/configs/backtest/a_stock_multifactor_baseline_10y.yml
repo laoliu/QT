@@ -1,0 +1,111 @@
+# A 股多因子基线策略 — 全 A 股 10 年回测配置（知识库 G1）
+# ============================================================
+# 策略: EP(盈利收益率) + ROE质量 + MOM_12_1 + IVOL反转 四因子等权
+# 回测区间: 2015-01-05 ~ 2024-12-31 (≥10年 A股强制要求)
+# Universe: 全 A 股 30-500亿市值，排除 ST/退市/停牌
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default          # 万0.85 佣金率
+  stamp_tax:
+    sell_rate: 0.0005       # 2023-08-28起减半，此处保守用0.5‰
+  transfer_fee:
+    rate: 1.0e-05           # 万0.1 过户费
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open       # 次日开盘成交（保守、无前视）
+  volume_constraint:
+    max_participation_rate: 0.10    # 单票最大参与率 10%
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, sortino, turnover,
+            win_rate, positions_count_distribution, cost_impact]
+  output_dir: output/a_stock_multifactor_baseline_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.70
+  max_sector_pct: 0.35
+  max_single_position_pct: 0.06
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+
+run:
+  start_date: "2015-01-05"    # A股策略首个交易日
+  end_date: "2024-12-31"
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 2.0               # 基础价差滑点 2bps（.env SLIPPAGE_SPREAD_BPS）
+  impact_coeff: 30.0          # 市场冲击系数
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: a_stock_multifactor
+  parameters:
+    base_index: "000906.SH"     # CSI800 — 覆盖 30-500B 市值范围，避免全市场加载
+    top_k: 30                 # 持仓数量
+    rebalance_days: 20        # 月度调仓（~20交易日）
+    min_mv: 300000.0          # 30亿市值下限（知识库：避免微盘流动性问题）
+    max_mv: 50000000.0        # 500亿市值上限
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0      # 最低日成交额（万元）
+    min_listed_days: 120      # 上市满120天
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: false  # 等权持仓
+    # ── 四因子权重 （等权 G1）────────────────────────
+    weight_ep: 0.25
+    weight_roe: 0.25
+    weight_mom: 0.25
+    weight_ivol: 0.25
+    # ── 动量参数 ─────────────────────────────────────
+    mom_lookback: 250         # MOM_12_1约250个交易日
+    mom_skip_recent: 20       # 跳过近1月约20日
+    momentum_lookback: 270    # 同步基类历史窗口（必须 ≥ mom_lookback + mom_skip_recent）
+    # ── IVOL参数 ─────────────────────────────────────
+    ivol_lookback: 60
+    volatility_lookback: 60   # 同步基类历史窗口（必须 ≥ ivol_lookback）
+    ep_pe_metric: pe_ttm
+    roe_metric: roe
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1                   # T+1 A股
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

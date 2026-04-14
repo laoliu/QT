@@ -1,0 +1,68 @@
+# 小盘转债策略 — 10年回测配置
+# ============================================================
+# 策略逻辑: 按发行规模升序排名 → 选最小top_k只 → 每日调仓
+# 回测区间: 2015-01-01 ~ 2024-12-31 (10年)
+# ============================================================
+
+name: "small_size_10y"
+description: >
+  小盘可转债策略 10年回测。按发行规模升序选最小的20只，
+  每日调仓，附带强赎预警与止损。
+
+data:
+  source: "tushare_cb"
+  start_date: "2015-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "small_size"
+  params:
+    top_k: 20
+    rebalance_days: 1
+    buffer_k: 0
+    max_price: 130.0
+    max_issue_size: 50000.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.15
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    lot_size: 10
+    exclude_called: true
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+risk_constraints:
+  force_redeem_enabled: true
+  force_redeem_max_weight: 0.30
+  force_redeem_cb_value_threshold: 125.0
+  stop_loss_pct: 0.15
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.10
+
+random_seed: 42
+output_dir: "output/small_size_10y"
+
+report:
+  benchmark: null
+  custom_benchmark: "000832.CSI"

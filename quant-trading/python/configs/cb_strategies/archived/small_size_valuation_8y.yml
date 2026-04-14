@@ -1,0 +1,71 @@
+# 小盘策略 + 估值择时仓位控制回测
+#
+# 在小盘策略基础上叠加市场估值仓位控制
+# 验证估值择时对高波动策略的降回撤效果
+
+name: "small_size_valuation_8y"
+description: "小盘策略 + 估值仓位控制 (8年回测)"
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2025-12-31"
+  frequency: "daily"
+  adjust: "post"
+  cache_dir: "data/cache"
+
+strategy:
+  name: "small_size"
+  params:
+    top_k: 10
+    rebalance_days: 5
+    max_price: 160
+    max_issue_size: 80000.0
+    min_turnover: 300.0
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.05
+    opening_volume_fraction: 0.3
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 0.5
+    fallback_bps: 3.0
+    max_bps: 15.0
+
+risk:
+  enabled: true
+  max_position_weight: 0.15
+  max_drawdown: 0.25
+
+valuation_sizing:
+  enabled: true
+  metric: "premium_percentile"
+  lookback_days: 500
+  high_threshold: 0.80
+  low_threshold: 0.20
+  high_scale: 0.50
+  low_scale: 1.00
+  mid_scale: 0.80
+  smooth_days: 5
+
+universe:
+  policy: "default"
+  exclude_st: true
+  exclude_suspended: true
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/small_size_valuation_8y"

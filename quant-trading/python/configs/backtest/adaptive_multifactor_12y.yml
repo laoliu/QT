@@ -1,0 +1,147 @@
+# 自适应多因子策略 — CSI800 12年回测
+# IC 加权 + 市场温度仓位管理 + 防御模式
+#
+# Alpha 逻辑：
+# - 根据近期因子 IC（信息系数）自适应调整权重
+# - 市场温度（趋势+波动+广度）动态控制仓位比例
+# - 温度低于阈值自动切换到防御模式（低波+价值+红利）
+#
+# 对标：balanced_multifactor（静态权重，AR=7.48%, Sharpe=0.41）
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000906.SH            # CSI800 = HS300 + CSI500
+  region: CN
+
+report:
+  benchmark: 000906.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact]
+  output_dir: reports/adaptive_multifactor_12y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30            # 从 0.50 收紧到 0.30
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05
+  market_regime_enabled: true       # 启用市场状态检测
+  stop_loss_pct: 0.15              # 从 0.25 收紧到 0.15
+  trailing_stop_pct: 0.12          # 从 0.20 收紧到 0.12
+  circuit_breaker_enabled: true    # 启用熔断
+  # DrawdownLimit 防死锁参数
+  drawdown_peak_reset_days: 20     # 全仓现金 20 天后重置 peak_nav，防止永久锁死
+  drawdown_allow_rotation: true    # 轮转策略允许在减仓区间继续换仓
+  drawdown_scale_factor_floor: 0.3 # 线性减仓最低缩放 30%，防止退化到零
+
+run:
+  start_date: '2014-01-02'
+  end_date: '2025-06-30'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: adaptive_multifactor
+  parameters:
+    # 持仓
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 200000.0          # 20 亿
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 1500.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    buffer_k: 15                  # 增大缓冲区减少换手
+
+    # 止损（与风控层保持一致）
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+
+    # 集中度
+    max_single_pct: 0.05
+    cash_reserve_pct: 0.03
+    max_industry_pct: 0.25
+    inverse_vol_weighting: true
+
+    # IC 自适应（加大窗口减少噪声）
+    ic_lookback: 60             # Rolling IC 窗口（20→60 减少噪声）
+    ic_decay_halflife: 30       # 半衰期（10→30 更平滑）
+    ic_weight_alpha: 0.30       # IC 权重占比降低（0.50→0.30 减少噪声影响）
+    ic_min_abs: 0.03            # 噪声门槛提高（0.02→0.03）
+
+    # 市场温度
+    temperature_enabled: true
+    temp_ma_short: 20
+    temp_ma_mid: 60
+    temp_ma_long: 120
+    temp_vol_short: 20
+    temp_vol_long: 100
+    temp_trend_weight: 0.40
+    temp_vol_weight: 0.30
+    temp_breadth_weight: 0.30
+    min_position_pct: 0.20      # 最冷时保留 20% 仓位（允许更大减仓）
+    defensive_threshold: 0.35   # 温度 <0.35 切换防御（更早进入防御）
+
+    # 8 因子基础权重
+    base_weight_value: 0.15
+    base_weight_quality: 0.15
+    base_weight_momentum: 0.15
+    base_weight_volatility: 0.15
+    base_weight_earnings_growth: 0.10
+    base_weight_dividend: 0.10
+    base_weight_piotroski: 0.10
+    base_weight_debt: 0.10
+
+    # 因子参数
+    value_metric: pe_ttm
+    quality_metric: roe
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    volatility_lookback: 60
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000906.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

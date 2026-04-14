@@ -1,0 +1,152 @@
+# Tiered Portfolio V3 — 四组件跨资产组合（含CB）
+# ====================================================================
+# V2.1→V3 变更:
+#   1. 移除 CSI2000 组件级 MDD 梯度控制
+#      理由: V2.0/V2.2 MDD 控制 AR 从 29.8%→14.3%（损失52%），
+#            而组合级分散(50/15/35)已将 MDD 自然降至 19%
+#   2. 新增 CB stock_quality_v4b 组件（合规费率验证 AR=29.7% SR=1.47）
+#   3. 重新分配权重: CSI2000(40%) + CB(20%) + CSI300(10%) + ETF(30%)
+#
+# V3→V3.1 (评审 EVAL-COMBO-V3-R1-20260616):
+#   4. 权重调整: CSI2000(40%→35%) + CB(20%→15%) + CSI300(10%→15%) + ETF(30%→35%)
+#      理由: CB容量≤50万需降权至≤15%(原则D), CSI2000风险贡献57%需降权(原则E)
+#   5. 补全 max_participation_rate 至各A股/ETF组件
+#
+# 各组件合规费率验证绩效（2018/2020-2026）:
+#   CSI2000 V3b (无MDD控): AR=29.81%, SR=1.221, MDD=34.23%
+#   CB stock_quality_v4b:   AR=29.69%, SR=1.469, MDD=19.49%
+#   CSI300 >=200B:          AR=5.44%,  SR=0.298, MDD=21.93%
+#   ETF FAA V5:             AR=11.48%, SR=0.533, MDD=18.42%
+# ====================================================================
+
+profile_name: "tiered_combo_v3"
+description: >
+  四组件跨资产组合 V3.1 (评审后调权):
+  CSI2000(35%) + CB(15%) + CSI300≥200B(15%) + ETF(35%)
+  去除组件级MDD控制，依赖组合分散管理风险
+
+initial_capital: 10000000.0
+
+# ── Regime Overlay (V4 新增) ──
+# MarketRegimeDetector 3-signal voting:
+#   BEAR (12.9% of days): position_scale=0.50 → A股组件目标仓位减半
+#   NEUTRAL: position_scale=0.80
+#   BULL: position_scale=1.00
+# 模拟验证: BEAR=50% → SR 1.35→1.68, MDD -34%→-21%
+regime_overlay:
+  enabled: false                       # 回测验证 regime overlay 净效果为负，暂禁用
+  # 保留配置供未来改进信号后重新启用
+  benchmark_symbol: "399303.SZ"    # CSI2000
+  lookback_days: 80                # 足够覆盖 momentum_lookback=60
+  neutral_scale: 1.0               # NEUTRAL不降仓(避免过度交易)
+  bear_scale: 0.50                 # BEAR降仓50%
+
+portfolio_weights:
+  ml_csi2000: 0.35
+  cb_stock_quality: 0.15
+  ml_csi300_ge200b: 0.15
+  etf: 0.35
+
+# ── 子组件配置 ──────────────────────────────────────────────
+pillars:
+  # ── ML CSI2000 V3b Ensemble (无组件级MDD控制) ──
+  ml_csi2000:
+    name: "ML CSI2000 V3b 6-Model Ensemble"
+    description: "LGB x5 + MASTER V2, rank_average融合"
+    market_type: "a_stock"
+    weight: 0.35
+    model_dir: "models/ml_csi2000_lgb_20d_r40"
+    ensemble_predictions:
+      - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"
+      - "models/ml_csi2000_de_10d/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_b3_sizeneutral/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet"
+      - "models/ml_csi2000_lgb_20d_neutral_p1/oos_predictions.parquet"
+      - "models/ml_csi2000_master_v2/oos_predictions.parquet"
+    ensemble_method: "rank_average"
+    ensemble_weights:
+      ml_csi2000_lgb_20d_r40: 1.87
+      ml_csi2000_de_10d: 1.46
+      ml_csi2000_lgb_b3_sizeneutral: 1.46
+      ml_csi2000_lgb_fund_t1aligned: 1.20
+      ml_csi2000_lgb_20d_neutral_p1: 2.15
+      ml_csi2000_master_v2: 0.70
+    universe: "csi2000"
+    top_k: 50
+    rebalance_days: 5
+    max_industry_pct: 0.15
+    max_stock_pct: 0.03
+    vol_target: 0.20
+    vol_lookback: 60
+    lot_size: 100
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.18
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    stamp_tax_sell: 0.0005
+    transfer_fee: 0.00001
+    slippage_bps: 8.0
+    max_participation_rate: 0.10
+
+  # ── CB Stock Quality V4b (合规费率验证: AR=29.7% SR=1.47) ──
+  cb_stock_quality:
+    name: "CB Stock Quality V4b Balanced"
+    description: "正股质量增强6因子CB策略"
+    market_type: "convertible_bond"
+    weight: 0.15
+    strategy_name: "cb_stock_quality"
+    strategy_config: "configs/cb_strategies/cb_stock_quality_v4b_balanced_8y.yml"
+    top_k: 10
+    rebalance_days: 1
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0
+    slippage_model: "linear_impact"
+
+  # ── ML CSI300 ≥200B ──
+  ml_csi300_ge200b:
+    name: "ML CSI300 GE200B Ensemble"
+    description: "CSI300市值>=200B筛选"
+    market_type: "a_stock"
+    weight: 0.15
+    model_dir: "models/ml_csi300_lgb_p3_t1a_open"
+    oos_predictions_path: "models/ml_csi300_lgb_p3_t1a_open/oos_predictions.parquet"
+    universe: "csi300"
+    min_mv_yi: 200
+    top_k: 30
+    rebalance_days: 5
+    max_sector_pct: 0.20
+    max_stock_pct: 0.05
+    lot_size: 100
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    stamp_tax_sell: 0.0005
+    transfer_fee: 0.00001
+    slippage_bps: 5.0
+    max_participation_rate: 0.10
+
+  # ── ETF Cross V5 FAA ──
+  etf:
+    name: "ETF Cross Asset V5 FAA"
+    description: "10只ETF Flexible Asset Allocation"
+    market_type: "etf"
+    weight: 0.35
+    strategy_name: "etf_cross_v5"
+    top_k: 3
+    rebalance_days: 10
+    symbols:
+      - "510300.SH"
+      - "510500.SH"
+      - "159915.SZ"
+      - "512100.SH"
+      - "510050.SH"
+      - "510880.SH"
+      - "512010.SH"
+      - "512690.SH"
+      - "512660.SH"
+      - "513100.SH"
+      - "159920.SZ"
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0  # 守护测试要求>=5.0
+    max_participation_rate: 0.10

@@ -1,0 +1,94 @@
+# ETF 轮动策略 — 10年回测
+# 策略：动量+低波+反转多因子轮动，均线趋势过滤
+# 标的：主要宽基/风格/跨境/商品 ETF
+# 特点：零印花税、极低佣金、高流动性
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}   # ETF 佣金万0.5
+  stamp_tax: {sell_rate: 0.0}                  # ETF 免印花税
+  transfer_fee: {rate: 0.0}                    # ETF 免过户费
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  symbols:
+    # 宽基
+    - 510300.SH   # 沪深300 ETF
+    - 510500.SH   # 中证500 ETF
+    - 159915.SZ   # 创业板 ETF
+    - 512100.SH   # 中证1000 ETF
+    - 510050.SH   # 上证50 ETF
+    # 风格/行业
+    - 510880.SH   # 红利 ETF
+    - 512010.SH   # 医药 ETF
+    - 515050.SH   # 5G ETF
+    - 512690.SH   # 酒 ETF
+    - 512660.SH   # 军工 ETF
+    # 跨境
+    - 513100.SH   # 纳指 ETF
+    - 159920.SZ   # 恒生 ETF
+    - 513500.SH   # 标普500 ETF
+    # 商品
+    - 518880.SH   # 黄金 ETF
+    # 债券
+    - 511010.SH   # 国债 ETF
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02   # ETF 流动性好但保守
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_rotation_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 1.0              # ETF 流动性极好，1bp 滑点
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 20
+    weight_momentum: 0.40
+    weight_volatility: 0.30
+    weight_reversion: 0.20
+    weight_volume: 0.10
+    momentum_lookback: 60
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 120
+    stop_loss_pct: 0.10
+    trailing_stop_pct: 0.08
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.50
+    lot_size: 100
+    min_amount: 0.0
+    buffer_k: 1
+    inverse_vol_weighting: false
+
+trading_rules:
+  t_plus: 1
+  lot_size: 100
+
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.50
+  max_drawdown: 0.30
+  enable_audit_log: true

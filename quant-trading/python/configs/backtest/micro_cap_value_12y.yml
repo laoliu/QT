@@ -1,0 +1,139 @@
+# 微盘股价值策略 — 全 A 微盘 12年回测
+# 市值 5-50 亿 + 质量门槛 + 小市值/深度价值/低波/低换手
+#
+# Alpha 逻辑：
+# - 微盘股机构覆盖极低，散户定价效率低，存在α
+# - 质量门槛（ROE≥8% + F-Score≥5 + 低负债）过滤地雷，保留被忽视的好公司
+# - 不用动量因子（微盘股反转效应 > 动量效应）
+# - 低换手因子选冷门股，规避炒作期
+# - 50 只极致分散，单票 2.5%
+#
+# 风险关注：
+# - 微盘股流动性差，滑点 10bps（涨跌不同 bps）
+# - 2017 和 2024 微盘股有崩溃风险（量化踩踏+监管风暴）
+# - 止损 20%，追踪止损 15%
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05    # 微盘股参与率要更低
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000852.SH              # CSI1000 覆盖排名 801-1800，包含大量微盘股
+  region: CN
+
+report:
+  benchmark: 000852.SH             # CSI1000 作为微盘基准
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact]
+  output_dir: reports/micro_cap_value_12y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.025
+  market_regime_enabled: false
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.20
+  circuit_breaker_enabled: false
+  # DrawdownLimit 防死锁参数
+  drawdown_peak_reset_days: 20     # 全仓现金 20 天后重置 peak_nav
+  drawdown_allow_rotation: true    # 轮转策略允许在减仓区间继续换仓
+  drawdown_scale_factor_floor: 0.3 # 线性减仓最低缩放 30%
+
+run:
+  start_date: '2014-01-02'
+  end_date: '2025-06-30'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0                    # 微盘股基础滑点较高
+  impact_coeff: 50.0               # 微盘冲击系数大
+  fallback_bps: 15.0
+  max_bps: 80.0
+
+strategy:
+  name: micro_cap_value
+  parameters:
+    # 持仓 — 极致分散
+    top_k: 50
+    rebalance_days: 20              # 月频
+    min_mv: 30000.0                 # 3 亿（从5亿降低，扩大候选池）
+    max_mv: 800000.0                # 80 亿（从50亿提高，适配 CSI1000 市值分布）
+    min_price: 3.0
+    max_price: 100.0                # 排除高价股
+    min_turnover: 500.0             # 500 万（微盘下限）
+    min_listed_days: 180
+    buffer_k: 15
+
+    # 止损（微盘股波动大，适当放宽）
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.20         # 从 15% 放宽到 20%
+
+    # 集中度
+    max_single_pct: 0.025           # 2.5%
+    cash_reserve_pct: 0.03
+    max_industry_pct: 0.15
+    inverse_vol_weighting: true
+
+    # L2 质量门槛（已在代码层做 ROE 年化处理）
+    min_roe: 6.0                    # 从 8% 降到 6%（年化后）
+    max_debt_to_assets: 65.0        # 从 60% 放宽到 65%
+    min_piotroski_score: 4          # 从 5 降到 4
+    require_positive_profit: true
+
+    # 五因子权重
+    weight_size: 0.30               # 小市值
+    weight_value: 0.25              # 深度价值
+    weight_quality: 0.20            # 质量
+    weight_volatility: 0.15         # 低波动
+    weight_turnover: 0.10           # 低换手
+
+    # 可选辅助因子（默认关闭）
+    weight_debt: 0.0
+    weight_momentum: 0.0
+
+    # 因子参数
+    value_metric: pe_ttm
+    quality_metric: roe
+    volatility_lookback: 60
+    momentum_lookback: 20
+    momentum_skip_recent: 3
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

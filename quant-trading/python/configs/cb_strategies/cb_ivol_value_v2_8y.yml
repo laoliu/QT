@@ -1,0 +1,96 @@
+# 可转债 IVOL-价值策略 v2 — 8年回测配置
+# ============================================================
+# v1 结果: AR=5.24%, SR=0.36, MDD=20.6%
+#
+# v2 改进:
+#   1. 增大 IVOL lookback 从 20→60 (IVOL 在低频下需更长窗口)
+#   2. 增大 high_distance_lookback 从 252→120 (CB 寿命较短，完整252有前几月噪声)
+#   3. 降低 IVOL 权重 0.20→0.15 (IVOL 在 CB 市场信号较弱)
+#   4. 增加 size 权重 0.20→0.25 (小盘效应在 CB 中验证更强)
+#   5. 缩小 buffer_k 从 3→2 (减少持仓惯性)
+#   6. 降低 stop_loss 从 0.12→0.10 (更早止损)
+#   7. 降低 max_price 从 135→130 (更聚焦低估值区间)
+# ============================================================
+
+name: "cb_ivol_value_v2_8y"
+description: >
+  IVOL-价值策略 v2 — 调整 IVOL lookback + 重配权重。
+  核心改进: 更长 IVOL 窗口 + 增强小盘因子权重。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_ivol_value"
+  params:
+    top_k: 20
+    rebalance_days: 5
+
+    # 因子权重 v2 (重新分配)
+    price_weight: 0.15
+    premium_weight: 0.10
+    ivol_weight: 0.15                # 降低 (IVOL 信号弱)
+    high_distance_weight: 0.10       # 降低
+    theta_weight: 0.10
+    skewness_weight: 0.10
+    size_weight: 0.30                # 增加小盘权重
+
+    # 更长的 IVOL lookback
+    ivol_lookback: 60
+    ivol_min_obs: 20
+    high_distance_lookback: 120
+    skewness_lookback: 20
+    skewness_min_obs: 10
+
+    # 筛选
+    max_price: 130.0
+    min_turnover: 50.0
+    min_days_to_maturity: 60
+    exclude_st: true
+
+    # 风控
+    stop_loss_pct: 0.10
+    buffer_k: 2
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    lot_size: 10
+    exclude_called: true
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (linear_impact) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/cb_ivol_value_v2_8y"
+
+report:
+  benchmark: "000300.SH"

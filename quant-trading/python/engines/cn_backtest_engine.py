@@ -144,8 +144,38 @@ ALLOCATION_POLICIES = {
 }
 
 
+# Time-varying stamp tax schedule for A-shares (卖出印花税)
+# 2023-08-28: reduced from 0.1% to 0.05%
+_STAMP_TAX_SCHEDULE: list[tuple[int, float]] = [
+    (20230828, 0.0005),  # from 2023-08-28: 万5
+    (0, 0.001),          # before: 千1
+]
+
+
+def get_stamp_tax_rate(dt: int, time_varying: bool = True) -> float:
+    """Get the applicable stamp tax rate for a given date.
+
+    Args:
+        dt: Trade date as YYYYMMDD int.
+        time_varying: If True, use historical schedule; else use current rate.
+    """
+    if not time_varying:
+        return 0.0005  # current rate
+    for cutoff, rate in _STAMP_TAX_SCHEDULE:
+        if dt >= cutoff:
+            return rate
+    return 0.001  # fallback
+
+
 class CapitalManager:
-    """Manage cash, fees, and capital allocation."""
+    """Manage cash, fees, and capital allocation.
+
+    Supports:
+      - Time-varying stamp tax (2023-08 reduction)
+      - Minimum commission (¥5 per trade)
+      - Maximum participation rate (% of daily volume)
+      - Transfer fee (过户费)
+    """
 
     def __init__(
         self,
@@ -154,6 +184,10 @@ class CapitalManager:
         commission: float = 0.0002,
         stamp_tax: float = 0.001,
         simulate_lots: bool = True,
+        min_commission: float = 5.0,
+        transfer_fee: float = 0.00001,
+        time_varying_tax: bool = False,
+        max_participation_rate: float = 0.0,
     ):
         self.init_money = init_money
         self.available_money = init_money
@@ -161,6 +195,10 @@ class CapitalManager:
         self.commission = commission
         self.stamp_tax = stamp_tax
         self.simulate_lots = simulate_lots  # trade in lots of 100
+        self.min_commission = min_commission
+        self.transfer_fee = transfer_fee
+        self.time_varying_tax = time_varying_tax
+        self.max_participation_rate = max_participation_rate
 
     def calc_per_capital(self, policy_param: dict) -> float:
         """Calculate the per-stock allocation based on policy."""
@@ -180,9 +218,16 @@ class CapitalManager:
         return money
 
     def buy_one_stock(
-        self, price: float, policy_param: dict
+        self, price: float, policy_param: dict,
+        volume: float = 0.0, dt: int = 0,
     ) -> tuple[int, float]:
         """Calculate shares to buy and deduct from available money.
+
+        Args:
+            price: Execution price per share.
+            policy_param: Capital allocation parameters.
+            volume: Daily volume (shares) for participation rate check.
+            dt: Trade date (YYYYMMDD) for time-varying fees.
 
         Returns: (shares_bought, fee_cost)
         """
@@ -194,15 +239,41 @@ class CapitalManager:
                 return 0, 0.0
             number = (number // 100) * 100
 
+        # Participation rate cap: don't exceed X% of daily volume
+        if self.max_participation_rate > 0 and volume > 0:
+            max_shares = int(volume * self.max_participation_rate)
+            if self.simulate_lots:
+                max_shares = (max_shares // 100) * 100
+            number = min(number, max_shares)
+            if number <= 0:
+                return 0, 0.0
+
         cost = number * price
-        fee = cost * self.commission
+        comm = max(cost * self.commission, self.min_commission)
+        xfer = cost * self.transfer_fee
+        fee = comm + xfer
 
         self.available_money -= cost + fee
         return number, fee
 
-    def sell_one_stock(self, total_capital: float) -> float:
-        """Process a sell transaction. Returns total fee."""
-        fee = total_capital * self.commission + total_capital * self.stamp_tax
+    def sell_one_stock(
+        self, total_capital: float, dt: int = 0,
+        volume: float = 0.0, sell_shares: int = 0,
+    ) -> float:
+        """Process a sell transaction. Returns total fee.
+
+        Args:
+            total_capital: Total proceeds = shares × price.
+            dt: Trade date for time-varying stamp tax.
+            volume: Daily volume for participation rate check.
+            sell_shares: Number of shares being sold.
+        """
+        # Time-varying stamp tax
+        tax_rate = get_stamp_tax_rate(dt, self.time_varying_tax) if dt else self.stamp_tax
+        comm = max(total_capital * self.commission, self.min_commission)
+        tax = total_capital * tax_rate
+        xfer = total_capital * self.transfer_fee
+        fee = comm + tax + xfer
         self.available_money += total_capital - fee
         return fee
 

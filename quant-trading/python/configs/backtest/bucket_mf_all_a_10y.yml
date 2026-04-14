@@ -1,0 +1,111 @@
+# ============================================================
+# A 股桶式多因子轮动 — 全 A 选股 (10 年回测)
+# ============================================================
+# R71 Phase 2: BucketMultiFactorStrategy
+# 三桶 (大/中/小盘) 独立因子组合，桶间按权重合并
+# 目标: 捕获不同市值段特有 alpha，降低单一因子周期失效风险
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/bucket_mf_all_a_10y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.3
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 1.0
+  trailing_stop_pct: 1.0
+  circuit_breaker_enabled: false
+
+strategy:
+  name: bucket_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 8
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    inverse_vol_weighting: true
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    str_lookback: 5
+    value_metric: pe_ttm
+    quality_metric: roe
+    # bucket_specs: 空=使用默认三桶
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 10.0
+  impact_coeff: 35.0
+  fallback_bps: 15.0
+  max_bps: 80.0
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

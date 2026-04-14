@@ -1,0 +1,139 @@
+# R71 Phase 2: Bucket Multi-Factor Strategy — Full A-Stock Market
+# 3-bucket architecture: large(30%) + mid(40%) + small(30%)
+# Biweekly rebalance, progressive drawdown control, industry cap 18%
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.1
+    lot_size: 100
+    opening_volume_fraction: 0.1
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  output_dir: reports/bucket_mf_fullmarket
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.18
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: false
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.4
+  progressive_drawdown: true
+  progressive_thresholds:
+  - [0.10, 0.80]
+  - [0.15, 0.60]
+  - [0.20, 0.40]
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 50.0
+  fallback_bps: 10.0
+  max_bps: 100.0
+strategy:
+  name: bucket_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_mv: 50000.0
+    max_mv: 10000000.0
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 8
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    inverse_vol_weighting: true
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    str_lookback: 5
+    value_metric: pe_ttm
+    quality_metric: roe
+    bucket_specs:
+    - name: large
+      mv_min: 1000000.0
+      mv_max: 100000000.0
+      top_k: 8
+      weight_alloc: 0.30
+      factor_weights:
+        quality: 0.30
+        value: 0.25
+        low_volatility: 0.25
+        dividend: 0.20
+    - name: mid
+      mv_min: 200000.0
+      mv_max: 1000000.0
+      top_k: 14
+      weight_alloc: 0.40
+      factor_weights:
+        value: 0.25
+        quality: 0.20
+        momentum: 0.20
+        peg: 0.20
+        fcfy: 0.15
+    - name: small
+      mv_min: 50000.0
+      mv_max: 200000.0
+      top_k: 8
+      weight_alloc: 0.30
+      factor_weights:
+        str: 0.30
+        size: 0.25
+        earnings_growth: 0.25
+        momentum: 0.20
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml

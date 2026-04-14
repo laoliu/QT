@@ -1,0 +1,91 @@
+# B-01 Fix: 强正则化 CSI1000 ML 配置 (OOS 回放模式)
+# 使用 Walk-Forward OOS 预测进行真实撮合回测
+# OOS predictions: 2018-01-16 ~ 2025-12-18
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0001}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 3000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 000852.SH}
+  region: CN
+
+report:
+  benchmark: 000852.SH
+  output_dir: output/ml_csi1000_oos_replay_8y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标
+  # R94: death spiral disabled
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2018-01-16'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 8.0
+  impact_coeff: 60.0
+  fallback_bps: 15.0
+  max_bps: 100.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 60
+    rebalance_days: 5
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi1000_lgb_regularized
+    oos_predictions_path: models/ml_csi1000_lgb_regularized/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    # --- 强正则化参数 (B-01 fix) ---
+    n_estimators: 200
+    learning_rate: 0.03
+    max_depth: 4
+    num_leaves: 15
+    reg_alpha: 0.5
+    reg_lambda: 5.0
+    min_child_samples: 100
+    subsample: 0.7
+    colsample_bytree: 0.6
+    min_gain_to_split: 0.1
+    purge_days: 10
+    min_mv: 500000
+    max_mv: 50000000
+
+trading_rules: {allow_short: false, lot_size: 100, t_plus: 1}
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000852.SH

@@ -1,0 +1,85 @@
+# A 股防御质量红利策略 — 全市场 10 年回测
+# 核心逻辑：高质量（ROE）+ 高分红 + 低波动 + 价值 → 稳健低回撤
+# 政策利好：新"国九条"(2024) 鼓励分红，高股息股票持续受市场青睐
+# 组合价值：与小盘/反转策略低相关，提供防御层
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0001}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A]}
+  region: CN
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 25
+    rebalance_days: 20          # 月频
+    min_mv: 1000000.0           # 100 亿
+    max_mv: 50000000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 250
+    buffer_k: 10
+
+    # 核心因子配比 — 质量+红利+低波+价值
+    weight_quality: 0.30        # ROE 质量（全周期最稳定因子）
+    weight_dividend: 0.25       # 股息率（政策利好加持）
+    weight_volatility: 0.25     # 低波动（熊市保护）
+    weight_value: 0.20          # EP 价值
+
+    # 关闭的因子
+    weight_momentum: 0.0
+    weight_size: 0.0
+    weight_str: 0.0
+    weight_turnover: 0.0
+    weight_earnings_growth: 0.0
+
+    # 因子参数
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+
+    # 风控
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    inverse_vol_weighting: true
+    max_single_pct: 0.06
+    cash_reserve_pct: 0.03
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

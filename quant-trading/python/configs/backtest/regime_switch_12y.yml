@@ -1,0 +1,93 @@
+# ─────────────────────────────────────────────
+# G4-3 牛熊切换 (Regime Switch) 12 年回测
+# 逻辑：牛市偏动量、熊市偏价值的动态因子切换
+# ─────────────────────────────────────────────
+backtest:
+  start_date: "2014-01-02"
+  end_date:   "2025-06-01"
+  initial_capital: 1_000_000
+  benchmark: "000905.SH"
+
+cost_model:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万2.5
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005
+  stamp_tax_auto_schedule: true
+  transfer_fee_rate: 1.0e-05  # §13.1 MarketRulesCNEquity
+
+fill_model:
+  method: next_bar_open
+  opening_volume_fraction: 0.10
+
+slippage:
+  model: linear_impact
+  base_bps: 5
+  impact_coeff: 30
+  max_bps: 50
+  fallback_bps: 8
+
+strategy:
+  name: regime_switch
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.18
+    trailing_stop_pct: 0.15
+    buffer_k: 8
+    max_single_pct: 0.05
+    min_mv: 300_000.0
+    max_industry_pct: 0.20
+
+    bull_weight_momentum: 0.50
+    bull_weight_value: 0.10
+    bull_weight_quality: 0.25
+    bull_weight_size: 0.15
+
+    bear_weight_momentum: 0.10
+    bear_weight_value: 0.50
+    bear_weight_quality: 0.25
+    bear_weight_size: 0.15
+
+    neutral_weight_momentum: 0.25
+    neutral_weight_value: 0.30
+    neutral_weight_quality: 0.25
+    neutral_weight_size: 0.20
+
+    ma_short: 20
+    ma_long: 60
+    momentum_lookback: 60
+    bull_momentum_threshold: 0.08
+    bear_momentum_threshold: -0.06
+    max_pe: 80.0
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.18
+  trailing_stop_pct: 0.15
+  enable_audit_log: true
+
+universe_policy:
+  auto_exclude:
+    - ST
+    - DELISTING
+    - SUSPENDED_LONG
+  base_index: "000905.SH"
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: regime_switch
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+output_dir: "output/regime_switch_12y"
+random_seed: 42

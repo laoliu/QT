@@ -1,0 +1,90 @@
+# CSI500 小市值+质量+估值策略 — 真实费率 10年
+# 核心: CSI500中选市值较小+质量高+估值低的股票
+# CSI500已是中盘偏小, 还有足够流动性
+# 月度调仓, 均衡多因子, 避免高换手
+# 费率: 万0.86佣金(用户实际)
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.000086}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.06
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000905.SH
+  region: CN
+
+report:
+  benchmark: 000905.SH
+  output_dir: output/csi500_quality_value_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 15.0
+  fallback_bps: 6.0
+  max_bps: 40.0
+
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 800.0
+    min_listed_days: 180
+    min_mv: 0.0
+    max_mv: 2000000.0
+    stop_loss_pct: 0.25
+    trailing_stop_pct: 0.0
+    buffer_k: 10
+    max_single_pct: 0.05
+    momentum_invert: false
+    weight_small_cap: 0.25
+    weight_momentum: 0.10
+    weight_turnover: 0.10
+    weight_volatility: 0.15
+    weight_quality: 0.25
+    weight_value: 0.15
+    regime_adaptive: false
+
+risk_constraints:
+  max_drawdown_pct: 0.45
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.4
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

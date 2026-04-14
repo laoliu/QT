@@ -1,0 +1,113 @@
+# v23_sbal 风格均衡轮动策略 — 8年事件驱动回测
+# 灵感: ZH1400599 Phase 1 (纯股票 AR>36%, MDD≈-15%, SR≈1.6)
+# 核心: 2×2 Fama-French 风格矩阵 + 象限内5因子 + MDD梯度减仓
+# 全市值(5-1000亿), 30只, 20日调仓
+# 与 v19(微盘2-30) 和 v22(中盘5-150) 显著差异化
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05       # 万0.85 (§13.1 A-stock default)
+  stamp_tax:
+    sell_rate: 0.0005    # 万5 (时变印花税自动)
+  transfer_fee:
+    rate: 1.0e-05        # 万0.1
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+
+report:
+  benchmark: 000300.SH   # 沪深300 (全市值策略用宽基基准)
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/v23_sbal_8y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.40
+  max_sector_pct: 0.15    # 单行业15%
+  max_single_position_pct: 0.04  # ~3.3% (30只等权)
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2018-01-02'
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: fixed_bps
+  bps: 20.0               # 保守: 20bps
+
+strategy:
+  name: v23_sbal
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    buffer_k: 10
+    min_mv: 50000.0        # 5亿 (万元)
+    max_mv: 10000000.0     # 1000亿 (万元)
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 800.0
+    min_listed_days: 180
+    max_industry_pct: 0.15
+    max_pb: 15.0
+    min_roe: -5.0
+    # 象限配置
+    quadrant_stocks: 8
+    min_quadrant_stocks: 3
+    # 5因子权重 (象限内排序)
+    weight_ep: 0.25
+    weight_growth: 0.25
+    weight_roe: 0.20
+    weight_low_vol: 0.15
+    weight_momentum: 0.15
+    # 动量参数
+    momentum_lookback: 240
+    momentum_skip_recent: 20
+    volatility_lookback: 60
+    # MDD 梯度减仓 (Phase 2 启示)
+    drawdown_timing_enabled: true
+    dd_level1_threshold: 0.15
+    dd_level1_scale: 0.70
+    dd_level2_threshold: 0.20
+    dd_level2_scale: 0.50
+    dd_restore_threshold: 0.08
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml

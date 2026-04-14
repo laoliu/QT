@@ -1,0 +1,53 @@
+# 跨资产组合 Walk-Forward 验证配置
+# R55 W2-1 工作项：CB + ML + ETF 三支柱组合级 WF
+# 验收标准：OOS/IS SR 衰减 ≤ 50%, PBO < 0.50
+
+walk_forward:
+  n_splits: 5
+  train_days: 756      # IS = 3 年 ≈ 756 交易日
+  test_days: 252        # OOS = 1 年 ≈ 252 交易日
+  purge_days: 5         # 清洗期（避免信息泄漏）
+
+# 场景 A：两资产 (CB + ETF)，重叠期 2018-01 ~ 2025-12 ≈ 8 年
+scenario_a:
+  name: "cb_etf_2asset"
+  description: "CB + ETF 两资产组合，满足 ≥7 年门槛"
+  pillars:
+    - name: "cb_combo"
+      source: "output/cb_combo_3s_9y/portfolio_nav.csv"
+      weight: 0.60
+      nav_column: "nav"
+      date_column: "date"
+    - name: "etf_cross"
+      source: "output/etf_cross_v3_11y/daily_snapshots.csv"
+      weight: 0.40
+      nav_column: "nav"
+      date_column: "date"
+
+# 场景 B：三资产 (CB + ML + ETF)，重叠期 2020-02 ~ 2025-10 ≈ 5.8 年
+scenario_b:
+  name: "cb_ml_etf_3asset"
+  description: "CB + ML + ETF 三支柱组合（重叠期不足 7 年，作为辅助验证）"
+  pillars:
+    - name: "cb_combo"
+      source: "output/cb_combo_3s_9y/portfolio_nav.csv"
+      weight: 0.40
+      nav_column: "nav"
+      date_column: "date"
+    - name: "ml_fusion"
+      source: "output/four_pillar_r45_regime/daily_nav.csv"
+      weight: 0.30
+      nav_column: "nav"
+      date_column: "date"
+    - name: "etf_cross"
+      source: "output/etf_cross_v3_11y/daily_snapshots.csv"
+      weight: 0.30
+      nav_column: "nav"
+      date_column: "date"
+
+# 验证指标门槛
+thresholds:
+  oos_is_sr_decay_max: 0.50     # OOS/IS SR 衰减 ≤ 50%
+  pbo_max: 0.50                  # PBO < 0.50
+  min_oos_sr: 0.30               # 每折 OOS SR 最低
+  wf_score_min: 5.0              # WF 综合评分

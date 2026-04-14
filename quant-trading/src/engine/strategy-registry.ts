@@ -180,6 +180,200 @@ const backtraderBuiltinFallback: Record<
     id: "scored",
     mapParams: (p) => ({ ...p }),
   },
+  "bollinger": {
+    id: "bollinger-breakout",
+    mapParams: (p) => ({ period: p.period ?? 20, stdDevMultiplier: p.devfactor ?? 2.0 }),
+  },
+  "dragon_master": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.target_board ?? 3 }),
+  },
+  "lianban_relay": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.min_boards ?? 2 }),
+  },
+  // ── CTA趋势策略 (Python) ──
+  "ema-cross": {
+    id: "dual-ma-crossover",
+    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
+  },
+  "adx-trend": {
+    id: "dmi-adx",
+    mapParams: (p) => ({ period: p.period ?? 14, adxThreshold: p.adx_threshold ?? 25 }),
+  },
+  "parabolic-sar": {
+    id: "parabolic-sar",
+    mapParams: (p) => ({ afStart: p.af_start ?? 0.02, afStep: p.af_step ?? 0.02, afMax: p.af_max ?? 0.2 }),
+  },
+  "ichimoku": {
+    id: "ichimoku",
+    mapParams: (p) => ({ tenkanPeriod: p.tenkan_period ?? 9, kijunPeriod: p.kijun_period ?? 26, senkouBPeriod: p.senkou_period ?? 52 }),
+  },
+  "supertrend": {
+    id: "supertrend",
+    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 10, multiplier: p.multiplier ?? 3.0 }),
+  },
+  "dema-cross": {
+    id: "dema-crossover",
+    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
+  },
+  "tema-cross": {
+    id: "dema-crossover",
+    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
+  },
+  "aroon": {
+    id: "aroon-trend",
+    mapParams: (p) => ({ period: p.period ?? 25 }),
+  },
+  "vortex": {
+    id: "dmi-adx",
+    mapParams: (p) => ({ period: p.period ?? 14 }),
+  },
+  "cci": {
+    id: "cci-divergence",
+    mapParams: (p) => ({ cciPeriod: p.period ?? 20 }),
+  },
+  "trix": {
+    id: "trix-momentum",
+    mapParams: (p) => ({ period: p.period ?? 15, signalPeriod: p.signal_period ?? 9 }),
+  },
+  "momentum": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.period ?? 12 }),
+  },
+  "dmi": {
+    id: "dmi-adx",
+    mapParams: (p) => ({ period: p.period ?? 14 }),
+  },
+  // ── CTA通道策略 (Python) ──
+  "keltner-channel": {
+    id: "keltner-channel",
+    mapParams: (p) => ({ emaPeriod: p.ema_period ?? 20, atrPeriod: p.atr_period ?? 20, atrMultiplier: p.atr_mult ?? 2.0 }),
+  },
+  "donchian-breakout": {
+    id: "donchian-mid-reversion",
+    mapParams: (p) => ({ period: p.upper_period ?? 20 }),
+  },
+  "atr-channel": {
+    id: "atr-trailing",
+    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 14, mult: p.atr_mult ?? 2.5 }),
+  },
+  "envelope": {
+    id: "ma-envelope",
+    mapParams: (p) => ({ period: p.ma_period ?? 20, percent: p.pct ?? 3.0 }),
+  },
+  "price-channel-breakout": {
+    id: "range-breakout",
+    mapParams: (p) => ({ rangePeriod: p.breakout_period ?? 20 }),
+  },
+  // ── CTA指标策略 (Python) ──
+  "stochastic": {
+    id: "stochastic-rsi",
+    mapParams: (p) => ({ rsiPeriod: p.k_period ?? 14, stochPeriod: p.k_period ?? 14 }),
+  },
+  "williams-r": {
+    id: "williams-r",
+    mapParams: (p) => ({ period: p.period ?? 14, overbought: p.overbought ?? -20, oversold: p.oversold ?? -80 }),
+  },
+  "obv": {
+    id: "obv-trend",
+    mapParams: (p) => ({ maPeriod: p.obv_ma_period ?? 20 }),
+  },
+  "mfi": {
+    id: "mfi-oscillator",
+    mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 20, overbought: p.overbought ?? 80 }),
+  },
+  "cmf": {
+    id: "cmf-divergence",
+    mapParams: (p) => ({ period: p.period ?? 20 }),
+  },
+  "adl": {
+    id: "obv-trend",
+    mapParams: (p) => ({ maPeriod: p.ma_period ?? 20 }),
+  },
+  "roc": {
+    id: "roc-momentum",
+    mapParams: (p) => ({ period: p.period ?? 12 }),
+  },
+  "vwap": {
+    id: "vwap-reversion",
+    mapParams: (p) => ({ period: p.period ?? 20 }),
+  },
+  "adaptive-ma": {
+    id: "kama-trend",
+    mapParams: (p) => ({ period: p.period ?? 10, fastPeriod: p.fast_period ?? 2, slowPeriod: p.slow_period ?? 30 }),
+  },
+  // ── CTA形态策略 (Python) ──
+  "engulfing": {
+    id: "double-bottom",
+    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
+  },
+  "hammer": {
+    id: "double-bottom",
+    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
+  },
+  "doji": {
+    id: "double-bottom",
+    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
+  },
+  "morning-star": {
+    id: "double-bottom",
+    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
+  },
+  "three-soldiers": {
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: 10 }),
+  },
+  "harami": {
+    id: "double-bottom",
+    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
+  },
+  // ── 组合策略 (Python) ──
+  "macd-rsi-combo": {
+    id: "macd-confirmation",
+    mapParams: (p) => ({ fastPeriod: p.macd_fast ?? 12, slowPeriod: p.macd_slow ?? 26, signalPeriod: p.macd_signal ?? 9 }),
+  },
+  "bollinger-rsi-combo": {
+    id: "bollinger-breakout",
+    mapParams: (p) => ({ period: p.bb_period ?? 20, stdDevMultiplier: p.bb_dev ?? 2.0 }),
+  },
+  "ma-volume-combo": {
+    id: "volume-confirmation",
+    mapParams: (p) => ({ volumeMaPeriod: p.slow_period ?? 30, volumeMultiplier: p.vol_mult ?? 1.5 }),
+  },
+  "kdj-macd-combo": {
+    id: "cta-kdj",
+    mapParams: (p) => ({ period: p.k_period ?? 9, kSmooth: 3, dPeriod: p.d_period ?? 3 }),
+  },
+  // ── 高阶组合策略 (Python) ──
+  "ichimoku-adx-combo": {
+    id: "ichimoku",
+    mapParams: (p) => ({ tenkanPeriod: p.tenkan_period ?? 9, kijunPeriod: p.kijun_period ?? 26 }),
+  },
+  "multi-tf-ma": {
+    id: "triple-ma-crossover",
+    mapParams: (p) => ({ shortPeriod: p.short_period ?? 5, midPeriod: p.medium_period ?? 20, longPeriod: p.long_period ?? 60 }),
+  },
+  "volatility-breakout": {
+    id: "volatility-target",
+    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 14 }),
+  },
+  "regime-switch": {
+    id: "mean-reversion",
+    mapParams: (p) => ({ period: p.ema_slow ?? 30, stdDev: 2 }),
+  },
+  "dual-thrust": {
+    id: "dual-thrust",
+    mapParams: (p) => ({ lookback: p.lookback ?? 4, k1: p.k1 ?? 0.5, k2: p.k2 ?? 0.5 }),
+  },
+  "r-breaker": {
+    id: "r-breaker",
+    mapParams: () => ({}),
+  },
+  "pivot-point": {
+    id: "pivot-point",
+    mapParams: () => ({}),
+  },
 };
 
 /** Map from strategy ID → factory function that creates the strategy with params. */

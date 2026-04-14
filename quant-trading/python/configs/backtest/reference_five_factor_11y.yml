@@ -1,0 +1,127 @@
+# 参考组合五因子策略 — 全 A 股 11 年回测配置 (R76 Phase 1)
+# ============================================================
+# 策略: EP + BP + ROE + DY + LV 五因子等权 + 扁平选股
+# 回测区间: 2015-01-05 ~ 2025-12-31 (≥10年 A股强制要求)
+# Universe: CSI800 成分股历史并集，排除 ST/退市/停牌
+# 参考: R76 E1 因子精简、E3 低频成本优势
+# V2结论: 扁平模式 AR=6.7%/SR=0.33 > 四象限 AR=2.9%/SR=0.14
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default          # 万0.85 佣金率
+  stamp_tax:
+    sell_rate: 0.0005       # 2023-08-28起减半
+  transfer_fee:
+    rate: 1.0e-05           # 万0.1 过户费
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - sortino
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/reference_five_factor_11y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.70
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 0.0              # 无止损 — 纯系统化月频调仓 (R76 E4)
+  trailing_stop_pct: 0.0          # 无追踪止损
+  circuit_breaker_enabled: false
+
+run:
+  start_date: "2015-01-05"
+  end_date: "2025-12-31"
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 2.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: reference_five_factor
+  parameters:
+    base_index: "000906.SH"     # CSI800
+    top_k: 30
+    rebalance_days: 21          # 月频调仓
+    min_mv: 100000.0            # 10亿市值下限
+    max_mv: 50000000.0          # 500亿市值上限
+    min_price: 3.0
+    max_price: 500.0
+    min_turnover: 2000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.0             # 无止损
+    trailing_stop_pct: 0.0          # 无追踪止损
+    buffer_k: 10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    max_industry_pct: 0.12      # 单行业 ≤ 12% (R76 E2)
+    inverse_vol_weighting: false
+    # ── 五因子等权 (R76 E1) ──────────────────────────
+    weight_ep: 0.20
+    weight_bp: 0.20
+    weight_roe: 0.20
+    weight_dy: 0.20
+    weight_lv: 0.20
+    # ── 四象限 (已禁用 — 扁平模式更优) ─────────────
+    quadrant_enabled: false
+    mv_split_percentile: 50.0
+    style_split_method: bp
+    min_industries: 6
+    # ── 因子参数 ─────────────────────────────────────
+    ep_metric: pe_ttm
+    bp_metric: pb
+    roe_metric: roe
+    dy_metric: dv_ratio
+    lv_lookback: 60
+    momentum_lookback: 65
+    volatility_lookback: 65
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

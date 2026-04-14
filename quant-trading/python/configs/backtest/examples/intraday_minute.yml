@@ -1,0 +1,66 @@
+# 回测配置示例：分钟级日内策略
+# 用法: run_backtest_from_config("configs/backtest/examples/intraday_minute.yml")
+#
+# 此配置与 src/aipha/backtest/config_runner.py 的 BacktestRunConfig 对应
+
+name: "intraday_minute_example"
+description: |
+  分钟级日内交易策略示例
+  - 基于分钟级 MACD 信号
+  - 日内平仓（T+0 限制下仅做 T+1）
+  - 单标的集中测试
+
+# ============================================================================
+# 数据配置
+# ============================================================================
+data:
+  source: "tushare"
+  start_date: "2024-01-02"
+  end_date: "2024-01-31"
+  frequency: "1m"  # 分钟级
+  adjust: "qfq"
+  cache_dir: "data/cache"
+  symbols:  # 限定测试标的
+    - "000001.SZ"
+    - "000002.SZ"
+    - "600000.SH"
+
+# ============================================================================
+# 股票池配置
+# ============================================================================
+universe:
+  policy: "whitelist"  # 白名单模式（使用 data.symbols）
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 0  # 已知标的，不过滤
+
+# ============================================================================
+# 策略配置
+# ============================================================================
+strategy:
+  name: "dual_ma"  # 双均线策略（无 macd_intraday 注册，用 dual_ma 替代）
+  params:
+    short_window: 12    # 短期均线
+    long_window: 26     # 长期均线
+    position_pct: 0.3   # 每次使用30%仓位
+    max_positions: 3
+
+# ============================================================================
+# 成本配置（分钟级交易更关注滑点）
+# ============================================================================
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万一佣金
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+# ============================================================================
+# 回测设置
+# ============================================================================
+initial_capital: 500000.0  # 50万
+lot_size: 100
+t_plus_n: 1  # A股 T+1
+random_seed: 2024
+output_dir: "output/intraday_minute"

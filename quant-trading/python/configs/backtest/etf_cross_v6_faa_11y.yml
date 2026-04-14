@@ -1,0 +1,91 @@
+# ETF 轮动 — FAA 五因子 v6 (Keller & Van Putten 2013)
+# 基于 etf_cross_v3_11y.yml，升级为 FAA 相关性感知框架
+# R115: 新增 C 因子(相关性因子) + 硬排除阈值
+#
+# 学术依据:
+#   Keller FAA 2013 (SSRN 2193735): 加入 C 因子后 SR ~0.9→~1.4, MDD ~25%→~12%
+#   C 因子 = ETF 与核心策略(ML+CB)的 60 日滚动 Pearson 相关性
+#   低相关 ETF 获得更高评分 → 自动偏好分散化标的
+#
+# 费率说明 (继承 v3):
+#   commission_rate=0.00005 (万0.5), 印花税/过户费: ETF 免征
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  symbols:
+    - 510300.SH    # 沪深300
+    - 510500.SH    # 中证500
+    - 159915.SZ    # 创业板
+    - 512100.SH    # 中证1000
+    - 510050.SH    # 上证50
+    - 510880.SH    # 红利
+    - 512010.SH    # 医药
+    - 512690.SH    # 酒
+    - 512660.SH    # 军工
+    - 513100.SH    # 纳指
+    - 159920.SZ    # 恒生
+    - 518880.SH    # 黄金
+    - 511010.SH    # 国债
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_cross_v6_faa_11y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  seed: 42
+
+slippage_model: {name: fixed, bps: 5.0}
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 10
+    # FAA 五因子权重 (Keller-inspired)
+    weight_momentum: 0.35
+    weight_volatility: 0.25
+    weight_correlation: 0.30
+    weight_volume: 0.10
+    weight_reversion: 0.0
+    # 因子参数
+    momentum_lookback: 20
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 0
+    # C-factor 参数
+    correlation_lookback: 60
+    correlation_hard_exclude: 0.60
+    benchmark_returns_path: ''  # 由组合脚本运行时注入
+    # 风控
+    stop_loss_pct: 0.0
+    trailing_stop_pct: 0.0
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.50
+    lot_size: 100
+    buffer_k: 1
+    inverse_vol_weighting: true
+
+trading_rules: {t_plus: 1, lot_size: 100}
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.60
+  max_drawdown: 0.50
+  drawdown_peak_reset_days: 30
+  enable_audit_log: true

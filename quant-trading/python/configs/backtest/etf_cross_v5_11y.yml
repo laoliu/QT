@@ -1,0 +1,92 @@
+# ETF 轮动策略 V5 — 扩充候选池（O1 优化）
+# 基于 v3 扩展：13 → 18 只，新增海外权益、红利低波、中长久期债券、中概互联
+# 竞品启发："中国精选价值-30" 配置了标普/纳指/红利低波/多品种债券
+# 选用数据历史最长的替代品种确保回测覆盖 2015-2025
+#
+# 变更记录：
+#   v3: 13只(A股宽基+行业+纳指+恒生+黄金+国债)
+#   v5: +513500(标普500,11y) +512890(红利低波,7y) +513050(中概互联,9y)
+#       +511130(30年国债,2y) +511020(活跃国债,7y)
+#   新增ETF从各自上市日起参与评分(无数据日不参与)
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  # 放宽缺失阈值：不同ETF上市时间不同，上市前无数据不是质量问题
+  max_missing_rate: 0.30
+  symbols:
+    # === 原 v3 候选池 (13只) ===
+    - 510300.SH    # 沪深300ETF — 宽基大盘
+    - 510500.SH    # 中证500ETF — 宽基中盘
+    - 159915.SZ    # 创业板ETF — 成长
+    - 512100.SH    # 中证1000ETF — 宽基小盘
+    - 510050.SH    # 上证50ETF — 超大盘
+    - 510880.SH    # 红利ETF — 风格
+    - 512010.SH    # 医药ETF — 行业
+    - 512690.SH    # 酒ETF — 行业
+    - 512660.SH    # 军工ETF — 行业
+    - 513100.SH    # 纳指ETF — 跨境(原有)
+    - 159920.SZ    # 恒生ETF — 跨境(原有)
+    - 518880.SH    # 黄金ETF — 商品
+    - 511010.SH    # 国债ETF — 债券(短久期)
+    # === v5 新增 (5只) ===
+    - 513500.SH    # 标普500ETF博时 — 海外权益(2015起,11年)
+    - 512890.SH    # 红利低波ETF华泰 — 防御风格(2019起,7年)
+    - 513050.SH    # 中概互联ETF — 跨境港股(2017起,9年)
+    - 511130.SH    # 30年国债ETF — 长久期债券(2024起,2年)
+    - 511020.SH    # 活跃国债ETF — 中久期债券(2019起,7年)
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_cross_v5_11y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  seed: 42
+
+slippage_model: {name: fixed, bps: 1.0}
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 10
+    weight_momentum: 0.60
+    weight_volatility: 0.40
+    weight_reversion: 0.0
+    weight_volume: 0.0
+    momentum_lookback: 20
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 0
+    stop_loss_pct: 0.0
+    trailing_stop_pct: 0.0
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.50
+    lot_size: 100
+    buffer_k: 1
+    inverse_vol_weighting: true
+
+trading_rules: {t_plus: 1, lot_size: 100}
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.60
+  max_drawdown: 0.50
+  drawdown_peak_reset_days: 30
+  enable_audit_log: true

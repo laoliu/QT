@@ -1,0 +1,44 @@
+# 指数增强策略回测配置 — 沪深300增强
+
+name: csi300_enhance_backtest
+
+data:
+  source: akshare
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: qfq
+
+universe:
+  policy: default
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  base_index: CSI300
+
+strategy:
+  name: index_enhance
+  params:
+    benchmark: CSI300
+    tracking_error_target: 0.05
+    tracking_error_max: 0.08
+    industry_deviation_max: 0.05
+    max_active_weight: 0.02
+    turnover_limit: 0.30
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  slippage_bps: 8.0
+  slippage_model: fixed
+
+risk:
+  enabled: true
+  max_position_weight: 0.05
+  max_drawdown: 0.15
+  industry_neutral_enabled: true
+  industry_max_deviation: 0.05
+
+initial_capital: 5000000
+output_dir: output/csi300_enhance

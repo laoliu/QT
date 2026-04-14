@@ -1,0 +1,95 @@
+# ============================================================
+# CSI2000 ML V3 Ensemble — Heterogeneous LGB+MASTER
+# ============================================================
+# 6 models: 5 LGB (V2) + MASTER Transformer (architecture diversity)
+# MASTER avg ρ vs LGB = 0.555 (vs V2 internal ρ = 0.753)
+# Top-50 stock overlap MASTER vs LGB = 11.4% (Jaccard=0.06)
+#   1) lgb_20d_r40         — ICIR=1.87, IC=0.19
+#   2) de_10d              — ICIR=1.46, IC=0.17
+#   3) lgb_b3_sizeneutral  — ICIR=1.46, IC=0.16
+#   4) lgb_fund_t1aligned  — ICIR=1.20, IC=0.14
+#   5) lgb_20d_neutral_p1  — ICIR=2.15, IC=0.20
+#   6) master_v1           — ICIR=0.60, IC=0.064, MASTER Transformer
+# ============================================================
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0000854
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 399303.SZ
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_ensemble_v3_master
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.30
+  max_sector_pct: 0.15
+  max_single_position_pct: 0.03
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  circuit_breaker_enabled: false
+  drawdown_allow_rotation: true       # 防止 DrawdownLimit 死亡螺旋
+  drawdown_peak_reset_days: 60        # 连续 60 天空仓后重置 peak_nav
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 8.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 10
+    buffer_k: 5
+    min_price: 3.0
+    max_price: 100.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    model_objective: regression
+    model_type: lightgbm
+    ensemble_method: rank_average
+    oos_predictions_paths:
+      - models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet
+      - models/ml_csi2000_de_10d/oos_predictions.parquet
+      - models/ml_csi2000_lgb_b3_sizeneutral/oos_predictions.parquet
+      - models/ml_csi2000_lgb_fund_t1aligned/oos_predictions.parquet
+      - models/ml_csi2000_lgb_20d_neutral_p1/oos_predictions.parquet
+      - models/ml_csi2000_master_v1/oos_predictions.parquet

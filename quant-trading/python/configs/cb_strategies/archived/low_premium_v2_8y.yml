@@ -1,0 +1,65 @@
+# 低溢价策略 v2 — 8年回测 (统一 linear_impact 滑点)
+# ============================================================
+# 基于 low_premium 策略：按溢价率升序选择转债
+# 调整：
+#   - start_date 扩展到 2018-01-02 (8年)
+#   - end_date 扩展到 2026-03-04 (最新数据)
+#   - 统一使用 linear_impact 滑点模型
+#   - 纯溢价率单因子，不依赖 Size
+# ============================================================
+
+name: "low_premium_v2_8y"
+description: >
+  低溢价率轮动策略 v2 — 持有溢价率最低的 top_k 只转债，追求最大正股弹性。
+  溢价率越低，转债与正股联动越紧密，向上弹性越大。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "low_premium"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 150.0
+    max_premium: 50.0
+    min_turnover: 30.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/low_premium_v2_8y"
+
+report:
+  benchmark: "000300.SH"

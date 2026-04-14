@@ -1,0 +1,63 @@
+# MultiFactor — 2022新规后分段 WF 验证
+# ============================================================
+# 原则 B（持续稳定性）：制度变更后的独立验证
+# 数据范围: 2022-08-01 ~ 2024-12-31（新规生效后）
+# ============================================================
+
+name: "multi_factor_post2022"
+description: >
+  多因子融合策略 — 仅限 2022-08-01 新规后数据。
+  验证策略在新涨跌停制度 (±20%) 下是否仍然有效。
+
+data:
+  source: "tushare_cb"
+  start_date: "2022-08-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "multi_factor"
+  params:
+    top_k: 20
+    rebalance_days: 3
+    price_weight: 0.25
+    premium_weight: 0.20
+    cb_value_weight: 0.00      # R94: 与 delta 共线，关闭
+    size_weight: 0.25           # R94: 独立维度，提权
+    max_price: 130.0
+    max_premium: 40.0
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.15
+    buffer_k: 0
+    lot_size: 10
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/multi_factor_post2022"

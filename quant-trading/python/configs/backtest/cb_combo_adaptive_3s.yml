@@ -1,0 +1,49 @@
+# CB 策略组合配置 — Performance-Weighted + Vol Targeting
+# ============================================================
+# 目标：使用滚动 Sharpe 动态降权失效策略 + 波动率目标控制
+# 核心改进：不再依赖等权/风险平价的静态假设
+# 组合：triple_low_v3 + sq_v4b + cb_adaptive_factor
+#   - triple_low_v3: 低风险稳健策略 (Post-2022 SR 0.66)
+#   - sq_v4b: 正股质量因子 (Post-2022 SR 0.86, 最稳健)
+#   - cb_adaptive_factor: IC 自适应 17 因子 (预期 post-2022 改善)
+# ============================================================
+
+name: "cb_combo_adaptive_3s"
+description: >
+  CB 三策略 Performance-Weighted 组合。
+  基于滚动 Sharpe 动态降权失效策略，叠加 vol targeting。
+  选择 post-2022 最稳健的策略组合，避免 small_size 依赖。
+
+combo:
+  method: "performance_weighted"
+  lookback: 40
+  rebalance_freq: 15
+  vol_target: 0.15
+  risk_free_rate: 0.02
+
+  strategies:
+    - name: "triple_low_v3"
+      nav_path: "output/triple_low_v3/daily_snapshots.csv"
+    - name: "sq_v4b"
+      nav_path: "output/sq_v4b/daily_snapshots.csv"
+    - name: "cb_adaptive_factor"
+      nav_path: "output/cb_adaptive_factor_8y/daily_snapshots.csv"
+
+  # 对照方法
+  comparison_methods:
+    - "equal_weight"
+    - "risk_parity"
+    - "rolling_risk_parity"
+    - "vol_targeted_regime"
+
+report:
+  benchmark: "000832.CSI"
+  output_dir: "output/cb_combo_adaptive_3s"
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "yearly_returns"
+    - "strategy_correlation"
+    - "sub_strategy_contribution"

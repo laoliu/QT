@@ -1,0 +1,103 @@
+# 复合等权 — 12年回测 (2014-2025)
+# 均衡型策略 G2-5: 6因子等权排名, 零参数优化
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 0.0003
+  stamp_tax:
+    sell_rate: 0.001
+  transfer_fee:
+    rate: 0.00002
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000905.SH
+  region: CN
+
+report:
+  benchmark: 000905.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/composite_rank_equal_12y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.40
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.04
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.12
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.30
+  benchmark_symbol: 000905.SH
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2014-01-02'
+  timezone: Asia/Shanghai
+
+strategy:
+  name: composite_rank_equal
+  parameters:
+    top_k: 40
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 800.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    buffer_k: 12
+    max_single_pct: 0.04
+    min_mv: 300000.0
+    max_industry_pct: 0.20
+    max_pe: 100.0
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    volatility_lookback: 60
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000905.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: composite_rank_equal

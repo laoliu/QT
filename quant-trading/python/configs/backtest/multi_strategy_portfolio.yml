@@ -1,0 +1,204 @@
+# 多策略组合回测配置
+# 目标：20-30% 年化收益，<15% 最大回撤，Sharpe > 1.5
+# 组合：小盘轮动(40%) + 多因子增强(35%) + PEAD 事件驱动 (25%)
+#
+# 设计原理：
+# - 小盘因子轮动：捕捉 A 股显著的小盘溢价，提供核心收益
+# - 多因子指数增强：提供稳定 Alpha 和低相关性分散来源
+# - PEAD 事件驱动：利用财报季脉冲式高 Alpha，与前两者低相关
+#
+# 三者低相关性可有效分散组合风险，实现风险调整后收益最大化。
+
+run:
+  mode: backtest
+  start_date: "2020-01-01"
+  end_date: "2025-09-05"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"
+  equity_data:
+    stock_basic: true
+    daily_basic: true
+    fina_indicator: true
+    income: true
+  pit_data:
+    enabled: true
+    ann_date_aligned: true
+
+market:
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    boards:
+      - "A"
+
+frequency:
+  data_frequency: "1d"
+  matching_resolution: "1d"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+slippage_model:
+  name: "fixed_bps"
+  bps: 5
+
+initial_capital: 3000000    # 300 万，3 子策略共享资金池
+
+# ---------------------------------------------------------------------------
+# 股票池策略
+# ---------------------------------------------------------------------------
+universe_policy:
+  name: "multi_strategy_default"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+
+# ---------------------------------------------------------------------------
+# 多策略编排
+# ---------------------------------------------------------------------------
+portfolio:
+  allocation_mode: "fixed_weight"  # fixed_weight | risk_parity | momentum_weight
+  rebalance_days: 60               # 组合层资金再配置周期（交易日）
+
+  # 子策略定义
+  strategies:
+    - name: "smallcap_rotation"
+      weight: 0.40                 # 40% 资金
+      config:
+        top_k: 30
+        rebalance_days: 10
+        buffer_k: 5
+        stop_loss_pct: 0.15
+        min_price: 3.0
+        max_price: 50.0
+        min_mv: 100000
+        max_mv: 2000000
+        min_turnover: 500
+        min_listed_days: 60
+        weight_small_cap: 0.40
+        weight_momentum: 0.25
+        weight_turnover: 0.15
+        weight_volatility: 0.20
+        momentum_lookback: 20
+        momentum_invert: false
+
+    - name: "multifactor_enhance"
+      weight: 0.35                 # 35% 资金
+      config:
+        top_k: 50
+        rebalance_days: 20
+        buffer_k: 10
+        stop_loss_pct: 0.20
+        benchmark: "000300.SH"
+        min_price: 5.0
+        max_price: 200.0
+        min_turnover: 1000
+        min_listed_days: 120
+        max_single_pct: 0.05
+        weight_value: 0.25
+        weight_quality: 0.20
+        weight_momentum: 0.20
+        weight_volatility: 0.20
+        weight_size: 0.15
+        value_metric: "pe_ttm"
+        momentum_lookback: 20
+        volatility_lookback: 60
+
+    - name: "pead_event"
+      weight: 0.25                 # 25% 资金
+      config:
+        top_k: 20
+        rebalance_days: 20
+        buffer_k: 5
+        stop_loss_pct: 0.15
+        min_mv: 200000
+        min_price: 5.0
+        max_price: 200.0
+        min_turnover: 1000
+        min_listed_days: 120
+        min_sue: 0.0
+        min_roe: 3.0
+        weight_sue: 0.45
+        weight_earnings_growth: 0.20
+        weight_quality: 0.15
+        weight_momentum: 0.10
+        weight_volatility: 0.10
+
+# ---------------------------------------------------------------------------
+# 组合级风控（覆盖子策略）
+# ---------------------------------------------------------------------------
+risk_control:
+  # 市场状态检测
+  market_regime:
+    enabled: true
+    index: "000300.SH"         # 涨跌幅参考指数
+    bull_threshold: 0.10
+    bear_threshold: -0.08
+    high_vol_threshold: 0.03
+    actions:
+      BEAR:
+        position_scale: 0.5    # 熊市减仓 50%
+        disable_strategies: [] # 可选：熊市禁用某子策略
+      BULL:
+        position_scale: 1.0
+      NEUTRAL:
+        position_scale: 0.8
+
+  # 行业中性约束（仅对 multifactor_enhance 生效）
+  industry_neutral:
+    enabled: true
+    target_strategy: "multifactor_enhance"
+    max_deviation: 0.05
+    benchmark_index: "000300.SH"
+
+  # 全组合风控
+  drawdown_limit:
+    max_drawdown_pct: 0.15     # 组合最大回撤15%
+    action: "reduce_to_50pct"  # 触发后减仓至 50%
+
+  concentration:
+    max_single_pct: 0.03       # 组合级单票最多3%
+    max_top5_pct: 0.12         # 组合级 top5 最多12%
+
+report:
+  benchmark: "000300.SH"
+  compare_sub_strategies: true    # 输出各子策略独立表现对比
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+    - "strategy_correlation"       # 子策略间相关性矩阵
+    - "sub_strategy_contribution"  # 各子策略收益贡献
+  universe_summary: true
+  output_dir: "reports/multi_strategy_portfolio"
+

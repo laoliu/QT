@@ -1,0 +1,18 @@
+# ETF V5 结构参数扫描 (Phase 2)
+# ============================================================
+# 基础: etf_cross_v5_opt.yml (Phase 1 最优因子权重已锁定)
+#   momentum=0.50, vol=0.10, reversion=0.0, volume=0.0
+# 维度: top_k × rebalance_days × trend_ma_period
+# 网格: 4×4×4 = 64 组
+# ============================================================
+
+base_config: "configs/backtest/etf_cross_v5_opt.yml"
+
+param_ranges:
+  top_k: [2, 3, 4, 5]
+  rebalance_days: [5, 10, 15, 20]
+  trend_ma_period: [0, 40, 60, 120]
+
+max_workers: 4
+output_dir: "output/sweep_etf_v5_structure"
+top_n: 20

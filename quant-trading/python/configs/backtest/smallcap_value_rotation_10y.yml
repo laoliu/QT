@@ -1,0 +1,89 @@
+# 小市值+估值轮动策略 — 真实费率版 10年回测
+# 基于联网研究: 小市值+低PE/PB+质量(ROE)组合
+# 核心逻辑: 小市值但有估值保护和质量锚定
+# 费率: 万0.86佣金(用户实际)
+# 目标: 平衡收益与回撤, 年化20%+
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.000086}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.06
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000905.SH
+  output_dir: output/smallcap_value_rotation_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_price: 3.0
+    max_price: 50.0
+    min_turnover: 500.0
+    min_listed_days: 90
+    min_mv: 0.0
+    max_mv: 1000000.0
+    stop_loss_pct: 0.20
+    trailing_stop_pct: 0.0
+    buffer_k: 8
+    max_single_pct: 0.05
+    momentum_invert: false
+    weight_small_cap: 0.35
+    weight_momentum: 0.10
+    weight_turnover: 0.10
+    weight_volatility: 0.15
+    weight_quality: 0.15
+    weight_value: 0.15
+    regime_adaptive: false
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.4
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

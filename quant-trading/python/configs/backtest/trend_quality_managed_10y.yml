@@ -1,0 +1,87 @@
+# 趋势质量管理策略 — 全A 10年回测
+# R14 专家评审推荐配置 #2
+# 核心逻辑：质量因子选股 + MA趋势仓位管理
+#   牛市(MA20>MA60)满仓 → 熊市自动降仓至30%
+#   目标：大幅压缩 MDD，换取更平稳的收益曲线
+# 作为组合中的防御仓位
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0003}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A]}
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  output_dir: output/trend_quality_managed_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 30.0
+  fallback_bps: 10.0
+  max_bps: 50.0
+
+strategy:
+  name: trend_quality_managed
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 300000.0
+    max_mv: 50000000.0
+    min_price: 5.0
+    max_price: 500.0
+    min_turnover: 1500.0
+    min_listed_days: 250
+    buffer_k: 10
+    weight_quality: 0.30
+    weight_stability: 0.30
+    weight_vol: 0.20
+    weight_value: 0.20
+    volatility_lookback: 60
+    stop_loss_pct: 0.25
+    trailing_stop_pct: 0.0
+    max_single_pct: 0.05
+    cash_reserve_pct: 0.03
+    max_industry_pct: 0.15
+    min_roe: 5.0
+    max_pe: 60.0
+    ma_short: 20
+    ma_long: 60
+    bear_scale: 0.30
+
+risk_constraints:
+  max_drawdown_pct: 0.35
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.4
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

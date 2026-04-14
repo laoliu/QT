@@ -1,0 +1,54 @@
+# configs/algo_trading_compliance.yml
+# 程序化交易合规配置（依据 2024-10 程序化交易管理办法）
+# 修改此文件需同步更新 docs/known_limitations.md 中合规声明章节
+
+version: "2024-10"
+description: "A/CB algo-trading compliance parameters per CSRC 2024-10 rules"
+
+# --- 报备与注册 ---
+reporting:
+  require_registration: true
+  registration_status: "pending"    # pending / registered / exempt
+  registration_note: "需向交易所报备算法策略信息"
+
+# --- 撤单率限制 ---
+order_limits:
+  # 单日撤单率上限（撤单笔数/总报单笔数）
+  max_cancel_rate: 0.80
+  # 单笔最高频率（每秒）
+  max_order_rate_per_second: 5
+  # 连续异常撤单触发人工审核阈值
+  cancel_rate_alert_threshold: 0.60
+
+# --- 参与率约束（与 risk/capacity_limit.py 保持一致）---
+participation:
+  max_participation_rate: 0.05           # R112: 小盘/CB策略单票成交量占比上限 5%
+  crowding_overlap_max_jaccard: 0.30     # 策略拥挤度 Jaccard 上限
+  crowding_note: "与主流量化策略持仓 Jaccard 指数超过 0.30 须降低参与率至 5%"
+  crowding_high_participation_rate: 0.05 # 拥挤时降低参与率
+
+# --- 信号质量门槛（T+1 折扣与 A 股约束）---
+signal_quality:
+  t1_discount_factor: 0.90              # A 股日频信号回测 SR 须乘以此折扣
+  flag_limit_hit_threshold: 0.05        # 涨跌停日信号占比上限（>5% 须标注扭曲）
+  min_tradeable_universe_fraction: 0.80 # 可交易标的占全标的比例下限
+
+# --- CB 特有合规 ---
+convertible_bond:
+  lot_size: 10                 # 最小交易单位（张）
+  t_plus_n: 0                  # T+0 交易
+  limit_up_pct_post_20220801: 0.20   # 2022-08-01 新规 ±20% 涨跌停
+  force_redeem_monitor: true   # 强赎监控是否启用
+  force_redeem_max_exposure: 0.30    # 转股价值≥125 持仓占比上限 30%
+
+# --- 涨跌停处理 ---
+limit_price:
+  treat_limit_up_as_untradeable: true   # 涨停视为不可买入
+  treat_limit_down_as_untradeable: true # 跌停视为不可卖出
+  signal_distortion_log: true           # 记录涨跌停日信号扭曲情况
+
+# --- 审计与报告 ---
+audit:
+  enable_audit_log: true
+  audit_log_retention_days: 90
+  report_to_exchange: false     # 是否自动上报交易所（暂不启用）

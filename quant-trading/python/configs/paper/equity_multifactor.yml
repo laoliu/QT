@@ -1,0 +1,100 @@
+# Paper Trading 配置 — A 股 multifactor_enhance 策略
+# 用法: python -m aipha paper --config configs/paper/equity_multifactor.yml
+#
+# 基于 multifactor_enhance 策略（R7 评审评分最高：32.08% 年化 / Sharpe 1.448）
+# 使用 HS300 成分股，日频调仓
+
+paper_engine:
+  # 策略
+  strategy_name: "multifactor_enhance"
+
+  # 策略参数（与 configs/backtest/multifactor_enhance_5y.yml 对齐）
+  strategy_params:
+    top_k: 30
+    rebalance_days: 20
+    weight_value: 0.25
+    weight_quality: 0.20
+    weight_momentum: 0.20
+    weight_size: 0.15
+    weight_volatility: 0.20
+    value_metric: "pe_ttm"
+    momentum_lookback: 20
+    volatility_lookback: 60
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    exclude_st: true
+    stop_loss_pct: 0.20
+    max_single_pct: 0.05
+    cash_reserve_pct: 0.05
+    buffer_k: 10
+    lot_size: 100
+    benchmark: "000300.SH"
+
+  # 标的列表 — HS300 候选池（Paper Trading 动态更新时可替代）
+  # 此处仅列部分代表性标的作为初始池，实际运行建议启用 universe
+  symbols:
+    - "600519.SH"   # 贵州茅台
+    - "601318.SH"   # 中国平安
+    - "600036.SH"   # 招商银行
+    - "000858.SZ"   # 五粮液
+    - "601166.SH"   # 兴业银行
+    - "600276.SH"   # 恒瑞医药
+    - "000333.SZ"   # 美的集团
+    - "002475.SZ"   # 立讯精密
+    - "600900.SH"   # 长江电力
+    - "601888.SH"   # 中国中免
+    - "300750.SZ"   # 宁德时代
+    - "600585.SH"   # 海螺水泥
+    - "000568.SZ"   # 泸州老窖
+    - "002714.SZ"   # 牧原股份
+    - "601012.SH"   # 隆基绿能
+    - "600809.SH"   # 山西汾酒
+    - "000001.SZ"   # 平安银行
+    - "002594.SZ"   # 比亚迪
+    - "601899.SH"   # 紫金矿业
+    - "000725.SZ"   # 京东方A
+    - "600030.SH"   # 中信证券
+    - "601398.SH"   # 工商银行
+    - "600690.SH"   # 海尔智家
+    - "601668.SH"   # 中国建筑
+    - "000002.SZ"   # 万科A
+    - "601225.SH"   # 陕西煤业
+    - "002304.SZ"   # 洋河股份
+    - "600048.SH"   # 保利发展
+    - "601628.SH"   # 中国人寿
+    - "603259.SH"   # 药明康德
+
+  # 数据源
+  market_type: "a_stock"
+  poll_interval: 5.0        # A 股轮询间隔（秒）
+  bar_interval_sec: 60      # K线周期（秒）
+
+  # 资金与交易规则（A 股）
+  initial_capital: 1000000.0
+  lot_size: 100              # A 股最小交易单位（100 股 = 1 手）
+  t_plus_n: 1                # T+1
+  commission_rate: 8.54e-05  # 13.1 MarketRulesCNEquity
+  commission_min: 5.0        # 最低佣金 5 元
+  stamp_tax_rate: 0.0005     # 印花税卖出千分之0.5
+  slippage_bps: 10.0         # §13.1 MarketRulesCNEquity A股默认10bps
+
+  # 状态持久化
+  state_dir: "data/paper_state/equity_multifactor"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/equity_multifactor"
+
+  # 监控告警（A 股版本，更宽松的阈值）
+  monitoring_enabled: true
+  alert_drawdown_threshold: 0.10    # 10% 回撤告警（A 股波动大于 CB）
+  alert_daily_loss_threshold: 0.05  # 5% 日内亏损告警
+  alert_data_stale_seconds: 180.0   # 180s 数据中断告警
+  alert_inactivity_minutes: 240.0   # 240min 无成交告警（日频策略可能较久不调仓）
+
+  # 指标收集
+  metrics_enabled: true
+  metrics:
+    export_interval_sec: 60
+    export_format: "json"
+    export_dir: "data/metrics/equity_multifactor"

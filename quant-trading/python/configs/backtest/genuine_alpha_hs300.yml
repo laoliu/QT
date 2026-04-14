@@ -1,0 +1,127 @@
+# genuine_alpha_hs300.yml — 沪深 300 真实 Alpha 配置
+# 特点：
+#   - 多因子均衡（size ≤ 30%），避免单因子 beta 暴露
+#   - 滑点 10bps（沪深 300 合理下限）
+#   - 止损 15% + 追踪止损 12%
+#   - 回撤控制 + 波动率目标
+#   - 10 年样本外含 2015/2018/2022 极端行情
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, cost_attribution]
+  output_dir: reports/genuine_alpha_hs300
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.35
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.08
+
+risk:
+  enabled: true
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.12
+  circuit_breaker_enabled: false
+  market_regime_enabled: false
+  position_sizing:
+    volatility_target:
+      enabled: true
+      target_vol: 0.18
+      lookback_days: 20
+      min_scale: 0.30
+      max_scale: 1.0
+    drawdown_control:
+      enabled: true
+      threshold: 0.08
+      max_threshold: 0.15
+      min_scale: 0.30
+
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2015-01-05'
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 20
+    rebalance_days: 15
+    min_mv: 100000.0
+    max_mv: 5000000.0
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    buffer_k: 6
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.08
+    momentum_lookback: 20
+    volatility_lookback: 20
+    momentum_invert: false
+    momentum_skip_recent: 1
+    momentum_multi_period: true
+    regime_adaptive: false
+    # 均衡权重：无单因子 > 30%
+    weight_small_cap: 0.20
+    weight_momentum: 0.20
+    weight_turnover: 0.10
+    weight_volatility: 0.15
+    weight_quality: 0.20
+    weight_value: 0.15
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

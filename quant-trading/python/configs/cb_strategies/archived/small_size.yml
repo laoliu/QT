@@ -1,0 +1,113 @@
+# 小规模策略 (issue_size 版) — 推荐部署配置
+# ============================================================
+# 验证日期: 2025-01
+# 数据范围: 2022-01-04 ~ 2024-12-31 (726 交易日)
+# 成交模型: next_bar_open (NBO)
+#
+# 验证指标 (NBO, 5bps, 稳健参数):
+#   年化收益: 12.92% | 最大回撤: 11.28% | Sharpe: 0.880
+#   交易次数: 539 | 全年正收: 2022:11.16% 2023:5.41% 2024:17.98%
+#
+# OOS 验证 (2025-02, 训练:2022-2023, 测试:2024):
+#   IS: 年化=10.40% Sharpe=0.767 | OOS: 年化=14.88% Sharpe=0.878
+#   OOS 比 IS 更好 (衰减=-43.1%), 策略具有样本外泛化能力
+#
+# 重要修复 (2025-01):
+#   - remain_size → issue_size: 修复前视偏差 (remain_size 为最新快照)
+#   - issue_size ÷ 10000: 修复单位错误 (元 → 万元)
+#   - sorted() 排序: 修复集合迭代非确定性
+# ============================================================
+
+name: "small_size"
+description: >
+  小规模可转债策略 — 买入发行规模小的低价可转债。
+  使用 issue_size (发行规模, 静态字段) 替代 remain_size (剩余规模, 存在前视偏差)。
+  稳健参数 (k=15, reb=5, p=120) — 不使用过拟合的最优参数 (reb=3, p=115)。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "small_size"
+  params:
+    top_k: 15
+    rebalance_days: 5
+    max_price: 120.0              # p=120 范围更稳健 (任意 reb 均 9~12%)
+    max_issue_size: 30000.0       # 万元 (3亿以下的小规模发行)
+    min_issue_size: 5000.0        # 万元 (实际无效: 最小 issue_size 是 1.4 亿)
+    min_turnover: 50.0            # 最低成交额 50 万
+    min_days_to_maturity: 60
+    exclude_st: true
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/small_size"
+
+# ============================================================
+# 验证结果 (稳健参数)
+# ============================================================
+verified_metrics:
+  annual_return_pct: 12.92
+  max_drawdown_pct: 11.28
+  sharpe: 0.880
+  total_trades: 539
+  capacity_test: "20万以上可用, 10万不可用(lot_size问题)"
+  slippage_robust: true
+  all_years_positive: true        # 2022:11.16% 2023:5.41% 2024:17.98%
+  oos_validation:
+    train_period: "2022-01-04 ~ 2023-12-29"
+    test_period: "2024-01-02 ~ 2024-12-31"
+    is_annual_return_pct: 10.40
+    oos_annual_return_pct: 14.88
+    oos_sharpe: 0.878
+    oos_calmar: 1.557
+    oos_max_dd_pct: 9.55
+    decay_pct: -43.1
+
+# ============================================================
+# 已知风险
+# ============================================================
+risks:
+  - "过拟合风险: 最优参数 (reb=3, p=115) 是孤岛信号, 仅该组合有效"
+  - "候选池小: 日均~13只 (maxI=30000)"
+  - "资金门槛: 最低20万"
+  - "issue_size 仍为静态近似: 非精确的 PIT 小规模筛选"
+
+# ============================================================
+# 过拟合警告: 最优参数 vs 稳健参数
+# ============================================================
+# 最优参数 (reb=3, p=115): 年化 15.60%, 但邻近参数 reb=2,4 或 p=110 均大幅亏损
+# 稳健参数 (reb=5, p=120): 年化 11.88%, 邻近参数均在 9~12% — 低方差, 真实可期
+# 结论: 采用稳健参数部署

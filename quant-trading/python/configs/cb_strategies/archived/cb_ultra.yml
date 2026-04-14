@@ -1,0 +1,83 @@
+# 可转债超级复合因子策略 (CB Ultra Alpha) - 回测配置
+# ============================================================
+# 四因子排名加权选股: 规模(40%) + 溢价率(20%) + 价格(20%) + 次新(20%)
+# 自适应降级: 候选不足时自动放宽次新约束
+
+name: "cb_ultra"
+
+description: >
+  可转债超级复合因子策略，叠加小规模效应、低溢价效应、
+  低价效应和次新效应四个高Alpha因子，通过排名归一化加权选股。
+  内置自适应降级机制，候选不足时自动放宽次新约束。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "cb_ultra"
+  params:
+    top_k: 5
+    rebalance_days: 1
+    max_price: 150.0
+    max_issue_size: 20000.0         # 万元 (2亿以下)
+    min_issue_size: 2000.0          # 万元
+    min_turnover: 10.0              # 万元
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10             # C-7: 收紧止损
+    trailing_stop_pct: 0.05          # C-7: 追踪止损
+    lot_size: 10
+
+    # 次新因子
+    use_age_filter: true
+    min_age_days: 3                 # 避免首日异常
+    max_age_days: 90                # 次新上限
+    fallback_max_age_days: 365      # 候选不足时放宽到此值
+
+    # 溢价率过滤
+    max_premium: 80.0               # 溢价率超此值过滤
+
+    # 因子权重 (排名法加权)
+    weight_size: 0.40               # 发行规模 (越小越好)
+    weight_premium: 0.20            # 溢价率 (越低越好)
+    weight_price: 0.20              # 价格 (越低越好)
+    weight_age: 0.20                # 上市天数 (越小=越新越好)
+
+    # 额外增强
+    prefer_low_premium: true        # 启用低溢价偏好
+    min_candidates: 3               # 最少候选数 (不足则放宽 age)
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  min_commission: 5  # §13.1 CB minimum
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+
+# ------ 滑点 ------
+slippage:
+  model: "linear_impact"
+  base_bps: 5.0          # CB 最低买卖价差
+  impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+  fallback_bps: 8.0      # 无成交量数据时的回退值
+  max_bps: 40.0          # 单笔滑点上限
+
+# ------ 资金 ------
+capital:
+  initial: 1000000.0
+  currency: "CNY"

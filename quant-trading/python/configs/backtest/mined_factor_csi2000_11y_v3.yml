@@ -1,0 +1,75 @@
+# 挖掘因子 CSI2000 v3 — 禁用MDD梯度 + 仅非size因子
+# ============================================================
+# 诊断: v2 的全部收益来自 2015, 2016-2024 全部负收益
+# 原因: 因子以 size/illiquidity 为主, 2015后小盘溢价消失
+# v3 变化:
+#   1. 禁用 MDD 梯度减仓 (避免 death spiral)
+#   2. 使用单独的反转+流动性因子信号 (去 size 因子)
+# ============================================================
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0000854}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/mined_factor_csi2000_11y_v3
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.0
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 15.0
+  impact_coeff: 10.0
+  fallback_bps: 30.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 30
+    rebalance_days: 20
+    buffer_k: 5
+    oos_predictions_path: output/mined_factor_signals_v3.parquet
+    model_objective: regression
+    model_type: lightgbm
+    model_path: ''
+    train_years: 3
+    predict_months: 3
+    forward_days: 5

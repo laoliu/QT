@@ -1,0 +1,36 @@
+# 资金量扫描配置索引
+#
+# 本目录不存放独立配置文件 — 多资金量测试通过 scripts/capital_sweep.py 动态生成。
+#
+# 使用方法:
+#   # A 股多因子增强 (沪深300) — 5 档资金量
+#   python scripts/capital_sweep.py configs/backtest/multifactor_enhance_5y.yml
+#
+#   # A 股小盘轮动 (中证1000) — 5 档资金量
+#   python scripts/capital_sweep.py configs/backtest/smallcap_rotation_5y.yml
+#
+#   # 可转债三低策略 — 5 档资金量
+#   python scripts/capital_sweep.py configs/cb_strategies/triple_low.yml
+#
+#   # 自定义资金量
+#   python scripts/capital_sweep.py configs/backtest/value_quality_5y.yml --capitals 200000 1000000 5000000
+#
+# 推荐扫描的策略清单:
+#
+# A 股策略 (基准配置文件):
+#   - configs/backtest/multifactor_enhance_5y.yml  (沪深300多因子, 2020-2024)
+#   - configs/backtest/smallcap_rotation_5y.yml    (中证1000小盘轮动, 2020-2024)
+#   - configs/backtest/pead_event_5y.yml           (PEAD事件驱动, 2020-2024)
+#   - configs/backtest/sector_momentum_5y.yml      (行业动量, 2020-2024)
+#   - configs/backtest/earnings_momentum_5y.yml    (盈利动量, 2020-2024)
+#   - configs/backtest/value_quality_5y.yml        (价值质量, 2020-2024)
+#
+# 可转债策略 (基准配置文件):
+#   - configs/cb_strategies/triple_low.yml         (三低, 2022-2024)
+#   - configs/cb_strategies/double_low.yml         (双低, 2022-2024)
+#   - configs/cb_strategies/small_size.yml         (小盘, 2022-2024)
+#   - configs/cb_strategies/new_bond.yml           (新债, 2022-2024)
+#
+# 默认资金量档位: 10万 / 50万 / 100万 / 500万 / 1000万
+#
+# 输出目录: results/capital_sweep/{strategy_name}_{capital}/

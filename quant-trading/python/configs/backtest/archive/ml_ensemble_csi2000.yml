@@ -1,0 +1,50 @@
+# CSI2000 多模型集成配置（P2: LGB + XGBoost + ElasticNet）
+# 三模型 rank_average 集成
+
+ensemble:
+  method: rank_average
+  sub_models:
+    - model_type: lightgbm
+      n_estimators: 300
+      learning_rate: 0.05
+      max_depth: 6
+      num_leaves: 31
+      reg_alpha: 0.1
+      reg_lambda: 1.0
+      min_child_samples: 50
+      subsample: 0.8
+      colsample_bytree: 0.8
+
+    - model_type: xgboost
+      xgb_n_estimators: 300
+      xgb_max_depth: 6
+      xgb_eta: 0.05
+      xgb_subsample: 0.8
+      xgb_colsample_bytree: 0.8
+      xgb_reg_alpha: 0.1
+      xgb_reg_lambda: 1.0
+
+    - model_type: elasticnet
+      en_alpha: 0.01
+      en_l1_ratio: 0.5
+      en_max_iter: 1000
+
+common:
+  universe: csi2000
+  train_years: 3
+  predict_months: 3
+  forward_days: 5
+  objective: regression
+  seed: 42
+
+output_dir: models/ml_csi2000_ensemble
+
+# 训练步骤:
+# 1. 分别训练三个子模型:
+#    python scripts/train_ml_factor.py --universe csi2000 --model lightgbm \
+#      --forward-days 5 --alt-factors --output models/ml_csi2000_lgb_alt
+#    python scripts/train_ml_factor.py --universe csi2000 --model xgboost \
+#      --forward-days 5 --alt-factors --output models/ml_csi2000_xgb_alt
+#    python scripts/train_ml_factor.py --universe csi2000 --model elasticnet \
+#      --forward-days 5 --alt-factors --output models/ml_csi2000_en_alt
+# 2. 集成预测使用 ensemble.py MultiModelEnsemble

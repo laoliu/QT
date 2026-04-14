@@ -1,0 +1,99 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 2.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.1
+    lot_size: 100
+slippage_model:
+  name: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/low_vol_value_12y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.35
+  max_sector_pct: 0.2
+  max_single_position_pct: 0.05
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.12
+  circuit_breaker_enabled: true
+  circuit_breaker_drawdown: 0.25
+  benchmark_symbol: 000300.SH
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2014-01-02'
+  timezone: Asia/Shanghai
+strategy:
+  name: low_vol_value
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_price: 3.0
+    max_price: 300.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    buffer_k: 10
+    max_single_pct: 0.05
+    min_mv: 500000.0
+    inverse_vol_weighting: true
+    max_industry_pct: 0.2
+    weight_volatility: 0.35
+    weight_value: 0.3
+    weight_quality: 0.2
+    weight_turnover: 0.15
+    value_ep_weight: 0.5
+    value_bp_weight: 0.5
+    min_roe: 5.0
+    max_pe: 50.0
+    max_pb: 10.0
+    ewma_halflife: 20
+    volatility_lookback: 60
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml
+  name: low_vol_value

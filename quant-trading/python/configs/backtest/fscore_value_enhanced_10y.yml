@@ -1,0 +1,77 @@
+# Piotroski F-Score 价值增强策略 — 全A 10年回测
+# R14 专家评审推荐配置 #3
+# 核心逻辑：Piotroski(2000) F-Score 过滤价值陷阱
+#   + 深度价值(低PE) + 质量(ROE) + 低波动
+# 学术基础：F-Score 在小盘价值股中可提升 5-8% 年化(Piotroski 2000)
+# 市值段：30-500亿，覆盖中盘+小盘
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0003}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A]}
+  region: CN
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 40.0
+  fallback_bps: 12.0
+  max_bps: 60.0
+
+strategy:
+  name: fscore_value_enhanced
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 300000.0
+    max_mv: 5000000.0
+    min_price: 5.0
+    max_price: 300.0
+    min_turnover: 800.0
+    min_listed_days: 250
+    buffer_k: 10
+    weight_fscore: 0.45
+    weight_value: 0.35
+    weight_accruals: 0.20
+    min_fscore: 5
+    value_metric: bp
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    max_single_pct: 0.05
+    max_industry_pct: 0.20
+
+risk_constraints:
+  max_drawdown_pct: 0.40
+  drawdown_peak_reset_days: 60
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.4
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]

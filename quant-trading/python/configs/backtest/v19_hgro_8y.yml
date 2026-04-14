@@ -1,0 +1,103 @@
+# v19_hgro 微盘成长因子轮动策略 — 日频事件驱动回测
+# 2018-01-02 ~ 2025-12-31, A股全市场, 与R103月频回测对照
+# 因子权重: small_size=0.40 mom_12_1=0.25 growth=0.20 ep=0.10 bp=0.05
+# 选股: 市值2-30亿, 持仓15只, 月频调仓(20天), 滑点20bps
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05       # 万0.85 (§13.1 A-stock default)
+  stamp_tax:
+    sell_rate: 0.0005    # 万5 (时变印花税自动)
+  transfer_fee:
+    rate: 1.0e-05        # 万0.1
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05   # R112议题7: A股中小盘策略降至5%
+    lot_size: 100
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+
+report:
+  benchmark: 000905.SH   # 中证500
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: output/v19_hgro_8y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.40
+  max_sector_pct: 1.0    # 不限行业 (与v19一致)
+  max_single_position_pct: 0.10
+
+run:
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2018-01-02'
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: fixed_bps
+  bps: 20.0               # 与R103一致: 20bps
+
+strategy:
+  name: v19_hgro
+  parameters:
+    top_k: 15
+    rebalance_days: 20
+    buffer_k: 5
+    min_mv: 20000.0       # 2亿 (万元)
+    max_mv: 300000.0      # 30亿 (万元)
+    min_price: 2.0
+    max_price: 100.0
+    min_turnover: 200.0
+    min_listed_days: 120
+    max_pb: 5.0
+    weight_small_size: 0.40
+    weight_momentum: 0.25
+    weight_growth: 0.20
+    weight_ep: 0.10
+    weight_bp: 0.05
+    momentum_lookback: 240
+    momentum_skip_recent: 20
+    vol_scaling_enabled: false
+    vol_target: 0.20
+    vol_lookback: 120
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml
+  # 注意: v19_hgro 目标微盘股(2-30亿), 不使用指数成分约束,
+  # 由策略的 min_mv/max_mv 在 _filter_universe() 中动态过滤。
+  # 数据加载使用全市场模式(_EQUITY_ROTATION_STRATEGIES)。

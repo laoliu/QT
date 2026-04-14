@@ -1,0 +1,99 @@
+# 次新小盘策略 �?MDD 硬化版（V-07 优化�?
+# ============================================================
+# 目标：将 new_small �?MDD �?~33% 压制�?�?0%
+#
+# 优化手段（相�?new_small_optimized）：
+#   1. max_drawdown=0.28 �?硬性限制回撤在 28%（reduce_position_at=14%�?
+#   2. allow_rotation=true �?有持仓时允许轮转，避免反馈循�?
+#   3. scale_factor_floor=0.50 �?减仓区间最低保�?50% 规模
+#   4. stop_loss_pct=0.08 �?收紧个券止损（从 10% �?8%�?
+#   5. max_issue_size=50000 �?收紧规模上限（从 6 �?�?5 亿）
+#
+# 设计原理�?
+#   - dd=0.20 + 默认参数 �?2.6% 年化（反馈循环，已证实）
+#   - dd=0.50 + optimized  �?40.16% 年化 / 28.90% MDD�?y�?
+#   - dd=0.28 + rotation + floor=0.5 �?预期�?
+#     0-14%  回撤：正常交�?
+#     14-28% 回撤：轮转通过（有持仓），新增仓位�?50%+
+#     >28%   回撤：禁止开仓，仅允许减�?
+#   - 2018 �?CB 系统性下跌是唯一产生 >28% 回撤的时�?
+#     该机制在 28% 处截断，预期可将 7y MDD �?33% �?28% 以内
+#
+# ⚠️ 本配置需要回测验证（python -m aipha.backtest.config_runner configs/cb_strategies/new_small_hardened_8y.yml�?
+# ============================================================
+
+name: "new_small_hardened_8y"
+description: >
+  次新小盘策略 MDD 硬化�?�?通过 DrawdownLimit + allow_rotation + scale_factor_floor
+  �?MDD 控制�?30% 以内，同时避免集中持仓反馈循环�?
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "new_small"
+  params:
+    top_k: 5
+    rebalance_days: 1
+    min_age_days: 5
+    max_age_days: 90
+    max_issue_size: 50000.0       # 万元�? 亿以下，�?optimized �?6 亿更保守�?
+    max_price: 150.0
+    min_turnover: 10.0
+    exclude_st: true
+    stop_loss_pct: 0.08           # 收紧止损�?%（optimized=10%�?
+    min_positions: 1
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本（可转债）------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+# ------ 资金与规�?------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 风控约束（V-07 核心优化�?-----
+# DrawdownLimit 三参数组合：
+#   max_drawdown=0.28            �?reduce_position_at=0.14（自�?50%�?
+#   drawdown_allow_rotation=true �?有持仓时轮转不受减仓比例限制
+#   drawdown_scale_factor_floor=0.50 �?无持仓时最低保�?50% 仓位规模
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.28
+  drawdown_scale_factor_floor: 0.50
+  drawdown_allow_rotation: true
+  enable_audit_log: true
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/new_small_hardened_8y"

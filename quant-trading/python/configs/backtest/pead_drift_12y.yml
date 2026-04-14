@@ -1,0 +1,44 @@
+# G5-1 业绩漂移 (PEAD Drift) 12 年回测
+backtest:
+  start_date: "2014-01-02"
+  end_date:   "2025-06-01"
+  initial_capital: 1_000_000
+  benchmark: "000905.SH"
+
+cost_model:
+  commission_rate: 8.54e-05  # 13.1 MarketRulesCNEquity
+  min_commission: 5.0
+  stamp_tax_rate: 0.0005  # 13.1 MarketRulesCNEquity (2023-08-28+; auto_schedule handles pre-2023)
+  transfer_fee_rate: 1.0e-05  # §13.1 MarketRulesCNEquity
+
+fill_model:
+  method: next_bar_open
+
+slippage:
+  model: linear_impact
+  base_bps: 5
+  impact_coeff: 0.1
+
+strategy:
+  name: pead_drift
+  parameters:
+    top_k: 20
+    rebalance_days: 10
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 800.0
+    min_listed_days: 250
+    stop_loss_pct: 0.18
+    trailing_stop_pct: 0.15
+    buffer_k: 5
+    max_single_pct: 0.06
+    min_mv: 300_000.0
+    max_mv: 5_000_000.0
+    max_industry_pct: 0.25
+
+    weight_earnings: 0.40
+    weight_momentum: 0.25
+    weight_value: 0.20
+    weight_quality: 0.15
+    momentum_lookback: 20
+    max_pe: 60.0

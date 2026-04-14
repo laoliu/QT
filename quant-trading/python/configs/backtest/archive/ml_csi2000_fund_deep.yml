@@ -1,0 +1,41 @@
+# CSI2000 + 深度基本面因子 ML 训练配置
+# 用法: python scripts/train_ml_factor.py --universe csi2000 --model lightgbm \
+#         --deep-fundamental --forward-days 5 \
+#         --output models/ml_csi2000_lgb_fund_deep
+#
+# 对照组: ml_csi2000_lgb_fund (IC=0.1505, 仅 daily_basic 浅层基本面)
+# 预期: 深度财务因子(ROE/ROA/毛利率/净利率/资产负债率/现金流) 应提升 IC 5-15%
+#
+# 训练参数:
+#   --start 2015-01-05  --end 2026-02-28
+#   --train-years 3  --predict-months 3  --forward-days 5
+#   --n-estimators 300  --max-depth 6  --num-leaves 31
+#   --reg-alpha 0.1  --reg-lambda 1.0  --min-child-samples 50
+#   --subsample 0.8  --colsample-bytree 0.8
+#
+# 新增因子 (来自 fina_indicator PIT):
+#   - cs_rank_fina_roe, cs_rank_fina_roa, cs_rank_fina_grossprofit_margin
+#   - cs_rank_fina_netprofit_margin, cs_rank_fina_debt_to_assets
+#   - cs_rank_fina_current_ratio, cs_rank_fina_dt_netprofit_yoy
+#   - cs_rank_fina_cfps, cs_rank_fina_eps, cs_rank_fina_bps
+#   - roe_debt_quality, cs_rank_roe_debt_q (质量+杠杆复合)
+#   - accruals_ratio, cs_rank_accruals (应计质量)
+#   - gm_std_20, cs_rank_gm_std (毛利率稳定性)
+
+description: "CSI2000 LightGBM + 深度基本面因子实验"
+baseline: "ml_csi2000_lgb_fund (IC=0.1505, IC_IR=5.60)"
+
+train_command: >
+  python scripts/train_ml_factor.py
+  --universe csi2000
+  --model lightgbm
+  --deep-fundamental
+  --forward-days 5
+  --output models/ml_csi2000_lgb_fund_deep
+  --start 2015-01-05
+  --end 2026-02-28
+
+expected_improvements:
+  ic_improvement_pct: "5-15%"
+  key_factors: ["ROE", "gross_margin", "accruals_quality", "debt_quality"]
+  risk: "PIT 对齐不完美可能引入前视偏差, 已用 ann_date <= trade_date 控制"

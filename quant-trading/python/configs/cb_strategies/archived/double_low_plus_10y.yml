@@ -1,0 +1,105 @@
+# DoubleLow+ 可转债6因子增强策略 — 10年回测配置
+# ============================================================
+#
+# 策略逻辑:
+#   在经典双低(价格+溢价率)基础上增加4个因子:
+#   1. 价格(close) — 低价→债底保护+上行弹性
+#   2. 溢价率(cb_over_rate) — 低溢价→高股性
+#   3. 规模(issue_size) — 小规模→定价偏差
+#   4. 次新(age) — 新债→IPO偏差修复
+#   5. 均值回归(bollinger_deviation) — 超卖信号
+#   6. 信用评级(rating) — 高评级→偿付安全
+#
+#   6因子排名归一化加权评分，top_k=10，每3天调仓。
+#
+# 回测区间: 2015-01-01 ~ 2024-12-31 (10年)
+#
+# 已知假设:
+#   - 频率: 日频
+#   - 成交: next_bar_open (避免同bar前视)
+#   - 滑点: 5bps (保守)
+#   - 可转债 T+0, 无印花税
+# ============================================================
+
+name: "double_low_plus_10y"
+description: >
+  DoubleLow+ 6因子增强可转债策略 10年回测。
+  排名归一化加权: 价格20%+溢价20%+规模15%+次新10%+均值回归20%+评级15%。
+  每3天再平衡，持仓10只。
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2015-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "double_low_plus"
+  params:
+    top_k: 10
+    rebalance_days: 3
+    max_price: 145.0
+    max_issue_size: 30000.0       # 万元(3亿以下)
+    min_issue_size: 1000.0        # 万元(0.1亿以上)
+    min_turnover: 15.0            # 万元
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.30
+    lot_size: 10
+    # 次新过滤
+    use_age_filter: true
+    min_age_days: 3
+    max_age_days: 180
+    fallback_max_age_days: 730
+    # 溢价率过滤
+    max_premium: 70.0
+    # 均值回归
+    lookback: 20
+    bb_k: 2.0
+    # 6因子权重
+    weight_price: 0.20
+    weight_premium: 0.20
+    weight_size: 0.15
+    weight_age: 0.10
+    weight_mean_reversion: 0.20
+    weight_rating: 0.15
+    # 自适应降级
+    min_candidates: 5
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ 成本(可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0               # 保守滑点
+
+# ------ 资金与规模 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 风控约束 ------
+risk:
+  enabled: true
+  max_position_weight: 0.15       # k=10 → 10%/只 + 5%缓冲
+  max_drawdown: 0.50              # 放宽以避免反馈循环
+  enable_audit_log: true
+
+# ------ 实验指纹 ------
+random_seed: 42
+
+# ------ 输出 ------
+output_dir: "output/double_low_plus_10y"

@@ -1,0 +1,68 @@
+# 真实数据回测配置示例：动量策略 + AKShare 日线数据（免费数据源）
+# 
+# AKShare 是完全免费的 A 股数据源，无需 Token 和积分
+# 官网：https://akshare.akfamily.xyz/
+#
+# 用法: python -m aipha backtest --config configs/backtest/examples/momentum_akshare.yml
+
+name: "momentum_akshare_daily"
+description: |
+  使用 AKShare 免费数据的动量策略回测
+  - 数据源：AKShare（免费）
+  - 频率：日线
+  - 无需 Token 和积分
+
+# ============================================================================
+# 数据配置（AKShare）
+# ============================================================================
+data:
+  source: "akshare"  # 使用 AKShare 免费数据
+  start_date: "2024-01-01"
+  end_date: "2024-06-30"  # 6个月
+  frequency: "daily"
+  symbols:
+    - "000001.SZ"  # 平安银行
+    - "000002.SZ"  # 万科A
+    - "000063.SZ"  # 中兴通讯
+    - "000333.SZ"  # 美的集团
+    - "600036.SH"  # 招商银行
+    - "600519.SH"  # 贵州茅台
+
+# ============================================================================
+# 股票池配置
+# ============================================================================
+universe:
+  policy: "a_share_default"
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 60
+
+# ============================================================================
+# 策略配置
+# ============================================================================
+strategy:
+  name: "momentum"
+  params:
+    lookback_days: 20  # 20日动量
+    top_k: 3  # 持仓3只
+    rebalance_days: 5  # 每周调仓
+
+# ============================================================================
+# 成本配置（A股真实成本）
+# ============================================================================
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万一佣金
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005  # 2023-08-28 起印花税减半：千分之0.5（卖出）
+  transfer_fee_rate: 0.00001
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+# ============================================================================
+# 回测设置
+# ============================================================================
+initial_capital: 1000000.0
+lot_size: 100
+t_plus_n: 1
+random_seed: 42
+output_dir: "output/akshare_momentum"

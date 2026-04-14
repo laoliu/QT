@@ -121,6 +121,8 @@ def _load_all_screeners() -> None:
         "screeners.eod_catalyst_screener",
         "screeners.sector_hotspot_screener",
         "screeners.dragon_master_screener",
+        "screeners.cb_stock_quality",
+        "screeners.ml_ranking_screener",
     ]
     for mod_name in modules:
         try:

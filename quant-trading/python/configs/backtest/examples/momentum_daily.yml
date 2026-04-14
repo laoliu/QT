@@ -1,0 +1,63 @@
+# 回测配置示例：日频动量策略
+# 用法: run_backtest_from_config("configs/backtest/examples/momentum_daily.yml")
+#
+# 此配置与 src/aipha/backtest/config_runner.py 的 BacktestRunConfig 对应
+
+name: "momentum_daily_example"
+description: |
+  日频动量因子策略示例
+  - 基于过去20日收益率排名
+  - 每周调仓
+  - 持仓10只股票
+
+# ============================================================================
+# 数据配置
+# ============================================================================
+data:
+  source: "tushare"  # 数据提供商：tushare, local, synthetic
+  start_date: "2023-01-01"
+  end_date: "2023-12-31"
+  frequency: "1d"  # 日频
+  adjust: "qfq"  # 前复权
+  cache_dir: "data/cache"
+  # symbols: null  # null 表示使用全市场（由 universe 过滤）
+
+# ============================================================================
+# 股票池配置
+# ============================================================================
+universe:
+  policy: "a_share_default"
+  exclude_st: true  # 自动剔除 ST/*ST
+  exclude_suspended: true  # 自动剔除停牌
+  exclude_limit: true  # 下单时避开涨跌停
+  exclude_list_path: "configs/universe/exclude_list.yml"  # 手动剔除名单
+  min_listing_days: 60  # 最少上市60天
+
+# ============================================================================
+# 策略配置
+# ============================================================================
+strategy:
+  name: "momentum_factor"
+  params:
+    lookback_days: 20  # 过去20日收益率
+    top_k: 10  # 持仓数量
+    rebalance_days: 5  # 调仓周期（天）
+
+# ============================================================================
+# 成本配置
+# ============================================================================
+cost:
+  commission_rate: 8.54e-05  # §13.1 MarketRulesCNEquity 万一佣金
+  commission_min: 5.0  # 最低5元
+  stamp_tax_rate: 0.0005  # 印花税千分之五（仅卖出）
+  transfer_fee_rate: 0.00001  # 过户费
+  slippage_bps: 10.0  # §13.1 MarketRulesCNEquity A股默认10bps
+
+# ============================================================================
+# 回测设置
+# ============================================================================
+initial_capital: 1000000.0  # 100万初始资金
+lot_size: 100  # A股最小交易单位
+t_plus_n: 1  # T+1 规则
+random_seed: 42  # 可复现的随机种子
+output_dir: "output/momentum_daily"

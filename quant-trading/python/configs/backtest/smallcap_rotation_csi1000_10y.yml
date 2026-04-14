@@ -1,0 +1,114 @@
+# A股小盘因子轮动策略 — 10年回测配置 (CSI1000成分限定)
+# ============================================================
+# 策略: 小市值+动量+低换手+低波动多因子打分选股
+# 股票池: 中证1000成分内 (缩小范围以避免API限制)
+# 回测区间: 2015-01-01 ~ 2024-12-31 (10年)
+# ============================================================
+
+run:
+  mode: backtest
+  start_date: "2015-01-01"
+  end_date: "2024-12-31"
+  timezone: "Asia/Shanghai"
+  seed: 42
+
+data:
+  provider: "tushare_pro"
+  cache_dir: data/cache/tushare
+  snapshot: "latest"
+  equity_data:
+    stock_basic: true
+    daily_basic: true
+
+market:
+  region: "CN"
+  instruments:
+    asset_type: "stock"
+    boards:
+      - "A"
+    index: "000852.SH"
+
+frequency:
+  data_frequency: "1d"
+  matching_resolution: "1d"
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+
+universe_policy:
+  name: "smallcap_rotation"
+  base_index: "000852.SH"
+  auto_exclude:
+    - "ST"
+    - "DELISTING"
+    - "SUSPENDED_LONG"
+  manual_exclude_list: "configs/universe/exclude_list.yml"
+  filters:
+    min_listed_days: 60
+    min_circ_mv: 100000
+    max_circ_mv: 2000000
+    min_price: 3.0
+    max_price: 50.0
+    min_turnover: 500
+
+trading_rules:
+  t_plus: 1
+  allow_short: false
+  lot_size: 100
+
+cost_model:
+  commission:
+    rate: 8.5e-05  # §13.1 A-stock default
+    min_fee: 5.0
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 0.00001
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 50.0
+  fallback_bps: 10.0
+  max_bps: 100.0
+
+initial_capital: 1000000
+
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 30
+    rebalance_days: 15
+    min_mv: 100000.0
+    max_mv: 2000000.0
+    stop_loss_pct: 0.15
+    momentum_invert: false
+    regime_adaptive: false
+    weight_small_cap: 0.30
+    weight_momentum: 0.15
+    weight_turnover: 0.10
+    weight_volatility: 0.15
+    weight_quality: 0.15
+    weight_value: 0.15
+
+risk_constraints:
+  max_single_position_pct: 0.05
+  max_drawdown_pct: 0.40
+
+report:
+  benchmark: "000852.SH"
+  metrics:
+    - "annual_return"
+    - "max_drawdown"
+    - "sharpe"
+    - "calmar"
+    - "sortino"
+    - "turnover"
+    - "win_rate"
+    - "positions_count_distribution"
+    - "cost_impact"
+  universe_summary: true
+  output_dir: "reports/smallcap_rotation_csi1000_10y"

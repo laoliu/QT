@@ -35,3 +35,27 @@ pytest>=7.0.0
 # Optional: advanced analytics
 scipy>=1.10.0
 # matplotlib>=3.7.0
+
+# YAML config parsing (used by aipha config_runner)
+pyyaml>=6.0
+
+# ═══════════════════════════════════════════════════════════
+# Aipha ML / Optimization dependencies (optional)
+# Install with: pip install -r requirements.txt
+# Or selectively:
+#   pip install lightgbm scikit-learn joblib  (for ML ranking)
+#   pip install cvxpy                          (for portfolio optimization)
+#   pip install torch                          (for GRU/GAT/MASTER models)
+# ═══════════════════════════════════════════════════════════
+
+# ML Core
+lightgbm>=4.0.0
+scikit-learn>=1.3.0
+joblib>=1.3.0
+
+# Portfolio Optimization
+cvxpy>=1.4.0
+
+# Deep Learning (optional — CPU works, GPU recommended for training)
+# torch>=2.0.0
+# torch-geometric>=2.4.0  # for GAT model

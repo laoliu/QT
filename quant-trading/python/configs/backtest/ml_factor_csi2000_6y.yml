@@ -1,0 +1,90 @@
+# CSI2000 ML OOS Replay 真实回测配置
+# Phase 0 决策门: 验证 IC=0.1505 是否转化为正收益
+# OOS predictions: 2020-01-17 ~ 2025-12-30 (24 WF folds)
+# 基于 CSI1000 OOS replay 模板, 适配 CSI2000
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.0001}
+  stamp_tax: {sell_rate: 0.0005}
+  transfer_fee: {rate: 1.0e-05}
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+initial_capital: 1000000
+
+market:
+  instruments: {asset_type: stock, boards: [A], index: 399303.SZ}
+  region: CN
+
+report:
+  benchmark: 399303.SZ
+  output_dir: output/ml_csi2000_oos_replay_6y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.5
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.02
+  stop_loss_pct: 0.20
+  trailing_stop_pct: 0.15
+  # R94: MDD 梯度减仓 + 波动率目标（对齐 risk_controlled_replay.py）
+  # R94: MDD 梯度减仓 + 波动率目标已禁用 (death spiral root cause)
+  position_sizing:
+    mdd_gradient:
+      enabled: false
+    volatility_target:
+      enabled: false
+
+run:
+  start_date: '2020-01-17'
+  end_date: '2025-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: linear_impact
+  base_bps: 8.0
+  impact_coeff: 60.0
+  fallback_bps: 15.0
+  max_bps: 100.0
+
+strategy:
+  name: ml_factor
+  parameters:
+    check_index_member: false
+    top_k: 50
+    rebalance_days: 5
+    model_objective: regression
+    model_type: lightgbm
+    model_path: models/ml_csi2000_lgb_fund
+    oos_predictions_path: models/ml_csi2000_lgb_fund/oos_predictions.parquet
+    train_years: 3
+    predict_months: 3
+    forward_days: 5
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    min_child_samples: 50
+    subsample: 0.8
+    colsample_bytree: 0.8
+    purge_days: 10
+    min_mv: 200000
+    max_mv: 30000000
+
+trading_rules: {allow_short: false, lot_size: 100, t_plus: 1}
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 399303.SZ

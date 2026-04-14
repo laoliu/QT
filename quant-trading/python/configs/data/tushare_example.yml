@@ -1,0 +1,58 @@
+# TuShare Pro 数据源配置示例
+# 
+# 使用说明：
+# 1. 复制本文件为 tushare_local.yml（已在 .gitignore 中）
+# 2. 将 token 替换为你的 TuShare Pro Token
+# 3. 从 https://tushare.pro/user/token 获取 Token
+
+# TuShare Pro API Token（必须）
+# 注意：请勿将真实 Token 提交到 Git！
+token: "your_tushare_token_here"
+
+# 本地缓存目录（可选，默认：./data/cache）
+cache_dir: "data/cache"
+
+# 是否启用缓存（可选，默认：true）
+enable_cache: true
+
+# 数据频率（可选，默认：1min）
+# 可选值：1min, 5min, 15min, 30min, 60min, daily
+frequency: "1min"
+
+# 复权方式（可选，默认：qfq）
+# - qfq: 前复权
+# - hfq: 后复权
+# - None: 不复权
+adjust: "qfq"
+
+# API 重试配置
+retry:
+  max_attempts: 3  # 最大重试次数
+  backoff_factor: 2  # 退避因子（秒）：1s -> 2s -> 4s
+  timeout: 30  # 单次请求超时（秒）
+
+# 数据质量阈值
+quality:
+  max_missing_rate: 0.05  # 最大缺失率（5%）
+  max_price_jump: 0.30    # 最大价格跳变（30%）
+  
+# 股票池配置示例
+# 可以直接指定股票列表，或使用指数成分股
+universes:
+  # 示例1：沪深300成分股
+  csi300:
+    type: "index"
+    code: "000300.SH"  # 沪深300指数代码
+    
+  # 示例2：手动指定股票列表
+  custom:
+    type: "manual"
+    symbols:
+      - "000001.SZ"  # 平安银行
+      - "600000.SH"  # 浦发银行
+      - "000858.SZ"  # 五粮液
+      
+  # 示例3：科创50
+  star50:
+    type: "index"
+    code: "000688.SH"

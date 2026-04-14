@@ -1,0 +1,69 @@
+# ============================================================
+# Aipha-Q Tracker — 追踪大V配置
+# ============================================================
+# 每个 VIP 作者一项。
+# platform_uid: 雪球数字用户 ID（从个人主页 URL 获取）
+# portfolio_codes: 组合代码列表（ZHxxxxxx）
+#
+# ⚠️ 首次使用前，需要：
+#   1. 打开大V的雪球主页，获取其数字 user_id
+#   2. 找到其公开组合的 ZH 代码
+#   3. 填入下方配置
+
+authors:
+  # ---- 主要跟踪目标 ----
+  - author_id: "ycjfm"
+    name: "月出渐分明"
+    platform: "xueqiu"
+    platform_uid: "6342158729"
+    portfolio_codes: ["ZH1400599"]   # 中国精选价值-30
+    track_posts: true
+    focus_assets: ["stock", "etf", "bond"]
+    check_interval: "daily"
+    weight: 2.0             # 主要跟踪对象，权重最高
+    enabled: true
+
+  # ---- 其他大V（待填入 UID）----
+  - author_id: "xzlx"
+    name: "学知利行"
+    platform: "xueqiu"
+    platform_uid: ""        # TODO: 填入雪球数字 user_id
+    portfolio_codes: []     # TODO: 填入组合代码，如 ["ZH123456"]
+    track_posts: true
+    focus_assets: ["stock"]
+    check_interval: "daily"
+    weight: 1.0
+    enabled: false           # 待填入 UID 后启用
+
+  - author_id: "wdg"
+    name: "挖地瓜的超级鹿鼎公"
+    platform: "xueqiu"
+    platform_uid: ""        # TODO: 填入雪球数字 user_id
+    portfolio_codes: []     # TODO: 填入组合代码
+    track_posts: true
+    focus_assets: ["stock"]
+    check_interval: "daily"
+    weight: 1.0
+    enabled: false           # 待填入 UID 后启用
+
+  - author_id: "gwc"
+    name: "管我财"
+    platform: "xueqiu"
+    platform_uid: ""        # TODO: 填入雪球数字 user_id
+    portfolio_codes: []     # TODO: 填入组合代码
+    track_posts: true
+    focus_assets: ["stock"]
+    check_interval: "daily"
+    weight: 1.0
+    enabled: false           # 待填入 UID 后启用
+
+  - author_id: "ylzz"
+    name: "榆林子洲"
+    platform: "xueqiu"
+    platform_uid: ""        # TODO: 填入雪球数字 user_id
+    portfolio_codes: []     # TODO: 填入组合代码
+    track_posts: true
+    focus_assets: ["stock"]
+    check_interval: "daily"
+    weight: 1.0
+    enabled: false           # 待填入 UID 后启用

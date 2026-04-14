@@ -1,0 +1,71 @@
+name: cb_comprehensive_v2_nosize_deep
+description: '10因子综合策略 v2。基于 48 组参数扫描选出最优。 weight_size=0.25 (提高小规模因子权重)。
+
+  '
+data:
+  source: tushare_cb
+  start_date: '2018-01-02'
+  end_date: '2024-12-31'
+  frequency: 1d
+  adjust: none
+  cache_dir: data/cache/cb_tushare
+strategy:
+  name: cb_comprehensive
+  params:
+    top_k: 5
+    rebalance_days: 1
+    max_price: 145.0
+    max_issue_size: 999999.0
+    min_issue_size: 500.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.1
+    lot_size: 10
+    use_age_filter: true
+    min_age_days: 3
+    max_age_days: 180
+    fallback_max_age_days: 730
+    max_premium: 60.0
+    lookback: 20
+    bb_k: 2.0
+    momentum_lookback: 10
+    weight_price: 0.1
+    weight_premium: 0.1
+    weight_size: 0.0
+    weight_age: 0.03
+    weight_mean_reversion: 0.2
+    weight_rating: 0.07
+    weight_delta: 0.05
+    weight_ytm: 0.05
+    weight_turnover: 0.05
+    weight_momentum: 0.1
+    min_candidates: 3
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.1
+    opening_volume_fraction: 0.15
+    lot_size: 10
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: linear_impact
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.5
+  enable_audit_log: true
+random_seed: 42
+output_dir: output/cb_comprehensive_v2_nosize_deep

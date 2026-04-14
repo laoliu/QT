@@ -1,0 +1,101 @@
+# 双低排名加权策略 �?溢价率偏�?(25:75)
+
+# 排名�?高溢价权�? 追求高弹性低溢价标的
+
+
+
+name: "double_low_rank_25_75"
+
+description: >-
+
+  双低排名策略：偏重溢价率(75%)，激进型排名加权�?
+
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+strategy:
+
+  name: "double_low_rank"
+
+  params:
+
+    top_k: 20
+
+    rebalance_days: 5
+
+    max_price: 130.0
+
+    max_premium: 50.0
+
+    min_turnover: 20.0
+
+    min_days_to_maturity: 30
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10
+
+    lot_size: 10
+
+    price_weight: 0.25
+
+    premium_weight: 0.75
+
+    use_cb_value: false
+
+
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0
+
+
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+random_seed: 42
+
+
+
+output_dir: "output/dl_rank_25_75"
+

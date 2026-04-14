@@ -1,0 +1,57 @@
+# Paper Trading 配置 — CB new_bond 策略
+# 用法: python -m aipha paper --config configs/paper/cb_new_bond.yml
+# OOS 验证 (2025-02): IS 11.05% → OOS 15.58%, Sharpe=0.827
+
+paper_engine:
+  # 策略
+  strategy_name: "new_bond"
+
+  # 策略参数（与 configs/cb_strategies/new_bond.yml 对齐，reb=5）
+  strategy_params:
+    top_k: 10
+    rebalance_days: 5
+    max_age_days: 60           # 上市 ≤60 天
+    min_age_days: 5
+    max_price: 120.0
+    min_turnover: 50.0
+    stop_loss_pct: 0.15
+    lot_size: 10
+
+  # 标的列表 — 次新债候选池
+  # new_bond 策略动态筛选上市 ≤60 天的 CB，因此需要覆盖近期上市的可转债
+  # 建议每月更新（剔除超龄标的、添加新上市标的）
+  symbols:
+    - "127045"
+    - "128054"
+    - "113050"
+    - "123046"
+    - "127036"
+    - "123039"
+    - "123027"
+    - "113060"
+    - "123057"
+    - "128109"
+    - "123044"
+    - "128035"
+    - "127037"
+    - "113049"
+    - "123050"
+
+  # 数据源
+  market_type: "convertible_bond"
+  poll_interval: 3.0        # 轮询间隔（秒）
+  bar_interval_sec: 60      # K线周期（秒）
+
+  # 资金与交易规则
+  initial_capital: 500000.0
+  lot_size: 10               # 可转债最小交易单位（张）
+  t_plus_n: 0                # T+0
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5        # 最低佣金
+  stamp_tax_rate: 0.0        # 可转债免印花税
+  slippage_bps: 5.0          # 滑点 5 bps
+
+  # 状态持久化
+  state_dir: "data/paper_state/new_bond"
+  state_file: "state.json"
+  audit_log_dir: "logs/paper/new_bond"

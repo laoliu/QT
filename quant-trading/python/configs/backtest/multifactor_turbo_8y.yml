@@ -1,0 +1,112 @@
+# A 股多因子增强 — 激进版 (2016-2024)
+# 目标年化 30%+：极度集中 + 高频换仓 + 无熔断 + 重仓动量
+#
+# 关键变化 vs 标准版:
+#   top_k: 50 → 10 (集中度 5x)
+#   rebalance_days: 20 → 5 (换仓频率 4x)
+#   circuit_breaker: OFF
+#   stop_loss: OFF (0.50 = 极宽松)
+#   weight_momentum: 0.20 → 0.35
+#   max_single_position_pct: 0.05 → 0.12
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+    index: 000300.SH
+  region: CN
+report:
+  benchmark: 000300.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  - win_rate
+  - positions_count_distribution
+  - cost_impact
+  - alpha
+  - beta
+  - information_ratio
+  output_dir: reports/multifactor_turbo_8y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.60
+  max_sector_pct: 0.40
+  max_single_position_pct: 0.12
+  market_regime_enabled: false
+  stop_loss_pct: 0.50
+  trailing_stop_pct: 0.0
+  momentum_skip_recent: 1
+  momentum_multi_period: true
+  inverse_vol_weighting: false
+  circuit_breaker_enabled: false
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2016-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 3
+  name: fixed_bps
+strategy:
+  name: multifactor_enhance
+  parameters:
+    benchmark: 000300.SH
+    buffer_k: 5
+    exclude_st: true
+    lot_size: 100
+    max_price: 9999.0
+    max_single_pct: 0.12
+    min_listed_days: 60
+    min_price: 1.0
+    min_turnover: 500.0
+    momentum_lookback: 20
+    momentum_skip_recent: 1
+    momentum_multi_period: true
+    rebalance_days: 5
+    stop_loss_pct: 0.50
+    cash_reserve_pct: 0.02
+    top_k: 10
+    value_metric: pe_ttm
+    volatility_lookback: 20
+    weight_momentum: 0.35
+    weight_quality: 0.20
+    weight_size: 0.20
+    weight_value: 0.10
+    weight_volatility: 0.15
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

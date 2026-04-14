@@ -1,0 +1,50 @@
+# 红利质量策略 — A股回测配置
+# 使用方法: from aipha.backtest.config_runner import run_from_config
+#           result = run_from_config("configs/sample_dividend_quality.yaml", symbols_override=[...])
+
+name: dividend_quality_backtest
+
+data:
+  source: akshare          # akshare / tushare
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: qfq               # 前复权
+
+universe:
+  policy: default
+  exclude_st: true
+  exclude_suspended: true
+  exclude_limit: true
+  min_listing_days: 120
+  base_index: CSI300         # 可选: CSI300 / CSI500 / CSI1000
+
+strategy:
+  name: dividend_quality
+  params: {}
+
+cost:
+  commission_rate: 0.0000854   # 万0.854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005       # 千分之0.5 (2023-08起)
+  transfer_fee_rate: 0.00001
+  slippage_bps: 10.0
+  slippage_model: fixed
+
+fill_model:
+  name: next_bar_open
+
+risk:
+  enabled: true
+  max_position_weight: 0.05
+  max_drawdown: 0.15
+  trailing_stop_pct: 0.12
+  enable_audit_log: true
+
+portfolio:
+  method: equal
+
+initial_capital: 1000000
+lot_size: 100
+t_plus_n: 1
+output_dir: output/dividend_quality

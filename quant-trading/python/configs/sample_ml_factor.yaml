@@ -1,0 +1,68 @@
+# Aipha 回测配置模板 — ML 因子选股
+# 使用方式: aipha_backtest action=run_from_yaml yamlPath=configs/sample_ml_factor.yaml
+
+data:
+  source: akshare
+  start: "2021-01-01"
+  end: "2024-01-01"
+  frequency: 1d
+  adjust: hfq
+
+# ── 股票池 ──
+universe:
+  preset: zz500             # 中证500成分股
+  exclude_st: true          # 排除ST
+  exclude_new: 60           # 排除上市不满60天的新股
+  min_market_cap: 30        # 最低市值30亿
+
+# ── 因子设置 ──
+factors:
+  - name: pe
+    weight: -0.15           # PE越低越好
+  - name: roe
+    weight: 0.25
+  - name: momentum
+    weight: 0.20
+    params:
+      lookback_days: 20
+  - name: turnover_rate
+    weight: 0.10
+  - name: volatility
+    weight: -0.10           # 低波优先
+
+# ── ML 模型 (可选) ──
+ml_model:
+  type: lgbm                # lgbm / gru / ensemble
+  model_path: models/lgbm_ranker.joblib
+  top_n: 30                 # 选前30只
+  retrain_interval: 20      # 每20个交易日重训练
+
+# ── 策略 ──
+strategy:
+  name: factor_ranking
+  params:
+    top_n: 10               # 持仓前10只
+    rebalance_days: 5       # 每5个交易日调仓
+
+# ── 成本 ──
+cost:
+  commission: 0.0000854
+  stamp_tax: 0.0005
+  slippage_bps: 15
+
+fill_model:
+  name: vwap
+
+# ── 风控 ──
+risk:
+  max_position_pct: 0.15
+  max_sector_pct: 0.30
+  max_drawdown: 0.20
+  max_daily_turnover: 0.40
+
+# ── 组合优化 ──
+portfolio:
+  optimizer: risk_parity    # equal / risk_parity / min_variance / max_sharpe
+  rebalance_days: 5
+
+initial_capital: 2000000

@@ -1,0 +1,77 @@
+# 防守价值策略 v2 — 8年回测 (统一 linear_impact)
+# ============================================================
+# 经济学基础: 大盘+低溢价+高YTM = "类债"策略
+#   - 面值保底 + 到期收益 → 安全边际
+#   - 与小盘策略(ss_v2/triple_low)天然负相关
+#   - 适合 Bear/Neutral 市场环境
+# v2 调整:
+#   - 调仓频率 10d (双周), 适合大盘低换手策略
+#   - min_issue_size: 30000 (>3亿, 大盘CB)
+#   - max_price: 115 (接近面值, 强制债底保护)
+#   - top_k: 25 (大分散, 降低个券风险)
+# ============================================================
+
+name: "defensive_value_v2_8y"
+description: >
+  防守价值策略 v2 — 大盘+高YTM+低溢价+近到期。
+  Anti-Size设计: min_issue_size=30000(仅选>3亿大盘CB)。
+  3因子: ytm(0.40) + premium(0.35) + maturity(0.25)。
+  双周频调仓, 持仓25只, 超分散。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "defensive_value"
+  params:
+    top_k: 25
+    rebalance_days: 10
+    buffer_k: 5
+    min_issue_size: 30000.0
+    max_price: 115.0
+    max_premium: 40.0
+    max_years_to_maturity: 5.0
+    min_years_to_maturity_val: 0.5
+    ytm_weight: 0.40
+    premium_weight: 0.35
+    maturity_weight: 0.25
+    min_turnover: 30.0
+    min_days_to_maturity: 180
+    stop_loss_pct: 0.12
+    min_positions: 10
+    lot_size: 10
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/defensive_value_v2_8y"
+
+report:
+  benchmark: "000300.SH"

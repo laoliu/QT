@@ -1,0 +1,114 @@
+# 综合 Alpha 多因子策略 — CSI800 成分 9年回测
+# 八因子体系：CSI800（沪深300 + 中证500）大中盘覆盖 ~800 只成分股
+# 滑点/冲击系数较 HS300 略高
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000906.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact]
+  output_dir: reports/comprehensive_alpha_csi800_9y
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: false
+
+run:
+  start_date: '2016-01-04'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 5.0
+  impact_coeff: 40.0
+  fallback_bps: 10.0
+  max_bps: 80.0
+
+strategy:
+  name: comprehensive_alpha
+  parameters:
+    top_k: 30
+    rebalance_days: 20
+    min_mv: 300000.0
+    max_mv: 5000000.0
+    min_price: 5.0
+    max_price: 200.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    buffer_k: 10
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    inverse_vol_weighting: true
+    weight_value: 0.15
+    weight_valuation_pct: 0.10
+    weight_quality: 0.10
+    weight_piotroski: 0.08
+    weight_accruals: 0.05
+    weight_stability: 0.05
+    weight_momentum: 0.15
+    weight_volatility: 0.12
+    weight_dividend: 0.10
+    weight_growth: 0.10
+    value_metric: pe_ttm
+    quality_metric: roe
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    piotroski_min_dims: 5
+    valuation_min_history: 20
+    stability_min_periods: 3
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000906.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

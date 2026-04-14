@@ -1,0 +1,66 @@
+# 负溢价策略 v2 — 8年回测 (统一 linear_impact 滑点)
+# ============================================================
+# 基于 negative_premium 策略：买入溢价率为负的转债
+# 调整：
+#   - start_date 扩展到 2018-01-02 (8年)
+#   - end_date 扩展到 2026-03-04 (最新数据)
+#   - 统一使用 linear_impact 滑点模型
+#   - 纯负溢价套利逻辑，不依赖 Size
+# ============================================================
+
+name: "negative_premium_v2_8y"
+description: >
+  负溢价偏离策略 v2 — 买入溢价率为负的转债 (转债价格 < 转股价值)，
+  等待折价修复。仅买入新机会，已持仓在溢价回归时卖出。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-04"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "negative_premium"
+  params:
+    top_k: 10
+    rebalance_days: 1
+    entry_threshold: -2.0
+    exit_threshold: 0.0
+    max_price: 200.0
+    min_turnover: 50.0
+    min_issue_size: 0.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/negative_premium_v2_8y"
+
+report:
+  benchmark: "000300.SH"

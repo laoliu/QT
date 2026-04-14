@@ -1,0 +1,81 @@
+# ETF 轮动 — 跨资产 v3 扩展至 2025-12-31
+# 基于 etf_cross_v3_10y.yml，延伸回测区间验证 2025 表现
+#
+# 费率说明 (R111 P1-6):
+#   commission_rate=0.00005 (万0.5) 低于 MarketRulesCNEquity 默认 0.0000854 (万0.854)
+#   原因: ETF 做市商竞争充分，实际账户佣金率通常为万0.3-0.5；
+#   本配置取万0.5 为保守估计，与实际账户匹配。
+#   印花税: ETF 免征，过户费: ETF 免征。
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  symbols:
+    - 510300.SH
+    - 510500.SH
+    - 159915.SZ
+    - 512100.SH
+    - 510050.SH
+    - 510880.SH
+    - 512010.SH
+    - 512690.SH
+    - 512660.SH
+    - 513100.SH
+    - 159920.SZ
+    - 518880.SH
+    - 511010.SH
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_cross_v3_11y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2025-12-31'
+  seed: 42
+
+# R111 P2-2: 滑点从 1bps 提高到 5bps，行业/跨境 ETF 实际 spread 约 5-10bps
+slippage_model: {name: fixed, bps: 5.0}
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 3
+    rebalance_days: 10
+    weight_momentum: 0.60
+    weight_volatility: 0.40
+    weight_reversion: 0.0
+    weight_volume: 0.0
+    momentum_lookback: 20
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 0
+    stop_loss_pct: 0.0
+    trailing_stop_pct: 0.0
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.50
+    lot_size: 100
+    buffer_k: 1
+    inverse_vol_weighting: true
+
+trading_rules: {t_plus: 1, lot_size: 100}
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.60
+  max_drawdown: 0.50
+  drawdown_peak_reset_days: 30
+  enable_audit_log: true

@@ -1,0 +1,72 @@
+# CB 双低策略激进版 — 7年全期回测 (2018-2024)
+# 目标年化 25%+: 集中持仓 + 每日换仓 + 放宽溢价率过滤
+#
+# 双低得分 = 价格 + 溢价率，选择得分最低的转债
+# top_k=10, rebalance=1 (每日换仓), 无 circuit_breaker
+#
+# Turbo 含义: 更集中 + 更高频 + 放宽过滤 + 无熔断
+# 对比 double_low_7y (top_k=20, max_premium=30):
+#   top_k: 20 → 10
+#   max_premium: 30 → 60 (放宽溢价率限制)
+#   buffer_k: 0 (无缓冲)
+
+name: "double_low_turbo"
+description: >
+  可转债双低轮动激进版，放宽过滤条件选top10低价低溢价转债。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "double_low"
+  params:
+    top_k: 10
+    rebalance_days: 1
+    buffer_k: 0
+    max_price: 150.0
+    max_premium: 60.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.10           # CB有债底保护,10%止损更合理(修复F-R3)
+    force_redeem_threshold: 130.0
+    force_redeem_days: 8
+    lot_size: 10
+    exclude_called: true
+    exclude_st: true
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15  # 开盘集合竞价仅占全天成交量15%(修复F-E2)
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+initial_capital: 1000000.0
+lot_size: 10
+t_plus_n: 0
+
+risk_constraints:
+  force_redeem_enabled: true
+  force_redeem_max_weight: 0.50
+  force_redeem_cb_value_threshold: 125.0
+  stop_loss_pct: 0.10            # CB有债底保护,10%止损更合理(修复F-R3)
+  circuit_breaker_enabled: false
+
+random_seed: 42
+output_dir: "output/cb_double_low_turbo_7y"
+
+report:
+  benchmark: null
+  custom_benchmark: "000832.CSI"

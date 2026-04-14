@@ -1,0 +1,226 @@
+# 回测质量门禁配置
+# 
+# 用于自动检查回测结果是否满足最低质量要求。
+# severity:
+#   "error"   — 硬门禁，不通过则策略视为不合格
+#   "warning" — 软告警，仅提醒但不阻塞
+#
+# operator: ">=", "<=", ">", "<", "==", "!="
+#
+# metric 名称需与 compute_full_metrics 或 BacktestReport 输出的指标对应
+
+quality_gates:
+  # === 硬门禁（必须通过）===
+  
+  - metric: sharpe_ratio
+    operator: ">="
+    threshold: 0.5
+    severity: error
+    description: "夏普比率不低于0.5（上线最低可接受）"
+
+  - metric: max_drawdown_pct
+    operator: "<="
+    threshold: 0.30
+    severity: error
+    description: "最大回撤不超过30%"
+
+  - metric: total_return
+    operator: ">"
+    threshold: 0.0
+    severity: error
+    description: "总收益率必须为正"
+
+  - metric: profit_factor
+    operator: ">="
+    threshold: 1.0
+    severity: error
+    description: "盈亏比必须≥1.0（总盈利>总亏损）"
+
+  # === 软告警（建议达标）===
+
+  - metric: win_rate
+    operator: ">="
+    threshold: 0.35
+    severity: warning
+    description: "胜率建议不低于35%"
+
+  - metric: calmar_ratio
+    operator: ">="
+    threshold: 0.8
+    severity: warning
+    description: "卡玛比率建议不低于0.8（收益/风险比）"
+
+  - metric: annualized_return
+    operator: ">="
+    threshold: 0.10
+    severity: warning
+    description: "年化收益率建议不低于10%（目标30%+）"
+
+  - metric: avg_positions
+    operator: ">="
+    threshold: 3.0
+    severity: warning
+    description: "平均持仓数建议不低于3只（分散风险）"
+
+  - metric: sortino_ratio
+    operator: ">="
+    threshold: 0.5
+    severity: warning
+    description: "索提诺比率建议不低于0.5"
+
+  - metric: turnover_rate
+    operator: "<="
+    threshold: 50.0
+    severity: warning
+    description: "年化单边换手率建议不超过50倍（过高换手侵蚀收益）"
+
+  - metric: max_concentration
+    operator: "<="
+    threshold: 0.50
+    severity: warning
+    description: "最大单票集中度建议不超过50%（过度集中风险）"
+
+  - metric: trading_days
+    operator: ">="
+    threshold: 60.0
+    severity: error
+    description: "回测交易日不少于60天（避免短周期统计失真）"
+
+  - metric: total_trades
+    operator: ">="
+    threshold: 5.0
+    severity: error
+    description: "总交易笔数不少于5笔（避免统计指标无意义）"
+
+# ============================================================
+# Walk-Forward 样本外验证门禁
+# ============================================================
+# 对 Walk-Forward 验证结果做阈值检查。
+# 与 quality_gates 列表独立，使用 check_walk_forward_gates() 执行。
+#
+walk_forward_gates:
+  max_sharpe_decay: 0.50          # IS→OOS Sharpe 衰减不超过 50%
+  max_return_decay: 0.70          # IS→OOS 收益衰减不超过 70%
+  min_test_win_rate: 0.50         # OOS 盈利折比例 ≥ 50%
+  min_test_sharpe: 0.0            # OOS 平均 Sharpe > 0
+  min_wf_score: 5.0               # WF 综合评分 ≥ 5.0 (0~10)
+  severity: error                # 硬门禁：未通过 WF 验证的策略不得进入模拟盘
+
+# ============================================================
+# Alpha 真实性门禁（防止 beta 伪装 alpha）
+# ============================================================
+# 检测策略是否只是风格因子暴露而非真正的 alpha。
+# 与 alpha_authenticity.py / config_auditor.py 配合使用。
+#
+alpha_authenticity_gates:
+  # --- 因子集中度 ---
+  max_single_factor_weight: 0.40       # 单因子权重上限（超过视为 beta 暴露）
+  severity_factor_exposure: error      # 硬门禁
+
+  # --- 滑点鲁棒性 ---
+  min_realistic_slippage_bps: 5.0      # A 股最低合理滑点
+  min_slippage_stress_score: 4.0       # 滑点压力测试最低评分 (0~10)
+  severity_slippage: error             # 硬门禁
+
+  # --- 起始日期敏感度 ---
+  max_start_date_return_std: 0.10      # 年化收益标准差上限（跨起始日期）
+  max_start_date_return_range: 0.20    # 年化收益极差上限
+  severity_start_date: warning         # 软告警（日期敏感度需更多数据才能严格化）
+
+  # --- 综合评分 ---
+  min_alpha_authenticity_score: 4.0    # 综合评分最低分 (0~10)
+  severity_overall: error              # 硬门禁
+
+# ============================================================
+# 上线级门禁（Production Launch Gates）
+# ============================================================
+# 策略进入模拟交易/实盘前的额外硬性要求。
+# 与 production_launch_process.md 配合使用。
+#
+production_gates:
+  min_backtest_years: 10               # 回测至少覆盖10年（CB≥7年）
+  min_backtest_years_cb: 7             # 可转债最低回测年限
+  min_annualized_return: 0.15          # 年化≥15%（目标30%+）
+  max_drawdown_pct: 0.25              # 最大回撤≤25%
+  min_sharpe: 0.80                     # Sharpe≥0.8
+  min_calmar: 0.60                     # Calmar≥0.6
+  min_win_rate: 0.40                   # 胜率≥40%
+  min_profitable_years_ratio: 0.80     # ≥80%年份盈利
+  max_worst_year_loss: -0.15           # 单年最大亏损≤15%
+  min_wf_folds_profitable: 5           # Walk-Forward≥5折OOS盈利
+  max_wf_sharpe_decay: 0.50            # WF IS→OOS Sharpe衰减≤50%
+  min_paper_trading_days: 60           # Paper Trading≥60天
+  max_paper_nav_deviation: 0.05        # Paper vs 回测 NAV偏差≤5%
+  severity: error                      # 全部为硬门禁
+
+# ============================================================
+# 容量与拥挤度门禁（Capacity & Crowding Gates）
+# ============================================================
+# 新策略进入模拟盘前必须通过（原则D/E）
+# 由 CapacityLimit / CrowdingLimit 模块读取此配置
+#
+capacity_gate:
+  enabled: true
+  min_capacity_cny: 500000             # 策略最低容量要求（元），低于此值标注容量受限
+  max_participation_rate: 0.10         # 单票成交量参与率上限
+  severity: error                      # 容量受限时阻止上线
+  note: "容量<50万时组合占比不超15%（原则D）"
+
+crowding_gate:
+  enabled: true
+  max_jaccard: 0.30                    # 与参考策略持仓的 Jaccard 重叠上限
+  severity: warning                    # 当前无参考策略列表，暂为 warning
+  note: "CB同资产策略收紧至<0.65（原则E [CN]）"
+
+# ============================================================
+# 统计验证门禁（Statistical Validation Gate）— C4 新增
+# ============================================================
+# 策略进入模拟盘前必须通过 DSR/PBO/WF 全套统计验证。
+# 对应知识库 J2 统计验证方法，原则 A 多重检验校正。
+#
+statistical_validation_gate:
+  enabled: true
+  description: "策略上线前必须通过DSR/PBO/WF统计验证（知识库J2/原则A）"
+  checks:
+    - name: dsr_significant
+      metric: dsr_p_value
+      operator: "<"
+      threshold: 0.05
+      description: "DSR(Deflated Sharpe Ratio) p值小于0.05方可认为显著（Bailey & LdP 2014）"
+    - name: pbo_below_threshold
+      metric: pbo
+      operator: "<"
+      threshold: 0.50
+      description: "PBO概率回测过拟合必须低于0.50（Bailey et al. 2017）"
+    - name: wf_oos_is_decay
+      metric: wf_oos_is_sharpe_ratio
+      operator: ">="
+      threshold: 0.50
+      description: "WF IS→OOS Sharpe保留率≥50%，超过则禁止上线（原则C）"
+  severity: error
+  blocking: true
+
+# ============================================================
+# 漂移检测门禁（Drift Alert Gate）— C5 新增
+# ============================================================
+# PSI超阈值时触发漂移告警，阻止受污染模型版本入库。
+# 对应知识库 S2 概念漂移检测，模型生命周期管理。
+#
+drift_alert_gate:
+  enabled: true
+  description: "PSI超阈值时触发漂移告警，阻止模型更新入库（知识库S2）"
+  checks:
+    - name: psi_critical
+      metric: drift_psi_overall
+      operator: "<="
+      threshold: 0.20
+      severity: error
+      description: "整体PSI>0.20为显著漂移，阻止部署（McLean & Pontiff 2016）"
+    - name: psi_warning
+      metric: drift_psi_overall
+      operator: "<="
+      threshold: 0.10
+      severity: warning
+      description: "整体PSI>0.10为轻微漂移，持续监控"
+  blocking: true
+  retrain_trigger: true              # PSI>0.20时自动触发重训练任务

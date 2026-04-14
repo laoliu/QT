@@ -1,0 +1,88 @@
+# 中证500 小盘轮动 — 极端集中版 (8年回测)
+# CSI500 是 A 股中小盘代表指数
+# 相比 HS300，CSI500 小盘效应更显著，alpha 更大
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  base_index: '000905.SH'
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+report:
+  benchmark: 000905.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover]
+  output_dir: reports/csi500_smallcap_8y
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.60
+  max_sector_pct: 0.40
+  max_single_position_pct: 0.15
+  market_regime_enabled: false
+  stop_loss_pct: 0.50
+  trailing_stop_pct: 0.0
+  circuit_breaker_enabled: false
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2016-01-04'
+  timezone: Asia/Shanghai
+slippage_model:
+  bps: 5
+  name: fixed_bps
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 10
+    rebalance_days: 5
+    min_mv: 0.0
+    max_mv: 3000000.0
+    min_price: 3.0
+    max_price: 9999.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.50
+    buffer_k: 3
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.15
+    momentum_lookback: 20
+    volatility_lookback: 20
+    momentum_invert: false
+    momentum_skip_recent: 1
+    momentum_multi_period: true
+    regime_adaptive: false
+    weight_small_cap: 0.45
+    weight_momentum: 0.30
+    weight_turnover: 0.00
+    weight_volatility: 0.15
+    weight_quality: 0.05
+    weight_value: 0.05
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,180 @@
+# 市场状态轮动策�?�?回测配置
+
+# ============================================================
+
+# 策略思路: 根据CB市场等权指数20日涨幅判断牛/�?震荡状态，
+
+# 动态切�?因子权重：牛市追动量+放量，熊市抄反转+低价�?
+# 震荡期偏重小规模+低溢价安全边际�?
+
+
+name: "cb_regime_rotation"
+
+description: >
+
+  可转债市场状态轮动策�?�?�?�?震荡三状态自适应因子轮动�?
+  6因子动态加权�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2018-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "cb_regime_rotation"
+
+  params:
+
+    top_k: 8
+
+    rebalance_days: 1
+
+    buffer_k: 3
+
+    max_price: 150.0
+
+    max_issue_size: 30000.0
+
+    min_issue_size: 0.0
+
+    min_turnover: 10.0
+
+    min_days_to_maturity: 60
+
+    exclude_st: true
+
+    exclude_called: true
+
+    max_premium: 80.0
+
+    regime_lookback: 20
+
+    bull_threshold: 0.03
+
+    bear_threshold: -0.02
+
+    momentum_lookback: 10
+
+    surge_lookback: 20
+
+    reversal_lookback: 5
+
+    warmup_bars: 25
+
+    # BULL 权重
+
+    bull_w_size: 0.10
+
+    bull_w_momentum: 0.35
+
+    bull_w_surge: 0.30
+
+    bull_w_premium: 0.10
+
+    bull_w_price: 0.05
+
+    bull_w_reversal: 0.10
+
+    # NEUTRAL 权重
+
+    neutral_w_size: 0.25
+
+    neutral_w_momentum: 0.15
+
+    neutral_w_surge: 0.10
+
+    neutral_w_premium: 0.20
+
+    neutral_w_price: 0.15
+
+    neutral_w_reversal: 0.15
+
+    # BEAR 权重
+
+    bear_w_size: 0.15
+
+    bear_w_momentum: 0.00
+
+    bear_w_surge: 0.05
+
+    bear_w_premium: 0.15
+
+    bear_w_price: 0.25
+
+    bear_w_reversal: 0.40
+
+    # 风控
+
+    stop_loss_pct: 0.12
+
+    min_positions: 3
+
+    lot_size: 10
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  min_commission: 5  # §13.1 CB minimum
+
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+
+
+# ------ 滑点 ------
+
+slippage:
+  model: "linear_impact"
+  base_bps: 5.0          # CB 最低买卖价差
+  impact_coeff: 50.0     # 参与率每增加1，额外增加50bps
+  fallback_bps: 8.0      # 无成交量数据时的回退值
+  max_bps: 40.0          # 单笔滑点上限
+
+
+
+# ------ 资金 ------
+
+capital:
+
+  initial: 1000000.0
+
+  currency: "CNY"
+

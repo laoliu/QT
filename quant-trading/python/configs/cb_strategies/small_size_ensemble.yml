@@ -1,0 +1,193 @@
+﻿# 小规模策�?(参数集成�? �?降低悬崖效应
+
+# ============================================================
+
+# 设计目标:
+
+#   解决 small_size 策略存在的严重参数悬崖效�?
+
+#   - top_k 15�?6: Sharpe 0.88 �?0.023 (骤降 97%)
+
+#   - max_price 120�?32: Sharpe 0.88 �?0.273 (骤降 69%)
+
+#   - max_issue_size 30000�?3000: Sharpe 0.88 �?0.105 (骤降 88%)
+
+#
+
+# 解决方案:
+
+#   用多组近优参数生成多个排名列表，�?倒数排名"加权聚合�?
+#   单个参数的极端敏感性被多参数投票平滑�?
+#
+
+# 信用风控:
+
+#   默认启用 min_rating="AA"，剔�?AA- 及以下评级转债�?
+#   2023 年亏损主因是蓝盾、搜特等低评级信用违约，非系统性下跌�?
+# ============================================================
+
+
+
+name: "small_size_ensemble"
+
+description: >
+
+  小规模可转债策略（参数集成版）�?通过多组近优参数投票聚合�?
+  平滑 top_k/max_price/max_issue_size 的悬崖效应，
+
+  同时启用信用评级过滤（AA 及以上）降低信用事件风险�?
+
+
+# ------ 数据 ------
+
+data:
+
+  source: "tushare_cb"
+
+  start_date: "2017-01-01"
+
+  end_date: "2024-12-31"
+
+  frequency: "1d"
+
+  adjust: "none"
+
+  cache_dir: "data/cache/cb_tushare"
+
+
+
+# ------ 策略 ------
+
+strategy:
+
+  name: "small_size_ensemble"
+
+  params:
+
+    top_k: 15
+
+    rebalance_days: 5
+
+    max_price: 125.0              # 主配置使用中位�?
+    max_issue_size: 32000.0
+
+    min_issue_size: 5000.0
+
+    min_turnover: 50.0
+
+    min_days_to_maturity: 60
+
+    exclude_st: true
+
+    stop_loss_pct: 0.10             # C-7: 收紧止损
+
+    lot_size: 10
+
+    # --- 信用风控 ---
+
+    min_rating: "A+"              # 放宽至 A+（小规模CB多为中小企业，AA过严致0候选）
+    exclude_unrated: false         # 允许无评级转债（小规模CB常无评级）
+    # --- 参数集成 ---
+
+    aggregation: "reciprocal_rank"
+
+    variants:
+
+      - top_k: 12
+
+        max_price: 115.0
+
+        max_issue_size: 27000.0
+
+      - top_k: 13
+
+        max_price: 118.0
+
+        max_issue_size: 28000.0
+
+      - top_k: 14
+
+        max_price: 120.0
+
+        max_issue_size: 30000.0
+
+      - top_k: 15
+
+        max_price: 122.0
+
+        max_issue_size: 31000.0
+
+      - top_k: 15
+
+        max_price: 125.0
+
+        max_issue_size: 32000.0
+
+
+
+# ------ 成交模型 ------
+
+fill_model:
+
+  name: "next_bar_open"
+
+  volume_constraint:
+
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+
+    lot_size: 10
+
+
+
+# ------ 成本 (可转�? ------
+
+cost:
+
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+
+  commission_min: 5
+  stamp_tax_rate: 0.0
+
+  transfer_fee_rate: 0.0
+
+  slippage_bps: 5.0
+
+
+
+# ------ 资金与规�?------
+
+initial_capital: 500000.0
+
+lot_size: 10
+
+t_plus_n: 0
+
+
+
+# ------ 实验指纹 ------
+
+random_seed: 42
+
+
+
+# ------ 输出 ------
+
+output_dir: "output/small_size_ensemble_8y"
+
+
+
+# ============================================================
+
+# 预期效果
+
+# ============================================================
+
+expected_improvements:
+
+  - "Sharpe 对参数变化的敏感性降�?50%+"
+
+  - "单参�?±10% 变化�?Sharpe 波动 < 0.15 (�?> 0.8)"
+
+  - "2023 年信用违约事件损失减少（AA 以下剔除?"
+

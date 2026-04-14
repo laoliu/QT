@@ -1,0 +1,123 @@
+# 增强版均衡多因子 — HS300 12年回测（启用新因子维度）
+# 在 V5 基础上激活 Piotroski + 盈利稳定性 + 估值分位 + 应计盈余质量
+# 传统四因子 60% + 新增基本面因子 40%
+#
+# 权重体系：
+# - 价值(PE)     12%  +  估值分位 8%  = 20%
+# - 质量(ROE)    10%  +  Piotroski 8%  +  应计 5%  +  稳定性 5% = 28%
+# - 动量         15%
+# - 低波         12%
+# - 股息         15%
+# - 盈利增长     10%
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.10
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+    index: 000300.SH
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics: [annual_return, max_drawdown, sharpe, calmar, turnover, win_rate,
+            positions_count_distribution, cost_impact]
+  output_dir: reports/balanced_mf_hs300_v6_enhanced
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.50
+  max_sector_pct: 0.30
+  max_single_position_pct: 0.06
+  market_regime_enabled: false
+  stop_loss_pct: 1.0
+  trailing_stop_pct: 1.0
+  circuit_breaker_enabled: false
+
+run:
+  start_date: '2013-01-04'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+
+strategy:
+  name: balanced_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 40
+    min_mv: 300000.0
+    max_mv: 50000000.0
+    min_price: 3.0
+    max_price: 1500.0
+    min_turnover: 1000.0
+    min_listed_days: 120
+    stop_loss_pct: 0.25
+    trailing_stop_pct: 0.25
+    buffer_k: 20
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.06
+    inverse_vol_weighting: true
+    # 传统因子
+    weight_value: 0.12
+    weight_quality: 0.10
+    weight_momentum: 0.15
+    weight_volatility: 0.12
+    weight_dividend: 0.15
+    weight_earnings_growth: 0.10
+    # 新增基本面因子
+    weight_piotroski: 0.08
+    weight_earnings_stability: 0.05
+    weight_valuation_percentile: 0.08
+    weight_accruals_quality: 0.05
+    # 因子参数
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    value_metric: pe_ttm
+    quality_metric: roe
+    regime_adaptive: false
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: 000300.SH
+  manual_exclude_list: configs/universe/exclude_list.yml

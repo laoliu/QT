@@ -1,0 +1,62 @@
+# Tiered Portfolio V2 — 30万起步级（MDD优化版）
+# ====================================================================
+# 重大调整: 30万资金下 CSI2000 仅分配7万，执行质量极差(P22 AR=9.1%)
+# 优化方案: 不配置CSI2000，纯 CB + ETF 组合
+#
+# P22实测: AR=12.7%  MDD=6.6%  SR=1.416  Calmar=1.917
+# 前瞻预期 AR: 10-12% (含 alpha 衰减折扣)
+#
+# 对比V1: AR 12.7% vs 11.1%(↑1.6pp), MDD 6.6% vs 22.2%(↓15.6pp)
+# ====================================================================
+
+profile_name: "tiered_combo_30w_v2"
+description: >
+  MDD优化双组件跨资产组合（30万起步级）:
+  CB(60%) + ETF(40%)
+  30万下CSI2000执行质量不足，不配置
+
+initial_capital: 300000.0
+
+portfolio_weights:
+  cb_stock_quality: 0.60
+  etf: 0.40
+
+pillars:
+  cb_stock_quality:
+    name: "CB Stock Quality V4b Balanced"
+    description: "正股质量增强6因子CB策略"
+    market_type: "convertible_bond"
+    weight: 0.60
+    strategy_name: "cb_stock_quality"
+    strategy_config: "configs/cb_strategies/cb_stock_quality_v4b_balanced_8y.yml"
+    top_k: 10
+    rebalance_days: 1
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0
+    slippage_model: "linear_impact"
+
+  etf:
+    name: "ETF Cross Asset V5 FAA"
+    description: "10只ETF Flexible Asset Allocation"
+    market_type: "etf"
+    weight: 0.40
+    strategy_name: "etf_cross_v5"
+    top_k: 3
+    rebalance_days: 10
+    symbols:
+      - "510300.SH"
+      - "510500.SH"
+      - "159915.SZ"
+      - "512100.SH"
+      - "510050.SH"
+      - "510880.SH"
+      - "512010.SH"
+      - "512690.SH"
+      - "512660.SH"
+      - "513100.SH"
+      - "159920.SZ"
+    commission_rate: 0.0000854
+    commission_min: 5.0
+    slippage_bps: 5.0
+    max_participation_rate: 0.10

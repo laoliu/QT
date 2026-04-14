@@ -1,0 +1,110 @@
+# ============================================================
+# A 股桶式多因子轮动 — CSI1000 宇宙 (10 年回测) v2
+# ============================================================
+# R71 P0 修复: 从 CSI300 扩至 CSI1000，收紧风控，增加换手控制
+# 根因: CSI300 中小盘桶几乎无候选标的 → AR=0.35% 完全失败
+# CSI1000: 覆盖大/中/小三个市值段，~1000 只成分股
+
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.08
+    lot_size: 100
+    opening_volume_fraction: 0.1
+
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+
+initial_capital: 1000000
+
+market:
+  instruments:
+    asset_type: stock
+    boards: [A]
+  region: CN
+
+report:
+  benchmark: 000300.SH
+  metrics:
+    - annual_return
+    - max_drawdown
+    - sharpe
+    - calmar
+    - turnover
+    - win_rate
+    - positions_count_distribution
+    - cost_impact
+  output_dir: output/bucket_mf_all_a_v2
+  universe_summary: true
+
+risk_constraints:
+  max_drawdown_pct: 0.25
+  max_sector_pct: 0.20
+  max_single_position_pct: 0.05
+  market_regime_enabled: false
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.10
+  circuit_breaker_enabled: true
+  circuit_breaker_threshold: 0.10
+
+strategy:
+  name: bucket_multifactor
+  parameters:
+    top_k: 30
+    rebalance_days: 10
+    min_price: 3.0
+    max_price: 200.0
+    min_turnover: 300.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.10
+    buffer_k: 15
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.05
+    inverse_vol_weighting: true
+    momentum_lookback: 60
+    momentum_skip_recent: 5
+    momentum_multi_period: true
+    volatility_lookback: 60
+    str_lookback: 5
+    value_metric: pe_ttm
+    quality_metric: roe
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  timezone: Asia/Shanghai
+
+slippage_model:
+  name: linear_impact
+  base_bps: 15.0
+  impact_coeff: 40.0
+  fallback_bps: 20.0
+  max_bps: 100.0
+
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+
+universe_policy:
+  auto_exclude: [ST, DELISTING, SUSPENDED_LONG]
+  base_index: '000852.SH'
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,82 @@
+# ETF 轮动策略 — 纯动量版本
+# 关闭趋势过滤，纯动量+低波，top_k=5
+
+cost_model:
+  commission: {min_fee: 5.0, rate: 0.00005}
+  stamp_tax: {sell_rate: 0.0}
+  transfer_fee: {rate: 0.0}
+
+data:
+  provider: tushare_etf
+  cache_dir: data/cache/tushare
+  adjust: qfq
+  symbols:
+    - 510300.SH
+    - 510500.SH
+    - 159915.SZ
+    - 512100.SH
+    - 510050.SH
+    - 510880.SH
+    - 512010.SH
+    - 515050.SH
+    - 512690.SH
+    - 512660.SH
+    - 513100.SH
+    - 159920.SZ
+    - 513500.SH
+    - 518880.SH
+    - 511010.SH
+
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.02
+    lot_size: 100
+    opening_volume_fraction: 0.10
+
+initial_capital: 1000000
+
+report:
+  benchmark: 510300.SH
+  output_dir: output/etf_momentum_only_10y
+
+run:
+  start_date: '2015-01-05'
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+
+slippage_model:
+  name: fixed
+  bps: 1.0
+
+strategy:
+  name: etf_rotation
+  parameters:
+    top_k: 5
+    rebalance_days: 20
+    weight_momentum: 0.60
+    weight_volatility: 0.30
+    weight_reversion: 0.10
+    weight_volume: 0.0
+    momentum_lookback: 60
+    volatility_lookback: 20
+    reversion_lookback: 5
+    trend_ma_period: 0          # 关闭趋势过滤
+    stop_loss_pct: 0.12
+    trailing_stop_pct: 0.10
+    cash_reserve_pct: 0.02
+    max_single_pct: 0.35
+    lot_size: 100
+    buffer_k: 2
+    inverse_vol_weighting: true  # 反波动率加权
+
+trading_rules:
+  t_plus: 1
+  lot_size: 100
+
+risk_constraints:
+  enabled: true
+  max_position_weight: 0.50
+  max_drawdown: 0.30
+  enable_audit_log: true

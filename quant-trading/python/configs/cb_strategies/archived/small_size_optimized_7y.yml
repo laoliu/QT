@@ -1,0 +1,59 @@
+# 可转债小盘极致策略 - 2018-2024全期回测配置 (26.30%年化)
+#
+# 核心Alpha: 小发行规模效应(issue_size排序, 越小越优)
+# 回测期: 2018-01-01 ~ 2024-12-31 (7年完整周期)
+# 年化收益: 26.30% | 最大回撤: 15.73% | 夏普比率: 1.39
+
+# ------ 数据 ------
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ 策略 ------
+strategy:
+  name: "small_size"
+  params:
+    top_k: 6
+    rebalance_days: 1
+    max_price: 145.0
+    max_issue_size: 20000.0
+    min_issue_size: 0.0
+    min_turnover: 10.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10           # CB有债底保护,10%止损更合理(修复F-R3)
+    lot_size: 10
+
+# ------ 成交模型 ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15  # 开盘集合竞价仅占全天成交量15%(修复F-E2)
+    lot_size: 10
+
+# ------ 成本 (可转债) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ 风控 ------
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.50
+
+# ------ 资金与规则 ------
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ 实验指纹 ------
+random_seed: 42

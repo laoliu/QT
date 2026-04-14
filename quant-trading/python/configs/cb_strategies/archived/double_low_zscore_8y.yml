@@ -1,0 +1,63 @@
+# 双低Z-Score策略 — 8年回测(等权 50:50, linear_impact 滑点)
+# ============================================================
+# Z-Score标准化消除价格与溢价率的量纲差异
+# 核心改进：经典双低 close+premium 中价格隐含~80%权重
+# Z-Score使两因子在数值上可比，权重参数才真正反映配比意图
+# ============================================================
+
+name: "double_low_zscore_8y"
+description: >-
+  双低Z-Score等权策略 8年回测：价格和溢价率分别做Z-Score标准化后50:50加权。
+
+data:
+  source: "tushare_cb"
+  start_date: "2018-01-02"
+  end_date: "2026-03-20"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+strategy:
+  name: "double_low_zscore"
+  params:
+    top_k: 20
+    rebalance_days: 5
+    max_price: 130.0
+    max_premium: 50.0
+    min_turnover: 20.0
+    min_days_to_maturity: 30
+    exclude_st: true
+    stop_loss_pct: 0.10
+    lot_size: 10
+    price_weight: 0.50
+    premium_weight: 0.50
+    use_cb_value: false
+
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+  slippage_model: "linear_impact"
+  slippage_params:
+    base_bps: 5.0
+    impact_coeff: 50.0
+    fallback_bps: 8.0
+    max_bps: 40.0
+
+initial_capital: 500000.0
+lot_size: 10
+t_plus_n: 0
+random_seed: 42
+output_dir: "output/double_low_zscore_8y"
+
+report:
+  benchmark: "000300.SH"

@@ -1,0 +1,112 @@
+cost_model:
+  commission:
+    min_fee: 5.0
+    rate: 8.5e-05  # §13.1 A-stock default
+  stamp_tax:
+    sell_rate: 0.0005
+  transfer_fee:
+    rate: 1.0e-05
+data:
+  provider: tushare_pro
+  snapshot: latest
+  cache_dir: data/cache/tushare
+fill_model:
+  name: next_bar_open
+  volume_constraint:
+    max_participation_rate: 0.05
+    lot_size: 100
+frequency:
+  data_frequency: 1d
+  matching_resolution: 1d
+initial_capital: 1000000
+market:
+  instruments:
+    asset_type: stock
+    boards:
+    - A
+  region: CN
+report:
+  benchmark: 000905.SH
+  metrics:
+  - annual_return
+  - max_drawdown
+  - sharpe
+  - calmar
+  - turnover
+  output_dir: reports/allmarket_truesmall
+  universe_summary: true
+risk_constraints:
+  max_drawdown_pct: 0.35
+  max_sector_pct: 0.25
+  max_single_position_pct: 0.08
+  drawdown_peak_reset_days: 20
+  drawdown_allow_rotation: true
+  drawdown_scale_factor_floor: 0.5
+risk:
+  enabled: true
+  stop_loss_pct: 0.15
+  trailing_stop_pct: 0.12
+  circuit_breaker_enabled: false
+  market_regime_enabled: false
+  position_sizing:
+    volatility_target:
+      enabled: true
+      target_vol: 0.2
+      lookback_days: 20
+      min_scale: 0.3
+      max_scale: 1.0
+    drawdown_control:
+      enabled: true
+      threshold: 0.08
+      max_threshold: 0.15
+      min_scale: 0.3
+run:
+  end_date: '2024-12-31'
+  mode: backtest
+  seed: 42
+  start_date: '2020-01-02'
+  timezone: Asia/Shanghai
+slippage_model:
+  name: linear_impact
+  base_bps: 3.0
+  impact_coeff: 30.0
+  fallback_bps: 8.0
+  max_bps: 50.0
+strategy:
+  name: smallcap_rotation
+  parameters:
+    top_k: 20
+    rebalance_days: 20
+    min_mv: 20000.0
+    max_mv: 100000.0
+    min_price: 5.0
+    max_price: 50.0
+    min_turnover: 500.0
+    min_listed_days: 120
+    stop_loss_pct: 0.15
+    trailing_stop_pct: 0.12
+    buffer_k: 5
+    cash_reserve_pct: 0.03
+    max_single_pct: 0.08
+    momentum_lookback: 20
+    volatility_lookback: 20
+    momentum_invert: false
+    momentum_skip_recent: 1
+    momentum_multi_period: true
+    regime_adaptive: false
+    weight_small_cap: 0.25
+    weight_momentum: 0.15
+    weight_turnover: 0.1
+    weight_volatility: 0.2
+    weight_quality: 0.15
+    weight_value: 0.15
+trading_rules:
+  allow_short: false
+  lot_size: 100
+  t_plus: 1
+universe_policy:
+  auto_exclude:
+  - ST
+  - DELISTING
+  - SUSPENDED_LONG
+  manual_exclude_list: configs/universe/exclude_list.yml

@@ -1,0 +1,67 @@
+﻿# Conversion Arbitrage Strategy - 8-year Backtest Config
+# ============================================================
+# Strategy: Find CBs where conversion premium <= -5%
+#           (CB price < conversion value => arbitrage opportunity)
+# Data range: 2017-01-01 ~ 2024-12-31 (8 years)
+# Fill model: next_bar_open (NBO)
+# ============================================================
+
+name: "conversion_arbitrage"
+description: >
+  Convertible bond conversion arbitrage strategy.
+  Selects CBs with negative/low conversion premium (cb_over_rate <= min_spread_pct),
+  indicating CB price < conversion value, providing arbitrage opportunity.
+
+# ------ Data ------
+data:
+  source: "tushare_cb"
+  start_date: "2017-01-01"
+  end_date: "2024-12-31"
+  frequency: "1d"
+  adjust: "none"
+  cache_dir: "data/cache/cb_tushare"
+
+# ------ Strategy ------
+strategy:
+  name: "conversion_arbitrage"
+  params:
+    top_k: 10
+    rebalance_days: 1
+    min_spread_pct: -5.0       # Select CBs with conversion premium <= -5%
+    max_price: 130.0
+    min_turnover: 50.0         # Min daily turnover (10k CNY)
+    min_days_to_maturity: 30
+    stop_loss_pct: 0.08
+    lot_size: 10
+
+# ------ Fill Model ------
+fill_model:
+  name: "next_bar_open"
+  volume_constraint:
+    max_participation_rate: 0.10
+    opening_volume_fraction: 0.15
+    lot_size: 10
+
+# ------ Cost (Convertible Bond) ------
+cost:
+  commission_rate: 0.0000854  # 13.1 MarketRulesConvertibleBond
+  commission_min: 5
+  stamp_tax_rate: 0.0          # No stamp tax for CB
+  transfer_fee_rate: 0.0
+  slippage_bps: 5.0
+
+# ------ Capital & Rules ------
+initial_capital: 1000000.0
+lot_size: 10
+t_plus_n: 0
+
+# ------ Experiment Fingerprint ------
+random_seed: 42
+
+# ------ Output ------
+output_dir: "output/conversion_arbitrage_8y"
+
+# ------ Report ------
+report:
+  benchmark: null
+  custom_benchmark: "000832.CSI"

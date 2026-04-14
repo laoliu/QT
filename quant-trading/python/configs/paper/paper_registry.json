@@ -1,0 +1,495 @@
+{
+  "version": "3.1",
+  "description": "模拟交易策略注册表 v3.1。2026-03-27审计降级：6个引用已归档配置的组合从backtest_qualified降级为research。",
+  "updated_at": "2026-03-27",
+  "entries": [
+    {
+      "entry_id": "plan_a3_4comp",
+      "display_name": "R111 Plan A3 四组件跨资产 (ML35/V19-10/CB45/ETF10)",
+      "config_path": "configs/paper/plan_a3_4comp.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "backtest_qualified",
+      "strategies": ["ml_csi2000_fund", "v19_hgro", "cb_3way_ew", "etf_cross_v3"],
+      "weights": {"ml": 0.35, "v19": 0.10, "cb": 0.45, "etf": 0.10},
+      "backtest_metrics": {
+        "combo_a3": {"ar": 0.330, "mdd": 0.173, "sr": 1.90, "calmar": 1.91, "period": "2020-01 ~ 2025-12"},
+        "etf_post_r111": {"ar": 0.100, "mdd": 0.261, "sr": 0.527, "calmar": 0.384},
+        "ml": {"ar": 0.373, "mdd": 0.231, "sr": 1.49, "calmar": 1.61},
+        "v19": {"ar": 0.390, "mdd": 0.330, "sr": 1.18},
+        "cb": {"ar": 0.237, "mdd": 0.195, "sr": 1.21},
+        "yearly_all_positive": true,
+        "min_year": {"year": "2022", "return": 0.020}
+      },
+      "initial_capital": 10000000.0,
+      "state_dir": "data/paper_state/plan_a3_4comp",
+      "registered_at": "2026-03-25T00:00:00",
+      "notes": "R111对抗审计修复后: ETF rank-normalize+5bps滑点, ML时变印花税, A3权重 ML35/V19-10/CB45/ETF10"
+    },
+    {
+      "entry_id": "plan_a_5comp",
+      "display_name": "R75 Plan A 五组件跨资产旗舰",
+      "config_path": "configs/paper/plan_a_5comp.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "backtest_qualified",
+      "strategies": ["cb_3way_ew", "ml_csi2000_fund", "etf_cross_v3", "bond_index", "gold_etf"],
+      "weights": {"cb": 0.30, "ml": 0.30, "etf": 0.15, "bond": 0.10, "gold": 0.15},
+      "backtest_metrics": {
+        "plan_a_combo": {"ar": 0.2119, "mdd": 0.1068, "sr": 2.039, "calmar": 1.98},
+        "bootstrap_sr_ci": [1.054, 3.126],
+        "wf_pass": true,
+        "adversarial_12_pass": true,
+        "adversarial_score": "A 9.2/10",
+        "yearly_positive": 6
+      },
+      "portfolio_expected": {"ar": 0.21, "mdd": 0.11, "sr": 2.04, "note": "R75 12项对抗全PASS, 6年连正"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/plan_a_5comp",
+      "registered_at": "2026-03-16T00:00:00",
+      "notes": "五组件跨资产旗舰: CB30/ML30/ETF15/Bond10/Gold15, SR=2.04, 12项对抗测试全PASS",
+      "capacity_analysis": {
+        "note": "ML component capacity ~500W, CB ~300W, ETF/Bond/Gold unlimited",
+        "portfolio_estimated_capacity_wan": 300
+      },
+      "stress_test": {
+        "note": "R75 12-item adversarial validation: all PASS",
+        "worst_case_mdd_pct": 10.68,
+        "worst_scenario": "2022_cb_new_rules + ml_decay_80pct",
+        "crisis_resilience": "excellent",
+        "rebalance_cost_annual": -0.003,
+        "max_drawdown_duration_days": 141
+      }
+    },
+    {
+      "entry_id": "cb_aggressive_5s",
+      "display_name": "CB 进取型五策略旗舰",
+      "config_path": "configs/paper/cb_paper_v2.yml",
+      "paper_mode": "multi_strategy",
+      "paper_status": "ready",
+      "paper_category": "research",
+      "strategies": ["small_size", "double_low_plus", "cb_comprehensive", "triple_low", "multi_factor"],
+      "source_configs": [
+        "configs/cb_strategies/small_size_v2_7y.yml",
+        "configs/cb_strategies/double_low_plus_v5_7y.yml",
+        "configs/cb_strategies/cb_comprehensive_v2_7y.yml",
+        "configs/cb_strategies/triple_low.yml",
+        "configs/cb_strategies/multi_factor.yml"
+      ],
+      "weights": {"small_size": 0.30, "double_low_plus": 0.30, "cb_comprehensive": 0.20, "triple_low": 0.10, "multi_factor": 0.10},
+      "backtest_metrics": {
+        "small_size_v2_7y": {"ar": 0.396, "mdd": 0.217, "sr": 1.27, "wf": 8.0},
+        "double_low_plus_v5_7y": {"ar": 0.398, "mdd": 0.186, "sr": 1.42, "wf": 7.17},
+        "cb_comprehensive_v2_7y": {"ar": 0.365, "mdd": 0.131, "sr": 1.28, "wf": 7.13},
+        "triple_low_8y": {"ar": 0.216, "mdd": 0.141, "sr": 1.64, "wf": 8.0},
+        "multi_factor_8y": {"ar": 0.245, "mdd": 0.160, "sr": 1.57, "wf": 8.0}
+      },
+      "portfolio_expected": {"ar": 0.34, "mdd": 0.18, "sr": 1.35, "note": "进取型，高alpha权重60%"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_aggressive_5s",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 引用归档v5/v2版配置(已archived), 新版参数大改(size权重-57%, top_k翻倍), metrics失准, 需用活跃版重测",
+      "capacity_analysis": {
+        "note": "ADV=300W/10% participation, peak holding date",
+        "small_size_v2": {"capacity_wan": 77, "max_positions": 6, "bottleneck": "123031.SZ"},
+        "double_low_plus_v5": {"capacity_wan": 112, "max_positions": 7, "bottleneck": "123031.SZ"},
+        "cb_comprehensive_v2": {"capacity_wan": 98, "max_positions": 7, "bottleneck": "123031.SZ"},
+        "portfolio_estimated_capacity_wan": 300
+      },
+      "stress_test": {
+        "note": "5 scenarios (2015 crash, 2016 circuit, 2018 trade war, 2020 COVID, 2022 CB rules)",
+        "worst_case_mdd_pct": 6.79,
+        "worst_scenario": "2022_cb_new_rules",
+        "crisis_resilience": "excellent"
+      }
+    },
+    {
+      "entry_id": "cb_concentrated_2s",
+      "display_name": "CB 集中型双策略",
+      "config_path": "configs/paper/cb_s4_launch.yml",
+      "paper_mode": "multi_strategy",
+      "paper_status": "ready",
+      "paper_category": "research",
+      "strategies": ["small_size", "cb_comprehensive"],
+      "source_configs": [
+        "configs/cb_strategies/small_size_v2_7y.yml",
+        "configs/cb_strategies/cb_comprehensive_opt_7y.yml"
+      ],
+      "weights": {"small_size": 0.60, "cb_comprehensive": 0.40},
+      "backtest_metrics": {
+        "small_size_v2_7y": {"ar": 0.396, "mdd": 0.217, "sr": 1.27, "wf": 8.0},
+        "cb_comprehensive_opt_7y": {"ar": 0.356, "mdd": 0.153, "sr": 1.28, "wf": 6.97}
+      },
+      "portfolio_expected": {"ar": 0.38, "mdd": 0.20, "sr": 1.28, "note": "集中型，6+4权重，最高预期收益"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_concentrated_2s",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 引用归档comprehensive_opt(已archived), 路径断裂, 需用v4版重测"
+    },
+    {
+      "entry_id": "cb_defensive_4s",
+      "display_name": "CB 防御型 SR 最优",
+      "config_path": "configs/paper/cb_optimal_portfolio.yml",
+      "paper_mode": "multi_strategy",
+      "paper_status": "ready",
+      "paper_category": "research",
+      "strategies": ["triple_low", "new_small", "small_size_enhanced", "cb_ultra_noage"],
+      "source_configs": [
+        "configs/cb_strategies/triple_low.yml",
+        "configs/cb_strategies/new_small.yml",
+        "configs/cb_strategies/small_size_enhanced.yml",
+        "configs/cb_strategies/cb_ultra_noage.yml"
+      ],
+      "weights": {"triple_low": 0.25, "new_small": 0.25, "small_size_enhanced": 0.25, "cb_ultra_noage": 0.25},
+      "backtest_metrics": {
+        "triple_low_8y": {"ar": 0.216, "mdd": 0.141, "sr": 1.64, "wf": 8.0},
+        "new_small_8y": {"ar": 0.198, "mdd": 0.166, "sr": 1.09, "wf": 7.21},
+        "small_size_enhanced_8y": {"ar": 0.173, "mdd": 0.166, "sr": 1.02, "wf": 7.39},
+        "cb_ultra_noage_8y": {"ar": 0.216, "mdd": 0.146, "sr": 1.15, "wf": 7.10}
+      },
+      "portfolio_expected": {"ar": 0.24, "mdd": 0.12, "sr": 1.97, "note": "防御型，等权4策略，组合SR近2.0"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_defensive_4s",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 含2个仅3年数据策略(small_size_enhanced/cb_ultra_noage违反§5.6), triple_low归档版无cost段, 需全面重测"
+    },
+    {
+      "entry_id": "cb_ensemble_3s",
+      "display_name": "CB Ensemble 鲁棒型",
+      "config_path": "configs/paper/cb_ensemble_portfolio.yml",
+      "paper_mode": "multi_strategy",
+      "paper_status": "ready",
+      "paper_category": "research",
+      "strategies": ["small_size_ensemble", "new_small_ensemble", "new_bond_ensemble"],
+      "source_configs": [
+        "configs/cb_strategies/small_size_ensemble.yml",
+        "configs/cb_strategies/new_small_ensemble.yml",
+        "configs/cb_strategies/new_bond_ensemble.yml"
+      ],
+      "weights": {"small_size_ensemble": 0.40, "new_small_ensemble": 0.35, "new_bond_ensemble": 0.25},
+      "backtest_metrics": {
+        "small_size_ensemble_8y": {"ar": 0.22, "mdd": 0.156, "sr": 1.18},
+        "new_small_ensemble_8y": {"ar": 0.28, "mdd": 0.173, "sr": 1.15},
+        "new_bond_ensemble_8y": {"ar": 0.19, "mdd": 0.145, "sr": 1.08}
+      },
+      "portfolio_expected": {"ar": 0.23, "mdd": 0.15, "sr": 1.20, "note": "Ensemble参数鲁棒性高"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_ensemble_3s",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 2/3策略仅3年数据+无slippage_model, 统计意义不足, 需扩展至8年重测"
+    },
+    {
+      "entry_id": "cb_double_low_family",
+      "display_name": "CB 双低家族专题",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["double_low_plus", "double_low_percentile", "double_low_rank", "double_low_zscore"],
+      "source_configs": [
+        "configs/cb_strategies/double_low_plus_v5_7y.yml",
+        "configs/cb_strategies/double_low_pct_50_50.yml",
+        "configs/cb_strategies/double_low_rank_50_50.yml",
+        "configs/cb_strategies/double_low_zscore_0_100.yml"
+      ],
+      "weights": {"double_low_plus": 0.35, "double_low_percentile": 0.25, "double_low_rank": 0.20, "double_low_zscore": 0.20},
+      "backtest_metrics": {
+        "double_low_plus_v5_7y": {"ar": 0.398, "mdd": 0.186, "sr": 1.42, "wf": 7.17},
+        "double_low_percentile_8y": {"ar": 0.195, "mdd": 0.164, "sr": 1.43, "wf": 7.89},
+        "double_low_rank_8y": {"ar": 0.192, "mdd": 0.153, "sr": 1.26, "wf": 7.89},
+        "double_low_zscore_8y": {"ar": 0.215, "mdd": 0.155, "sr": 1.31, "wf": 7.78}
+      },
+      "portfolio_expected": {"ar": 0.27, "mdd": 0.16, "sr": 1.35, "note": "双低因子多变体组合，验证因子家族鲁棒性"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_double_low_family",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "双低类4个变体组合，同因子不同构建方式验证稳定性"
+    },
+    {
+      "entry_id": "cb_alpha_hunters",
+      "display_name": "CB 高Alpha猎手组合",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["small_size", "double_low_plus", "new_small"],
+      "source_configs": [
+        "configs/cb_strategies/small_size_v2_7y.yml",
+        "configs/cb_strategies/double_low_plus_v5_7y.yml",
+        "configs/cb_strategies/new_small.yml"
+      ],
+      "weights": {"small_size": 0.40, "double_low_plus": 0.35, "new_small": 0.25},
+      "backtest_metrics": {
+        "small_size_v2_7y": {"ar": 0.396, "mdd": 0.217, "sr": 1.27, "wf": 8.0},
+        "double_low_plus_v5_7y": {"ar": 0.398, "mdd": 0.186, "sr": 1.42, "wf": 7.17},
+        "new_small_8y": {"ar": 0.330, "mdd": 0.329, "sr": 1.40, "wf": 7.21}
+      },
+      "portfolio_expected": {"ar": 0.38, "mdd": 0.22, "sr": 1.33, "note": "3个最高AR策略集中，追求超额绝对值"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_alpha_hunters",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 引用归档v5版dlp和new_small, 新版参数大改(top_k+67%, size权重-57%), metrics失准"
+    },
+    {
+      "entry_id": "cb_quality_balanced",
+      "display_name": "CB 质量均衡六策略",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["triple_low", "multi_factor", "double_low_percentile", "cb_multi_alpha", "cb_reversal_small", "pseudo_ytm"],
+      "source_configs": [
+        "configs/cb_strategies/triple_low.yml",
+        "configs/cb_strategies/multi_factor.yml",
+        "configs/cb_strategies/double_low_pct_50_50.yml",
+        "configs/cb_strategies/cb_multi_alpha.yml",
+        "configs/cb_strategies/cb_reversal_small.yml",
+        "configs/cb_strategies/pseudo_ytm.yml"
+      ],
+      "weights": {"triple_low": 0.20, "multi_factor": 0.20, "double_low_percentile": 0.20, "cb_multi_alpha": 0.15, "cb_reversal_small": 0.15, "pseudo_ytm": 0.10},
+      "backtest_metrics": {
+        "triple_low_8y": {"ar": 0.216, "mdd": 0.141, "sr": 1.64, "wf": 8.0},
+        "multi_factor_8y": {"ar": 0.245, "mdd": 0.160, "sr": 1.57, "wf": 8.0},
+        "double_low_percentile_8y": {"ar": 0.195, "mdd": 0.164, "sr": 1.43, "wf": 7.89},
+        "cb_multi_alpha_8y": {"ar": 0.172, "mdd": 0.134, "sr": 1.07, "wf": 6.35},
+        "cb_reversal_small_8y": {"ar": 0.171, "mdd": 0.181, "sr": 1.10, "wf": 6.95},
+        "pseudo_ytm_8y": {"ar": 0.180, "mdd": 0.190, "sr": 0.92, "wf": 7.59}
+      },
+      "portfolio_expected": {"ar": 0.21, "mdd": 0.13, "sr": 1.45, "note": "6策略均持，最大分散化降低单策略依赖"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_quality_balanced",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "六策略等权/近等权，因子相关性低，分散化程度最高"
+    },
+    {
+      "entry_id": "cb_regime_adaptive",
+      "display_name": "CB 市场状态自适应",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["cb_regime_rotation", "cb_comprehensive", "triple_low"],
+      "source_configs": [
+        "configs/cb_strategies/cb_regime_rotation.yml",
+        "configs/cb_strategies/cb_comprehensive_v2_7y.yml",
+        "configs/cb_strategies/triple_low.yml"
+      ],
+      "weights": {"cb_regime_rotation": 0.40, "cb_comprehensive": 0.35, "triple_low": 0.25},
+      "backtest_metrics": {
+        "cb_regime_rotation_8y": {"ar": 0.189, "mdd": 0.219, "sr": 0.87, "wf": 6.76},
+        "cb_comprehensive_v2_7y": {"ar": 0.365, "mdd": 0.131, "sr": 1.28, "wf": 7.13},
+        "triple_low_8y": {"ar": 0.216, "mdd": 0.141, "sr": 1.64, "wf": 8.0}
+      },
+      "portfolio_expected": {"ar": 0.25, "mdd": 0.17, "sr": 1.15, "note": "含市场状态检测的动态切换组合"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_regime_adaptive",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "Regime Rotation 策略检测牛/震/熊并动态调仓，搭配稳健策略兜底"
+    },
+    {
+      "entry_id": "cb_value_income",
+      "display_name": "CB 价值+收益型",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["low_price", "ytm_plus", "defensive_value", "double_low"],
+      "source_configs": [
+        "configs/cb_strategies/low_price.yml",
+        "configs/cb_strategies/ytm_plus.yml",
+        "configs/cb_strategies/defensive_value.yml",
+        "configs/cb_strategies/double_low_7y.yml"
+      ],
+      "weights": {"low_price": 0.25, "ytm_plus": 0.25, "defensive_value": 0.25, "double_low": 0.25},
+      "backtest_metrics": {
+        "low_price_8y": {"ar": 0.163, "mdd": 0.199, "sr": 0.85, "wf": 8.0},
+        "ytm_plus_8y": {"ar": 0.155, "mdd": 0.173, "sr": 0.82, "wf": 6.90},
+        "defensive_value_8y": {"ar": 0.150, "mdd": 0.165, "sr": 0.88},
+        "double_low_8y": {"ar": 0.166, "mdd": 0.169, "sr": 1.15, "wf": 7.89}
+      },
+      "portfolio_expected": {"ar": 0.16, "mdd": 0.14, "sr": 1.05, "note": "价值+收益导向，偏债性，适合保守投资者"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_value_income",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "偏债性价值组合，波动最低，适合对回撤容忍度极低的资金"
+    },
+    {
+      "entry_id": "cb_momentum_growth",
+      "display_name": "CB 动量成长型",
+      "config_path": "",
+      "paper_mode": "multi_strategy",
+      "paper_status": "registered",
+      "paper_category": "research",
+      "strategies": ["cb_comprehensive", "small_size", "cb_reversal_small", "multi_factor"],
+      "source_configs": [
+        "configs/cb_strategies/cb_comprehensive_v2_7y.yml",
+        "configs/cb_strategies/small_size_v2_7y.yml",
+        "configs/cb_strategies/cb_reversal_small.yml",
+        "configs/cb_strategies/multi_factor.yml"
+      ],
+      "weights": {"cb_comprehensive": 0.30, "small_size": 0.30, "cb_reversal_small": 0.20, "multi_factor": 0.20},
+      "backtest_metrics": {
+        "cb_comprehensive_v2_7y": {"ar": 0.365, "mdd": 0.131, "sr": 1.28, "wf": 7.13},
+        "small_size_v2_7y": {"ar": 0.396, "mdd": 0.217, "sr": 1.27, "wf": 8.0},
+        "cb_reversal_small_8y": {"ar": 0.171, "mdd": 0.181, "sr": 1.10, "wf": 6.95},
+        "multi_factor_8y": {"ar": 0.245, "mdd": 0.160, "sr": 1.57, "wf": 8.0}
+      },
+      "portfolio_expected": {"ar": 0.30, "mdd": 0.17, "sr": 1.30, "note": "混合动量+反转+多因子，成长导向"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/cb_momentum_growth",
+      "registered_at": "2026-02-28T00:00:00",
+      "notes": "[2026-03-27降级] 引用归档comprehensive_v2+reversal_small, 新版因子从10缩减为6, metrics失准"
+    },
+    {
+      "entry_id": "r106_attack",
+      "display_name": "R106 进取型跨资产组合",
+      "config_path": "configs/paper/r106_attack.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["v19_hgro", "double_low"],
+      "weights": {"baseline_smallcap": 0.50, "cb": 0.40, "bond": 0.10},
+      "backtest_metrics": {"ar": 0.218, "mdd": 0.104, "sr": 1.67, "calmar": 2.10},
+      "portfolio_expected": {"ar": 0.218, "mdd": 0.104, "sr": 1.67},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/r106_attack",
+      "registered_at": "2026-03-22T00:00:00",
+      "notes": "R106评估最优进取型: SM50/CB40/Bond10, 已迁移为标准 multi_asset paper_engine 配置"
+    },
+    {
+      "entry_id": "r106_steady",
+      "display_name": "R106 均衡型跨资产组合",
+      "config_path": "configs/paper/r106_steady.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["v19_hgro", "dividend_defensive", "value_quality", "double_low"],
+      "weights": {"baseline_smallcap": 0.25, "largecap_dividend": 0.10, "midcap_value": 0.05, "cb": 0.35, "bond": 0.25},
+      "backtest_metrics": {"ar": 0.168, "mdd": 0.077, "sr": 1.71, "calmar": 2.18},
+      "portfolio_expected": {"ar": 0.168, "mdd": 0.077, "sr": 1.71},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/r106_steady",
+      "registered_at": "2026-03-22T00:00:00",
+      "notes": "R106评估最优均衡型: SM25/LD10/MV5/CB35/Bond25, 已迁移为标准 multi_asset paper_engine 配置"
+    },
+    {
+      "entry_id": "r106_defend",
+      "display_name": "R106 防御型跨资产组合",
+      "config_path": "configs/paper/r106_defend.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["v19_hgro", "dividend_defensive", "double_low"],
+      "weights": {"baseline_smallcap": 0.15, "largecap_dividend": 0.15, "cb": 0.30, "bond": 0.40},
+      "backtest_metrics": {"ar": 0.135, "mdd": 0.053, "sr": 1.76, "calmar": 2.55},
+      "portfolio_expected": {"ar": 0.135, "mdd": 0.053, "sr": 1.76},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/r106_defend",
+      "registered_at": "2026-03-22T00:00:00",
+      "notes": "R106评估最优防御型: SM15/LD15/CB30/Bond40, 已迁移为标准 multi_asset paper_engine 配置"
+    },
+    {
+      "entry_id": "r107_v19_cb40",
+      "display_name": "R107 v19_raw 60% + CB 40% 激进型组合",
+      "config_path": "configs/paper/r107_v19_cb40.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["v19_hgro", "double_low"],
+      "weights": {"equity": 0.60, "cb": 0.40},
+      "backtest_metrics": {"ar": 0.331, "mdd": 0.175, "sr": 1.33, "calmar": 1.89},
+      "portfolio_expected": {"ar": 0.331, "mdd": 0.175, "sr": 1.33, "note": "MC中位AR=32.9%, P(AR>=30%)=60.9%, 新规后AR=49.6%"},
+      "initial_capital": 1000000.0,
+      "state_dir": "data/paper_state/r107_v19_cb40",
+      "registered_at": "2026-03-23T00:00:00",
+      "notes": "R107优化最优激进型: v19_hgro 60% + double_low 40%, 采用标准 multi_asset paper_engine 配置。"
+    },
+    {
+      "entry_id": "r115_combo",
+      "display_name": "R115 FAA 三组件跨资产 (ML55/CB30/ETF15)",
+      "config_path": "configs/paper/r115_combo.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["ml_csi2000_fund", "cb_stock_quality", "etf_cross_v6_faa"],
+      "weights": {"ml": 0.55, "cb": 0.30, "etf": 0.15},
+      "backtest_metrics": {
+        "combo_r115_faa": {"ar": 0.2849, "mdd": 0.1683, "sr": 1.801, "calmar": 1.693, "period": "2020-01 ~ 2025-12"},
+        "ml_csi2000_fund": {"ar": 0.352, "mdd": 0.229, "sr": 1.524, "calmar": 1.535},
+        "cb_stock_quality": {"ar": 0.206, "mdd": 0.215, "sr": 1.243, "calmar": 0.958},
+        "etf_cross_v6_faa": {"ar": 0.109, "mdd": 0.228, "sr": 0.519, "calmar": 0.476},
+        "dsr_pvalue": 0.0188,
+        "pbo": 0.1186,
+        "hlz_t_adj": 2.217,
+        "yearly_all_positive": true,
+        "min_year": {"year": "2022", "return": 0.0655}
+      },
+      "initial_capital": 10000000.0,
+      "state_dir": "data/paper_state/r115_combo",
+      "registered_at": "2026-03-26T22:00:00",
+      "notes": "R115 FAA 三组件: ML55%+CB30%+ETF15%, SR=1.801, 7/7年正收益, 日频批处理模式"
+    },
+    {
+      "entry_id": "r124_combo",
+      "display_name": "R124v2 四组件跨资产 (ML2000-50/ML1000-15/CB5/ETF30, CF-001合规)",
+      "config_path": "configs/paper/r124_combo.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["ml_csi2000_fund", "ml_csi1000_fund", "cb_stock_quality", "etf_cross_v6_faa"],
+      "weights": {"ml_csi2000": 0.50, "ml_csi1000": 0.15, "cb": 0.05, "etf": 0.30},
+      "backtest_metrics": {
+        "combo_r124v1": {"ar": 0.256, "mdd": 0.142, "sr": 1.53, "calmar": 1.80, "period": "2020-01 ~ 2025-12", "note": "v1 weights 40/10/25/25, v2 50/15/5/30 pending retest"},
+        "ml_csi2000_fund": {"ar": 0.352, "mdd": 0.229, "sr": 1.524, "calmar": 1.535},
+        "ml_csi1000_fund": {"ar": 0.263, "mdd": 0.18, "sr": 1.30},
+        "cb_stock_quality": {"ar": 0.069, "note": "post_2022_ar, capacity_max_50W"},
+        "etf_cross_v6_faa": {"ar": 0.109, "mdd": 0.228, "sr": 0.519},
+        "yearly_all_positive": true
+      },
+      "cf_compliance": {
+        "CF-001": "CB=5% (50W on 10M), within capacity limit",
+        "CF-002": "CSI1000=15% (exceeds 10% soft limit, compensating CB reduction)",
+        "CF-003": "CB factors DL70+Mom30 unchanged",
+        "CF-006": "CSI1000 uses old model lgb_fund, Du2025 not applied"
+      },
+      "initial_capital": 10000000.0,
+      "state_dir": "data/paper_state/r124_combo",
+      "registered_at": "2026-03-29T22:00:00",
+      "notes": "R124v2 四组件: ML2000-50%+ML1000-15%+CB5%+ETF30%, CF-001合规(CB容量≤50万). 基于R116架构."
+    },
+    {
+      "entry_id": "tiered_combo_v3",
+      "display_name": "Tiered Combo V3.1 四组件跨资产 (CSI2000-35/CB15/CSI300-15/ETF35, EVAL批准)",
+      "config_path": "configs/paper/tiered_combo_v3.yml",
+      "paper_mode": "multi_asset",
+      "paper_status": "ready",
+      "paper_category": "paper_trading",
+      "strategies": ["ml_csi2000_v3b_ensemble", "cb_stock_quality_v4b", "ml_csi300_ge200b", "etf_faa_v5"],
+      "weights": {"ml_csi2000": 0.35, "cb_stock_quality": 0.15, "ml_csi300": 0.15, "etf": 0.35},
+      "backtest_metrics": {
+        "combo_v3": {"ar": 0.237, "mdd": 0.178, "sr": 1.527, "calmar": 1.33, "period": "2020-01 ~ 2025-12"},
+        "post_2022_08": {"ar": 0.169, "sr": 1.159, "mdd": 0.178},
+        "ml_csi2000_v3b": {"ar": 0.298, "mdd": 0.342, "sr": 1.221},
+        "cb_stock_quality_v4b": {"ar": 0.297, "mdd": 0.195, "sr": 1.469},
+        "ml_csi300_ge200b": {"ar": 0.054, "mdd": 0.219, "sr": 0.298},
+        "etf_faa_v5": {"ar": 0.115, "mdd": 0.184, "sr": 0.533},
+        "forward_ar_estimate": "15-18%",
+        "yearly_all_positive": true,
+        "wf_ml_csi2000": {"folds": 7, "score": 8.48, "verdict": "PASS", "sr_decay": -0.101},
+        "wf_cb_v4b": {"folds": 29, "score": 6.7, "verdict": "PASS", "sr_decay": -0.181}
+      },
+      "evaluation": {
+        "report_id": "EVAL-COMBO-V3-R1-20260616",
+        "report_path": "docs/reports/formal_evaluations/tiered_combo_v3_expert_review_r1_20260616.md",
+        "rating": "B+",
+        "score": 7.93,
+        "decision": "approved_for_paper_with_adjustments",
+        "key_adjustments": "CB 20%→15% (capacity), CSI2000 40%→35% (risk concentration)"
+      },
+      "initial_capital": 10000000.0,
+      "state_dir": "data/paper_state/tiered_combo_v3",
+      "registered_at": "2026-06-16T00:00:00",
+      "notes": "EVAL-COMBO-V3-R1评审B+7.93批准; 194因子不过拟合(WF OOS SR>IS SR); 权重调整35/15/15/35; 前瞻AR 15-18%"
+    }
+  ]
+}

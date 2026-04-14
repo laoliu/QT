@@ -673,27 +673,64 @@ def get_klines_batch(
 
     start_n = _norm(start)
     end_n = _norm(end)
+    req_start_ts = int(datetime.strptime(start_n, "%Y-%m-%d").timestamp() * 1000)
+    req_end_ts = int(datetime.strptime(end_n, "%Y-%m-%d").timestamp() * 1000)
 
-    # Step 1: Check cache
-    try:
-        from cache.stock_cache import get_cache
-        cache = get_cache()
-        period = "daily"
-        for sym in symbols:
-            cached_bars, cs, ce = cache.get_klines(sym, market, period, start_n, end_n)
-            if cached_bars and cs <= start_n and ce >= end_n:
-                result[sym] = cached_bars
+    # Step 1: Check Parquet first (highest priority)
+    pq_partial: dict[str, list[dict]] = {}  # symbols with partial parquet data
+    for sym in symbols:
+        pq_bars = _fetch_parquet_klines(sym, start_n, end_n, market)
+        if pq_bars:
+            pq_dates = sorted(b["timestamp"] for b in pq_bars)
+            if pq_dates[0] <= req_start_ts and pq_dates[-1] >= req_end_ts:
+                result[sym] = pq_bars
+                continue
             else:
-                need_fetch.append(sym)
-        print(f"[批量缓存] {len(result)} 命中, {len(need_fetch)} 需拉取", file=sys.stderr)
-    except Exception as e:
-        print(f"[批量缓存] 缓存检查失败: {e}", file=sys.stderr)
-        need_fetch = list(symbols)
+                pq_partial[sym] = pq_bars
+        need_fetch.append(sym)
+    if result:
+        print(f"[Parquet批量] {len(result)} 只全命中", file=sys.stderr)
 
     if not need_fetch:
         return result
 
-    # Step 2: Batch QMT fetch
+    # Step 2: Check SQLite cache for remaining symbols
+    still_need = []
+    try:
+        from cache.stock_cache import get_cache
+        cache = get_cache()
+        period = "daily"
+        for sym in need_fetch:
+            cached_bars, cs, ce = cache.get_klines(sym, market, period, start_n, end_n)
+            if cached_bars and cs <= start_n and ce >= end_n:
+                result[sym] = cached_bars
+            elif cached_bars and sym in pq_partial:
+                # Merge parquet + SQLite
+                merged = pq_partial[sym] + cached_bars
+                merged.sort(key=lambda b: b["timestamp"])
+                seen = set()
+                deduped = [b for b in merged if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
+                m_dates = sorted(b["timestamp"] for b in deduped)
+                if m_dates[0] <= req_start_ts and m_dates[-1] >= req_end_ts:
+                    result[sym] = deduped
+                    continue
+                result[sym] = deduped
+                still_need.append(sym)
+            elif sym in pq_partial:
+                result[sym] = pq_partial[sym]
+                still_need.append(sym)
+            else:
+                still_need.append(sym)
+        print(f"[批量缓存] Parquet+SQLite后: {len(result)} 命中, {len(still_need)} 需拉取", file=sys.stderr)
+    except Exception as e:
+        print(f"[批量缓存] 缓存检查失败: {e}", file=sys.stderr)
+        still_need = list(need_fetch)
+    need_fetch = still_need
+
+    if not need_fetch:
+        return result
+
+    # Step 3: Batch QMT fetch
     qmt_result = _fetch_qmt_klines_batch(need_fetch, start_n, end_n, market)
     if qmt_result:
         # Save to cache
@@ -705,7 +742,7 @@ def get_klines_batch(
             print(f"[批量缓存] QMT数据保存失败: {e}", file=sys.stderr)
         result.update(qmt_result)
 
-    # Step 3: Per-stock fallback for remaining symbols
+    # Step 4: Per-stock fallback for remaining symbols
     still_missing = [s for s in need_fetch if s not in result]
     if still_missing:
         print(f"[批量回退] {len(still_missing)} 只股票走逐只拉取 ...", file=sys.stderr)
@@ -825,15 +862,30 @@ def _fetch_tdx_klines(symbol: str, start: str, end: str, market: str = "cn_stock
         return []
 
 
+def _fetch_parquet_klines(symbol: str, start: str, end: str, market: str = "cn_stock") -> list[dict]:
+    """Try loading kline bars from local parquet files (tushare cache).
+
+    Returns list of bar dicts (same format as SQLite cache), or [].
+    """
+    try:
+        from data_providers.local_parquet_provider import get_klines as pq_get_klines
+        bars = pq_get_klines(symbol, "1d", start, end, market)
+        return bars or []
+    except Exception as e:
+        print(f"[Parquet] {symbol} 读取失败: {e}", file=sys.stderr)
+        return []
+
+
 def get_klines(symbol, interval, start, end, market="cn_stock"):
-    """Fetch historical kline data with local SQLite caching.
+    """Fetch historical kline data with local disk + network fallback.
 
     Priority chain for cn_stock:
-      1. Cache (SQLite)  — permanent for historical bars, short TTL for today
-      2. QMT bridge      — if WINDOWS_XTDATA_URL env is set
-      3. TDX (通达信)    — free pytdx public servers
-      4. EastMoney       — stock_zh_a_hist (akshare)
-      5. Baidu Finance   — stock_zh_a_daily (akshare fallback)
+      1. Parquet (tushare本地) — 最高优先级，定期更新
+      2. SQLite cache        — 补充Parquet缺失部分
+      3. QMT bridge          — if WINDOWS_XTDATA_URL env is set
+      4. TDX (通达信)        — free pytdx public servers
+      5. EastMoney           — stock_zh_a_hist (akshare)
+      6. Baidu Finance       — stock_zh_a_daily (akshare fallback)
     """
     import akshare as ak
 
@@ -850,7 +902,35 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
     period_map = {"1d": "daily", "1w": "weekly", "1M": "monthly"}
     period = period_map.get(interval, "daily")
 
-    # Try cache first
+    collected_bars: list[dict] = []
+    gaps = [(start, end)]
+
+    # ── Priority 1: Parquet (tushare本地文件) ────────────────────
+    if market in ("cn_stock", "index") and period == "daily":
+        pq_bars = _fetch_parquet_klines(symbol, start, end, market)
+        if pq_bars:
+            pq_ts = {b["timestamp"] for b in pq_bars}
+            new_gaps = []
+            for gap_start, gap_end in gaps:
+                gs_ts = int(datetime.strptime(gap_start, "%Y-%m-%d").timestamp() * 1000)
+                ge_ts = int(datetime.strptime(gap_end, "%Y-%m-%d").timestamp() * 1000)
+                gap_pq = [b for b in pq_bars if gs_ts <= b["timestamp"] <= ge_ts]
+                if gap_pq:
+                    collected_bars.extend(gap_pq)
+                    print(f"[Parquet✓] {symbol} {gap_start}~{gap_end} 获取 {len(gap_pq)} bars", file=sys.stderr)
+                    pq_sorted = sorted(b["timestamp"] for b in gap_pq)
+                    if pq_sorted[0] <= gs_ts and pq_sorted[-1] >= ge_ts:
+                        continue  # gap fully covered
+                new_gaps.append((gap_start, gap_end))
+            gaps = new_gaps
+            if not gaps:
+                collected_bars.sort(key=lambda b: b["timestamp"])
+                seen = set()
+                result = [b for b in collected_bars if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
+                print(f"[Parquet] {symbol} 全部命中: {len(result)} bars", file=sys.stderr)
+                return result
+
+    # ── Priority 2: SQLite cache ──────────────────────────────────
     try:
         from cache.stock_cache import get_cache
         cache = get_cache()
@@ -858,22 +938,35 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
             symbol, market, period, start, end
         )
 
-        # Check if cache fully covers the requested range
-        if cached_bars and cached_start <= start and cached_end >= end:
-            print(f"[缓存✓] K线全命中: {symbol} {start}~{end} ({len(cached_bars)} bars)", file=sys.stderr)
-            return cached_bars
-
-        # Determine what gaps to fill
-        gaps = cache.get_klines_missing_range(symbol, start, end, market, period)
         if cached_bars:
-            gap_desc = ", ".join(f"{g[0]}~{g[1]}" for g in gaps)
-            print(f"[缓存△] K线部分命中: {symbol} 已缓存{len(cached_bars)}bars, 需补: {gap_desc}", file=sys.stderr)
-        else:
-            print(f"[缓存✗] K线未命中: {symbol} {start}~{end}, 需全量拉取", file=sys.stderr)
+            # Use cached bars to fill remaining gaps
+            cached_ts = {b["timestamp"] for b in cached_bars}
+            new_gaps = []
+            for gap_start, gap_end in gaps:
+                gs_ts = int(datetime.strptime(gap_start, "%Y-%m-%d").timestamp() * 1000)
+                ge_ts = int(datetime.strptime(gap_end, "%Y-%m-%d").timestamp() * 1000)
+                gap_cached = [b for b in cached_bars if gs_ts <= b["timestamp"] <= ge_ts]
+                if gap_cached:
+                    collected_bars.extend(gap_cached)
+                    print(f"[SQLite✓] {symbol} {gap_start}~{gap_end} 补充 {len(gap_cached)} bars", file=sys.stderr)
+                    if cached_start <= gap_start and cached_end >= gap_end:
+                        continue  # gap fully covered by cache
+                new_gaps.append((gap_start, gap_end))
+            gaps = new_gaps
+
+        if not gaps:
+            collected_bars.sort(key=lambda b: b["timestamp"])
+            seen = set()
+            result = [b for b in collected_bars if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
+            print(f"[Parquet+SQLite] {symbol} 本地全覆盖: {len(result)} bars", file=sys.stderr)
+            return result
+
+        # Refine gaps using cache's own gap detection
+        gaps = cache.get_klines_missing_range(symbol, start, end, market, period)
+        gap_desc = ", ".join(f"{g[0]}~{g[1]}" for g in gaps)
+        print(f"[本地△] {symbol} 仍缺: {gap_desc}", file=sys.stderr)
     except Exception as e:
         print(f"[缓存] K线缓存读取失败: {e}", file=sys.stderr)
-        cached_bars = []
-        gaps = [(start, end)]
 
     try:
         all_new_bars = []
@@ -1012,8 +1105,8 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
             except Exception as e:
                 print(f"[缓存] K线缓存保存失败: {e}", file=sys.stderr)
 
-        # Merge cached + new bars, sorted by timestamp
-        merged = cached_bars + all_new_bars
+        # Merge collected (parquet+sqlite) + new bars, sorted by timestamp
+        merged = collected_bars + all_new_bars
         merged.sort(key=lambda b: b["timestamp"])
         # Deduplicate by timestamp
         seen = set()
@@ -1024,17 +1117,17 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                 seen.add(ts)
                 result.append(bar)
 
-        _cached_n = len(cached_bars)
+        _local_n = len(collected_bars)
         _new_n = len(all_new_bars)
         _total_n = len(result)
         if _new_n > 0:
-            print(f"[缓存汇总] {symbol}: 缓存{_cached_n} + 新拉{_new_n} = 合计{_total_n} bars", file=sys.stderr)
+            print(f"[汇总] {symbol}: 本地{_local_n} + 新拉{_new_n} = 合计{_total_n} bars", file=sys.stderr)
         return result
 
     except Exception as e:
         print(f"Error fetching klines: {e}", file=sys.stderr)
-        # Return cached data if available even on fetch error
-        return cached_bars if cached_bars else []
+        # Return local data if available even on fetch error
+        return collected_bars if collected_bars else []
 
 
 def _xq_search(keyword: str, size: int = 10) -> list:

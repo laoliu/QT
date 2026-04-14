@@ -134,7 +134,7 @@ function applyOptimalPool(){
 function loadOptHistory(){
   var statusEl=document.getElementById('opt-history-status');
   statusEl.textContent='加载中…';
-  api('/quant/admin/api/optimize-history?limit=50')
+  api('/quant/admin/api/optimize-history?limit=50',{_timeout:30000})
     .then(function(d){
       if(d.error){statusEl.textContent='加载失败: '+d.error;return;}
       var entries=d.entries||[];

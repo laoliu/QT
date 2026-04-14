@@ -86,6 +86,14 @@ export function getAdminBodyHtml(b: string): string {
       </div>
       <div id="sync-result" style="margin-top:8px;font-size:12px"></div>
     </div>
+    <div class="card">      <h3>💾 离线数据 (TuShare Parquet)</h3>
+      <div id="local-data-status" style="font-size:12px;margin-bottom:8px"></div>
+      <div class="form-row">
+        <button class="btn btn-sm" onclick="checkLocalData()">🔍 检查状态</button>
+        <button class="btn btn-primary" onclick="syncLocalData()">📥 补全最新数据</button>
+      </div>
+      <div id="local-data-result" style="margin-top:8px;font-size:12px"></div>
+    </div>
     <div class="card">
       <h3>🔥 数据预热</h3>
       <div class="form-row"><label>代码</label><input type="text" id="warmup-symbols" placeholder="000300,600519" style="width:200px"><label>周期</label>

@@ -1,8 +1,10 @@
 import { runPythonScript } from "../bridge/python-bridge.js";
+import { LocalParquetProvider } from "./local-parquet-provider.js";
 /**
  * Data provider abstraction — fetches market data from various sources.
  *
  * Supported backends:
+ *   - local-parquet (A-share daily from G:/qtdata — fastest, disk only)
  *   - akshare (A-share, futures, fund — via Python bridge)
  *   - tushare (A-share — via Python bridge)
  *   - Built-in mock/demo provider (for testing)
@@ -677,12 +679,17 @@ export function getLotSize(symbol: string, market?: MarketType): number {
  */
 class SmartProvider implements MarketDataProvider {
   name = "smart";
+  private localParquet: LocalParquetProvider | null;
   private akshare: AKShareProvider;
   private yfinance: YFinanceProvider;
   private tushare: TushareProvider;
   private jqdata: JQDataProvider;
 
   constructor(private config: QuantTradingConfig) {
+    // Local parquet is enabled by default when not explicitly disabled
+    const localCfg = config.dataProviders?.localData;
+    this.localParquet =
+      localCfg?.enabled === false ? null : new LocalParquetProvider(config);
     this.akshare = new AKShareProvider(config);
     this.yfinance = new YFinanceProvider(config);
     this.tushare = new TushareProvider(config);
@@ -731,6 +738,13 @@ class SmartProvider implements MarketDataProvider {
     market?: MarketType,
   ): Promise<KlineBar[]> {
     const m = market ?? detectMarketFromSymbol(symbol);
+
+    // Try local parquet first for CN markets (fastest — disk read, no API)
+    if (this.localParquet && (m === "cn_stock" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
+      const localBars = await this.localParquet.getKlines(symbol, interval, start, end, m);
+      if (localBars.length > 0) return localBars;
+    }
+
     const bars = await this.pick(m).getKlines(symbol, interval, start, end, m);
     if (bars.length > 0) return bars;
 
@@ -986,6 +1000,11 @@ export function createDataProvider(config: QuantTradingConfig): MarketDataProvid
   // Shorthand selector: `dataProvider: "demo"` returns offline demo data
   if (config.dataProvider === "demo") {
     return new DemoProvider();
+  }
+
+  // Local parquet provider (direct disk reads, no API)
+  if (config.dataProvider === "local") {
+    return new CachedProvider(new LocalParquetProvider(config));
   }
 
   // When broker is remote-qmt, use QMT bridge for CN stock data with akshare fallback

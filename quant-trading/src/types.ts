@@ -783,6 +783,12 @@ export type DataProviderConfig = {
   tushare?: { enabled: boolean; token?: string };
   yfinance?: { enabled: boolean };
   fred?: { enabled?: boolean; apiKey?: string };
+  /** Local parquet data cache (tushare format from G:/qtdata). */
+  localData?: {
+    enabled: boolean;
+    /** Root data directory (default: "G:/qtdata"). */
+    dataDir?: string;
+  };
 };
 
 /** Broker-specific connection configs */
@@ -859,8 +865,8 @@ export type SignalWebhookConfig = {
 export type QuantTradingConfig = {
   dataDir?: string;
   defaultMarket?: MarketType;
-  /** Shorthand provider selector: "demo" for offline/test, otherwise use `dataProviders`. */
-  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart" | "jqdata";
+  /** Shorthand provider selector: "demo" for offline/test, "local" for disk-only parquet, otherwise use `dataProviders`. */
+  dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart" | "jqdata" | "local";
   dataProviders?: DataProviderConfig;
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
@@ -925,6 +931,14 @@ export type QuantTradingConfig = {
    * via iframe.  Example: 18890.
    */
   openclawProxyPort?: number;
+
+  /**
+   * Standalone HTTP server port.
+   * When set, a lightweight Node.js HTTP server is started on this port
+   * that serves all `/quant/*` routes independently of the OpenClaw gateway.
+   * Useful when the gateway (龙虾) is not running.  Example: 18891.
+   */
+  standalonePort?: number;
 
   /**
    * Data staleness monitoring configuration.

@@ -233,6 +233,37 @@ function doWarmup(){
     }).join('');toast('✅ 预热完成');loadData();
   });
 }
+function checkLocalData(){
+  toast('🔍 检查离线数据…');
+  var el=document.getElementById('local-data-result');
+  api('/quant/admin/api/local-data/check').then(function(r){
+    if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'检查失败')+'</span>';return}
+    var d=r.data||r;
+    var html='<div>📂 缓存月份: <b>'+d.cached_months+'</b>  最新月: <b>'+(d.latest_month||'无')+'</b></div>';
+    if(d.stale_months&&d.stale_months.length){
+      html+='<div style="color:var(--orange)">⏳ 需更新: <b>'+d.stale_months.length+'</b> 个月</div>';
+      d.stale_months.forEach(function(m){html+='<div style="font-size:11px;margin-left:12px">'+esc(m.month)+' — '+esc(m.reason)+(m.latest_date?' (最新: '+m.latest_date+')':'')+'</div>'});
+    }else{html+='<div style="color:var(--green)">✅ '+esc(d.message||'全部最新')+'</div>'}
+    el.innerHTML=html;
+    document.getElementById('local-data-status').innerHTML='💾 '+d.cached_months+' 月, 最新: '+(d.latest_month||'-');
+  });
+}
+function syncLocalData(){
+  toast('📥 正在补全离线数据… (可能需要较长时间)');
+  var el=document.getElementById('local-data-result');
+  el.innerHTML='<div style="color:var(--text-dim)">⏳ 同步进行中，请耐心等待…</div>';
+  api('/quant/admin/api/local-data/sync',{method:'POST',body:JSON.stringify({})}).then(function(r){
+    if(r.status==='error'||r.ok===false){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||r.error||'同步失败')+'</span>';toast('❌ 同步失败');return}
+    var html='<div>✅ 同步完成 (耗时 '+r.elapsed_seconds+'s)</div>';
+    html+='<div>日线: <b>'+r.daily_months_synced+'</b> 月  复权因子: <b>'+r.adj_factor_months_synced+'</b> 月</div>';
+    if(r.stock_basic)html+='<div>股票列表: '+esc(r.stock_basic.status)+(r.stock_basic.stocks?' ('+r.stock_basic.stocks+'只)':'')+'</div>';
+    el.innerHTML=html;
+    toast('✅ 离线数据同步完成');
+  }).catch(function(err){
+    el.innerHTML='<span style="color:var(--red)">❌ 请求超时或失败: '+esc(String(err.message||err))+'</span>';
+    toast('❌ 同步请求失败');
+  });
+}
 function queryKlines(){
   var symbol=document.getElementById('kline-symbol').value.trim();
   var interval=document.getElementById('kline-interval').value;

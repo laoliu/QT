@@ -28,7 +28,7 @@ function syncDailyPickHistory(){
 }
 
 function fetchDailyPickHistory(){
-  return api('/quant/admin/api/daily-pick-history').then(function(list){
+  return api('/quant/admin/api/daily-pick-history',{_timeout:60000}).then(function(list){
     _dailyPickHistory=Array.isArray(list)?list:[];
     return _dailyPickHistory;
   }).catch(function(){
@@ -156,7 +156,7 @@ function restoreDailyPickHistory(id,callback){
   }
 
   toast('正在加载历史记录…');
-  api('/quant/admin/api/daily-pick-history/detail?id='+encodeURIComponent(id))
+  api('/quant/admin/api/daily-pick-history/detail?id='+encodeURIComponent(id),{_timeout:60000})
     .then(function(result){
       if(!result||result.error){
         toast('❌ 加载失败: '+(result&&result.error||'未知错误'));
@@ -205,7 +205,8 @@ function deleteDailyPickHistory(id){
   if(!confirm('确认删除这条每日综合选股历史记录吗？'))return;
   api('/quant/admin/api/daily-pick-history/delete',{
     method:'POST',
-    body:JSON.stringify({id:id})
+    body:JSON.stringify({id:id}),
+    _timeout:30000
   }).then(function(){
     return fetchDailyPickHistory();
   }).then(function(){

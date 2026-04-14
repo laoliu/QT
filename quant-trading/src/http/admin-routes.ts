@@ -2026,6 +2026,32 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         const pendingOrders = orderMgr
           ? await orderMgr.getOrders({ status: ["pending", "submitted", "partial"] })
           : [];
+        // Enrich pending orders with stock names (same pattern as conditional-orders)
+        const nameMap = new Map<string, string>();
+        for (const p of positions) {
+          if (p.name) nameMap.set(p.symbol, p.name);
+        }
+        const missingSyms = [...new Set(pendingOrders.map((o) => o.symbol))].filter(
+          (s) => !nameMap.has(s),
+        );
+        if (missingSyms.length > 0) {
+          await Promise.all(
+            missingSyms.map(async (sym) => {
+              try {
+                const q = await marketDataProvider.getQuote(sym);
+                if (q?.symbol?.name && q.symbol.name !== sym) {
+                  nameMap.set(sym, q.symbol.name);
+                }
+              } catch {
+                /* ignore */
+              }
+            }),
+          );
+        }
+        const enrichedPending = pendingOrders.map((o) => ({
+          ...o,
+          name: nameMap.get(o.symbol) ?? "",
+        }));
         const currentBrokerType = engine.broker?.brokerType;
         const connHealth = engine.getConnectionHealth();
 
@@ -2037,11 +2063,11 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           lastError: connHealth.lastError ?? null,
           positionCount: positions.length,
           positions: positions.slice(0, 50),
-          pendingOrderCount: pendingOrders.length,
+          pendingOrderCount: enrichedPending.length,
           pendingOrderCountByBroker: currentBrokerType
-            ? pendingOrders.filter((o) => o.brokerType === currentBrokerType).length
-            : pendingOrders.length,
-          pendingOrders: pendingOrders.slice(0, 50),
+            ? enrichedPending.filter((o) => o.brokerType === currentBrokerType).length
+            : enrichedPending.length,
+          pendingOrders: enrichedPending.slice(0, 50),
           conditionalOrderCount: conditionalOrderService.activeCount,
         });
       } catch (err) {
@@ -3229,6 +3255,57 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         { action: "sync", source, symbols, max_stocks: maxStocks, days },
         config,
         { maxRetries: 0, timeoutMs: 10 * 60_000 },
+      );
+      json(res, result.ok ? result.data : { status: "error", message: result.error });
+    }),
+  });
+
+  // ── Local Parquet Data — Check / Sync / Health ────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/local-data/check",
+    handler: secure(async (_req, res) => {
+      const result = await runPythonScript<Record<string, unknown>>(
+        "data_providers/parquet_data_updater.py",
+        { action: "check" },
+        config,
+        { maxRetries: 0, timeoutMs: 3 * 60_000 },
+      );
+      json(res, result.ok ? result.data : { status: "error", message: result.error });
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/local-data/sync",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        res.writeHead(405);
+        res.end();
+        return;
+      }
+      const body = await parseObjectBody(req);
+      const force = !!(body.force as boolean);
+      const startFrom = (body.start_from as string) ?? "";
+      const result = await runPythonScript<Record<string, unknown>>(
+        "data_providers/parquet_data_updater.py",
+        { action: "sync", force, start_from: startFrom },
+        config,
+        { maxRetries: 0, timeoutMs: 30 * 60_000 },
+      );
+      json(res, result.ok ? result.data : { status: "error", message: result.error });
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/local-data/health",
+    handler: secure(async (_req, res) => {
+      const result = await runPythonScript<Record<string, unknown>>(
+        "data_providers/parquet_data_updater.py",
+        { action: "health" },
+        config,
+        { maxRetries: 0, timeoutMs: 60_000 },
       );
       json(res, result.ok ? result.data : { status: "error", message: result.error });
     }),

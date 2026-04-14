@@ -1545,7 +1545,7 @@ export function getPlannerBodyHtml(b: string): string {
         </div>
         <div style="overflow-x:auto">
           <table id="engine-pending-table">
-            <thead><tr><th>订单号</th><th>代码</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成</th><th>状态</th><th>券商</th><th>策略</th><th>时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>订单号</th><th>代码</th><th>名称</th><th>方向</th><th>类型</th><th>价格</th><th>数量</th><th>已成</th><th>状态</th><th>券商</th><th>策略</th><th>时间</th><th>操作</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

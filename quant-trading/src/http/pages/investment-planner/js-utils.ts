@@ -13,7 +13,7 @@ function toast(msg,ms){ms=ms||2500;var el=document.getElementById('toast');el.te
 
 function api(path,opts){
   opts=opts||{};
-  var timeoutMs=opts._timeout||15000;
+  var timeoutMs=opts._timeout||30000;
   var headers=opts.body?{'Content-Type':'application/json'}:{};
   if(opts.headers)Object.keys(opts.headers).forEach(function(k){headers[k]=opts.headers[k]});
   var fetchOpts=Object.assign({},opts,{headers:headers});

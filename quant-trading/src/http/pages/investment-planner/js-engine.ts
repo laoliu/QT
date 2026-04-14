@@ -293,7 +293,7 @@ var _enginePositions=[];
 var _enginePendingOrders=[];
 var _engineStartPollTimer=null;
 function loadEngineStatus(){
-  api('/quant/admin/api/engine-status')
+  api('/quant/admin/api/engine-status',{_timeout:30000})
     .then(function(d){
       _enginePositions=d.positions||[];
       _enginePendingOrders=(d.pendingOrders||[]).filter(function(o){
@@ -342,7 +342,7 @@ function loadEngineStatus(){
       // Keep polling while engine is starting
       if(mode==='starting'&&!_engineStartPollTimer){
         _engineStartPollTimer=setInterval(function(){
-          api('/quant/admin/api/engine-status').then(function(d2){
+          api('/quant/admin/api/engine-status',{_timeout:30000}).then(function(d2){
             var m2=d2.mode||'stopped';
             if(m2!=='starting'){
               clearInterval(_engineStartPollTimer);
@@ -419,7 +419,7 @@ function renderPositionsTable(){
 function renderPendingTable(){
   var tbody=document.querySelector('#engine-pending-table tbody');
   if(!_enginePendingOrders.length){
-    tbody.innerHTML='<tr><td colspan="12" style="color:var(--text-dim)">暂无挂单</td></tr>';
+    tbody.innerHTML='<tr><td colspan="13" style="color:var(--text-dim)">暂无挂单</td></tr>';
     return;
   }
   var sideLabel={buy:'买入',sell:'卖出',short:'做空',cover:'平空'};
@@ -430,6 +430,7 @@ function renderPendingTable(){
     rows+='<tr>'+
       '<td style="font-size:11px">'+esc((o.orderId||'').slice(0,8))+'</td>'+
       '<td>'+esc(o.symbol||'')+'</td>'+
+      '<td>'+esc(o.name||'-')+'</td>'+
       '<td style="color:'+sideColor+'">'+(sideLabel[o.side]||o.side)+'</td>'+
       '<td>'+esc(o.orderType||'-')+'</td>'+
       '<td>'+(o.price!=null?num(o.price):'市价')+'</td>'+
@@ -466,7 +467,7 @@ function cancelPendingOrder(orderId){
 
 function loadConditionalOrders(){
   document.getElementById('cond-status').textContent='加载中…';
-  api('/quant/admin/api/conditional-orders?active=false')
+  api('/quant/admin/api/conditional-orders?active=false',{_timeout:30000})
     .then(function(d){
       var orders=d.orders||[];
       document.getElementById('cond-status').textContent='共 '+orders.length+' 条记录，活跃 '+(d.activeCount||0)+' 条';

@@ -149,6 +149,9 @@ async function _spawnPython<T = unknown>(
         ...(config.dataProviders?.fred?.apiKey
           ? { FRED_API_KEY: config.dataProviders.fred.apiKey }
           : {}),
+        ...(config.dataProviders?.localData?.dataDir
+          ? { QTDATA_DIR: config.dataProviders.localData.dataDir }
+          : {}),
       },
     });
 

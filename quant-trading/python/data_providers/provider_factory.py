@@ -224,6 +224,32 @@ def _fetch_jqdata_data(symbol: str, start_date: str, end_date: str, market: str 
         return None
 
 
+def _fetch_local_parquet_data(symbol: str, start_date: str, end_date: str, market: str = "cn_stock"):
+    """Fetch data from local parquet cache (G:/qtdata).
+
+    Fastest source — no network calls. Returns DataFrame or None.
+    """
+    try:
+        from data_providers.local_parquet_provider import get_klines
+        import pandas as pd
+
+        data_dir = os.environ.get("QTDATA_DIR", "G:/qtdata")
+        bars = get_klines(symbol, "1d", start_date, end_date, market, data_dir)
+        if not bars:
+            return None
+
+        df = pd.DataFrame(bars)
+        df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df = df.set_index("date")
+        df = df[["open", "high", "low", "close", "volume"]]
+        df = df.sort_index()
+        return df
+
+    except Exception as e:
+        print(f"[local_parquet] Error fetching {symbol}: {e}", file=sys.stderr)
+        return None
+
+
 def fetch_data_for_backtest(
     symbol: str,
     start_date: str,
@@ -233,9 +259,9 @@ def fetch_data_for_backtest(
     """Fetch historical data for backtesting. Returns pandas DataFrame.
 
     Auto-routes based on symbol with multi-source fallback:
-      A-shares:  AKShare → Tushare → JQData → YFinance
+      A-shares:  LocalParquet → AKShare → Tushare → JQData → YFinance
       US/HK:     YFinance → AKShare
-      Index:     AKShare → Tushare → JQData
+      Index:     LocalParquet → AKShare → Tushare → JQData
 
     Args:
         symbol: Stock code (600519, AAPL, 00700.HK, etc.)
@@ -251,24 +277,30 @@ def fetch_data_for_backtest(
         market = detect_market(symbol)
 
     if market == "cn_stock" or market == "index":
-        # Primary: AKShare
+        # Primary: Local Parquet (fastest — disk read only, no API)
+        df = _fetch_local_parquet_data(symbol, start_date, end_date, market)
+        if df is not None and not df.empty:
+            return df
+
+        # Fallback 1: AKShare
+        print(f"[provider_factory] Local parquet miss for {symbol}, trying AKShare", file=sys.stderr)
         df = _fetch_cn_data(symbol, start_date, end_date)
         if df is not None and not df.empty:
             return df
 
-        # Fallback 1: Tushare
+        # Fallback 2: Tushare
         print(f"[provider_factory] AKShare failed for {symbol}, trying Tushare", file=sys.stderr)
         df = _fetch_tushare_data(symbol, start_date, end_date, market)
         if df is not None and not df.empty:
             return df
 
-        # Fallback 2: JQData
+        # Fallback 3: JQData
         print(f"[provider_factory] Tushare failed for {symbol}, trying JQData", file=sys.stderr)
         df = _fetch_jqdata_data(symbol, start_date, end_date, market)
         if df is not None and not df.empty:
             return df
 
-        # Fallback 3: YFinance
+        # Fallback 4: YFinance
         print(f"[provider_factory] JQData failed for {symbol}, trying YFinance", file=sys.stderr)
         return _fetch_yfinance_data(symbol, start_date, end_date, market)
     else:
@@ -334,20 +366,102 @@ def fetch_klines_batch(
 ) -> dict[str, Any]:
     """Fetch K-line data for multiple symbols concurrently.
 
+    Optimisation: loads local parquet monthly files once and extracts data
+    for all requested symbols, only falling back to API for missing symbols.
+
     Returns dict of {symbol: DataFrame_or_None}.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     results: dict[str, Any] = {}
 
-    def _fetch_one(sym: str) -> tuple[str, Any]:
-        return sym, fetch_data_for_backtest(sym, start_date, end_date, market or detect_market(sym))
+    # ── Phase 1: batch-read from local parquet (single pass) ──────
+    try:
+        from data_providers.local_parquet_provider import _to_ts_code, _months_between, _safe_read_parquet, _apply_qfq
+        import pandas as pd
+        from pathlib import Path
+        from datetime import datetime as _dt
 
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_fetch_one, sym): sym for sym in symbols}
-        for future in as_completed(futures):
-            sym, df = future.result()
-            results[sym] = df
+        data_dir = os.environ.get("QTDATA_DIR", "G:/qtdata")
+        cache_dir = Path(data_dir) / "cache" / "equity_tushare"
+
+        if cache_dir.exists():
+            start_norm = start_date.replace("-", "")
+            end_norm = end_date.replace("-", "")
+            months = _months_between(start_norm, end_norm)
+
+            # Load monthly files once
+            month_dfs = {}
+            adj_month_dfs = {}
+            for month in months:
+                p = cache_dir / f"daily_{month}.parquet"
+                if p.exists():
+                    df = _safe_read_parquet(p)
+                    if df is not None and not df.empty:
+                        month_dfs[month] = df
+                ap = cache_dir / f"adj_factor_{month}.parquet"
+                if ap.exists():
+                    adf = _safe_read_parquet(ap)
+                    if adf is not None and not adf.empty:
+                        adj_month_dfs[month] = adf
+
+            # Extract data per symbol
+            for sym in symbols:
+                mkt = market or detect_market(sym)
+                if mkt not in ("cn_stock", "index"):
+                    continue
+                ts_code = _to_ts_code(sym, mkt)
+                sym_dfs = []
+                for month in months:
+                    if month not in month_dfs:
+                        continue
+                    sdf = month_dfs[month][month_dfs[month]["ts_code"] == ts_code]
+                    if not sdf.empty:
+                        sym_dfs.append(sdf)
+
+                if not sym_dfs:
+                    continue
+
+                merged = pd.concat(sym_dfs, ignore_index=True)
+                merged = merged[
+                    (merged["trade_date"] >= start_norm)
+                    & (merged["trade_date"] <= end_norm)
+                ]
+                merged = merged.drop_duplicates(subset=["ts_code", "trade_date"])
+                merged = merged.sort_values("trade_date")
+
+                if merged.empty:
+                    continue
+
+                # Apply QFQ
+                merged = _apply_qfq(merged, ts_code, months, cache_dir)
+
+                out = merged[["open", "high", "low", "close", "vol"]].copy()
+                out = out.rename(columns={"vol": "volume"})
+                out.index = pd.to_datetime(merged["trade_date"], format="%Y%m%d")
+                results[sym] = out
+
+    except Exception as e:
+        print(f"[provider_factory] Batch local parquet error: {e}", file=sys.stderr)
+
+    # ── Phase 2: fetch missing symbols from API ───────────────────
+    missing = [s for s in symbols if s not in results]
+    if missing:
+        if len(results) > 0:
+            print(
+                f"[provider_factory] {len(results)}/{len(symbols)} from local parquet, "
+                f"fetching {len(missing)} from API",
+                file=sys.stderr,
+            )
+
+        def _fetch_one(sym: str) -> tuple[str, Any]:
+            return sym, fetch_data_for_backtest(sym, start_date, end_date, market or detect_market(sym))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_fetch_one, sym): sym for sym in missing}
+            for future in as_completed(futures):
+                sym, df = future.result()
+                results[sym] = df
 
     return results
 

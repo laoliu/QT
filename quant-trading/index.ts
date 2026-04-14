@@ -83,6 +83,7 @@ import {
   type HttpHandler,
 } from "./src/http/auth-middleware.js";
 import { registerQuantRoutes } from "./src/http/routes.js";
+import { createRouteCollector, startStandaloneServer, stopStandaloneServer } from "./src/http/standalone-server.js";
 import { AlertStore } from "./src/services/alert-store.js";
 import { BacktestStore } from "./src/services/backtest-store.js";
 import { BenchmarkService } from "./src/services/benchmark.js";
@@ -1303,6 +1304,23 @@ const quantTradingPlugin = {
     const securePublic = (handler: HttpHandler): HttpHandler =>
       withRateLimit(config, withCors(config, handler), rateLimiter);
 
+    // ── Standalone server: intercept route registrations ───
+    const standalonePort = config.standalonePort
+      ? Number(config.standalonePort)
+      : 0;
+    const routeCollector = standalonePort ? createRouteCollector() : null;
+    if (routeCollector) {
+      const origRegister = api.registerHttpRoute.bind(api);
+      api.registerHttpRoute = (params) => {
+        origRegister(params);
+        routeCollector.collect({
+          path: params.path,
+          handler: params.handler,
+          match: params.match,
+        });
+      };
+    }
+
     const tradePlanStore = new TradePlanStoreImpl({
       persistPath: config.dataDir ? `${config.dataDir}/trade-plans.json` : null,
     });
@@ -1355,6 +1373,16 @@ const quantTradingPlugin = {
       secure,
       securePublic,
     });
+
+    // ── Standalone HTTP Server ─────────────────────────────
+    if (routeCollector && standalonePort) {
+      startStandaloneServer(routeCollector.routes, standalonePort, api.logger);
+      api.registerService({
+        id: "standalone-http",
+        async start() { /* already started above */ },
+        async stop() { stopStandaloneServer(); },
+      });
+    }
 
     // ── AI Workflow Instructions (injected into system prompt) ──
     api.on("before_prompt_build", async () => ({

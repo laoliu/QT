@@ -2501,6 +2501,104 @@ def monitor_portfolio(
     }
 
 
+def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20) -> list[dict]:
+    """使用策略适配数据库选股：每只股票使用其历史最优策略。
+
+    从 stock_strategy_fitness 表中读取所有股票的 rank=1 策略，
+    按 composite_score 降序排列，返回 top_n 只。
+    """
+    import sqlite3 as _sql
+
+    home = os.path.expanduser("~")
+    db_path = os.path.join(home, ".openclaw", "extensions", "quant-trading", "cache", "quant-trading.db")
+    if not os.path.exists(db_path):
+        print("[fitness_optimal] 数据库不存在", file=sys.stderr)
+        return []
+
+    try:
+        conn = _sql.connect(db_path)
+        conn.row_factory = _sql.Row
+
+        # 获取最新batch_id
+        batch_row = conn.execute(
+            "SELECT batch_id FROM stock_strategy_fitness ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        if not batch_row:
+            conn.close()
+            print("[fitness_optimal] 无适配数据", file=sys.stderr)
+            return []
+        batch_id = batch_row["batch_id"]
+
+        # 获取每只股票的 rank=1 策略，按 composite_score 降序
+        rows = conn.execute("""
+            SELECT symbol, stock_name, strategy_id, strategy_name,
+                   composite_score, total_return, annualized_return,
+                   sharpe_ratio, max_drawdown, win_rate
+            FROM stock_strategy_fitness
+            WHERE batch_id = ? AND rank = 1
+            ORDER BY composite_score DESC
+            LIMIT ?
+        """, (batch_id, top_n * 2)).fetchall()
+
+        conn.close()
+
+        if not rows:
+            print("[fitness_optimal] 无rank=1数据", file=sys.stderr)
+            return []
+
+        # 同时获取全局最优策略列表
+        conn2 = _sql.connect(db_path)
+        conn2.row_factory = _sql.Row
+        global_rows = conn2.execute("""
+            SELECT strategy_id FROM global_strategy_ranking
+            WHERE batch_id = ? ORDER BY rank ASC LIMIT 10
+        """, (batch_id,)).fetchall()
+        conn2.close()
+        global_strategies = {r["strategy_id"] for r in global_rows}
+
+        candidates = []
+        for r in rows:
+            score = float(r["composite_score"])
+            reasons = [
+                f"最优策略: {r['strategy_name'] or r['strategy_id']}",
+                f"综合得分: {score:.2f}",
+                f"年化收益: {float(r['annualized_return'] or 0)*100:.1f}%",
+                f"夏普: {float(r['sharpe_ratio'] or 0):.2f}",
+                f"最大回撤: {float(r['max_drawdown'] or 0)*100:.1f}%",
+                f"胜率: {float(r['win_rate'] or 0)*100:.0f}%",
+            ]
+            # 若其最优策略也是全局最优，额外加分
+            if r["strategy_id"] in global_strategies:
+                score += 5
+                reasons.append("★全局最优策略")
+            candidates.append({
+                "symbol": r["symbol"],
+                "name": r["stock_name"] or r["symbol"],
+                "score": round(score, 2),
+                "price": 0,
+                "changePct": 0,
+                "pe": None,
+                "pb": None,
+                "mktcap": None,
+                "reasons": reasons,
+                "bestStrategy": r["strategy_id"],
+                "fitnessScore": float(r["composite_score"]),
+                "totalReturn": float(r["total_return"] or 0),
+                "annualizedReturn": float(r["annualized_return"] or 0),
+                "sharpeRatio": float(r["sharpe_ratio"] or 0),
+                "maxDrawdown": float(r["max_drawdown"] or 0),
+                "winRate": float(r["win_rate"] or 0),
+            })
+
+        # 按score降序
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        print(f"[fitness_optimal] 返回 {min(len(candidates), top_n)} 只股票", file=sys.stderr)
+        return candidates[:top_n]
+    except Exception as e:
+        print(f"[fitness_optimal] 查询失败: {e}", file=sys.stderr)
+        return []
+
+
 def update_screening(
     strategy: str = "auto",
     risk_tolerance: str = "medium",
@@ -2510,6 +2608,21 @@ def update_screening(
     import time as _time
     t_total = _time.time()
     profile = RISK_PROFILES.get(risk_tolerance, RISK_PROFILES["medium"])
+
+    # ── fitness_optimal: use strategy-stock fitness DB to pick each stock's best strategy ──
+    if strategy == "fitness_optimal":
+        candidates = _screen_fitness_optimal(profile, top_n)
+        if candidates:
+            enhanced = list(candidates[:top_n])
+            # Skip Round 4 kline re-fetch since fitness data is from full backtest
+            print(f"[planner:timing] fitness_optimal: {_time.time()-t_total:.1f}s ({len(enhanced)} stocks)", file=sys.stderr, flush=True)
+            return {
+                "candidates": enhanced,
+                "strategy": "fitness_optimal",
+                "total": len(enhanced),
+            }
+        # Fallback to auto if no fitness data
+        strategy = "auto"
 
     t0 = _time.time()
     candidates = screen_stocks(strategy, profile, top_n)

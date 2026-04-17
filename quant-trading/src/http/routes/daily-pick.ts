@@ -432,6 +432,26 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
+        // ── Load strategy-fitness data for scoring boost ──────
+        let fitnessMap = new Map<string, { bestStrategy: string; score: number }>();
+        let globalTopStrategies = new Set<string>();
+        try {
+          const fitnessResult = await runPythonScript<Record<string, unknown>>(
+            "scripts/strategy_fitness.py",
+            { action: "query_global" },
+            config,
+            { timeoutMs: 10_000 },
+          );
+          if (fitnessResult.ok && fitnessResult.data) {
+            const strategies = fitnessResult.data.strategies as Array<Record<string, unknown>> | undefined;
+            if (strategies) {
+              globalTopStrategies = new Set(strategies.map((s) => String(s.strategy_id)));
+            }
+          }
+        } catch {
+          // Fitness data optional — silently continue
+        }
+
         const combinedMap = new Map<string, CombinedStock>();
         selectedStrategies.forEach((run, strategyIdx) => {
           const strategyWeight = Math.max(1, topStrategyCount - strategyIdx);
@@ -450,8 +470,13 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
               selected: false,
             };
             const rankWeight = (topNPerStrategy - candidateIdx) / topNPerStrategy;
-            const contribution =
+            let contribution =
               Math.max(0, candidate.score) * 0.7 + rankWeight * 35 + strategyWeight * 10;
+
+            // Boost if the strategy is in global top strategies (fitness data)
+            if (globalTopStrategies.has(run.screenStrategy ?? run.strategy)) {
+              contribution += 15;
+            }
 
             current.appearanceCount += 1;
             current.contributionScore += contribution;
@@ -504,6 +529,30 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         const backtestPoolSize = Math.min(combinedList.length, finalStockLimit * 2);
         const backtestPool = combinedList.slice(0, backtestPoolSize);
         const backtestPoolSymbols = backtestPool.map((item) => item.symbol);
+
+        // ── Load per-stock fitness data for candidate boost ────
+        for (const sym of backtestPoolSymbols) {
+          try {
+            const fitRes = await runPythonScript<Record<string, unknown>>(
+              "scripts/strategy_fitness.py",
+              { action: "query_stock", symbol: sym },
+              config,
+              { timeoutMs: 5_000 },
+            );
+            if (fitRes.ok && fitRes.data) {
+              const strategies = fitRes.data.strategies as Array<Record<string, unknown>> | undefined;
+              if (strategies && strategies.length > 0) {
+                const best = strategies[0]!;
+                fitnessMap.set(sym, {
+                  bestStrategy: String(best.strategy_id),
+                  score: Number(best.composite_score) || 0,
+                });
+              }
+            }
+          } catch {
+            // Optional — continue without fitness data
+          }
+        }
 
         let stockBacktestRanking: StockBacktestEntry[] = [];
         if (backtestPool.length > 0) {
@@ -640,7 +689,14 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         const backtestScoreMap = new Map<string, number>();
         for (const row of stockBacktestRanking) {
           if (row.summary && !row.error) {
-            backtestScoreMap.set(row.symbol, row.compositeScore);
+            let score = row.compositeScore;
+            // Apply fitness boost: stocks with strong fitness data get a bonus
+            const fitness = fitnessMap.get(row.symbol);
+            if (fitness && fitness.score > 0) {
+              // Add up to 10% bonus based on fitness composite score
+              score += Math.min(fitness.score * 0.1, score * 0.1);
+            }
+            backtestScoreMap.set(row.symbol, round2(score));
           }
         }
 

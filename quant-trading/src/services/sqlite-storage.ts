@@ -155,6 +155,54 @@ CREATE TABLE IF NOT EXISTS trade_plans (
 CREATE INDEX IF NOT EXISTS idx_trade_plans_symbol ON trade_plans(symbol);
 CREATE INDEX IF NOT EXISTS idx_trade_plans_date ON trade_plans(date);
 CREATE INDEX IF NOT EXISTS idx_trade_plans_status ON trade_plans(status);
+
+-- Strategy-Stock fitness: top 5 best strategies per stock
+CREATE TABLE IF NOT EXISTS stock_strategy_fitness (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol          TEXT NOT NULL,
+  stock_name      TEXT,
+  strategy_id     TEXT NOT NULL,
+  strategy_name   TEXT,
+  rank            INTEGER NOT NULL,
+  composite_score REAL NOT NULL,
+  total_return    REAL,
+  annualized_return REAL,
+  sharpe_ratio    REAL,
+  sortino_ratio   REAL,
+  max_drawdown    REAL,
+  win_rate        REAL,
+  profit_loss_ratio REAL,
+  calmar_ratio    REAL,
+  total_trades    INTEGER,
+  backtest_start  TEXT,
+  backtest_end    TEXT,
+  batch_id        TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (symbol, strategy_id, batch_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ssf_symbol ON stock_strategy_fitness(symbol);
+CREATE INDEX IF NOT EXISTS idx_ssf_strategy ON stock_strategy_fitness(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_ssf_batch ON stock_strategy_fitness(batch_id);
+CREATE INDEX IF NOT EXISTS idx_ssf_score ON stock_strategy_fitness(composite_score DESC);
+
+-- Global strategy ranking: top 10 strategies across all stocks
+CREATE TABLE IF NOT EXISTS global_strategy_ranking (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  strategy_id     TEXT NOT NULL,
+  strategy_name   TEXT,
+  rank            INTEGER NOT NULL,
+  total_score     REAL NOT NULL,
+  stock_count     INTEGER NOT NULL,
+  avg_score       REAL,
+  max_score       REAL,
+  min_score       REAL,
+  batch_id        TEXT NOT NULL,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (strategy_id, batch_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gsr_strategy ON global_strategy_ranking(strategy_id);
+CREATE INDEX IF NOT EXISTS idx_gsr_batch ON global_strategy_ranking(batch_id);
+CREATE INDEX IF NOT EXISTS idx_gsr_rank ON global_strategy_ranking(rank);
 `;
 
 // ── Types ────────────────────────────────────────────────────
@@ -249,6 +297,43 @@ export interface TradePlanRow {
   updatedAt: string;
 }
 
+export interface StockStrategyFitnessRow {
+  id?: number;
+  symbol: string;
+  stockName?: string;
+  strategyId: string;
+  strategyName?: string;
+  rank: number;
+  compositeScore: number;
+  totalReturn?: number;
+  annualizedReturn?: number;
+  sharpeRatio?: number;
+  sortinoRatio?: number;
+  maxDrawdown?: number;
+  winRate?: number;
+  profitLossRatio?: number;
+  calmarRatio?: number;
+  totalTrades?: number;
+  backtestStart?: string;
+  backtestEnd?: string;
+  batchId: string;
+  createdAt?: string;
+}
+
+export interface GlobalStrategyRankingRow {
+  id?: number;
+  strategyId: string;
+  strategyName?: string;
+  rank: number;
+  totalScore: number;
+  stockCount: number;
+  avgScore?: number;
+  maxScore?: number;
+  minScore?: number;
+  batchId: string;
+  createdAt?: string;
+}
+
 // ── Storage interface ────────────────────────────────────────
 
 export interface QuantStorage {
@@ -299,6 +384,15 @@ export interface QuantStorage {
     limit?: number;
   }): Promise<TradePlanRow[]>;
   getTradePlanCount(): Promise<{ total: number; pending: number; executed: number; cancelled: number }>;
+
+  // ── Strategy-Stock Fitness ─────────────────
+  saveStockStrategyFitness(rows: StockStrategyFitnessRow[]): Promise<void>;
+  getStockTopStrategies(symbol: string, batchId?: string): Promise<StockStrategyFitnessRow[]>;
+  saveGlobalStrategyRanking(rows: GlobalStrategyRankingRow[]): Promise<void>;
+  getGlobalTopStrategies(batchId?: string): Promise<GlobalStrategyRankingRow[]>;
+  getLatestFitnessBatchId(): Promise<string | null>;
+  listFitnessBatches(limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>>;
+  cleanOldFitnessBatches(keepN?: number): Promise<number>;
 
   // ── Lifecycle ────────────────────────────
   close(): Promise<void>;
@@ -623,6 +717,16 @@ export class InMemoryStorage implements QuantStorage {
       cancelled: all.filter((p) => p.status === "cancelled").length,
     };
   }
+
+  // ── Strategy-Stock Fitness (no-op in memory mode) ─────────
+
+  async saveStockStrategyFitness(_rows: StockStrategyFitnessRow[]): Promise<void> {}
+  async getStockTopStrategies(_symbol: string, _batchId?: string): Promise<StockStrategyFitnessRow[]> { return []; }
+  async saveGlobalStrategyRanking(_rows: GlobalStrategyRankingRow[]): Promise<void> {}
+  async getGlobalTopStrategies(_batchId?: string): Promise<GlobalStrategyRankingRow[]> { return []; }
+  async getLatestFitnessBatchId(): Promise<string | null> { return null; }
+  async listFitnessBatches(_limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>> { return []; }
+  async cleanOldFitnessBatches(_keepN?: number): Promise<number> { return 0; }
 
   // ── Lifecycle ─────────────────────────────────────────────
 
@@ -1161,6 +1265,157 @@ export class SqliteStorage implements QuantStorage {
       pending: row.pending ?? 0,
       executed: row.executed ?? 0,
       cancelled: row.cancelled ?? 0,
+    };
+  }
+
+  // ── Strategy-Stock Fitness ────────────────────────────────
+
+  async saveStockStrategyFitness(rows: StockStrategyFitnessRow[]): Promise<void> {
+    const stmt = (this.db as Record<string, Function>).prepare(`
+      INSERT OR REPLACE INTO stock_strategy_fitness
+        (symbol, stock_name, strategy_id, strategy_name, rank, composite_score,
+         total_return, annualized_return, sharpe_ratio, sortino_ratio, max_drawdown,
+         win_rate, profit_loss_ratio, calmar_ratio, total_trades,
+         backtest_start, backtest_end, batch_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const txn = (this.db as Record<string, Function>).transaction((items: StockStrategyFitnessRow[]) => {
+      for (const r of items) {
+        stmt.run(
+          r.symbol, r.stockName ?? null, r.strategyId, r.strategyName ?? null,
+          r.rank, r.compositeScore,
+          r.totalReturn ?? null, r.annualizedReturn ?? null,
+          r.sharpeRatio ?? null, r.sortinoRatio ?? null, r.maxDrawdown ?? null,
+          r.winRate ?? null, r.profitLossRatio ?? null, r.calmarRatio ?? null,
+          r.totalTrades ?? null, r.backtestStart ?? null, r.backtestEnd ?? null,
+          r.batchId,
+        );
+      }
+    });
+    txn(rows);
+  }
+
+  async getStockTopStrategies(symbol: string, batchId?: string): Promise<StockStrategyFitnessRow[]> {
+    const bid = batchId ?? await this.getLatestFitnessBatchId();
+    if (!bid) return [];
+    const rows = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT * FROM stock_strategy_fitness WHERE symbol = ? AND batch_id = ? ORDER BY rank ASC",
+      )
+      .all(symbol, bid) as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapFitnessRow(r));
+  }
+
+  async saveGlobalStrategyRanking(rows: GlobalStrategyRankingRow[]): Promise<void> {
+    const stmt = (this.db as Record<string, Function>).prepare(`
+      INSERT OR REPLACE INTO global_strategy_ranking
+        (strategy_id, strategy_name, rank, total_score, stock_count,
+         avg_score, max_score, min_score, batch_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const txn = (this.db as Record<string, Function>).transaction((items: GlobalStrategyRankingRow[]) => {
+      for (const r of items) {
+        stmt.run(
+          r.strategyId, r.strategyName ?? null, r.rank, r.totalScore,
+          r.stockCount, r.avgScore ?? null, r.maxScore ?? null,
+          r.minScore ?? null, r.batchId,
+        );
+      }
+    });
+    txn(rows);
+  }
+
+  async getGlobalTopStrategies(batchId?: string): Promise<GlobalStrategyRankingRow[]> {
+    const bid = batchId ?? await this.getLatestFitnessBatchId();
+    if (!bid) return [];
+    const rows = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT * FROM global_strategy_ranking WHERE batch_id = ? ORDER BY rank ASC",
+      )
+      .all(bid) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      id: r.id as number,
+      strategyId: r.strategy_id as string,
+      strategyName: (r.strategy_name as string) ?? undefined,
+      rank: r.rank as number,
+      totalScore: r.total_score as number,
+      stockCount: r.stock_count as number,
+      avgScore: (r.avg_score as number) ?? undefined,
+      maxScore: (r.max_score as number) ?? undefined,
+      minScore: (r.min_score as number) ?? undefined,
+      batchId: r.batch_id as string,
+      createdAt: (r.created_at as string) ?? undefined,
+    }));
+  }
+
+  async getLatestFitnessBatchId(): Promise<string | null> {
+    const row = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT batch_id FROM stock_strategy_fitness ORDER BY created_at DESC LIMIT 1",
+      )
+      .get() as { batch_id: string } | undefined;
+    return row?.batch_id ?? null;
+  }
+
+  async listFitnessBatches(limit = 20): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>> {
+    const rows = (this.db as Record<string, Function>)
+      .prepare(`
+        SELECT batch_id, MIN(created_at) as created_at,
+               COUNT(DISTINCT symbol) as stock_count,
+               COUNT(DISTINCT strategy_id) as strategy_count
+        FROM stock_strategy_fitness
+        GROUP BY batch_id
+        ORDER BY created_at DESC
+        LIMIT ?
+      `)
+      .all(limit) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      batchId: r.batch_id as string,
+      createdAt: r.created_at as string,
+      stockCount: r.stock_count as number,
+      strategyCount: r.strategy_count as number,
+    }));
+  }
+
+  async cleanOldFitnessBatches(keepN = 5): Promise<number> {
+    const batches = await this.listFitnessBatches(1000);
+    if (batches.length <= keepN) return 0;
+    const toDelete = batches.slice(keepN).map((b) => b.batchId);
+    let deleted = 0;
+    for (const bid of toDelete) {
+      const r1 = (this.db as Record<string, Function>)
+        .prepare("DELETE FROM stock_strategy_fitness WHERE batch_id = ?")
+        .run(bid) as { changes: number };
+      const r2 = (this.db as Record<string, Function>)
+        .prepare("DELETE FROM global_strategy_ranking WHERE batch_id = ?")
+        .run(bid) as { changes: number };
+      deleted += r1.changes + r2.changes;
+    }
+    return deleted;
+  }
+
+  private mapFitnessRow(r: Record<string, unknown>): StockStrategyFitnessRow {
+    return {
+      id: r.id as number,
+      symbol: r.symbol as string,
+      stockName: (r.stock_name as string) ?? undefined,
+      strategyId: r.strategy_id as string,
+      strategyName: (r.strategy_name as string) ?? undefined,
+      rank: r.rank as number,
+      compositeScore: r.composite_score as number,
+      totalReturn: (r.total_return as number) ?? undefined,
+      annualizedReturn: (r.annualized_return as number) ?? undefined,
+      sharpeRatio: (r.sharpe_ratio as number) ?? undefined,
+      sortinoRatio: (r.sortino_ratio as number) ?? undefined,
+      maxDrawdown: (r.max_drawdown as number) ?? undefined,
+      winRate: (r.win_rate as number) ?? undefined,
+      profitLossRatio: (r.profit_loss_ratio as number) ?? undefined,
+      calmarRatio: (r.calmar_ratio as number) ?? undefined,
+      totalTrades: (r.total_trades as number) ?? undefined,
+      backtestStart: (r.backtest_start as string) ?? undefined,
+      backtestEnd: (r.backtest_end as string) ?? undefined,
+      batchId: r.batch_id as string,
+      createdAt: (r.created_at as string) ?? undefined,
     };
   }
 

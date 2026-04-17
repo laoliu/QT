@@ -253,6 +253,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">数据驱动</span><span class="tag">规则路由</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/strategy-fitness" class="nav-card" style="color:inherit;text-decoration:none;border-left:3px solid var(--purple)">
+    <div class="icon">🎯</div>
+    <h3>策略适配分析</h3>
+    <p>全市场策略×股票回测适配 — 每只股票找最优策略，全局策略排名</p>
+    <div class="tags">
+      <span class="tag">策略适配</span><span class="tag">全局排名</span><span class="tag">个股最优</span>
+      <span class="tag">回测驱动</span><span class="tag">综合选股</span>
+    </div>
+  </a>
   <a href="${b}/quant/admin/sentiment-dashboard" class="nav-card card-sentiment" style="color:inherit;text-decoration:none">
     <div class="icon">🌡️</div>
     <h3>市场情绪</h3>

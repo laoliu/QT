@@ -51,6 +51,7 @@ import {
   parseObjectBody,
 } from "./routes/_helpers.js";
 import { registerDailyPickRoutes } from "./routes/daily-pick.js";
+import { registerStrategyFitnessRoutes } from "./routes/strategy-fitness.js";
 import { registerStrategyLabRoutes } from "./routes/strategy-lab.js";
 import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
 import { registerStrategyRoutingRoutes } from "./routes/strategy-routing.js";
@@ -3781,6 +3782,21 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
 
   // Portfolio Combo & Risk Simulator (extracted to routes/portfolio-combo.ts)
   registerPortfolioComboRoutes(deps);
+
+  // Strategy-Stock Fitness Analysis (extracted to routes/strategy-fitness.ts)
+  registerStrategyFitnessRoutes(deps);
+
+  // ── Strategy Fitness Analysis Page ─────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/strategy-fitness",
+    handler: securePublic(async (_req, res) => {
+      const { getStrategyFitnessPageHtml } = await import("./pages/strategy-fitness-page.js");
+      const html = getStrategyFitnessPageHtml("", config.apiToken);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
 
   // ── Auction Sniper (竞价抢筹狙击) Page ──────────────────────────
   api.registerHttpRoute({

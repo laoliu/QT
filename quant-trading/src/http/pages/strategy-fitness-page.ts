@@ -265,13 +265,23 @@ function checkStatus(){
   api('/quant/admin/api/strategy-fitness/status',{_timeout:10000}).then(function(data){
     if(!data)return;
     var badge=document.getElementById('statusBadge');
-    if(data.status==='running'){
+    if(data.status==='starting'||data.status==='loading_klines'||data.status==='loading_fundamentals'||data.status==='building_bars'){
+      badge.className='status-running';
+      badge.textContent='● 准备中';
+      document.getElementById('progressSection').style.display='block';
+      var detail2=data.phase||'正在准备...';
+      if(data.elapsed_seconds)detail2+=' | 耗时: '+formatDuration(data.elapsed_seconds);
+      updateProgress(0,'running');
+      document.getElementById('progressDetail').textContent=detail2;
+    }else if(data.status==='running'){
       badge.className='status-running';
       badge.textContent='● 运行中';
       document.getElementById('progressSection').style.display='block';
-      var pct=data.total_stocks>0?Math.round(data.completed_stocks/data.total_stocks*100):0;
+      var total=data.total_strategies||data.total_stocks||1;
+      var done=data.completed_strategies||data.completed_stocks||0;
+      var pct=Math.round(done/total*100);
       updateProgress(pct,'running');
-      var detail='已完成: '+data.completed_stocks+'/'+data.total_stocks+' 只股票';
+      var detail=data.phase||(data.completed_strategies?'策略: '+data.completed_strategies+'/'+data.total_strategies:'已完成: '+data.completed_stocks+'/'+data.total_stocks+' 只股票');
       if(data.elapsed_seconds)detail+=' | 耗时: '+formatDuration(data.elapsed_seconds);
       if(data.estimated_remaining)detail+=' | 预计剩余: '+formatDuration(data.estimated_remaining);
       document.getElementById('progressDetail').textContent=detail;

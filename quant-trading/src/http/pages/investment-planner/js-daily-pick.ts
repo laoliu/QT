@@ -933,5 +933,145 @@ function updateBatchUI(){
   }
 }
 
+/* ══════ STRATEGY FITNESS INTEGRATION ══════ */
+var _fitnessGlobalRanking=null;
+var _fitnessLoading=false;
+
+function _loadFitnessGlobal(callback){
+  if(_fitnessGlobalRanking){callback(_fitnessGlobalRanking);return;}
+  if(_fitnessLoading)return;
+  _fitnessLoading=true;
+  var badge=document.getElementById('dp-fitness-badge');
+  if(badge)badge.textContent='⏳ 加载排名...';
+  api('/quant/admin/api/strategy-fitness/global',{_timeout:15000}).then(function(data){
+    _fitnessLoading=false;
+    var strats=data&&data.strategies?data.strategies:[];
+    _fitnessGlobalRanking=strats;
+    if(badge){
+      if(strats.length>0)badge.textContent='✅ 已加载 '+strats.length+' 个排名策略';
+      else badge.textContent='⚠️ 无适配数据，请先运行策略适配分析';
+    }
+    callback(strats);
+  }).catch(function(e){
+    _fitnessLoading=false;
+    if(badge)badge.textContent='❌ 加载失败';
+    toast('❌ 加载策略排名失败: '+e.message);
+    callback([]);
+  });
+}
+
+function selectFitnessGlobalTop(){
+  _loadFitnessGlobal(function(strats){
+    if(!strats.length){
+      toast('⚠️ 无全局排名数据，请先在「策略适配分析」页面运行分析');
+      return;
+    }
+    // Uncheck all first
+    document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
+    // Check strategies that match global ranking
+    var matched=0;
+    var ids=strats.map(function(s){return s.strategy_id;});
+    document.querySelectorAll('.dp-strategy').forEach(function(el){
+      if(ids.indexOf(el.value)>=0){el.checked=true;matched++;}
+    });
+    // Also add fitness_optimal as a virtual strategy
+    var fitnessBox=document.querySelector('.dp-strategy[value="fitness_optimal"]');
+    if(fitnessBox)fitnessBox.checked=true;
+    _highlightFitnessRankBadges(strats);
+    toast('🏆 已选中全局最优 '+matched+' 个策略 (共'+strats.length+'个排名) — 未匹配的策略可能ID不同');
+  });
+}
+
+function selectFitnessStockOptimal(){
+  // Uncheck all, only check fitness_optimal
+  document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
+  var box=document.querySelector('.dp-strategy[value="fitness_optimal"]');
+  if(box){
+    box.checked=true;
+    toast('🎯 已选中「个股最优」策略 — 将根据每只股票的历史回测最优策略进行选股');
+  }else{
+    // Fallback: add it dynamically
+    toast('🎯 个股最优模式已启用 — 策略池中未找到fitness_optimal选项，将使用全部策略');
+    document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=true;});
+  }
+}
+
+function showFitnessRankingPanel(){
+  var panel=document.getElementById('dp-fitness-panel');
+  panel.style.display='block';
+  var body=document.getElementById('dp-fitness-ranking-body');
+  body.innerHTML='<span style="color:var(--text-dim)">⏳ 加载中...</span>';
+  _loadFitnessGlobal(function(strats){
+    if(!strats.length){
+      body.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-dim)">暂无数据<br><a href="/quant/admin/strategy-fitness" target="_blank" style="color:var(--accent)">前往策略适配分析页面运行 →</a></div>';
+      return;
+    }
+    var maxScore=Math.max.apply(null,strats.map(function(s){return s.total_score||0}))||1;
+    // Get currently checked strategies
+    var checked=new Set();
+    document.querySelectorAll('.dp-strategy:checked').forEach(function(el){checked.add(el.value);});
+    var html='<table style="width:100%;font-size:12px"><tr>';
+    html+='<th style="width:30px">选</th><th>排名</th><th>策略ID</th><th>总得分</th><th>覆盖股票</th><th>平均得分</th><th>最高</th><th>最低</th><th>得分分布</th>';
+    html+='</tr>';
+    strats.forEach(function(s){
+      var isChecked=checked.has(s.strategy_id);
+      var barW=Math.round((s.total_score/maxScore)*100);
+      var rankCls=s.rank===1?'background:var(--green);color:#000':s.rank===2?'background:var(--accent);color:#000':s.rank===3?'background:var(--yellow);color:#000':'background:var(--bg3);color:var(--text)';
+      html+='<tr>';
+      html+='<td><input type="checkbox" class="dp-fitness-check" value="'+esc(s.strategy_id)+'" '+(isChecked?'checked':'')+' style="vertical-align:middle"></td>';
+      html+='<td><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;'+rankCls+'">#'+s.rank+'</span></td>';
+      html+='<td><strong>'+esc(s.strategy_id)+'</strong>';
+      if(s.strategy_name)html+='<br><span style="color:var(--text-dim);font-size:11px">'+esc(s.strategy_name)+'</span>';
+      html+='</td>';
+      html+='<td style="color:var(--green);font-weight:700">'+num(s.total_score)+'</td>';
+      html+='<td>'+s.stock_count+'</td>';
+      html+='<td>'+num(s.avg_score)+'</td>';
+      html+='<td>'+num(s.max_score)+'</td>';
+      html+='<td>'+num(s.min_score)+'</td>';
+      html+='<td><span style="display:inline-block;height:6px;border-radius:3px;vertical-align:middle;background:var(--purple);width:'+barW+'px"></span></td>';
+      html+='</tr>';
+    });
+    html+='</table>';
+    html+='<div style="margin-top:8px;font-size:11px;color:var(--text-dim)">💡 勾选策略后点击「应用勾选」将仅选中这些策略运行综合选股</div>';
+    body.innerHTML=html;
+  });
+}
+
+function applyFitnessSelection(){
+  var checks=document.querySelectorAll('.dp-fitness-check:checked');
+  if(!checks.length){toast('请至少勾选一个策略');return;}
+  var ids=new Set();
+  checks.forEach(function(el){ids.add(el.value);});
+  // Uncheck all strategies in pool, then check matching ones
+  document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
+  var matched=0;
+  document.querySelectorAll('.dp-strategy').forEach(function(el){
+    if(ids.has(el.value)){el.checked=true;matched++;}
+  });
+  document.getElementById('dp-fitness-panel').style.display='none';
+  _highlightFitnessRankBadges(_fitnessGlobalRanking||[]);
+  toast('✅ 已应用 '+matched+' 个策略 (选中'+ids.size+'个)');
+}
+
+function _highlightFitnessRankBadges(strats){
+  // Remove existing badges
+  document.querySelectorAll('.dp-rank-tag').forEach(function(el){el.remove();});
+  if(!strats||!strats.length)return;
+  var rankMap={};
+  strats.forEach(function(s){rankMap[s.strategy_id]=s.rank;});
+  document.querySelectorAll('.dp-strategy').forEach(function(el){
+    var r=rankMap[el.value];
+    if(r!=null){
+      var colors=r===1?'background:var(--green);color:#000':r===2?'background:var(--accent);color:#000':r===3?'background:var(--yellow);color:#000':'background:var(--bg3);color:var(--text)';
+      var badge=document.createElement('span');
+      badge.className='dp-rank-tag';
+      badge.style.cssText='display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:16px;border-radius:8px;font-size:9px;font-weight:700;margin-left:2px;padding:0 4px;vertical-align:middle;'+colors;
+      badge.textContent='#'+r;
+      badge.title='全局策略排名 #'+r;
+      el.parentNode.appendChild(badge);
+    }
+  });
+}
+
 `;
 }

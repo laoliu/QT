@@ -1164,6 +1164,10 @@ export function getPlannerBodyHtml(b: string): string {
         <label>策略池</label>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">全选</button>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=false)" style="padding:2px 8px;font-size:11px">全不选</button>
+        <button class="btn btn-sm" type="button" onclick="selectFitnessGlobalTop()" style="padding:2px 8px;font-size:11px;background:var(--purple);color:#fff;border-color:var(--purple)" title="从策略适配分析中加载全局排名前10的策略">🏆 全局最优</button>
+        <button class="btn btn-sm" type="button" onclick="selectFitnessStockOptimal()" style="padding:2px 8px;font-size:11px;background:#1f6feb;color:#fff;border-color:#1f6feb" title="使用fitness_optimal策略（根据每只股票的历史最优策略选股）">🎯 个股最优</button>
+        <button class="btn btn-sm" type="button" onclick="showFitnessRankingPanel()" style="padding:2px 8px;font-size:11px;border-color:var(--purple);color:var(--purple)" title="查看全局策略排名详情并自选">📊 排名选择</button>
+        <span id="dp-fitness-badge" style="font-size:11px;color:var(--text-dim)"></span>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="momentum" checked style="vertical-align:middle;margin-right:4px">趋势动量</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="value" checked style="vertical-align:middle;margin-right:4px">价值投资</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="growth" checked style="vertical-align:middle;margin-right:4px">成长投资</label>
@@ -1320,6 +1324,16 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="volatility-breakout" checked style="vertical-align:middle;margin-right:4px">波动率突破</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="regime-switch" checked style="vertical-align:middle;margin-right:4px">趋势/震荡切换</label>
         <span id="dp-composed-strategies"></span>
+      </div>
+      <!-- Fitness Ranking Panel (hidden by default) -->
+      <div id="dp-fitness-panel" style="display:none;margin:8px 0;padding:12px;background:var(--bg);border:1px solid var(--purple);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:14px;font-weight:600;color:var(--purple)">🏆 全局策略排名</span>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm" onclick="applyFitnessSelection()" style="border-color:var(--purple);color:var(--purple)">✅ 应用勾选</button>
+          <button class="btn btn-sm" onclick="document.getElementById('dp-fitness-panel').style.display='none'">✖ 关闭</button>
+        </div>
+        <div id="dp-fitness-ranking-body" style="font-size:13px"><span style="color:var(--text-dim)">加载中...</span></div>
       </div>
       <div class="form-row">
         <label>每策略前N</label>

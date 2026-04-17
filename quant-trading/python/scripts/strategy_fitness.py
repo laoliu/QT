@@ -32,7 +32,7 @@ import sqlite3
 import sys
 import time
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -229,96 +229,290 @@ def _load_klines(symbols: list[str], start_date: str, end_date: str) -> dict[str
 
 # ── Single stock-strategy backtest ───────────────────────────────
 
-def _run_single_backtest(
-    symbol: str,
-    strategy_id: str,
-    klines: list[dict],
-    initial_capital: float,
-) -> dict | None:
-    """对单只股票运行单个策略的回测，返回 metrics dict 或 None。"""
-    try:
-        from aipha.strategy.registry import StrategyRegistry
-        from aipha.backtest.engine import BacktestEngine, BacktestConfig
-        from aipha.domain.models import Bar
-        from aipha.utils.metrics import compute_all_metrics
+# ── Load fundamental metadata ────────────────────────────────────
 
-        reg = StrategyRegistry()
-        strategy = reg.create(strategy_id)
+def _load_fundamentals(symbols: list[str]) -> dict[str, dict]:
+    """批量加载基本面数据 (PE/PB/ROE/DV_ratio 等) 用于策略 metadata。
 
-        # 将 kline dicts 转换为 {date: {symbol: Bar}} 格式
-        bars_by_date: dict[date, dict[str, Bar]] = {}
+    主要数据源: 腾讯财经 API (免费、无认证、支持批量)。
+    返回 {symbol: {pe_ttm, pb, roe, dv_ratio, total_mv, turnover_rate, ...}}
+    """
+    result = _fetch_tencent_fundamentals(symbols)
+
+    # 对仍然缺失的，设置空
+    for sym in symbols:
+        if sym not in result:
+            result[sym] = {}
+
+    filled = sum(1 for v in result.values() if v.get("pe_ttm") is not None)
+    print(f"[Fundamentals] 总获取: {filled}/{len(symbols)}", file=sys.stderr)
+    return result
+
+
+def _fetch_tencent_fundamentals(codes: list[str]) -> dict[str, dict]:
+    """通过腾讯财经批量 API 拉取 PE/PB/turnover 等数据。
+
+    优点: 免费、无 proxy 问题 (HTTP)、支持批量 (~50 per request)。
+    """
+    import urllib.request as _urlreq
+
+    result: dict[str, dict] = {}
+
+    # 构建腾讯代码映射
+    tencent_codes = []
+    code_map: dict[str, str] = {}
+    for c in codes:
+        prefix = "sh" if c.startswith("6") else "sz"
+        tc = f"{prefix}{c}"
+        tencent_codes.append(tc)
+        code_map[tc] = c
+
+    batch_size = 50
+    for i in range(0, len(tencent_codes), batch_size):
+        batch = tencent_codes[i:i + batch_size]
+        query = ",".join(batch)
+        url = f"http://qt.gtimg.cn/q={query}"
+        try:
+            resp = _urlreq.urlopen(url, timeout=15)
+            data = resp.read().decode("gbk")
+            for line in data.strip().split("\n"):
+                line = line.strip()
+                if not line or "~" not in line:
+                    continue
+                eq_pos = line.find("=")
+                if eq_pos < 0:
+                    continue
+                var_name = line[:eq_pos].strip()
+                # Extract tencent code from var name: v_sh600519="..."
+                tc_key = var_name.split("_")[-1] if "_" in var_name else ""
+                code = code_map.get(tc_key, "")
+                if not code:
+                    continue
+
+                parts = line[eq_pos + 1:].strip('" ;\r').split("~")
+                if len(parts) < 47:
+                    continue
+
+                try:
+                    price_str = parts[3]
+                    price = float(price_str) if price_str else None
+                    pe = float(parts[39]) if parts[39] else None
+                    pb = float(parts[46]) if len(parts) > 46 and parts[46] else None
+                    turnover = float(parts[38]) if parts[38] else None
+                    name = parts[1] if len(parts) > 1 else ""
+
+                    # 计算 ROE ≈ PB / PE (杜邦恒等式)
+                    roe = None
+                    if pe and pb and pe > 0:
+                        roe = round(pb / pe, 4)
+
+                    # 估算 dv_ratio (无直接数据):
+                    # 低 PE + 高 ROE 公司通常有较高分红
+                    dv_ratio = 0.01  # 保守默认 1%
+                    if pe and roe:
+                        if pe < 15 and roe > 0.08:
+                            dv_ratio = 0.03  # 大概 3%
+                        elif pe < 25 and roe > 0.05:
+                            dv_ratio = 0.015  # 大概 1.5%
+
+                    # 估算增长率和财务比率(无直接数据):
+                    # 用 ROE 和 PE 做粗略估计
+                    dt_netprofit_yoy = 0.05  # 默认 5% 增长
+                    revenue_yoy = 0.05  # 默认 5%
+                    debt_to_assets = 0.30  # 默认 30%
+                    gross_margin = 0.35  # 默认 35%
+                    fcfy = 0.0  # 默认 0
+                    if pe and roe:
+                        # 高 ROE + 低 PE 通常意味着更高增长
+                        if roe > 0.15 and pe < 20:
+                            dt_netprofit_yoy = 0.15
+                            revenue_yoy = 0.10
+                            gross_margin = 0.45
+                            fcfy = 0.04
+                        elif roe > 0.10 and pe < 30:
+                            dt_netprofit_yoy = 0.10
+                            revenue_yoy = 0.08
+                            gross_margin = 0.40
+                            fcfy = 0.03
+
+                    result[code] = {
+                        "pe_ttm": pe,
+                        "pb": pb,
+                        "roe": roe,
+                        "dv_ratio": dv_ratio,
+                        "dt_netprofit_yoy": dt_netprofit_yoy,
+                        "revenue_yoy": revenue_yoy,
+                        "debt_to_assets": debt_to_assets,
+                        "gross_margin": gross_margin,
+                        "fcfy": fcfy,
+                        "turnover_rate": turnover,
+                        "total_mv": None,  # 腾讯的市值字段单位不确定，暂不使用
+                        "name": name,
+                    }
+                except (ValueError, IndexError):
+                    pass
+        except Exception as e:
+            print(f"  [Tencent] 批次 {i // batch_size + 1} 失败: {e}", file=sys.stderr)
+
+        if (i // batch_size + 1) % 5 == 0 or i + batch_size >= len(tencent_codes):
+            print(f"  [Tencent] 进度: {min(i + batch_size, len(codes))}/{len(codes)}", file=sys.stderr)
+
+    return result
+
+
+# ── Build bars_by_date with metadata ─────────────────────────────
+
+def _build_bars_by_date(
+    all_klines: dict[str, list[dict]],
+    fundamentals: dict[str, dict],
+) -> dict[date, dict[str, Any]]:
+    """将原始 kline dicts + 基本面数据 → {date: {symbol: Bar}} 带 metadata。"""
+    from aipha.domain.models import Bar
+
+    bars_by_date: dict[date, dict[str, Bar]] = {}
+
+    for symbol, klines in all_klines.items():
+        meta = fundamentals.get(symbol, {})
+        # 过滤 None 值
+        metadata = {k: v for k, v in meta.items() if v is not None} if meta else {}
+
         for bar_dict in klines:
             ts = bar_dict.get("timestamp", 0)
             if isinstance(ts, (int, float)) and ts > 1e12:
-                dt = datetime.fromtimestamp(ts / 1000).date()
+                dt_obj = datetime.fromtimestamp(ts / 1000)
             elif isinstance(ts, (int, float)):
-                dt = datetime.fromtimestamp(ts).date()
+                dt_obj = datetime.fromtimestamp(ts)
             elif isinstance(ts, str):
-                dt = datetime.strptime(ts[:10], "%Y-%m-%d").date()
+                dt_obj = datetime.strptime(ts[:10], "%Y-%m-%d")
             else:
                 continue
 
+            d = dt_obj.date()
             bar = Bar(
                 symbol=symbol,
-                timestamp=int(ts) if isinstance(ts, (int, float)) else 0,
+                start_ts=dt_obj,
+                end_ts=dt_obj.replace(hour=15, minute=0, second=0),
                 open=_sf(bar_dict.get("open")),
                 high=_sf(bar_dict.get("high")),
                 low=_sf(bar_dict.get("low")),
                 close=_sf(bar_dict.get("close")),
                 volume=_sf(bar_dict.get("volume")),
-                amount=_sf(bar_dict.get("amount")),
+                metadata=metadata if metadata else None,
             )
-            if dt not in bars_by_date:
-                bars_by_date[dt] = {}
-            bars_by_date[dt][symbol] = bar
+            if d not in bars_by_date:
+                bars_by_date[d] = {}
+            bars_by_date[d][symbol] = bar
 
-        if len(bars_by_date) < 60:  # 至少60个交易日
-            return None
+    return bars_by_date
+
+
+# ── Run one strategy on the full universe ────────────────────────
+
+def _run_strategy_backtest(
+    strategy_id: str,
+    bars_by_date: dict[date, dict[str, Any]],
+    initial_capital: float,
+) -> dict[str, dict] | None:
+    """运行单个策略在全部股票上的回测，返回 {symbol: metrics_dict}。"""
+    try:
+        import aipha.strategy.register_all  # noqa: F401
+        from aipha.strategy.registry import StrategyRegistry
+        from aipha.backtest.engine import BacktestEngine, BacktestConfig
+        from aipha.domain.models import Side
+
+        reg = StrategyRegistry()
+        strategy = reg.create(strategy_id)
 
         config = BacktestConfig(initial_capital=initial_capital)
         engine = BacktestEngine(config=config, strategy=strategy)
         result = engine.run(bars_by_date)
 
-        # 计算指标
-        if not result.daily_snapshots:
+        if not result.trades:
             return None
 
-        nav_series = [s.nav for s in result.daily_snapshots]
-        metrics = compute_all_metrics(nav_series)
-        metrics["total_trades"] = result.total_trades
-        metrics["strategy_id"] = strategy_id
-        metrics["symbol"] = symbol
-        metrics["backtest_start"] = str(result.start_date)
-        metrics["backtest_end"] = str(result.end_date)
-        metrics["composite_score"] = composite_score(metrics)
+        # 提取每只股票的交易表现
+        # 按 symbol 汇总: 买入成本、卖出收益、持仓市值
+        stock_trades: dict[str, list] = {}
+        for t in result.trades:
+            if t.symbol not in stock_trades:
+                stock_trades[t.symbol] = []
+            stock_trades[t.symbol].append(t)
 
-        return metrics
+        # 获取最后一天价格用于计算未平仓市值
+        sorted_dates = sorted(bars_by_date.keys())
+        last_bars = bars_by_date[sorted_dates[-1]] if sorted_dates else {}
+
+        per_stock: dict[str, dict] = {}
+        for sym, trades in stock_trades.items():
+            buy_cost = 0.0
+            buy_qty = 0
+            sell_proceeds = 0.0
+            sell_qty = 0
+            wins = 0
+            round_trips = 0
+            holding_days = set()  # 简化: 用交易发生的日期跟踪
+
+            for t in trades:
+                if t.side == Side.BUY:
+                    buy_cost += t.notional + t.fees.total
+                    buy_qty += t.qty
+                else:
+                    sell_proceeds += t.notional - t.fees.total
+                    sell_qty += t.qty
+                holding_days.add(t.trade_date)
+
+            # 未平仓部分按最后价格计算
+            remaining_qty = buy_qty - sell_qty
+            remaining_value = 0.0
+            if remaining_qty > 0 and sym in last_bars:
+                remaining_value = remaining_qty * last_bars[sym].close
+
+            total_pnl = sell_proceeds + remaining_value - buy_cost
+            total_return_pct = (total_pnl / buy_cost * 100) if buy_cost > 0 else 0
+
+            # 简化 win_rate: 整体是否盈利
+            total_trades_count = len(trades)
+
+            # 年化收益 (简化)
+            trading_days = len(sorted_dates)
+            ann_return = 0.0
+            if buy_cost > 0 and trading_days > 0:
+                total_r = (sell_proceeds + remaining_value) / buy_cost
+                years = trading_days / 245
+                ann_return = ((total_r ** (1 / years)) - 1) * 100 if years > 0 and total_r > 0 else 0
+
+            cs = composite_score({
+                "total_return": total_return_pct,
+                "annualized_return": ann_return,
+                "sharpe_ratio": 0,  # 简化：无法单独计算
+                "win_rate": 1.0 if total_pnl > 0 else 0.0,
+                "profit_loss_ratio": max(total_return_pct / 10, 0) if total_return_pct > 0 else 0,
+                "max_drawdown": 0,
+                "total_trades": total_trades_count,
+            })
+
+            per_stock[sym] = {
+                "strategy_id": strategy_id,
+                "symbol": sym,
+                "composite_score": cs,
+                "total_return": round(total_return_pct, 4),
+                "annualized_return": round(ann_return, 4),
+                "sharpe_ratio": 0,
+                "sortino_ratio": 0,
+                "max_drawdown": 0,
+                "win_rate": 1.0 if total_pnl > 0 else 0.0,
+                "profit_loss_ratio": round(total_return_pct / 10, 4) if total_return_pct > 0 else 0,
+                "calmar_ratio": 0,
+                "total_trades": total_trades_count,
+                "backtest_start": str(result.start_date) if result.start_date else "",
+                "backtest_end": str(result.end_date) if result.end_date else "",
+            }
+
+        return per_stock
     except Exception as e:
-        print(f"[Backtest] {symbol}/{strategy_id} 失败: {e}", file=sys.stderr)
+        print(f"[Strategy] {strategy_id} 回测失败: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return None
-
-
-# ── Worker function for multiprocessing ──────────────────────────
-
-def _worker_backtest(args: tuple) -> list[dict]:
-    """Worker: 对一只股票运行所有策略的回测。
-
-    返回该股票所有策略的 metrics list。
-    """
-    symbol, strategy_ids, klines, initial_capital = args
-
-    # 确保子进程中策略已注册
-    try:
-        import aipha.strategy.register_all  # noqa: F401
-    except Exception:
-        pass
-
-    results = []
-    for sid in strategy_ids:
-        m = _run_single_backtest(symbol, sid, klines, initial_capital)
-        if m and math.isfinite(m.get("composite_score", 0)):
-            results.append(m)
-    return results
 
 
 # ── Save results to DB ───────────────────────────────────────────
@@ -487,7 +681,11 @@ def run_fitness_analysis(
     workers: int = 8,
     initial_capital: float = 1_000_000,
 ) -> dict:
-    """执行策略适配分析主流程。"""
+    """执行策略适配分析主流程。
+
+    新架构: 每个策略用全部股票一起跑（轮动策略需要多股票做排名筛选），
+    然后从交易记录中提取每只股票的表现。
+    """
     batch_id = f"fitness_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     t0 = time.time()
 
@@ -526,7 +724,17 @@ def run_fitness_analysis(
         batch = symbols[i:i + batch_size]
         batch_klines = _load_klines(batch, start_date, end_date)
         all_klines.update(batch_klines)
-        print(f"  K线加载进度: {min(i + batch_size, len(symbols))}/{len(symbols)}", file=sys.stderr)
+        loaded = min(i + batch_size, len(symbols))
+        print(f"  K线加载进度: {loaded}/{len(symbols)}", file=sys.stderr)
+        _write_progress({
+            "batch_id": batch_id,
+            "status": "loading_klines",
+            "phase": f"加载K线数据 {loaded}/{len(symbols)}",
+            "total_stocks": len(symbols),
+            "completed_stocks": 0,
+            "klines_loaded": loaded,
+            "elapsed_seconds": int(time.time() - t0),
+        })
 
     # 过滤掉无数据的股票
     valid_symbols = [s for s in symbols if s in all_klines and len(all_klines[s]) >= 60]
@@ -535,84 +743,92 @@ def run_fitness_analysis(
     if not valid_symbols:
         return {"error": "所有股票K线数据不足", "batch_id": batch_id}
 
+    # Step 5: 加载基本面数据 (PE/PB/ROE 等)
+    print(f"[Step 5] 加载基本面数据...", file=sys.stderr)
+    _write_progress({
+        "batch_id": batch_id,
+        "status": "loading_fundamentals",
+        "phase": "加载基本面数据...",
+        "total_stocks": len(valid_symbols),
+        "completed_stocks": 0,
+        "elapsed_seconds": int(time.time() - t0),
+    })
+    fundamentals = _load_fundamentals(valid_symbols)
+    fund_count = sum(1 for v in fundamentals.values() if v.get("pe_ttm") is not None)
+    print(f"[Step 5] 基本面: {fund_count}/{len(valid_symbols)} 股票有数据", file=sys.stderr)
+
+    # Step 6: 构建 bars_by_date (所有股票 + metadata)
+    print(f"[Step 6] 构建全量 bars_by_date...", file=sys.stderr)
+    _write_progress({
+        "batch_id": batch_id,
+        "status": "building_bars",
+        "phase": "构建回测数据...",
+        "total_stocks": len(valid_symbols),
+        "completed_stocks": 0,
+        "elapsed_seconds": int(time.time() - t0),
+    })
+    # 只保留有效股票的klines
+    filtered_klines = {s: all_klines[s] for s in valid_symbols}
+    bars_by_date = _build_bars_by_date(filtered_klines, fundamentals)
+    print(f"[Step 6] bars_by_date: {len(bars_by_date)} 交易日, "
+          f"每日平均 {sum(len(v) for v in bars_by_date.values()) / len(bars_by_date):.0f} 只股票",
+          file=sys.stderr)
+
+    # Step 7: 逐策略回测 (每个策略用全量股票)
+    print(f"[Step 7] 开始策略回测 ({len(strategy_ids)} 个策略)...", file=sys.stderr)
     _write_progress({
         "batch_id": batch_id,
         "status": "running",
+        "phase": "策略回测中...",
         "total_stocks": len(valid_symbols),
-        "completed_stocks": 0,
         "total_strategies": len(strategy_ids),
-        "current_stock": "",
+        "completed_stocks": 0,
+        "completed_strategies": 0,
         "elapsed_seconds": int(time.time() - t0),
-        "estimated_remaining": None,
     })
 
-    # Step 5: 并行回测
-    print(f"[Step 5] 开始回测 (workers={workers})...", file=sys.stderr)
-
-    # 收集所有结果: {symbol: [metrics_dict, ...]}
+    # {symbol: [metrics_dict, ...]} — 每只股票关联多个策略结果
     all_results: dict[str, list[dict]] = {}
-    completed = 0
+    completed_strategies = 0
 
-    # 使用 ProcessPoolExecutor 并行
-    tasks = [
-        (sym, strategy_ids, all_klines[sym], initial_capital)
-        for sym in valid_symbols
-    ]
+    for sid in strategy_ids:
+        completed_strategies += 1
+        print(f"  [{completed_strategies}/{len(strategy_ids)}] 运行策略: {sid} ...", file=sys.stderr)
+        try:
+            per_stock = _run_strategy_backtest(sid, bars_by_date, initial_capital)
+            if per_stock:
+                for sym, metrics in per_stock.items():
+                    if sym not in all_results:
+                        all_results[sym] = []
+                    if math.isfinite(metrics.get("composite_score", 0)):
+                        all_results[sym].append(metrics)
+                print(f"    → {sid}: {len(per_stock)} 只股票有交易", file=sys.stderr)
+            else:
+                print(f"    → {sid}: 无交易", file=sys.stderr)
+        except Exception as e:
+            print(f"    → {sid}: 错误 {e}", file=sys.stderr)
 
-    # 限制 workers 数量
-    actual_workers = min(workers, len(tasks), os.cpu_count() or 4)
+        # 更新进度
+        elapsed = time.time() - t0
+        rate = completed_strategies / elapsed if elapsed > 0 else 0
+        remaining = (len(strategy_ids) - completed_strategies) / rate if rate > 0 else None
+        _write_progress({
+            "batch_id": batch_id,
+            "status": "running",
+            "phase": f"策略回测: {completed_strategies}/{len(strategy_ids)}",
+            "total_stocks": len(valid_symbols),
+            "total_strategies": len(strategy_ids),
+            "completed_stocks": len(all_results),
+            "completed_strategies": completed_strategies,
+            "current_strategy": sid,
+            "elapsed_seconds": int(elapsed),
+            "estimated_remaining": int(remaining) if remaining else None,
+        })
 
-    try:
-        with ProcessPoolExecutor(max_workers=actual_workers) as executor:
-            futures = {
-                executor.submit(_worker_backtest, task): task[0]
-                for task in tasks
-            }
-            for future in as_completed(futures):
-                sym = futures[future]
-                completed += 1
-                try:
-                    results = future.result(timeout=600)  # 10分钟超时
-                    if results:
-                        all_results[sym] = results
-                except Exception as e:
-                    print(f"  [Error] {sym}: {e}", file=sys.stderr)
+    print(f"[Step 7] 回测完成: {len(all_results)} 只股票有结果", file=sys.stderr)
 
-                # 更新进度
-                if completed % 10 == 0 or completed == len(tasks):
-                    elapsed = time.time() - t0
-                    rate = completed / elapsed if elapsed > 0 else 0
-                    remaining = (len(tasks) - completed) / rate if rate > 0 else None
-                    _write_progress({
-                        "batch_id": batch_id,
-                        "status": "running",
-                        "total_stocks": len(valid_symbols),
-                        "completed_stocks": completed,
-                        "total_strategies": len(strategy_ids),
-                        "current_stock": sym,
-                        "elapsed_seconds": int(elapsed),
-                        "estimated_remaining": int(remaining) if remaining else None,
-                    })
-                    print(f"  进度: {completed}/{len(tasks)} ({completed*100//len(tasks)}%)", file=sys.stderr)
-    except Exception as e:
-        # 如果 multiprocessing 失败，fallback 到单线程
-        print(f"[Step 5] 多进程失败，降级为单线程: {e}", file=sys.stderr)
-        for task in tasks:
-            sym = task[0]
-            completed += 1
-            try:
-                results = _worker_backtest(task)
-                if results:
-                    all_results[sym] = results
-            except Exception as e2:
-                print(f"  [Error] {sym}: {e2}", file=sys.stderr)
-            if completed % 10 == 0:
-                print(f"  进度: {completed}/{len(tasks)}", file=sys.stderr)
-
-    print(f"[Step 5] 回测完成: {len(all_results)} 只股票有结果", file=sys.stderr)
-
-    # Step 6: 每只股票取 Top N
-    print(f"[Step 6] 计算每只股票 Top {top_n_per_stock} 策略...", file=sys.stderr)
+    # Step 8: 每只股票取 Top N
+    print(f"[Step 8] 计算每只股票 Top {top_n_per_stock} 策略...", file=sys.stderr)
     stock_fitness: list[dict] = []
     strategy_scores: dict[str, list[float]] = {}  # {strategy_id: [scores...]}
 
@@ -646,10 +862,10 @@ def run_fitness_analysis(
                 strategy_scores[sid] = []
             strategy_scores[sid].append(score)
 
-    print(f"[Step 6] 共 {len(stock_fitness)} 条 stock-fitness 记录", file=sys.stderr)
+    print(f"[Step 8] 共 {len(stock_fitness)} 条 stock-fitness 记录", file=sys.stderr)
 
-    # Step 7: 全局策略排名
-    print(f"[Step 7] 计算全局 Top {top_n_global} 策略...", file=sys.stderr)
+    # Step 9: 全局策略排名
+    print(f"[Step 9] 计算全局 Top {top_n_global} 策略...", file=sys.stderr)
     strategy_agg = []
     for sid, scores in strategy_scores.items():
         strategy_agg.append({
@@ -667,15 +883,15 @@ def run_fitness_analysis(
     for rank_idx, item in enumerate(global_ranking, start=1):
         item["rank"] = rank_idx
 
-    print(f"[Step 7] 全局策略排名:", file=sys.stderr)
+    print(f"[Step 9] 全局策略排名:", file=sys.stderr)
     for item in global_ranking:
         print(f"  #{item['rank']}: {item['strategy_id']} "
               f"(total_score={item['total_score']:.2f}, "
               f"stocks={item['stock_count']}, "
               f"avg={item['avg_score']:.2f})", file=sys.stderr)
 
-    # Step 8: 保存到数据库
-    print("[Step 8] 保存结果到数据库...", file=sys.stderr)
+    # Step 10: 保存到数据库
+    print("[Step 10] 保存结果到数据库...", file=sys.stderr)
     _save_to_db(batch_id, stock_fitness, global_ranking)
 
     elapsed = time.time() - t0
@@ -683,7 +899,7 @@ def run_fitness_analysis(
         "batch_id": batch_id,
         "status": "done",
         "total_stocks": len(valid_symbols),
-        "completed_stocks": completed,
+        "completed_stocks": len(all_results),
         "total_strategies": len(strategy_ids),
         "elapsed_seconds": int(elapsed),
         "results": {

@@ -21,7 +21,7 @@ function renderRecommend(d){
     kpiHtml(numInt(sm.investedAmount),'建议投入')+
     kpiHtml(numInt(sm.cashReserve),'现金储备')+
     kpiHtml(sm.cashReservePct+'%','现金比例')+
-    kpiHtml(sm.positionCount+'ֻ','持仓数');
+    kpiHtml(sm.positionCount+'只','持仓数');
 
   // Allocation table with decision fields
   var tbody=document.querySelector('#rec-table tbody');

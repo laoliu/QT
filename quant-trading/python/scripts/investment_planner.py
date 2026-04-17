@@ -1431,9 +1431,6 @@ def _score_sina_stocks(
             continue
         if code.startswith("8") or code.startswith("4"):
             continue
-        # Skip 创业板 (ChiNext) — requires separate trading permission
-        if code.startswith("3"):
-            continue
 
         price = _safe_float(s.get("trade"))
         pe = _safe_float(s.get("per"))
@@ -1641,9 +1638,6 @@ def _score_akshare_stocks(
         if "ST" in name or "退" in name or not code:
             continue
         if code.startswith("8") or code.startswith("4"):
-            continue
-        # Skip 创业板 (ChiNext) — requires separate trading permission
-        if code.startswith("3"):
             continue
 
         price = _safe_float(row.get("最新价"))
@@ -1898,9 +1892,6 @@ def _screen_from_tencent_universe(
     candidates = []
     for sym, q in all_quotes.items():
         if q["price"] <= 0:
-            continue
-        # Skip 创业板 (ChiNext) — requires separate trading permission
-        if sym.startswith("3"):
             continue
         pe = q.get("pe", 0)
         pb = q.get("pb", 0)

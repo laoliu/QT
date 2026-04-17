@@ -20,10 +20,12 @@ Usage:
     python qmt_data_bridge.py --host 0.0.0.0 --port 58088
 
 API:
-  GET  /health           -> {"status": "ok", "xtdata": true, "trading": true}
+  GET  /health           -> {"ok": true, "status": "ok", "xtdata": true, "trading": true}
   GET  /trading/events    -> {"events": [...], "count": N}
   POST /klines            body: {"codes": [...], "period": "1d", "count": 120}
+                           -> {"ok": true, "data": {"bars": {"600519.SH": [...]}}}
   POST /quote             body: {"codes": [...]}
+                           -> {"ok": true, "data": {"quotes": {"600519.SH": {...}}}}
   POST /trading           body: {"method": "place_order", "params": {...}}
   POST /sector_list       body: {"sector_type": "industry"|"concept"|""}
   POST /sector_members    body: {"sector": "电力设备"} -> {"data": ["600XXX", ...]}
@@ -38,6 +40,13 @@ import json
 import os
 import subprocess
 import sys
+
+# 加载 .env 文件（优先当前目录，再向上搜索）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import threading
 import time
 from datetime import datetime
@@ -504,7 +513,7 @@ def _fetch_klines_xtdata(codes, period, count):
                 bars = bars[-req_count:]
 
         if bars:
-            result[stock_id] = bars
+            result[qmt_code] = bars
 
     _log("成功获取 %d/%d 只股票K线" % (len(result), len(codes)))
     return result
@@ -541,13 +550,18 @@ def _fetch_quotes_xtdata(codes):
             # get_full_tick returns: lastPrice, open, high, low, lastClose,
             # volume, amount, askPrice[5], askVol[5], bidPrice[5], bidVol[5]
             quote = {
-                "price": float(tick.get("lastPrice", 0) or 0),
+                "lastPrice": float(tick.get("lastPrice", 0) or 0),
                 "open": float(tick.get("open", 0) or 0),
                 "high": float(tick.get("high", 0) or 0),
                 "low": float(tick.get("low", 0) or 0),
-                "prevClose": float(tick.get("lastClose", 0) or 0),
+                "lastClose": float(tick.get("lastClose", 0) or 0),
                 "volume": int(tick.get("volume", 0) or 0),
                 "amount": float(tick.get("amount", 0) or 0),
+                # Keep raw arrays for AlphQ-compatible format
+                "askPrice": [float(p) for p in tick.get("askPrice", [])],
+                "askVol": [int(v) for v in tick.get("askVol", [])],
+                "bidPrice": [float(p) for p in tick.get("bidPrice", [])],
+                "bidVol": [int(v) for v in tick.get("bidVol", [])],
             }
             # Bid/Ask (5 levels)
             ask_prices = tick.get("askPrice", [])
@@ -577,8 +591,8 @@ def _fetch_quotes_xtdata(codes):
                     quote["name"] = detail.get("InstrumentName", "") or ""
             except Exception:
                 pass
-            if quote["price"] > 0:
-                result[stock_id] = quote
+            if quote["lastPrice"] > 0:
+                result[qmt_code] = quote
         except Exception as e:
             _log("%s quote failed: %s" % (qmt_code, e))
             continue
@@ -1144,12 +1158,14 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                     "connecting" if _trading_bg_retry_running else "disabled"
                 )
                 body = json.dumps({
+                    "ok": xtdata_ok,
                     "status": "ok" if xtdata_ok else "degraded",
                     "xtdata": xtdata_ok,
                     "trading": _trading_connected,
                     "trading_status": trading_status,
                     "version": BRIDGE_VERSION,
                     "error": xtdata_err or None,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }).encode("utf-8")
                 try:
                     self.send_response(200)
@@ -1311,7 +1327,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
             if path == "/quote":
                 _bump_stat("quote")
                 quotes = _fetch_quotes_xtdata(codes)
-                self._json_response(200, {"status": "ok", "data": quotes, "count": len(quotes)})
+                self._json_response(200, {"ok": True, "data": {"quotes": quotes}})
                 _log("[serve] returned %d quotes" % len(quotes))
                 return
 
@@ -1321,7 +1337,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
             _log("[serve] klines request: %d stocks, period=%s, count=%d" % (len(codes), period, count))
 
             klines = _fetch_klines_xtdata(codes, period, count)
-            self._json_response(200, {"status": "ok", "data": klines, "count": len(klines)})
+            self._json_response(200, {"ok": True, "data": {"bars": klines}})
             _log("[serve] returned %d stocks klines" % len(klines))
 
         def _json_response(self, code, obj):

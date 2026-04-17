@@ -281,11 +281,9 @@ function renderDailyCompositePick(d){
 
   var ranking=Array.isArray(d.strategyRanking)?d.strategyRanking:[];
   var selected=Array.isArray(d.selectedStrategies)?d.selectedStrategies:[];
-  // Filter out 创业板 (ChiNext 3xxxxx) stocks — user has no trading permission
-  function _notChiNext(item){return !item.symbol||!item.symbol.startsWith('3');}
-  var combined=Array.isArray(d.combinedList)?d.combinedList.filter(_notChiNext):[];
-  var finalSymbols=Array.isArray(d.finalSymbols)?d.finalSymbols.filter(function(s){return !s.startsWith('3');}):[];
-  var stockBt=Array.isArray(d.stockBacktestRanking)?d.stockBacktestRanking.filter(_notChiNext):[];
+  var combined=Array.isArray(d.combinedList)?d.combinedList:[];
+  var finalSymbols=Array.isArray(d.finalSymbols)?d.finalSymbols:[];
+  var stockBt=Array.isArray(d.stockBacktestRanking)?d.stockBacktestRanking:[];
   var poolBt=Array.isArray(d.poolBacktestRanking)?d.poolBacktestRanking:[];
 
   var bestLabel='-';

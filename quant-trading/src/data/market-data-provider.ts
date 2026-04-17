@@ -457,22 +457,32 @@ class QMTBridgeProvider implements MarketDataProvider {
           body: JSON.stringify({ codes }),
           signal: controller.signal,
         });
-        const data = (await resp.json()) as { status: string; data: Record<string, unknown> };
-        // Return the first quote, mapped to legacy format
-        const entries = Object.entries(data.data ?? {});
+        const data = (await resp.json()) as {
+          ok?: boolean;
+          status?: string;
+          data: Record<string, unknown>;
+        };
+        if (!data.ok && data.status !== "ok") return null;
+        // AlphQ bridge nests under "quotes", legacy puts directly in data
+        let quoteData = data.data ?? {};
+        if (quoteData.quotes && typeof quoteData.quotes === "object") {
+          quoteData = quoteData.quotes as Record<string, unknown>;
+        }
+        const entries = Object.entries(quoteData);
         if (entries.length === 0) return null;
         const [, q] = entries[0] as [string, Record<string, unknown>];
         return {
-          price: q.price,
-          prev_close: q.prevClose,
+          // Normalize: AlphQ uses lastPrice/lastClose, legacy uses price/prevClose
+          price: q.lastPrice ?? q.price,
+          prev_close: q.lastClose ?? q.prevClose,
           open: q.open,
           high: q.high,
           low: q.low,
           volume: q.volume,
           amount: q.amount,
           name: q.name,
-          bid1: (q.bids as Array<{ price: number }>)?.[0]?.price,
-          ask1: (q.asks as Array<{ price: number }>)?.[0]?.price,
+          bid1: (q.bidPrice as number[])?.[0] ?? (q.bids as Array<{ price: number }>)?.[0]?.price,
+          ask1: (q.askPrice as number[])?.[0] ?? (q.asks as Array<{ price: number }>)?.[0]?.price,
         } as T;
       }
       // get_klines
@@ -487,8 +497,18 @@ class QMTBridgeProvider implements MarketDataProvider {
         }),
         signal: controller.signal,
       });
-      const data = (await resp.json()) as { status: string; data: Record<string, unknown[]> };
-      return (data.data ?? {}) as T;
+      const data = (await resp.json()) as {
+        ok?: boolean;
+        status?: string;
+        data: Record<string, unknown>;
+      };
+      if (!data.ok && data.status !== "ok") return null;
+      // AlphQ bridge nests under "bars", legacy puts directly in data
+      let klineData = data.data ?? {};
+      if (klineData.bars && typeof klineData.bars === "object") {
+        klineData = klineData.bars as Record<string, unknown>;
+      }
+      return klineData as T;
     } catch (err) {
       console.warn(`[QMTBridgeProvider] direct ${method} failed: ${(err as Error).message}`);
       return null;
@@ -680,6 +700,7 @@ export function getLotSize(symbol: string, market?: MarketType): number {
 class SmartProvider implements MarketDataProvider {
   name = "smart";
   private localParquet: LocalParquetProvider | null;
+  private qmt: QMTBridgeProvider | null;
   private akshare: AKShareProvider;
   private yfinance: YFinanceProvider;
   private tushare: TushareProvider;
@@ -690,6 +711,9 @@ class SmartProvider implements MarketDataProvider {
     const localCfg = config.dataProviders?.localData;
     this.localParquet =
       localCfg?.enabled === false ? null : new LocalParquetProvider(config);
+    // Use QMT bridge for real-time data when windowsBridgeUrl is configured
+    const qmtUrl = config.tradingAccount?.qmt?.windowsBridgeUrl;
+    this.qmt = qmtUrl ? new QMTBridgeProvider(qmtUrl) : null;
     this.akshare = new AKShareProvider(config);
     this.yfinance = new YFinanceProvider(config);
     this.tushare = new TushareProvider(config);
@@ -717,6 +741,14 @@ class SmartProvider implements MarketDataProvider {
 
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
     const m = market ?? detectMarketFromSymbol(symbol);
+
+    // Priority 1: QMT bridge for CN real-time quotes (direct xtdata, fastest for real-time)
+    if (this.qmt && (m === "cn_stock" || m === "futures" || m === "fund")) {
+      const qmtQuote = await this.qmt.getQuote(symbol, m);
+      if (qmtQuote) return qmtQuote;
+    }
+
+    // Priority 2: AKShare (Sina/Xueqiu)
     const quote = await this.pick(m).getQuote(symbol, m);
     if (quote) return quote;
 
@@ -739,12 +771,19 @@ class SmartProvider implements MarketDataProvider {
   ): Promise<KlineBar[]> {
     const m = market ?? detectMarketFromSymbol(symbol);
 
-    // Try local parquet first for CN markets (fastest — disk read, no API)
+    // Priority 1: local parquet for CN markets (fastest — disk read, no API)
     if (this.localParquet && (m === "cn_stock" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
       const localBars = await this.localParquet.getKlines(symbol, interval, start, end, m);
       if (localBars.length > 0) return localBars;
     }
 
+    // Priority 2: QMT bridge (xtdata, local network)
+    if (this.qmt && (m === "cn_stock" || m === "futures" || m === "fund")) {
+      const qmtBars = await this.qmt.getKlines(symbol, interval, start, end, m);
+      if (qmtBars.length > 0) return qmtBars;
+    }
+
+    // Priority 3: AKShare (remote API)
     const bars = await this.pick(m).getKlines(symbol, interval, start, end, m);
     if (bars.length > 0) return bars;
 
@@ -1039,10 +1078,14 @@ class QMTFallbackProvider implements MarketDataProvider {
   name = "qmt-fallback";
   private qmt: QMTBridgeProvider;
   private smart: SmartProvider;
+  private localParquet: LocalParquetProvider | null;
 
   constructor(config: QuantTradingConfig) {
     this.qmt = new QMTBridgeProvider(config.tradingAccount?.qmt?.windowsBridgeUrl ?? "");
     this.smart = new SmartProvider(config);
+    const localCfg = config.dataProviders?.localData;
+    this.localParquet =
+      localCfg?.enabled === false ? null : new LocalParquetProvider(config);
   }
 
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
@@ -1063,10 +1106,20 @@ class QMTFallbackProvider implements MarketDataProvider {
     market?: MarketType,
   ): Promise<KlineBar[]> {
     const m = market ?? detectMarketFromSymbol(symbol);
+
+    // Priority 1: local parquet (disk read, fastest)
+    if (this.localParquet && (m === "cn_stock" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
+      const localBars = await this.localParquet.getKlines(symbol, interval, start, end, m);
+      if (localBars.length > 0) return localBars;
+    }
+
+    // Priority 2: QMT bridge
     if (m === "cn_stock" || m === "futures" || m === "fund") {
       const bars = await this.qmt.getKlines(symbol, interval, start, end, m);
       if (bars.length > 0) return bars;
     }
+
+    // Priority 3: SmartProvider (AKShare → tushare → jqdata → yfinance)
     return this.smart.getKlines(symbol, interval, start, end, market);
   }
 

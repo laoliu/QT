@@ -532,6 +532,15 @@ export class ConditionalOrderService {
 
     const triggered: string[] = [];
     const active = this.listOrders(true);
+
+    // Retry exit for orders that triggered but failed to submit exit (e.g. non-trading hours)
+    const pendingRetry = [...this.orders.values()].filter(
+      (o) => o.triggered && typeof o.triggerResult === "string" && o.triggerResult.startsWith("exit_failed"),
+    );
+    if (pendingRetry.length > 0) {
+      await this.retryFailedExits(pendingRetry);
+    }
+
     if (active.length === 0) return [];
 
     // Deduplicate symbols to minimize quote calls
@@ -743,6 +752,38 @@ export class ConditionalOrderService {
       this.saveToDisk();
     }
     return triggered;
+  }
+
+  // ── Retry failed exits ─────────────────────────────────────
+
+  private async retryFailedExits(orders: ConditionalOrder[]): Promise<void> {
+    if (!this.exitFn) return;
+    let changed = false;
+    for (const order of orders) {
+      try {
+        const result = await this.exitFn(
+          order.symbol,
+          order.quantity,
+          `重试卖出: ${order.description ?? order.id}`,
+          order.strategyId,
+          order.exitSide,
+        );
+        if (result.ok) {
+          order.triggerResult = "exit_submitted";
+          changed = true;
+          console.log(`[conditional-order] retry exit succeeded: ${order.id} ${order.symbol}`);
+          void this.notifyFn?.(`🔔 条件单 ${order.id}(${order.symbol}) 重试卖出成功，委托已提交`);
+        }
+        // If still failed, keep the updated reason (may change from "not found" to "非交易时段" etc.)
+        else if (result.reason !== order.triggerResult?.replace("exit_failed: ", "")) {
+          order.triggerResult = `exit_failed: ${result.reason}`;
+          changed = true;
+        }
+      } catch {
+        // Ignore transient errors during retry
+      }
+    }
+    if (changed) this.saveToDisk();
   }
 
   // ── Persistence ────────────────────────────────────────────

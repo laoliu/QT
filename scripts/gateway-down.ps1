@@ -1,14 +1,14 @@
 # Stop the QT gateway
-# Usage: .\gateway-down.ps1 [-Lobster] [-Standalone [-StandalonePort 18891]] [-Port 18889] [-PyPort 8000]
-#   Default      Stop the Python FastAPI gateway
+# Usage: .\gateway-down.ps1 [-Lobster] [-PyGateway] [-StandalonePort 18891] [-Port 18889] [-PyPort 8000]
+#   Default      Stop the standalone HTTP server
 #   -Lobster     Stop the OpenClaw (龙虾) Node.js gateway instead
-#   -Standalone  Stop the standalone HTTP server
+#   -PyGateway   Stop the Python FastAPI gateway
 param(
     [int]$Port = $env:QT_GATEWAY_PORT ? [int]$env:QT_GATEWAY_PORT : 18889,
     [int]$PyPort = $env:QT_PY_GATEWAY_PORT ? [int]$env:QT_PY_GATEWAY_PORT : 8001,
     [int]$StandalonePort = $env:QT_STANDALONE_PORT ? [int]$env:QT_STANDALONE_PORT : 18891,
     [switch]$Lobster,
-    [switch]$Standalone
+    [switch]$PyGateway
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,42 +16,6 @@ $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
 $LogDir = Join-Path $ProjectDir 'logs'
-
-# ── Standalone mode ────────────────────────────────────────────
-if ($Standalone) {
-    $PidFile = Join-Path $LogDir "standalone-${StandalonePort}.pid"
-
-    Write-Host "Stopping standalone HTTP server on port $StandalonePort ..."
-
-    $stopped = $false
-
-    if (Test-Path $PidFile) {
-        $saPid = (Get-Content $PidFile -Raw).Trim()
-        if ($saPid -match '^\d+$') {
-            $proc = Get-Process -Id ([int]$saPid) -ErrorAction SilentlyContinue
-            if ($proc -and -not $proc.HasExited) {
-                Stop-Process -Id ([int]$saPid) -Force -ErrorAction SilentlyContinue
-                $stopped = $true
-            }
-        }
-        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
-    }
-
-    $conns = Get-NetTCPConnection -LocalPort $StandalonePort -State Listen -ErrorAction SilentlyContinue
-    if ($conns) {
-        foreach ($conn in $conns) {
-            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
-        }
-        $stopped = $true
-    }
-
-    if ($stopped) {
-        Write-Host "✅ Standalone server stopped."
-    } else {
-        Write-Host "ℹ️  No standalone server was running on port $StandalonePort."
-    }
-    exit 0
-}
 
 # ── OpenClaw (龙虾) mode ──────────────────────────────────────
 if ($Lobster) {
@@ -105,28 +69,62 @@ if ($Lobster) {
     exit 0
 }
 
-# ── Python FastAPI mode (default) ──────────────────────────────
-$PidFile = Join-Path $LogDir "py-gateway-${PyPort}.pid"
+# ── Python FastAPI mode ────────────────────────────────────────
+if ($PyGateway) {
+    $PidFile = Join-Path $LogDir "py-gateway-${PyPort}.pid"
 
-Write-Host "Stopping Python FastAPI gateway on port $PyPort ..."
+    Write-Host "Stopping Python FastAPI gateway on port $PyPort ..."
+
+    $stopped = $false
+
+    if (Test-Path $PidFile) {
+        $gatewayPid = (Get-Content $PidFile -Raw).Trim()
+        if ($gatewayPid -match '^\d+$') {
+            $proc = Get-Process -Id ([int]$gatewayPid) -ErrorAction SilentlyContinue
+            if ($proc -and -not $proc.HasExited) {
+                Stop-Process -Id ([int]$gatewayPid) -Force -ErrorAction SilentlyContinue
+                $stopped = $true
+            }
+        }
+        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    }
+
+    $conns = Get-NetTCPConnection -LocalPort $PyPort -State Listen -ErrorAction SilentlyContinue
+    if ($conns) {
+        foreach ($conn in $conns) {
+            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+        $stopped = $true
+    }
+
+    if ($stopped) {
+        Write-Host "✅ Python gateway stopped."
+    } else {
+        Write-Host "ℹ️  No Python gateway was running on port $PyPort."
+    }
+    exit 0
+}
+
+# ── Standalone mode (default) ─────────────────────────────────
+$PidFile = Join-Path $LogDir "standalone-${StandalonePort}.pid"
+
+Write-Host "Stopping standalone HTTP server on port $StandalonePort ..."
 
 $stopped = $false
 
-# 1) Kill by PID file
 if (Test-Path $PidFile) {
-    $gatewayPid = (Get-Content $PidFile -Raw).Trim()
-    if ($gatewayPid -match '^\d+$') {
-        $proc = Get-Process -Id ([int]$gatewayPid) -ErrorAction SilentlyContinue
+    $saPid = (Get-Content $PidFile -Raw).Trim()
+    if ($saPid -match '^\d+$') {
+        $proc = Get-Process -Id ([int]$saPid) -ErrorAction SilentlyContinue
         if ($proc -and -not $proc.HasExited) {
-            Stop-Process -Id ([int]$gatewayPid) -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id ([int]$saPid) -Force -ErrorAction SilentlyContinue
             $stopped = $true
         }
     }
     Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-# 2) Kill anything still listening on the port
-$conns = Get-NetTCPConnection -LocalPort $PyPort -State Listen -ErrorAction SilentlyContinue
+$conns = Get-NetTCPConnection -LocalPort $StandalonePort -State Listen -ErrorAction SilentlyContinue
 if ($conns) {
     foreach ($conn in $conns) {
         Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
@@ -135,7 +133,7 @@ if ($conns) {
 }
 
 if ($stopped) {
-    Write-Host "✅ Python gateway stopped."
+    Write-Host "✅ Standalone server stopped."
 } else {
-    Write-Host "ℹ️  No Python gateway was running on port $PyPort."
+    Write-Host "ℹ️  No standalone server was running on port $StandalonePort."
 }

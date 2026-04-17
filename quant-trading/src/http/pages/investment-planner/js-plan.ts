@@ -81,7 +81,7 @@ function renderPlan(d){
     kpiHtml(p.monthlyReturnNeeded.toFixed(2)+'%','月均收益'),
     kpiHtml('<span class="badge badge-blue">'+esc(p.strategyLabel)+'</span>','推荐策略'),
     kpiHtml(esc(p.tradeFrequency),'交易频率'),
-    kpiHtml(s.totalPositions+'ֻ','持仓数'),
+    kpiHtml(s.totalPositions+'只','持仓数'),
     kpiHtml(s.cashReservePct+'%','现金比例'),
   ].join('');
 

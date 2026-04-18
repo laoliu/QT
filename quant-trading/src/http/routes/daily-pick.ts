@@ -203,9 +203,8 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           summary.annualizedReturn * 0.35 +
           summary.sharpeRatio * 12 +
           summary.winRate * 0.28 +
-          Math.min(summary.profitFactor, 4) * 4 -
-          summary.maxDrawdown * 0.85 +
-          Math.min(summary.totalTrades, 120) * 0.03;
+          Math.min(summary.profitFactor, 8) * 3 -
+          summary.maxDrawdown * 1.5;
         return round2(score);
       };
 
@@ -215,8 +214,8 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           summary.annualizedReturn * 0.25 +
           summary.sharpeRatio * 10 +
           summary.winRate * 0.3 +
-          Math.min(summary.profitFactor, 4) * 3 -
-          summary.maxDrawdown * 0.8;
+          Math.min(summary.profitFactor, 8) * 3 -
+          summary.maxDrawdown * 1.2;
         return round2(score);
       };
 
@@ -251,7 +250,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         const topStrategyCount = clampInteger(
           body.top_strategy_count ?? body.topStrategyCount,
           2,
-          3,
+          5,
           3,
         );
         const finalStockLimit = clampInteger(
@@ -599,7 +598,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           }));
 
         // Backtest top candidates – cap pool to avoid spawning too many Python processes
-        const backtestPoolSize = Math.min(combinedList.length, finalStockLimit * 2);
+        const backtestPoolSize = Math.min(combinedList.length, finalStockLimit * 3);
         const backtestPool = combinedList.slice(0, backtestPoolSize);
         const backtestPoolSymbols = backtestPool.map((item) => item.symbol);
 
@@ -631,11 +630,25 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         if (backtestPool.length > 0) {
           const benchmark = selectedStrategies[0]!;
 
+          // Build a map of strategy key → screenStrategy for quick lookup
+          const strategyScreenMap = new Map<string, string>();
+          for (const run of selectedStrategies) {
+            strategyScreenMap.set(run.strategy, run.screenStrategy);
+          }
+
           // Concurrency limiter: run at most 4 Python backtests in parallel
           const CONCURRENCY = 4;
           const queue = [...backtestPool];
           const results: StockBacktestEntry[] = [];
           const runOne = async (stock: (typeof backtestPool)[number]): Promise<StockBacktestEntry> => {
+              // Use the stock's best source strategy (lowest strategyRank) instead of always the #1 strategy
+              const bestSource = [...stock.sourceDetails].sort(
+                (a, b) => a.strategyRank - b.strategyRank,
+              )[0];
+              const matchedScreenStrategy =
+                (bestSource && strategyScreenMap.get(bestSource.strategy)) ??
+                benchmark.screenStrategy;
+
               const btResult = await runPythonScript<Record<string, unknown>>(
                 "scripts/backtest_engine.py",
                 {
@@ -643,7 +656,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                   initial_capital: initialCapital,
                   start_date: startDate,
                   end_date: endDate,
-                  strategy: benchmark.screenStrategy,
+                  strategy: matchedScreenStrategy,
                   risk_tolerance: riskTolerance,
                   symbols: [stock.symbol],
                   rebalance_days: rebalanceDays,
@@ -787,7 +800,40 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
 
         const withoutBacktest = backtestPool.filter((stock) => !backtestScoreMap.has(stock.symbol));
 
-        const finalCandidates = [...withBacktest, ...withoutBacktest]
+        // ── Diversified final selection ──────────────────────────
+        // Greedy pick: limit stocks sourced from the same single strategy to
+        // avoid homogeneous picks (e.g. all momentum stocks).
+        // Max per primary strategy = ceil(finalStockLimit / selectedStrategies.length)
+        const maxPerStrategy = Math.max(
+          2,
+          Math.ceil(finalStockLimit / Math.max(1, selectedStrategies.length)),
+        );
+        const strategyCounts = new Map<string, number>();
+        const diversified: typeof withBacktest = [];
+        const overflow: typeof withBacktest = [];
+        for (const stock of [...withBacktest, ...withoutBacktest]) {
+          // Primary strategy = the highest-ranked strategy source for this stock
+          const primary = stock.sourceDetails
+            .slice()
+            .sort((a, b) => a.strategyRank - b.strategyRank)[0]?.strategy ?? "unknown";
+          const count = strategyCounts.get(primary) ?? 0;
+          if (count < maxPerStrategy) {
+            diversified.push(stock);
+            strategyCounts.set(primary, count + 1);
+          } else {
+            overflow.push(stock);
+          }
+          if (diversified.length >= finalStockLimit) break;
+        }
+        // If we still need more, fill from overflow (best scores first)
+        if (diversified.length < finalStockLimit) {
+          for (const stock of overflow) {
+            diversified.push(stock);
+            if (diversified.length >= finalStockLimit) break;
+          }
+        }
+
+        const finalCandidates = diversified
           .slice(0, finalStockLimit)
           .map((item, index) => ({
             ...item,

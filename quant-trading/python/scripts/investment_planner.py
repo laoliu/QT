@@ -1412,7 +1412,6 @@ def _score_sina_stocks(
     top_n: int,
 ) -> list[dict]:
     """Score stocks from Sina Finance data."""
-    import random
     pe_min, pe_max = risk_profile.get("preferred_pe_range", (0, 50))
     pb_min, pb_max = risk_profile.get("preferred_pb_range", (0, 8))
     min_cap = risk_profile.get("min_market_cap", 20e8)
@@ -1464,8 +1463,8 @@ def _score_sina_stocks(
         # Calculate amplitude
         amplitude = ((high - low) / settlement * 100) if settlement > 0 else 0
 
-        # Score based on strategy (with slight randomization to diversify results)
-        score = random.uniform(0, 1.5)  # base jitter to prevent identical rankings
+        # Deterministic tiebreaker to prevent identical rankings
+        score = (hash(code) % 1000) * 0.0015  # 0 ~ 1.5 range, stable per symbol
         reasons = []
 
         if strategy in ("momentum", "auto", "mixed"):
@@ -1626,7 +1625,6 @@ def _score_akshare_stocks(
     top_n: int,
 ) -> list[dict]:
     """Score stocks from akshare DataFrame (original logic)."""
-    import random
     pe_min, pe_max = risk_profile.get("preferred_pe_range", (0, 50))
     pb_min, pb_max = risk_profile.get("preferred_pb_range", (0, 8))
     min_cap = risk_profile.get("min_market_cap", 20e8)
@@ -1665,7 +1663,7 @@ def _score_akshare_stocks(
         if pb_max > 0 and (pb <= pb_min or pb > pb_max):
             continue
 
-        score = random.uniform(0, 1.5)  # base jitter
+        score = (hash(code) % 1000) * 0.0015  # deterministic tiebreaker
         reasons = []
 
         if strategy in ("momentum", "auto", "mixed"):
@@ -1888,7 +1886,6 @@ def _screen_from_tencent_universe(
         batch = universe[i:i + 50]
         all_quotes.update(_fetch_tencent_batch(batch))
 
-    import random
     candidates = []
     for sym, q in all_quotes.items():
         if q["price"] <= 0:
@@ -1903,7 +1900,7 @@ def _screen_from_tencent_universe(
         if pb_max > 0 and pb > 0 and (pb < pb_min or pb > pb_max):
             continue
 
-        score = random.uniform(0, 1.5)  # base jitter
+        score = (hash(sym) % 1000) * 0.0015  # deterministic tiebreaker
         reasons = []
         change_pct = q.get("changePct", 0)
         turnover = q.get("turnoverRate", 0)

@@ -1340,7 +1340,7 @@ export function getPlannerBodyHtml(b: string): string {
         <label>每策略前N</label>
         <input type="number" id="dp-top-n" value="8" min="5" max="20" style="width:60px">
         <label>入围策略</label>
-        <input type="number" id="dp-top-strategy-count" value="3" min="2" max="3" style="width:60px">
+        <input type="number" id="dp-top-strategy-count" value="3" min="2" max="5" style="width:60px">
         <label>最终股票</label>
         <input type="number" id="dp-final-limit" value="8" min="3" max="8" style="width:60px">
         <span style="font-size:11px;color:var(--text-dim)">回测资金/周期/风险将复用下方「建仓推荐参数」</span>

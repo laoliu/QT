@@ -3,6 +3,9 @@ dist/
 logs/
 *.log
 .DS_Store
-__pycache__/
+__pycache__
+
+# esbuild worker bundles
+quant-trading/src/engine/fitness-worker.mjs
 
 .env

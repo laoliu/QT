@@ -147,10 +147,223 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
         <input type="number" id="initialCapital" value="1000000" min="100000" step="100000">
       </div>
     </div>
-    <div style="display:flex;gap:12px;align-items:center">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
       <button class="btn btn-primary" id="btnRun" onclick="startAnalysis()">🚀 开始分析</button>
       <button class="btn" id="btnRefresh" onclick="checkStatus()">🔄 刷新状态</button>
       <span id="runStatus" style="font-size:13px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+
+  <!-- Strategy Selection -->
+  <div class="card">
+    <h3>📋 策略选择 <span style="font-size:12px;font-weight:400;color:var(--text-dim)">(选择要参与适配分析的策略)</span></h3>
+    <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="toggleAllStrategies(true)">全选</button>
+      <button class="btn btn-sm" onclick="toggleAllStrategies(false)">全不选</button>
+      <button class="btn btn-sm" onclick="toggleAlphaStrategies()" style="border-color:var(--purple);color:var(--purple)">Alpha策略</button>
+      <button class="btn btn-sm" onclick="toggleBuiltinStrategies()" style="border-color:var(--accent);color:var(--accent)">Builtin策略</button>
+      <span id="strategyCountBadge" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+    <div style="margin-bottom:6px">
+      <label style="font-weight:600;color:var(--purple);font-size:12px;margin-bottom:2px">
+        <input type="checkbox" id="includeAlpha" checked onchange="updateStrategyCount()" style="vertical-align:middle;margin-right:4px">
+        Alpha量化策略 (~65个: 多因子/轮动/事件驱动)
+      </label>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:8px">
+      Alpha策略由Python aipha引擎运行，包含红利质量、动量加速、指数增强等65个因子/轮动策略。勾选即全部参与分析。
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">默认策略</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('default',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('default',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="momentum" checked onchange="updateStrategyCount()">趋势动量</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="value" checked onchange="updateStrategyCount()">价值投资</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="growth" checked onchange="updateStrategyCount()">成长投资</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="swing" checked onchange="updateStrategyCount()">波段交易</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="mixed" checked onchange="updateStrategyCount()">混合策略</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="manipulation" checked onchange="updateStrategyCount()">跟庄策略</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="spread-arbitrage" checked onchange="updateStrategyCount()">价差套利</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="rsi-reversal" checked onchange="updateStrategyCount()">RSI反转</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="vwap-reversion" checked onchange="updateStrategyCount()">VWAP回归</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="mean-reversion-zscore" checked onchange="updateStrategyCount()">均值回归Z-Score</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="williams-r" checked onchange="updateStrategyCount()">威廉指标反转</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="momentum-breakout" checked onchange="updateStrategyCount()">动量突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="range-breakout" checked onchange="updateStrategyCount()">区间突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="dual-ma-crossover" checked onchange="updateStrategyCount()">双均线交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="trend-combo" checked onchange="updateStrategyCount()">趋势合并</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="double-bottom" checked onchange="updateStrategyCount()">双底双顶</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="macd-divergence" checked onchange="updateStrategyCount()">MACD背离</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="volume-confirmation" checked onchange="updateStrategyCount()">成交量确认</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="gated" checked onchange="updateStrategyCount()">条件门控</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="scored" checked onchange="updateStrategyCount()">加权仓位</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="mean-reversion" checked onchange="updateStrategyCount()">均值回归</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="macd-confirmation" checked onchange="updateStrategyCount()">MACD确认</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="default" value="cta-kdj" checked onchange="updateStrategyCount()">KDJ随机</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">组合/增强</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('combo',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('combo',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="combo" value="composite" checked onchange="updateStrategyCount()">综合投票</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="combo" value="enhanced-composite" checked onchange="updateStrategyCount()">增强综合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="combo" value="rsi-filter" checked onchange="updateStrategyCount()">RSI动量过滤</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="combo" value="rsi-enhanced" checked onchange="updateStrategyCount()">RSI增强选股</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="combo" value="rsi-macd-combined" checked onchange="updateStrategyCount()">RSI+MACD组合</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">扩展技术指标</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('tech',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('tech',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="trix-momentum" checked onchange="updateStrategyCount()">TRIX动量</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="mfi-oscillator" checked onchange="updateStrategyCount()">MFI资金流</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="aroon-trend" checked onchange="updateStrategyCount()">阿隆趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="cmf-divergence" checked onchange="updateStrategyCount()">蔡金资金流背离</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="elder-ray" checked onchange="updateStrategyCount()">Elder Ray力量</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="supertrend" checked onchange="updateStrategyCount()">超级趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="hull-ma-crossover" checked onchange="updateStrategyCount()">Hull MA交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="dema-crossover" checked onchange="updateStrategyCount()">DEMA交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="triple-ma-crossover" checked onchange="updateStrategyCount()">三重均线交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="ma-envelope" checked onchange="updateStrategyCount()">MA包络</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="connors-rsi" checked onchange="updateStrategyCount()">Connors RSI</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="kama-trend" checked onchange="updateStrategyCount()">KAMA自适应趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="tech" value="demarker" checked onchange="updateStrategyCount()">DeMARK指标</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">CTA经典</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('cta',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('cta',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="cta-trend" checked onchange="updateStrategyCount()">CTA趋势跟踪</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="dual-thrust" checked onchange="updateStrategyCount()">Dual Thrust双推力</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="turtle-breakout" checked onchange="updateStrategyCount()">海龟突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="macd-trend" checked onchange="updateStrategyCount()">MACD趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="bollinger-breakout" checked onchange="updateStrategyCount()">布林带突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="keltner-channel" checked onchange="updateStrategyCount()">肯特纳通道</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="r-breaker" checked onchange="updateStrategyCount()">R-Breaker反转</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="aberration" checked onchange="updateStrategyCount()">标准差偏离</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="ttm-squeeze" checked onchange="updateStrategyCount()">TTM挤压</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="dmi-adx" checked onchange="updateStrategyCount()">DMI+ADX</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="parabolic-sar" checked onchange="updateStrategyCount()">抛物线SAR</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="volatility-target" checked onchange="updateStrategyCount()">波动率目标</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="momentum-rotation" checked onchange="updateStrategyCount()">动量轮动</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="obv-trend" checked onchange="updateStrategyCount()">OBV趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="ichimoku" checked onchange="updateStrategyCount()">一目均衡表</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="grid-trading" checked onchange="updateStrategyCount()">网格交易</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="multi-ma-convergence" checked onchange="updateStrategyCount()">多均线收敛</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="donchian-mid-reversion" checked onchange="updateStrategyCount()">唐奇安中线回归</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="pivot-point" checked onchange="updateStrategyCount()">枢轴点</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="chandelier-exit" checked onchange="updateStrategyCount()">烛台止损</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="roc-momentum" checked onchange="updateStrategyCount()">ROC动量</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="cci-divergence" checked onchange="updateStrategyCount()">CCI背离</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="ema-crossover" checked onchange="updateStrategyCount()">EMA均线交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="atr-trailing" checked onchange="updateStrategyCount()">ATR追踪止损</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="stochastic-rsi" checked onchange="updateStrategyCount()">随机RSI</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="macd-histogram-reversal" checked onchange="updateStrategyCount()">MACD柱状反转</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="cta" value="bollinger-bandwidth" checked onchange="updateStrategyCount()">布林带带宽</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">CTA扩展</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('ctaext',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('ctaext',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-awesome-oscillator" checked onchange="updateStrategyCount()">AO振荡器</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-elder-force" checked onchange="updateStrategyCount()">Elder力量指数</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-demarker" checked onchange="updateStrategyCount()">CTA DeMARK</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-ultimate-oscillator" checked onchange="updateStrategyCount()">终极振荡器</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-adx-breakout" checked onchange="updateStrategyCount()">ADX突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-trix-trend" checked onchange="updateStrategyCount()">TRIX趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-hull-ma-trend" checked onchange="updateStrategyCount()">Hull MA趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-mass-index" checked onchange="updateStrategyCount()">质量指数</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-chaikin-oscillator" checked onchange="updateStrategyCount()">蔡金振荡器</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-coppock" checked onchange="updateStrategyCount()">Coppock曲线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-rsi-divergence" checked onchange="updateStrategyCount()">RSI背离</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-volume-breakout" checked onchange="updateStrategyCount()">成交量突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-adaptive-ma" checked onchange="updateStrategyCount()">自适应均线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-ma-envelope" checked onchange="updateStrategyCount()">CTA MA包络</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-connors-rsi" checked onchange="updateStrategyCount()">CTA Connors RSI</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-aroon-oscillator" checked onchange="updateStrategyCount()">阿隆振荡器</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-mfi-trend" checked onchange="updateStrategyCount()">MFI趋势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-dema-crossover" checked onchange="updateStrategyCount()">CTA DEMA交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-triple-ma" checked onchange="updateStrategyCount()">CTA三重均线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-supertrend" checked onchange="updateStrategyCount()">CTA超级趋势</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">T0日内</label>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-day-trading" checked onchange="updateStrategyCount()">T0日内交易</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-enhanced" checked onchange="updateStrategyCount()">T0增强</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python趋势</label>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('pytrend',true)">全选</button>
+      <button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="toggleGroup('pytrend',false)">全不选</button>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="ema-cross" checked onchange="updateStrategyCount()">EMA均线交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="adx-trend" checked onchange="updateStrategyCount()">ADX趋势强度</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="aroon" checked onchange="updateStrategyCount()">阿隆指标</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="vortex" checked onchange="updateStrategyCount()">漩涡指标</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="cci" checked onchange="updateStrategyCount()">CCI顺势</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="trix" checked onchange="updateStrategyCount()">TRIX平滑</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="dmi" checked onchange="updateStrategyCount()">趋向指标DMI</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="dema-cross" checked onchange="updateStrategyCount()">DEMA交叉</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pytrend" value="tema-cross" checked onchange="updateStrategyCount()">TEMA交叉</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python通道</label>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pychannel" value="donchian-breakout" checked onchange="updateStrategyCount()">唐奇安突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pychannel" value="atr-channel" checked onchange="updateStrategyCount()">ATR通道</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pychannel" value="envelope" checked onchange="updateStrategyCount()">包络线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pychannel" value="price-channel-breakout" checked onchange="updateStrategyCount()">价格通道突破</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python指标</label>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="stochastic" checked onchange="updateStrategyCount()">随机振荡器</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="mfi" checked onchange="updateStrategyCount()">MFI资金流</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="cmf" checked onchange="updateStrategyCount()">蔡金资金流</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="adl" checked onchange="updateStrategyCount()">聚散指标ADL</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="roc" checked onchange="updateStrategyCount()">变化率ROC</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="vwap" checked onchange="updateStrategyCount()">VWAP均价</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="adaptive-ma" checked onchange="updateStrategyCount()">自适应均线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pyind" value="obv" checked onchange="updateStrategyCount()">能量潮OBV</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python形态</label>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="engulfing" checked onchange="updateStrategyCount()">吞没形态</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="hammer" checked onchange="updateStrategyCount()">锤子线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="doji" checked onchange="updateStrategyCount()">十字星</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="morning-star" checked onchange="updateStrategyCount()">启明星</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="three-soldiers" checked onchange="updateStrategyCount()">三兵三鸦</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pypattern" value="harami" checked onchange="updateStrategyCount()">孕线形态</label>
+    </div>
+    <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python组合</label>
+    </div>
+    <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="macd-rsi-combo" checked onchange="updateStrategyCount()">MACD+RSI组合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="bollinger-rsi-combo" checked onchange="updateStrategyCount()">布林+RSI组合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="ma-volume-combo" checked onchange="updateStrategyCount()">均线+量能组合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="kdj-macd-combo" checked onchange="updateStrategyCount()">KDJ+MACD组合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="ichimoku-adx-combo" checked onchange="updateStrategyCount()">一目+ADX组合</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="multi-tf-ma" checked onchange="updateStrategyCount()">多周期均线</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="volatility-breakout" checked onchange="updateStrategyCount()">波动率突破</label>
+      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="pycombo" value="regime-switch" checked onchange="updateStrategyCount()">趋势/震荡切换</label>
     </div>
   </div>
 
@@ -279,9 +492,50 @@ function switchTab(id){
   if(id==='history')loadHistory();
 }
 
+// ── Strategy selection helpers ────────────────────────
+function getSelectedBuiltinStrategies(){
+  var checked=document.querySelectorAll('.fit-builtin:checked');
+  var arr=[];
+  checked.forEach(function(el){arr.push(el.value)});
+  return arr;
+}
+function updateStrategyCount(){
+  var builtinCount=document.querySelectorAll('.fit-builtin:checked').length;
+  var totalBuiltin=document.querySelectorAll('.fit-builtin').length;
+  var alphaChecked=document.getElementById('includeAlpha').checked;
+  var alphaStr=alphaChecked?'Alpha ~65':'Alpha 0';
+  document.getElementById('strategyCountBadge').textContent=
+    '已选: '+alphaStr+' + Builtin '+builtinCount+'/'+totalBuiltin+' 个策略';
+}
+function toggleAllStrategies(on){
+  document.getElementById('includeAlpha').checked=on;
+  document.querySelectorAll('.fit-builtin').forEach(function(el){el.checked=on});
+  updateStrategyCount();
+}
+function toggleAlphaStrategies(){
+  var el=document.getElementById('includeAlpha');
+  el.checked=!el.checked;
+  updateStrategyCount();
+}
+function toggleBuiltinStrategies(){
+  var all=document.querySelectorAll('.fit-builtin');
+  var checked=document.querySelectorAll('.fit-builtin:checked');
+  var on=checked.length<all.length/2;
+  all.forEach(function(el){el.checked=on});
+  updateStrategyCount();
+}
+function toggleGroup(group,on){
+  document.querySelectorAll('.fit-builtin[data-group="'+group+'"]').forEach(function(el){el.checked=on});
+  updateStrategyCount();
+}
+// Init count on load
+setTimeout(updateStrategyCount,100);
+
 // ── Start Analysis ────────────────────────────────────
 var _pollTimer=null;
 function startAnalysis(){
+  // Clear stale poll timer from any previous run
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
   var btn=document.getElementById('btnRun');
   btn.disabled=true;
   btn.textContent='⏳ 启动中...';
@@ -289,7 +543,7 @@ function startAnalysis(){
   document.getElementById('progressSection').style.display='block';
   document.getElementById('resultSection').style.display='none';
   updateProgress(0,'running');
-  document.getElementById('progressDetail').textContent='正在提交...';
+  document.getElementById('progressDetail').textContent='正在提交...';  
 
   var body={
     universe:document.getElementById('universe').value,
@@ -298,7 +552,16 @@ function startAnalysis(){
     top_n_global:parseInt(document.getElementById('topNGlobal').value)||10,
     workers:parseInt(document.getElementById('workers').value)||8,
     initial_capital:parseInt(document.getElementById('initialCapital').value)||1000000,
+    include_alpha:document.getElementById('includeAlpha').checked,
+    builtin_strategies:getSelectedBuiltinStrategies(),
   };
+
+  if(!body.include_alpha&&body.builtin_strategies.length===0){
+    toast('❌ 请至少选择一类策略');
+    btn.disabled=false;
+    btn.textContent='🚀 开始分析';
+    return;
+  }
 
   api('/quant/admin/api/strategy-fitness/run',{
     method:'POST',
@@ -343,7 +606,7 @@ function checkStatus(){
       if(data.elapsed_seconds)detail2+=' | 耗时: '+formatDuration(data.elapsed_seconds);
       updateProgress(0,'running');
       document.getElementById('progressDetail').textContent=detail2;
-    }else if(data.status==='running'){
+    }else if(data.status==='running'||data.status==='alpha_done'){
       badge.className='status-running';
       badge.textContent='● 运行中';
       document.getElementById('progressSection').style.display='block';
@@ -400,7 +663,11 @@ function showResult(data){
   document.getElementById('resultSection').style.display='block';
   var kpis='';
   kpis+=kpiHtml(data.total_stocks||'-','股票数');
-  kpis+=kpiHtml(data.total_strategies||'-','策略数');
+  var stratLabel=(data.total_strategies||'-');
+  if(data.alpha_strategies&&data.builtin_strategies){
+    stratLabel=data.total_strategies+' (Alpha:'+data.alpha_strategies+' Builtin:'+data.builtin_strategies+')';
+  }
+  kpis+=kpiHtml(stratLabel,'策略数');
   kpis+=kpiHtml(data.fitness_records||'-','适配记录');
   kpis+=kpiHtml(formatDuration(data.elapsed_seconds),'总耗时');
   kpis+=kpiHtml(data.batch_id||'-','批次ID');

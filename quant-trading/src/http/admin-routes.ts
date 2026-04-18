@@ -192,7 +192,10 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     handler: securePublic(async (_req, res) => {
       const { getStockDetailPageHtml } = await import("./pages/stock-detail-page.js");
       const html = getStockDetailPageHtml("", config.apiToken);
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
       res.end(html);
     }),
   });

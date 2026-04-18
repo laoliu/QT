@@ -1011,6 +1011,8 @@ def run_fitness_analysis(
     top_n_global: int = 10,
     workers: int = 8,
     initial_capital: float = 1_000_000,
+    include_alpha: bool = True,
+    has_builtin: bool = False,
 ) -> dict:
     """执行策略适配分析主流程。
 
@@ -1036,11 +1038,16 @@ def run_fitness_analysis(
     print(f"[Step 1] 共 {len(symbols)} 只股票", file=sys.stderr)
 
     # Step 2: 获取策略列表
-    print("[Step 2] 获取A股策略列表...", file=sys.stderr)
-    strategy_ids = _get_astock_strategies()
-    if not strategy_ids:
+    strategy_ids: list[str] = []
+    if include_alpha:
+        print("[Step 2] 获取A股策略列表...", file=sys.stderr)
+        strategy_ids = _get_astock_strategies()
+        print(f"[Step 2] 共 {len(strategy_ids)} 个Alpha策略", file=sys.stderr)
+    else:
+        print("[Step 2] 跳过Alpha策略 (include_alpha=False)", file=sys.stderr)
+
+    if not strategy_ids and not has_builtin:
         return {"error": "无可用策略", "batch_id": batch_id}
-    print(f"[Step 2] 共 {len(strategy_ids)} 个策略", file=sys.stderr)
 
     # Step 3: 计算回测时间范围
     end_date = datetime.now().strftime("%Y-%m-%d")
@@ -1106,21 +1113,22 @@ def run_fitness_analysis(
           file=sys.stderr)
 
     # Step 7: 逐策略回测 (每个策略用全量股票)
-    print(f"[Step 7] 开始策略回测 ({len(strategy_ids)} 个策略)...", file=sys.stderr)
-    _write_progress({
-        "batch_id": batch_id,
-        "status": "running",
-        "phase": "策略回测中...",
-        "total_stocks": len(valid_symbols),
-        "total_strategies": len(strategy_ids),
-        "completed_stocks": 0,
-        "completed_strategies": 0,
-        "elapsed_seconds": int(time.time() - t0),
-    })
-
     # {symbol: [metrics_dict, ...]} — 每只股票关联多个策略结果
     all_results: dict[str, list[dict]] = {}
     completed_strategies = 0
+
+    if strategy_ids:
+        print(f"[Step 7] 开始策略回测 ({len(strategy_ids)} 个策略)...", file=sys.stderr)
+        _write_progress({
+            "batch_id": batch_id,
+            "status": "running",
+            "phase": "Alpha策略回测中...",
+            "total_stocks": len(valid_symbols),
+            "total_strategies": len(strategy_ids),
+            "completed_stocks": 0,
+            "completed_strategies": 0,
+            "elapsed_seconds": int(time.time() - t0),
+        })
 
     for sid in strategy_ids:
         completed_strategies += 1
@@ -1156,7 +1164,56 @@ def run_fitness_analysis(
             "estimated_remaining": int(remaining) if remaining else None,
         })
 
-    print(f"[Step 7] 回测完成: {len(all_results)} 只股票有结果", file=sys.stderr)
+    if strategy_ids:
+        print(f"[Step 7] Alpha回测完成: {len(all_results)} 只股票有结果", file=sys.stderr)
+    else:
+        print("[Step 7] 无Alpha策略，跳过", file=sys.stderr)
+
+    # 如果有 builtin 策略待 TS 侧执行，先返回中间结果 (不做 Step 8-10)
+    if has_builtin and strategy_ids:
+        # 返回 alpha 原始结果 + 元数据，由 TS 侧合并后统一排名和保存
+        alpha_raw: list[dict] = []
+        for sym, metrics_list in all_results.items():
+            for m in metrics_list:
+                alpha_raw.append(m)
+        elapsed = time.time() - t0
+        _write_progress({
+            "batch_id": batch_id,
+            "status": "alpha_done",
+            "phase": "Alpha策略完成，等待Builtin策略...",
+            "total_stocks": len(valid_symbols),
+            "total_strategies": len(strategy_ids),
+            "completed_strategies": len(strategy_ids),
+            "elapsed_seconds": int(elapsed),
+        })
+        return {
+            "batch_id": batch_id,
+            "universe": universe,
+            "total_stocks": len(valid_symbols),
+            "total_strategies": len(strategy_ids),
+            "elapsed_seconds": int(elapsed),
+            "valid_symbols": valid_symbols,
+            "start_date": start_date,
+            "end_date": end_date,
+            "alpha_results": alpha_raw,
+            "_phase": "alpha_only",
+        }
+
+    if has_builtin and not strategy_ids:
+        # 只跑 builtin，返回元数据让 TS 侧处理
+        elapsed = time.time() - t0
+        return {
+            "batch_id": batch_id,
+            "universe": universe,
+            "total_stocks": len(valid_symbols),
+            "total_strategies": 0,
+            "elapsed_seconds": int(elapsed),
+            "valid_symbols": valid_symbols,
+            "start_date": start_date,
+            "end_date": end_date,
+            "alpha_results": [],
+            "_phase": "metadata_only",
+        }
 
     # Step 8: 每只股票取 Top N
     print(f"[Step 8] 计算每只股票 Top {top_n_per_stock} 策略...", file=sys.stderr)
@@ -1269,6 +1326,8 @@ if __name__ == "__main__":
                 top_n_global=config.get("top_n_global", 10),
                 workers=config.get("workers", 8),
                 initial_capital=config.get("initial_capital", 1_000_000),
+                include_alpha=config.get("include_alpha", True),
+                has_builtin=config.get("has_builtin", False),
             )
         elif action == "status":
             result = _read_progress()

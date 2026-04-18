@@ -452,22 +452,14 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
 
     def _task_klines():
         """Fetch K-lines: bridge → akshare_provider (Parquet → SQLite → network).
-        
-        Also fetches 252 daily bars for 52-week high/low when interval != 1d.
-        Both requests go to bridge sequentially (bridge is single-threaded).
-        Returns (bars, source, daily_52w_bars_or_None).
+        Returns (bars, source).
         """
         _bars = None
         _source = "akshare"
-        _daily_52w = None
-
         if market == "cn_stock" and fetch_interval in ("1d", "1w", "1M"):
-            # If non-daily, fetch daily bars first (for 52-week) then main interval
-            if fetch_interval != "1d":
-                _daily_52w = _fetch_klines_bridge(symbol, "1d", 252)
             bridge_bars = _fetch_klines_bridge(symbol, fetch_interval, fetch_count)
             if bridge_bars:
-                return (bridge_bars, "bridge", _daily_52w)
+                return (bridge_bars, "bridge")
         try:
             from data_providers.akshare_provider import get_klines as _get_klines
             end_date = datetime.now().strftime("%Y%m%d")
@@ -489,14 +481,14 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
             _bars = _get_klines(symbol, fetch_interval, start_date, end_date, market)
         except Exception:
             _bars = None
-        return (_bars, _source, _daily_52w)
+        return (_bars, _source)
 
     _QUOTE_KLINE_TIMEOUT = 18  # seconds — total budget for all quote + kline tasks
 
     bridge_quote = None
     sina = None
     tencent = None
-    kline_result = (None, "akshare", None)
+    kline_result = (None, "akshare")
 
     pool_qk = ThreadPoolExecutor(max_workers=4)
     fut_bridge = pool_qk.submit(_task_bridge_quote)
@@ -695,7 +687,7 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
             result["name"] = symbol
 
     # ── 4. Assemble K-lines from parallel result ──────────────────
-    bars, kline_source, daily_52w_bars = kline_result
+    bars, kline_source = kline_result
 
     try:
         if aggregate_interval and bars:
@@ -715,16 +707,14 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         result["technicals"] = compute_technicals(closes)
 
     # ── 5b. Compute 52-week high/low from klines if still missing ──
+    # Each bar (daily/weekly/monthly) already contains high/low for that period,
+    # so we can compute 52-week range from any interval without extra fetches.
     if "quote" in result:
         q = result["quote"]
         if q.get("high52w") is None or q.get("low52w") is None:
-            # For daily klines, use last 252 bars directly.
-            # For non-daily, use pre-fetched daily bars from parallel pool.
-            _52w_bars = None
-            if kline_interval == "1d" and klines:
-                _52w_bars = klines[-252:]
-            elif daily_52w_bars:
-                _52w_bars = daily_52w_bars
+            _52w_count = {"1d": 252, "1w": 52, "1M": 12, "1Q": 4, "6M": 2, "1Y": 1}
+            n = _52w_count.get(kline_interval, 252)
+            _52w_bars = klines[-n:] if klines else None
             if _52w_bars:
                 highs = [b["high"] for b in _52w_bars if b.get("high")]
                 lows = [b["low"] for b in _52w_bars if b.get("low")]

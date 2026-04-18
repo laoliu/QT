@@ -1196,7 +1196,7 @@ export async function runBacktest(
   return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
 }
 
-function resolveBuiltinStrategy(strategyId: string, params?: Record<string, unknown>) {
+export function resolveBuiltinStrategy(strategyId: string, params?: Record<string, unknown>) {
   const factory = strategyMap.get(strategyId);
   if (!factory) {
     const known = [...strategyMap.keys()].join(", ");

@@ -41,7 +41,7 @@ function captureDailyPickParams(){
   return {
     strategies:getDailyPickStrategies(),
     topN:Math.max(5,Math.min(20,parseInt(document.getElementById('dp-top-n').value)||8)),
-    topStrategyCount:Math.max(2,Math.min(3,parseInt(document.getElementById('dp-top-strategy-count').value)||3)),
+    topStrategyCount:Math.max(2,Math.min(5,parseInt(document.getElementById('dp-top-strategy-count').value)||3)),
     finalLimit:Math.max(3,Math.min(8,parseInt(document.getElementById('dp-final-limit').value)||8)),
     initialCapital:Number(document.getElementById('rec-capital').value)||500000,
     riskTolerance:document.getElementById('rec-risk').value||'medium',
@@ -229,7 +229,7 @@ function runDailyCompositePick(){
   }
 
   var topN=Math.max(5,Math.min(20,parseInt(document.getElementById('dp-top-n').value)||8));
-  var topStrategyCount=Math.max(2,Math.min(3,parseInt(document.getElementById('dp-top-strategy-count').value)||3));
+  var topStrategyCount=Math.max(2,Math.min(5,parseInt(document.getElementById('dp-top-strategy-count').value)||3));
   var finalLimit=Math.max(3,Math.min(8,parseInt(document.getElementById('dp-final-limit').value)||8));
   var endVal=document.getElementById('rec-end').value.trim();
 

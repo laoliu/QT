@@ -451,13 +451,23 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         return _fetch_tencent_quote(symbol)
 
     def _task_klines():
-        """Fetch K-lines: bridge → akshare_provider (Parquet → SQLite → network)."""
+        """Fetch K-lines: bridge → akshare_provider (Parquet → SQLite → network).
+        
+        Also fetches 252 daily bars for 52-week high/low when interval != 1d.
+        Both requests go to bridge sequentially (bridge is single-threaded).
+        Returns (bars, source, daily_52w_bars_or_None).
+        """
         _bars = None
         _source = "akshare"
+        _daily_52w = None
+
         if market == "cn_stock" and fetch_interval in ("1d", "1w", "1M"):
+            # If non-daily, fetch daily bars first (for 52-week) then main interval
+            if fetch_interval != "1d":
+                _daily_52w = _fetch_klines_bridge(symbol, "1d", 252)
             bridge_bars = _fetch_klines_bridge(symbol, fetch_interval, fetch_count)
             if bridge_bars:
-                return (bridge_bars, "bridge")
+                return (bridge_bars, "bridge", _daily_52w)
         try:
             from data_providers.akshare_provider import get_klines as _get_klines
             end_date = datetime.now().strftime("%Y%m%d")
@@ -479,14 +489,14 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
             _bars = _get_klines(symbol, fetch_interval, start_date, end_date, market)
         except Exception:
             _bars = None
-        return (_bars, _source)
+        return (_bars, _source, _daily_52w)
 
     _QUOTE_KLINE_TIMEOUT = 18  # seconds — total budget for all quote + kline tasks
 
     bridge_quote = None
     sina = None
     tencent = None
-    kline_result = (None, "akshare")
+    kline_result = (None, "akshare", None)
 
     pool_qk = ThreadPoolExecutor(max_workers=4)
     fut_bridge = pool_qk.submit(_task_bridge_quote)
@@ -685,7 +695,7 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
             result["name"] = symbol
 
     # ── 4. Assemble K-lines from parallel result ──────────────────
-    bars, kline_source = kline_result
+    bars, kline_source, daily_52w_bars = kline_result
 
     try:
         if aggregate_interval and bars:
@@ -705,16 +715,23 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         result["technicals"] = compute_technicals(closes)
 
     # ── 5b. Compute 52-week high/low from klines if still missing ──
-    if "quote" in result and klines:
+    if "quote" in result:
         q = result["quote"]
         if q.get("high52w") is None or q.get("low52w") is None:
-            recent = klines[-252:]
-            highs = [b["high"] for b in recent if b.get("high")]
-            lows = [b["low"] for b in recent if b.get("low")]
-            if highs and q.get("high52w") is None:
-                q["high52w"] = max(highs)
-            if lows and q.get("low52w") is None:
-                q["low52w"] = min(lows)
+            # For daily klines, use last 252 bars directly.
+            # For non-daily, use pre-fetched daily bars from parallel pool.
+            _52w_bars = None
+            if kline_interval == "1d" and klines:
+                _52w_bars = klines[-252:]
+            elif daily_52w_bars:
+                _52w_bars = daily_52w_bars
+            if _52w_bars:
+                highs = [b["high"] for b in _52w_bars if b.get("high")]
+                lows = [b["low"] for b in _52w_bars if b.get("low")]
+                if highs and q.get("high52w") is None:
+                    q["high52w"] = max(highs)
+                if lows and q.get("low52w") is None:
+                    q["low52w"] = min(lows)
 
     # ── 6. Parallel fetch: company info, financials, shareholders, news ──
     # All sections below are independent — run them concurrently to avoid
@@ -808,20 +825,57 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
 
     # ── News sources (each returns a list of news items) ──────────
     def _news_eastmoney():
+        """直接调用东方财富搜索 API，绕过 akshare stock_news_em 的 pyarrow 正则 bug"""
         try:
-            news_df = ak.stock_news_em(symbol=symbol)
-            if news_df is not None and not news_df.empty:
-                items = []
-                for _, row in news_df.head(8).iterrows():
-                    items.append({
-                        "title": str(row.get("新闻标题", "")),
-                        "time": str(row.get("发布时间", "")),
-                        "source": str(row.get("文章来源", "")),
-                        "content": str(row.get("新闻内容", ""))[:200],
-                        "url": str(row.get("新闻链接", "")),
-                        "channel": "eastmoney",
-                    })
-                return items
+            import json as _json, re as _re
+            from curl_cffi import requests as _cffi_req
+            url = "https://search-api-web.eastmoney.com/search/jsonp"
+            inner_param = {
+                "uid": "",
+                "keyword": symbol,
+                "type": ["cmsArticleWebOld"],
+                "client": "web",
+                "clientType": "web",
+                "clientVersion": "curr",
+                "param": {
+                    "cmsArticleWebOld": {
+                        "searchScope": "default",
+                        "sort": "default",
+                        "pageIndex": 1,
+                        "pageSize": 10,
+                        "preTag": "<em>",
+                        "postTag": "</em>",
+                    }
+                },
+            }
+            cb = "jQuery35101792940631092459_1764599530165"
+            params = {
+                "cb": cb,
+                "param": _json.dumps(inner_param, ensure_ascii=False),
+                "_": "1764599530176",
+            }
+            r = _cffi_req.get(url, params=params, timeout=8)
+            text = r.text
+            start = text.index("(") + 1
+            end = text.rindex(")")
+            data_json = _json.loads(text[start:end])
+            rows = data_json.get("result", {}).get("cmsArticleWebOld", [])
+            _strip_em = _re.compile(r"</?em>")
+            items = []
+            for row in rows[:8]:
+                title = _strip_em.sub("", row.get("title", ""))
+                content = _strip_em.sub("", row.get("content", ""))
+                content = content.replace("\u3000", "").replace("\r\n", " ")
+                code = row.get("code", "")
+                items.append({
+                    "title": title,
+                    "time": row.get("date", ""),
+                    "source": row.get("mediaName", ""),
+                    "content": content[:200],
+                    "url": f"http://finance.eastmoney.com/a/{code}.html" if code else "",
+                    "channel": "eastmoney",
+                })
+            return items
         except Exception:
             pass
         return []

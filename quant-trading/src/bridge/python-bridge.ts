@@ -152,6 +152,9 @@ async function _spawnPython<T = unknown>(
         ...(config.dataProviders?.localData?.dataDir
           ? { QTDATA_DIR: config.dataProviders.localData.dataDir }
           : {}),
+        ...(config.dataDir
+          ? { QUANT_DATA_DIR: config.dataDir }
+          : {}),
       },
     });
 

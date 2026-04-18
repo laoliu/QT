@@ -116,8 +116,10 @@ def composite_score(metrics: dict) -> float:
 
 def _get_db_path() -> str:
     """与 TypeScript sqlite-storage.ts 使用同一数据库文件。"""
-    home = os.path.expanduser("~")
-    data_dir = os.path.join(home, ".openclaw", "extensions", "quant-trading", "cache")
+    data_dir = os.environ.get("QUANT_DATA_DIR", "")
+    if not data_dir:
+        home = os.path.expanduser("~")
+        data_dir = os.path.join(home, ".openclaw", "quant-data")
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, "quant-trading.db")
 
@@ -128,6 +130,10 @@ def _fetch_universe(universe: str, custom_symbols: list[str] | None = None) -> l
     """获取指定范围的股票代码列表。"""
     if universe == "custom" and custom_symbols:
         return list(custom_symbols)
+
+    # 全部A股
+    if universe == "all_a":
+        return _fetch_all_a_stocks()
 
     # 尝试 akshare 获取指数成分股
     index_map = {
@@ -187,6 +193,53 @@ def _fetch_universe(universe: str, custom_symbols: list[str] | None = None) -> l
             print(f"[Universe] stock_cache fallback失败: {e3}", file=sys.stderr)
 
     # 过滤 ST、退市
+    symbols = [s for s in symbols if s and len(s) == 6 and s[0] in ("0", "3", "6")]
+    return symbols
+
+
+def _fetch_all_a_stocks() -> list[str]:
+    """获取全部A股代码列表。"""
+    symbols: list[str] = []
+
+    # 方法1: akshare
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot_em()
+        if df is not None and not df.empty:
+            col = "代码" if "代码" in df.columns else df.columns[0]
+            symbols = df[col].astype(str).str.strip().tolist()
+            symbols = [s.zfill(6) for s in symbols if s.strip()]
+            print(f"[Universe] akshare全部A股: {len(symbols)} 只", file=sys.stderr)
+    except Exception as e:
+        print(f"[Universe] akshare全A获取失败: {e}", file=sys.stderr)
+
+    # 方法2: stock_cache fallback
+    if not symbols:
+        try:
+            from cache.stock_cache import get_cache
+            cache = get_cache()
+            all_stocks = cache.get_stock_list()
+            if all_stocks:
+                symbols = [s["code"] for s in all_stocks if s.get("code")]
+                print(f"[Universe] stock_cache全A: {len(symbols)} 只", file=sys.stderr)
+        except Exception as e2:
+            print(f"[Universe] stock_cache全A失败: {e2}", file=sys.stderr)
+
+    # 方法3: tushare fallback
+    if not symbols:
+        try:
+            from aipha.data.tushare_equity_provider import TuShareEquityProvider
+            provider = TuShareEquityProvider()
+            df = provider.load_stock_basic()
+            if df is not None and not df.empty:
+                col = "ts_code" if "ts_code" in df.columns else df.columns[0]
+                raw = df[col].astype(str).tolist()
+                symbols = [s.split(".")[0].zfill(6) for s in raw if s.strip()]
+                print(f"[Universe] tushare全A: {len(symbols)} 只", file=sys.stderr)
+        except Exception as e3:
+            print(f"[Universe] tushare全A失败: {e3}", file=sys.stderr)
+
+    # 过滤: 只保留主板+创业板+科创板, 去除ST标记
     symbols = [s for s in symbols if s and len(s) == 6 and s[0] in ("0", "3", "6")]
     return symbols
 
@@ -448,9 +501,7 @@ def _run_strategy_backtest(
             buy_qty = 0
             sell_proceeds = 0.0
             sell_qty = 0
-            wins = 0
-            round_trips = 0
-            holding_days = set()  # 简化: 用交易发生的日期跟踪
+            holding_days = set()
 
             for t in trades:
                 if t.side == Side.BUY:
@@ -470,10 +521,9 @@ def _run_strategy_backtest(
             total_pnl = sell_proceeds + remaining_value - buy_cost
             total_return_pct = (total_pnl / buy_cost * 100) if buy_cost > 0 else 0
 
-            # 简化 win_rate: 整体是否盈利
             total_trades_count = len(trades)
 
-            # 年化收益 (简化)
+            # 年化收益
             trading_days = len(sorted_dates)
             ann_return = 0.0
             if buy_cost > 0 and trading_days > 0:
@@ -481,13 +531,129 @@ def _run_strategy_backtest(
                 years = trading_days / 245
                 ann_return = ((total_r ** (1 / years)) - 1) * 100 if years > 0 and total_r > 0 else 0
 
+            # ── 计算 per-stock 每日净值、最大回撤、夏普 ──
+            # 以买入成本为基准，构建组合价值曲线（而非 P&L 曲线）
+            daily_equity = []
+            pos_qty = 0
+            cash_for_sym = buy_cost  # 从投入资金开始，而非 0
+            trade_idx = 0
+            sym_trades_sorted = sorted(trades, key=lambda t: t.trade_date)
+
+            for d in sorted_dates:
+                # 处理该日的所有交易
+                while trade_idx < len(sym_trades_sorted) and sym_trades_sorted[trade_idx].trade_date <= d:
+                    t = sym_trades_sorted[trade_idx]
+                    if t.side == Side.BUY:
+                        cash_for_sym -= (t.notional + t.fees.total)
+                        pos_qty += t.qty
+                    else:
+                        cash_for_sym += (t.notional - t.fees.total)
+                        pos_qty -= t.qty
+                    trade_idx += 1
+
+                # 只在有持仓或有过交易后才记录净值
+                if pos_qty > 0 or cash_for_sym != buy_cost or trade_idx > 0:
+                    price = bars_by_date[d][sym].close if d in bars_by_date and sym in bars_by_date[d] else 0
+                    equity = cash_for_sym + pos_qty * price
+                    daily_equity.append(equity)
+
+            # 最大回撤 (基于净值序列)
+            max_dd = 0.0
+            if len(daily_equity) >= 2:
+                peak = daily_equity[0]
+                for eq in daily_equity[1:]:
+                    if eq > peak:
+                        peak = eq
+                    if peak > 0:
+                        dd = (peak - eq) / peak
+                        if dd > max_dd:
+                            max_dd = dd
+                    elif buy_cost > 0:
+                        # fallback: 用初始投入作为基准计算回撤
+                        dd = (buy_cost - eq) / buy_cost
+                        if dd > max_dd:
+                            max_dd = dd
+
+            # 夏普比率 (基于日收益率)
+            sharpe = 0.0
+            daily_returns = []
+            if len(daily_equity) >= 2:
+                for i in range(1, len(daily_equity)):
+                    prev = daily_equity[i - 1]
+                    curr = daily_equity[i]
+                    if prev > 0:
+                        daily_returns.append(curr / prev - 1)
+                    elif buy_cost > 0:
+                        # 权益接近 0 时用初始投入归一化，避免负分母反转
+                        daily_returns.append((curr - prev) / buy_cost)
+                if daily_returns:
+                    avg_ret = sum(daily_returns) / len(daily_returns)
+                    n = len(daily_returns)
+                    std_ret = (sum((r - avg_ret) ** 2 for r in daily_returns) / max(1, n - 1)) ** 0.5
+                    if std_ret > 0:
+                        sharpe = (avg_ret - 0.03 / 252) / std_ret * (252 ** 0.5)
+
+            # Sortino (只用负收益计算下行波动率)
+            sortino = 0.0
+            if daily_returns:
+                neg_returns = [r for r in daily_returns if r < 0]
+                if neg_returns:
+                    avg_ret = sum(daily_returns) / len(daily_returns)
+                    down_std = (sum(r ** 2 for r in neg_returns) / len(neg_returns)) ** 0.5
+                    if down_std > 0:
+                        sortino = (avg_ret - 0.03 / 252) / down_std * (252 ** 0.5)
+
+            # Calmar
+            calmar = ann_return / (max_dd * 100) if max_dd > 0 else 0.0
+
+            # Win rate & Profit/loss ratio: 基于买卖配对计算实际盈亏
+            buy_trades = sorted([t for t in trades if t.side == Side.BUY], key=lambda t: t.trade_date)
+            sell_trades = sorted([t for t in trades if t.side != Side.BUY], key=lambda t: t.trade_date)
+            round_trips = min(len(buy_trades), len(sell_trades))
+            wins_pnl = []
+            losses_pnl = []
+            for i in range(round_trips):
+                bt = buy_trades[i]
+                st = sell_trades[i]
+                pnl = (st.notional - st.fees.total) - (bt.notional + bt.fees.total)
+                if pnl > 0:
+                    wins_pnl.append(pnl)
+                else:
+                    losses_pnl.append(pnl)
+
+            # 如果有未平仓且浮盈，将浮盈计为一笔赢利
+            remaining_qty = buy_qty - sell_qty
+            if remaining_qty > 0 and remaining_value > 0:
+                # 未平仓部分的买入成本（取最后几笔买入）
+                unmatched_buys = buy_trades[round_trips:]
+                unmatched_cost = sum(b.notional + b.fees.total for b in unmatched_buys) if unmatched_buys else 0
+                if unmatched_cost > 0:
+                    unrealized_pnl = remaining_value - unmatched_cost
+                    if unrealized_pnl > 0:
+                        wins_pnl.append(unrealized_pnl)
+                    else:
+                        losses_pnl.append(unrealized_pnl)
+
+            total_round_trips = round_trips + (1 if remaining_qty > 0 and remaining_value > 0 and (buy_qty - sell_qty) > 0 else 0)
+            if total_round_trips > 0:
+                win_rate = len(wins_pnl) / total_round_trips
+            else:
+                win_rate = 1.0 if total_pnl > 0 else 0.0
+
+            if wins_pnl or losses_pnl:
+                avg_win = sum(wins_pnl) / len(wins_pnl) if wins_pnl else 0
+                avg_loss = abs(sum(losses_pnl) / len(losses_pnl)) if losses_pnl else 0
+                profit_loss_ratio = avg_win / avg_loss if avg_loss > 0 else (avg_win if avg_win > 0 else 0)
+            else:
+                profit_loss_ratio = max(total_return_pct / 10, 0) if total_return_pct > 0 else 0
+
             cs = composite_score({
                 "total_return": total_return_pct,
                 "annualized_return": ann_return,
-                "sharpe_ratio": 0,  # 简化：无法单独计算
-                "win_rate": 1.0 if total_pnl > 0 else 0.0,
-                "profit_loss_ratio": max(total_return_pct / 10, 0) if total_return_pct > 0 else 0,
-                "max_drawdown": 0,
+                "sharpe_ratio": sharpe,
+                "win_rate": win_rate * 100,  # 转为百分比，与 TS builtin-engine 一致
+                "profit_loss_ratio": profit_loss_ratio,
+                "max_drawdown": max_dd * 100,
                 "total_trades": total_trades_count,
             })
 
@@ -497,12 +663,12 @@ def _run_strategy_backtest(
                 "composite_score": cs,
                 "total_return": round(total_return_pct, 4),
                 "annualized_return": round(ann_return, 4),
-                "sharpe_ratio": 0,
-                "sortino_ratio": 0,
-                "max_drawdown": 0,
-                "win_rate": 1.0 if total_pnl > 0 else 0.0,
-                "profit_loss_ratio": round(total_return_pct / 10, 4) if total_return_pct > 0 else 0,
-                "calmar_ratio": 0,
+                "sharpe_ratio": round(sharpe, 4),
+                "sortino_ratio": round(sortino, 4),
+                "max_drawdown": round(max_dd, 6),
+                "win_rate": round(win_rate, 4),
+                "profit_loss_ratio": round(profit_loss_ratio, 4),
+                "calmar_ratio": round(calmar, 4),
                 "total_trades": total_trades_count,
                 "backtest_start": str(result.start_date) if result.start_date else "",
                 "backtest_end": str(result.end_date) if result.end_date else "",
@@ -665,6 +831,171 @@ def _query_global(batch_id: str = "") -> dict:
         return {
             "batch_id": batch_id,
             "strategies": [dict(r) for r in rows],
+        }
+    finally:
+        conn.close()
+
+
+def _list_batches(limit: int = 20) -> dict:
+    """列出历史分析批次。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {"batches": []}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT batch_id, MIN(created_at) as created_at,
+                   COUNT(DISTINCT symbol) as stock_count,
+                   COUNT(DISTINCT strategy_id) as strategy_count
+            FROM stock_strategy_fitness
+            GROUP BY batch_id
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return {
+            "batches": [
+                {
+                    "batchId": r["batch_id"],
+                    "createdAt": r["created_at"],
+                    "stockCount": r["stock_count"],
+                    "strategyCount": r["strategy_count"],
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        conn.close()
+
+
+def _query_all_stocks(batch_id: str = "", limit: int = 100, offset: int = 0) -> dict:
+    """查询所有股票的 rank=1 最优策略，分页返回。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {"stocks": [], "total": 0}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        if not batch_id:
+            row = conn.execute(
+                "SELECT batch_id FROM stock_strategy_fitness ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+            batch_id = row["batch_id"] if row else ""
+        if not batch_id:
+            return {"stocks": [], "total": 0}
+
+        count_row = conn.execute(
+            "SELECT COUNT(DISTINCT symbol) as cnt FROM stock_strategy_fitness WHERE batch_id = ? AND rank = 1",
+            (batch_id,),
+        ).fetchone()
+        total = count_row["cnt"] if count_row else 0
+
+        rows = conn.execute(
+            "SELECT * FROM stock_strategy_fitness WHERE batch_id = ? AND rank = 1 ORDER BY composite_score DESC LIMIT ? OFFSET ?",
+            (batch_id, limit, offset),
+        ).fetchall()
+
+        # Resolve missing stock names
+        name_map: dict[str, str] = {}
+        missing = [r["symbol"] for r in rows if not r["stock_name"]]
+        if missing:
+            try:
+                from cache.stock_cache import get_cache
+                cache = get_cache()
+                for sym in missing:
+                    n = cache.get_stock_name(sym)
+                    if n:
+                        name_map[sym] = n
+            except Exception:
+                pass
+
+        stocks = []
+        for r in rows:
+            d = dict(r)
+            d["stockName"] = d.get("stock_name") or name_map.get(d["symbol"]) or d["symbol"]
+            d["strategyId"] = d.get("strategy_id", "")
+            d["compositeScore"] = d.get("composite_score", 0)
+            d["totalReturn"] = d.get("total_return", 0)
+            d["annualizedReturn"] = d.get("annualized_return", 0)
+            d["sharpeRatio"] = d.get("sharpe_ratio")
+            d["maxDrawdown"] = d.get("max_drawdown", 0)
+            d["winRate"] = d.get("win_rate", 0)
+            d["totalTrades"] = d.get("total_trades", 0)
+            stocks.append(d)
+
+        return {"stocks": stocks, "total": total, "batch_id": batch_id, "limit": limit, "offset": offset}
+    finally:
+        conn.close()
+
+
+def _batch_detail(batch_id: str) -> dict:
+    """返回指定批次的股票列表和策略列表。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {"stocks": [], "strategies": []}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        stock_rows = conn.execute(
+            """
+            SELECT symbol, stock_name, COUNT(*) as strategy_count,
+                   MAX(composite_score) as best_score
+            FROM stock_strategy_fitness
+            WHERE batch_id = ?
+            GROUP BY symbol
+            ORDER BY best_score DESC
+            """,
+            (batch_id,),
+        ).fetchall()
+        strat_rows = conn.execute(
+            """
+            SELECT strategy_id, strategy_name, COUNT(*) as stock_count,
+                   AVG(composite_score) as avg_score
+            FROM stock_strategy_fitness
+            WHERE batch_id = ?
+            GROUP BY strategy_id
+            ORDER BY avg_score DESC
+            """,
+            (batch_id,),
+        ).fetchall()
+
+        # Resolve missing stock names via stock_cache
+        name_map: dict[str, str] = {}
+        missing = [r["symbol"] for r in stock_rows if not r["stock_name"]]
+        if missing:
+            try:
+                from cache.stock_cache import get_cache
+                cache = get_cache()
+                for sym in missing:
+                    n = cache.get_stock_name(sym)
+                    if n:
+                        name_map[sym] = n
+            except Exception:
+                pass
+
+        return {
+            "batch_id": batch_id,
+            "stocks": [
+                {
+                    "symbol": r["symbol"],
+                    "stockName": r["stock_name"] or name_map.get(r["symbol"]) or r["symbol"],
+                    "strategyCount": r["strategy_count"],
+                    "bestScore": round(r["best_score"], 4) if r["best_score"] else 0,
+                }
+                for r in stock_rows
+            ],
+            "strategies": [
+                {
+                    "strategyId": r["strategy_id"],
+                    "strategyName": r["strategy_name"] or r["strategy_id"],
+                    "stockCount": r["stock_count"],
+                    "avgScore": round(r["avg_score"], 4) if r["avg_score"] else 0,
+                }
+                for r in strat_rows
+            ],
         }
     finally:
         conn.close()
@@ -841,6 +1172,7 @@ def run_fitness_analysis(
             score = m["composite_score"]
             stock_fitness.append({
                 "symbol": sym,
+                "stock_name": fundamentals.get(sym, {}).get("name", ""),
                 "strategy_id": sid,
                 "rank": rank_idx,
                 "composite_score": score,
@@ -948,6 +1280,20 @@ if __name__ == "__main__":
                 result = _query_stock(symbol, config.get("batch_id", ""))
         elif action == "query_global":
             result = _query_global(config.get("batch_id", ""))
+        elif action == "list_batches":
+            result = _list_batches(config.get("limit", 20))
+        elif action == "query_all_stocks":
+            result = _query_all_stocks(
+                config.get("batch_id", ""),
+                config.get("limit", 100),
+                config.get("offset", 0),
+            )
+        elif action == "batch_detail":
+            bid = config.get("batch_id", "")
+            if not bid:
+                result = {"error": "需要 batch_id 参数"}
+            else:
+                result = _batch_detail(bid)
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:

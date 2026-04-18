@@ -12,6 +12,7 @@ export function json(res: ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "no-store",
   });
   res.end(body);
 }
@@ -180,6 +181,8 @@ export const DAILY_PICK_STRATEGIES = [
   "multi-tf-ma",
   "volatility-breakout",
   "regime-switch",
+  // ── Aipha 策略适配 ──
+  "fitness_optimal",
 ] as const;
 
 export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
@@ -319,6 +322,18 @@ export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
   "multi-tf-ma": "多周期均线",
   "volatility-breakout": "波动率突破",
   "regime-switch": "趋势/震荡切换",
+  // ── Aipha 策略适配 ──
+  fitness_optimal: "个股最优(适配)",
+  stable_compounder: "稳健复利",
+  high_delivery_expect: "高送转预期",
+  buyback_signal: "回购信号",
+  turnaround_play: "困境反转",
+  dividend_quality: "红利质量",
+  value_quality: "价值质量",
+  insider_buying: "内部人增持",
+  earnings_momentum: "盈利动量",
+  garp_select: "GARP选股",
+  sector_rotation: "行业轮动",
 };
 
 export const CTA_SCREEN_STRATEGY_MAP: Record<string, string> = {

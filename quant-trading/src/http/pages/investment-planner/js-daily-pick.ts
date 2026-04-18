@@ -244,6 +244,7 @@ function runDailyCompositePick(){
     start_date:document.getElementById('rec-start').value||'2025-06-01'
   };
   if(endVal)body.end_date=endVal;
+  if(_selectedAiphaStrategies.length>0)body.aipha_strategies=_selectedAiphaStrategies;
 
   document.getElementById('dp-results').style.display='none';
   _dailyPickRunning=true;
@@ -936,6 +937,57 @@ function updateBatchUI(){
 /* ══════ STRATEGY FITNESS INTEGRATION ══════ */
 var _fitnessGlobalRanking=null;
 var _fitnessLoading=false;
+var _selectedAiphaStrategies=[];
+var _fitnessStratNames={
+  stable_compounder:'稳健复利',high_delivery_expect:'高送转预期',buyback_signal:'回购信号',
+  turnaround_play:'困境反转',dividend_quality:'红利质量',value_quality:'价值质量',
+  insider_buying:'内部人增持',earnings_momentum:'盈利动量',garp_select:'GARP选股',
+  sector_rotation:'行业轮动',momentum:'趋势动量',value:'价值投资',growth:'成长投资',
+  swing:'波段交易',mixed:'混合策略',manipulation:'跟庄策略','spread-arbitrage':'价差套利',
+  'rsi-reversal':'RSI反转','vwap-reversion':'VWAP回归','mean-reversion-zscore':'均值回归Z-Score',
+  'williams-r':'威廉指标反转','momentum-breakout':'动量突破','range-breakout':'区间突破',
+  'dual-ma-crossover':'双均线交叉','trend-combo':'趋势合并','double-bottom':'双底双顶',
+  'macd-divergence':'MACD背离','volume-confirmation':'成交量确认',gated:'条件门控',
+  scored:'加权仓位','mean-reversion':'均值回归','macd-confirmation':'MACD确认',
+  'cta-kdj':'KDJ随机',composite:'综合投票','enhanced-composite':'增强综合',
+  'rsi-filter':'RSI动量过滤','rsi-enhanced':'RSI增强选股','rsi-macd-combined':'RSI+MACD组合',
+  'trix-momentum':'TRIX动量','mfi-oscillator':'MFI资金流','aroon-trend':'阿隆趋势',
+  'cmf-divergence':'蔡金资金流背离','elder-ray':'Elder Ray力量',supertrend:'超级趋势',
+  'hull-ma-crossover':'Hull MA交叉','dema-crossover':'DEMA交叉','triple-ma-crossover':'三重均线交叉',
+  'ma-envelope':'MA包络','connors-rsi':'Connors RSI','kama-trend':'KAMA自适应趋势',
+  demarker:'DeMARK指标','cta-trend':'CTA趋势跟踪','dual-thrust':'Dual Thrust双推力',
+  'turtle-breakout':'海龟突破','macd-trend':'MACD趋势','bollinger-breakout':'布林带突破',
+  'keltner-channel':'肯特纳通道','r-breaker':'R-Breaker反转',aberration:'标准差偏离',
+  'ttm-squeeze':'TTM挤压','dmi-adx':'DMI+ADX','parabolic-sar':'抛物线SAR',
+  'volatility-target':'波动率目标','momentum-rotation':'动量轮动','obv-trend':'OBV趋势',
+  ichimoku:'一目均衡表','grid-trading':'网格交易','multi-ma-convergence':'多均线收敛',
+  'donchian-mid-reversion':'唐奇安中线回归','pivot-point':'枢轴点','chandelier-exit':'烛台止损',
+  'roc-momentum':'ROC动量','cci-divergence':'CCI背离','ema-crossover':'EMA均线交叉',
+  'atr-trailing':'ATR追踪止损','stochastic-rsi':'随机RSI','macd-histogram-reversal':'MACD柱状反转',
+  'bollinger-bandwidth':'布林带带宽','cta-awesome-oscillator':'AO振荡器',
+  'cta-elder-force':'Elder力量指数','cta-demarker':'CTA DeMARK',
+  'cta-ultimate-oscillator':'终极振荡器','cta-adx-breakout':'ADX突破',
+  'cta-trix-trend':'TRIX趋势','cta-hull-ma-trend':'Hull MA趋势','cta-mass-index':'质量指数',
+  'cta-chaikin-oscillator':'蔡金振荡器','cta-coppock':'Coppock曲线',
+  'cta-rsi-divergence':'RSI背离','cta-volume-breakout':'成交量突破',
+  'cta-adaptive-ma':'自适应均线','cta-ma-envelope':'CTA MA包络',
+  'cta-connors-rsi':'CTA Connors RSI','cta-aroon-oscillator':'阿隆振荡器',
+  'cta-mfi-trend':'MFI趋势','cta-dema-crossover':'CTA DEMA交叉',
+  'cta-triple-ma':'CTA三重均线','cta-supertrend':'CTA超级趋势',
+  't0-day-trading':'T0日内交易','t0-enhanced':'T0增强',
+  'ema-cross':'EMA均线交叉','adx-trend':'ADX趋势强度',aroon:'阿隆指标',
+  vortex:'漩涡指标',cci:'CCI顺势',trix:'TRIX平滑',dmi:'趋向指标DMI',
+  'dema-cross':'DEMA交叉','tema-cross':'TEMA交叉','donchian-breakout':'唐奇安突破',
+  'atr-channel':'ATR通道',envelope:'包络线','price-channel-breakout':'价格通道突破',
+  stochastic:'随机振荡器',mfi:'MFI资金流',cmf:'蔡金资金流',adl:'聚散指标ADL',
+  roc:'变化率ROC',vwap:'VWAP均价','adaptive-ma':'自适应均线',obv:'能量潮OBV',
+  engulfing:'吞没形态',hammer:'锤子线',doji:'十字星','morning-star':'启明星',
+  'three-soldiers':'三兵三鸦',harami:'孕线形态',
+  'macd-rsi-combo':'MACD+RSI组合','bollinger-rsi-combo':'布林+RSI组合',
+  'ma-volume-combo':'均线+量能组合','kdj-macd-combo':'KDJ+MACD组合',
+  'ichimoku-adx-combo':'一目+ADX组合','multi-tf-ma':'多周期均线',
+  'volatility-breakout':'波动率突破','regime-switch':'趋势/震荡切换'
+};
 
 function _loadFitnessGlobal(callback){
   if(_fitnessGlobalRanking){callback(_fitnessGlobalRanking);return;}
@@ -966,19 +1018,14 @@ function selectFitnessGlobalTop(){
       toast('⚠️ 无全局排名数据，请先在「策略适配分析」页面运行分析');
       return;
     }
-    // Uncheck all first
+    // Uncheck all, then only check fitness_optimal
     document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
-    // Check strategies that match global ranking
-    var matched=0;
-    var ids=strats.map(function(s){return s.strategy_id;});
-    document.querySelectorAll('.dp-strategy').forEach(function(el){
-      if(ids.indexOf(el.value)>=0){el.checked=true;matched++;}
-    });
-    // Also add fitness_optimal as a virtual strategy
     var fitnessBox=document.querySelector('.dp-strategy[value="fitness_optimal"]');
     if(fitnessBox)fitnessBox.checked=true;
+    // Store all ranked aipha strategy IDs for backend
+    _selectedAiphaStrategies=strats.map(function(s){return s.strategy_id;});
     _highlightFitnessRankBadges(strats);
-    toast('🏆 已选中全局最优 '+matched+' 个策略 (共'+strats.length+'个排名) — 未匹配的策略可能ID不同');
+    toast('🏆 已启用全局最优模式 — 将使用排名前 '+strats.length+' 个适配策略选股');
   });
 }
 
@@ -988,11 +1035,10 @@ function selectFitnessStockOptimal(){
   var box=document.querySelector('.dp-strategy[value="fitness_optimal"]');
   if(box){
     box.checked=true;
+    _selectedAiphaStrategies=[];  // empty = use all, no filter
     toast('🎯 已选中「个股最优」策略 — 将根据每只股票的历史回测最优策略进行选股');
   }else{
-    // Fallback: add it dynamically
-    toast('🎯 个股最优模式已启用 — 策略池中未找到fitness_optimal选项，将使用全部策略');
-    document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=true;});
+    toast('🎯 个股最优模式已启用 — 策略池中未找到fitness_optimal选项');
   }
 }
 
@@ -1006,6 +1052,13 @@ function showFitnessRankingPanel(){
       body.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-dim)">暂无数据<br><a href="/quant/admin/strategy-fitness" target="_blank" style="color:var(--accent)">前往策略适配分析页面运行 →</a></div>';
       return;
     }
+    // Auto-apply: check fitness_optimal and store all ranked aipha IDs
+    document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
+    var fitnessBox=document.querySelector('.dp-strategy[value="fitness_optimal"]');
+    if(fitnessBox)fitnessBox.checked=true;
+    _selectedAiphaStrategies=strats.map(function(s){return s.strategy_id;});
+    _highlightFitnessRankBadges(strats);
+    toast('📊 已选中全部 '+strats.length+' 个排名策略，可在面板中取消勾选再点「应用勾选」');
     var maxScore=Math.max.apply(null,strats.map(function(s){return s.total_score||0}))||1;
     // Get currently checked strategies
     var checked=new Set();
@@ -1021,7 +1074,8 @@ function showFitnessRankingPanel(){
       html+='<td><input type="checkbox" class="dp-fitness-check" value="'+esc(s.strategy_id)+'" '+(isChecked?'checked':'')+' style="vertical-align:middle"></td>';
       html+='<td><span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;'+rankCls+'">#'+s.rank+'</span></td>';
       html+='<td><strong>'+esc(s.strategy_id)+'</strong>';
-      if(s.strategy_name)html+='<br><span style="color:var(--text-dim);font-size:11px">'+esc(s.strategy_name)+'</span>';
+      var cnName=s.strategy_name||_fitnessStratNames[s.strategy_id]||'';
+      if(cnName)html+='<br><span style="color:var(--text-dim);font-size:11px">'+esc(cnName)+'</span>';
       html+='</td>';
       html+='<td style="color:var(--green);font-weight:700">'+num(s.total_score)+'</td>';
       html+='<td>'+s.stock_count+'</td>';
@@ -1040,17 +1094,17 @@ function showFitnessRankingPanel(){
 function applyFitnessSelection(){
   var checks=document.querySelectorAll('.dp-fitness-check:checked');
   if(!checks.length){toast('请至少勾选一个策略');return;}
-  var ids=new Set();
-  checks.forEach(function(el){ids.add(el.value);});
-  // Uncheck all strategies in pool, then check matching ones
+  var ids=[];
+  checks.forEach(function(el){ids.push(el.value);});
+  // Store selected aipha strategy IDs for backend
+  _selectedAiphaStrategies=ids;
+  // Uncheck all, then only check fitness_optimal
   document.querySelectorAll('.dp-strategy').forEach(function(el){el.checked=false;});
-  var matched=0;
-  document.querySelectorAll('.dp-strategy').forEach(function(el){
-    if(ids.has(el.value)){el.checked=true;matched++;}
-  });
+  var fitnessBox=document.querySelector('.dp-strategy[value="fitness_optimal"]');
+  if(fitnessBox)fitnessBox.checked=true;
   document.getElementById('dp-fitness-panel').style.display='none';
   _highlightFitnessRankBadges(_fitnessGlobalRanking||[]);
-  toast('✅ 已应用 '+matched+' 个策略 (选中'+ids.size+'个)');
+  toast('✅ 已应用 '+ids.length+' 个适配策略 — 运行选股时将使用这些策略的适配数据');
 }
 
 function _highlightFitnessRankBadges(strats){

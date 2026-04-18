@@ -20,6 +20,59 @@ import { parseJsonBody } from "../parse-body.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as http from "node:http";
+
+/** Fetch stock names in batch from Tencent finance API (qt.gtimg.cn). */
+async function fetchStockNames(symbols: string[]): Promise<Map<string, string>> {
+  const nameMap = new Map<string, string>();
+  if (symbols.length === 0) return nameMap;
+
+  // Build Tencent query codes: sh601126,sz300456,...
+  const codes = symbols.map((s) => {
+    const c = s.replace(/\.(SH|SZ|sh|sz)$/, "");
+    if (c.startsWith("6") || c.startsWith("9")) return `sh${c}`;
+    return `sz${c}`;
+  });
+
+  // Batch in groups of 50
+  for (let i = 0; i < codes.length; i += 50) {
+    const batch = codes.slice(i, i + 50);
+    const url = `http://qt.gtimg.cn/q=${batch.join(",")}`;
+    try {
+      const text = await new Promise<string>((resolve, reject) => {
+        const req = http.get(url, { timeout: 10_000 }, (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            const buf = Buffer.concat(chunks);
+            // Tencent API returns GBK-encoded text
+            try {
+              const decoder = new TextDecoder("gbk");
+              resolve(decoder.decode(buf));
+            } catch {
+              resolve(buf.toString("utf-8"));
+            }
+          });
+          res.on("error", reject);
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+      });
+      // Parse response lines like: v_sh601126="1~四方股份~601126~..."
+      for (const line of text.split(";")) {
+        const m = line.match(/v_\w{2}(\d{6})="([^"]*)"/);
+        if (!m) continue;
+        const code = m[1]!;
+        const fields = m[2]!.split("~");
+        const name = fields[1]?.trim();
+        if (name) nameMap.set(code, name);
+      }
+    } catch {
+      /* best-effort — continue with remaining batches */
+    }
+  }
+  return nameMap;
+}
 
 export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
   const { api, config, secure, securePublic, composedStrategyStore } = deps;
@@ -228,6 +281,23 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
             // Resolve label and screen key for composed / CTA strategies
             let screenStrategy = strategy;
             let strategyLabel = DAILY_PICK_STRATEGY_LABELS[strategy] ?? strategy;
+            // When fitness_optimal is used with specific aipha_strategies, show those strategy names
+            if (
+              strategy === "fitness_optimal" &&
+              Array.isArray(body.aipha_strategies) &&
+              body.aipha_strategies.length > 0
+            ) {
+              const aiphaNames = (body.aipha_strategies as string[])
+                .map((id: string) => DAILY_PICK_STRATEGY_LABELS[id] ?? id)
+                .slice(0, 5);
+              strategyLabel =
+                "全局排名适配(" +
+                aiphaNames.join("+") +
+                (body.aipha_strategies.length > 5
+                  ? `等${body.aipha_strategies.length}个`
+                  : "") +
+                ")";
+            }
             if (CTA_SCREEN_STRATEGY_MAP[strategy]) {
               screenStrategy = CTA_SCREEN_STRATEGY_MAP[strategy];
             } else if (composedIds.has(strategy) && composedStrategyStore) {
@@ -247,6 +317,9 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 strategy: screenStrategy,
                 risk_tolerance: riskTolerance,
                 top_n: topNPerStrategy,
+                ...(screenStrategy === "fitness_optimal" && Array.isArray(body.aipha_strategies) && body.aipha_strategies.length > 0
+                  ? { aipha_strategies: body.aipha_strategies }
+                  : {}),
               },
               config,
               { timeoutMs: 360_000 },
@@ -749,6 +822,26 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           for (const row of stockBacktestRanking) {
             if (row.summary && !row.error) {
               row.rank = finalRank++;
+            }
+          }
+        }
+
+        // ── Enrich stock names via Tencent finance API ────────
+        const needsName = combinedList.filter(
+          (item) => !item.name || item.name === item.symbol,
+        );
+        if (needsName.length > 0) {
+          const symbols = needsName.map((item) => item.symbol);
+          const nameMap = await fetchStockNames(symbols);
+          for (const item of needsName) {
+            const resolved = nameMap.get(item.symbol);
+            if (resolved) item.name = resolved;
+          }
+          // Also patch stockBacktestRanking entries
+          for (const row of fullStockBacktestRanking) {
+            if (!row.name || row.name === row.symbol) {
+              const resolved = nameMap.get(row.symbol);
+              if (resolved) row.name = resolved;
             }
           }
         }

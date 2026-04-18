@@ -118,19 +118,90 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── All stocks top strategy list ────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/all-stocks",
+    handler: secure(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+        const batchId = url.searchParams.get("batch_id") || undefined;
+        const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "100", 10) || 100, 1), 2000);
+        const offset = Math.max(parseInt(url.searchParams.get("offset") ?? "0", 10) || 0, 0);
+        const storage = deps.dataWarehouse?.storage;
+        if (storage && "getAllStocksTopStrategy" in storage) {
+          const result = await (storage as { getAllStocksTopStrategy(b?: string, l?: number, o?: number): Promise<{ rows: unknown[]; total: number }> })
+            .getAllStocksTopStrategy(batchId, limit, offset);
+          if (result.total > 0) {
+            const bid = batchId ?? (storage as { getLatestFitnessBatchId(): Promise<string | null> }).getLatestFitnessBatchId
+              ? await (storage as { getLatestFitnessBatchId(): Promise<string | null> }).getLatestFitnessBatchId()
+              : null;
+            json(res, { ok: true, stocks: result.rows, total: result.total, batch_id: bid, limit, offset });
+            return;
+          }
+        }
+        // Fallback: query via Python
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/strategy_fitness.py",
+          { action: "query_all_stocks", batch_id: batchId ?? "", limit, offset },
+          config,
+          { timeoutMs: 30_000 },
+        );
+        json(res, result.ok ? { ok: true, ...(result.data as object) } : { error: result.error });
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
   // ── List fitness batch history ─────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
     path: "/quant/admin/api/strategy-fitness/history",
     handler: secure(async (_req, res) => {
       try {
+        // Try TS storage first (works when better-sqlite3 is available)
         const storage = deps.dataWarehouse?.storage;
         if (storage && "listFitnessBatches" in storage) {
           const batches = await (storage as { listFitnessBatches(n: number): Promise<unknown[]> }).listFitnessBatches(20);
-          json(res, { ok: true, batches });
-        } else {
-          json(res, { ok: true, batches: [] });
+          if (Array.isArray(batches) && batches.length > 0) {
+            json(res, { ok: true, batches });
+            return;
+          }
         }
+        // Fallback: query via Python (sqlite3 is built-in)
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/strategy_fitness.py",
+          { action: "list_batches", limit: 20 },
+          config,
+          { timeoutMs: 15_000 },
+        );
+        json(res, result.ok ? { ok: true, batches: (result.data as Record<string, unknown>)?.batches ?? [] } : { ok: true, batches: [] });
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Batch detail: list stocks & strategies ─────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/batch-detail",
+    handler: secure(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+        const batchId = url.searchParams.get("batch_id") ?? "";
+        if (!batchId) {
+          json(res, { error: "需要 batch_id 参数" }, 400);
+          return;
+        }
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/strategy_fitness.py",
+          { action: "batch_detail", batch_id: batchId },
+          config,
+          { timeoutMs: 30_000 },
+        );
+        json(res, result.ok ? result.data : { error: result.error });
       } catch (err) {
         json(res, { error: String(err) }, 500);
       }

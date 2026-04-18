@@ -390,6 +390,7 @@ export interface QuantStorage {
   getStockTopStrategies(symbol: string, batchId?: string): Promise<StockStrategyFitnessRow[]>;
   saveGlobalStrategyRanking(rows: GlobalStrategyRankingRow[]): Promise<void>;
   getGlobalTopStrategies(batchId?: string): Promise<GlobalStrategyRankingRow[]>;
+  getAllStocksTopStrategy(batchId?: string, limit?: number, offset?: number): Promise<{ rows: StockStrategyFitnessRow[]; total: number }>;
   getLatestFitnessBatchId(): Promise<string | null>;
   listFitnessBatches(limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>>;
   cleanOldFitnessBatches(keepN?: number): Promise<number>;
@@ -724,6 +725,7 @@ export class InMemoryStorage implements QuantStorage {
   async getStockTopStrategies(_symbol: string, _batchId?: string): Promise<StockStrategyFitnessRow[]> { return []; }
   async saveGlobalStrategyRanking(_rows: GlobalStrategyRankingRow[]): Promise<void> {}
   async getGlobalTopStrategies(_batchId?: string): Promise<GlobalStrategyRankingRow[]> { return []; }
+  async getAllStocksTopStrategy(_batchId?: string, _limit?: number, _offset?: number): Promise<{ rows: StockStrategyFitnessRow[]; total: number }> { return { rows: [], total: 0 }; }
   async getLatestFitnessBatchId(): Promise<string | null> { return null; }
   async listFitnessBatches(_limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>> { return []; }
   async cleanOldFitnessBatches(_keepN?: number): Promise<number> { return 0; }
@@ -1346,6 +1348,23 @@ export class SqliteStorage implements QuantStorage {
       batchId: r.batch_id as string,
       createdAt: (r.created_at as string) ?? undefined,
     }));
+  }
+
+  async getAllStocksTopStrategy(batchId?: string, limit = 100, offset = 0): Promise<{ rows: StockStrategyFitnessRow[]; total: number }> {
+    const bid = batchId ?? await this.getLatestFitnessBatchId();
+    if (!bid) return { rows: [], total: 0 };
+    const countRow = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT COUNT(DISTINCT symbol) as cnt FROM stock_strategy_fitness WHERE batch_id = ? AND rank = 1",
+      )
+      .get(bid) as { cnt: number } | undefined;
+    const total = countRow?.cnt ?? 0;
+    const rows = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT * FROM stock_strategy_fitness WHERE batch_id = ? AND rank = 1 ORDER BY composite_score DESC LIMIT ? OFFSET ?",
+      )
+      .all(bid, limit, offset) as Array<Record<string, unknown>>;
+    return { rows: rows.map((r) => this.mapFitnessRow(r)), total };
   }
 
   async getLatestFitnessBatchId(): Promise<string | null> {

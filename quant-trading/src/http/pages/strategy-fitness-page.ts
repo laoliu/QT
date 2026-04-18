@@ -71,6 +71,22 @@ nav button:hover{color:var(--text)}
 nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
 .tab-content{display:none}
 .tab-content.active{display:block}
+.clickable-row{cursor:pointer;transition:background .15s}
+.clickable-row:hover{background:var(--bg3)}
+.batch-detail{margin-top:16px;border-top:1px solid var(--border);padding-top:16px}
+.batch-detail h4{font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.back-link{cursor:pointer;color:var(--accent);font-size:13px;display:inline-flex;align-items:center;gap:4px;margin-bottom:12px}
+.back-link:hover{text-decoration:underline}
+.clickable-num{color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted}
+.clickable-num:hover{text-decoration-style:solid}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;justify-content:center;align-items:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;position:relative}
+.modal h3{margin-bottom:12px;font-size:15px}
+.modal .close-btn{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer}
+.modal .close-btn:hover{color:var(--text)}
+.modal table{font-size:12px}
+.modal th,.modal td{padding:6px 10px}
 @media(max-width:768px){.grid-2{grid-template-columns:1fr}.form-row{flex-direction:column}}
 </style>
 </head>
@@ -85,6 +101,7 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
 <nav>
   <button class="active" onclick="switchTab('run')">🚀 运行分析</button>
   <button onclick="switchTab('global')">🏆 全局排名</button>
+  <button onclick="switchTab('allstocks')">📋 个股Top策略</button>
   <button onclick="switchTab('stock')">📊 个股查询</button>
   <button onclick="switchTab('history')">📋 历史记录</button>
 </nav>
@@ -101,6 +118,7 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
           <option value="csi300">沪深300 (~300只)</option>
           <option value="csi500">中证500 (~500只)</option>
           <option value="csi1000" selected>中证1000 (~1000只)</option>
+          <option value="all_a">全部A股 (~5000只)</option>
         </select>
       </div>
       <div>
@@ -166,7 +184,25 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   </div>
 </div>
 
-<!-- Tab 3: Stock Query -->
+<!-- Tab 3: All Stocks Top Strategy -->
+<div id="tab-allstocks" class="tab-content">
+  <div class="card">
+    <h3>📋 个股 Top 策略一览</h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">每只被计算过的个股，其得分最高的策略（rank #1）汇总列表，按综合得分降序排列</p>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="loadAllStocks()">🔄 刷新</button>
+      <span id="allStocksCount" style="font-size:12px;color:var(--text-dim)"></span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-sm" id="btnPrev" onclick="allStocksPage(-1)" disabled>← 上一页</button>
+        <span id="allStocksPageInfo" style="font-size:12px;color:var(--text-dim)"></span>
+        <button class="btn btn-sm" id="btnNext" onclick="allStocksPage(1)">下一页 →</button>
+      </div>
+    </div>
+    <div id="allStocksTable"><div class="empty">点击刷新加载数据</div></div>
+  </div>
+</div>
+
+<!-- Tab 4: Stock Query -->
 <div id="tab-stock" class="tab-content">
   <div class="card">
     <h3>📊 个股最优策略查询</h3>
@@ -183,15 +219,42 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   </div>
 </div>
 
-<!-- Tab 4: History -->
+<!-- Tab 5: History -->
 <div id="tab-history" class="tab-content">
   <div class="card">
     <h3>📋 分析历史</h3>
     <button class="btn btn-sm" onclick="loadHistory()" style="margin-bottom:12px">🔄 刷新</button>
     <div id="historyTable"><div class="empty">点击刷新加载</div></div>
   </div>
+  <div id="batchDetail" style="display:none">
+    <div class="card">
+      <span class="back-link" onclick="hideBatchDetail()">← 返回历史列表</span>
+      <h3 id="batchDetailTitle">📊 批次详情</h3>
+      <div class="grid grid-2" style="margin-bottom:16px">
+        <div class="card" style="margin-bottom:0">
+          <h4 style="font-size:14px">🏆 全局策略排名</h4>
+          <div id="batchGlobalTable"><div class="empty">加载中...</div></div>
+        </div>
+        <div class="card" style="margin-bottom:0">
+          <h4 style="font-size:14px">📊 个股查询</h4>
+          <div class="form-row" style="margin-bottom:8px">
+            <div style="flex:2"><input type="text" id="batchQuerySymbol" placeholder="输入股票代码查询" maxlength="6"></div>
+            <div><button class="btn btn-sm btn-primary" onclick="queryBatchStock()">🔍 查询</button></div>
+          </div>
+          <div id="batchStockResult"><div class="empty">输入代码查询该批次的个股适配</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
+</div>
+<div class="modal-overlay" id="batchModal" onclick="if(event.target===this)closeBatchModal()">
+  <div class="modal">
+    <button class="close-btn" onclick="closeBatchModal()">&times;</button>
+    <h3 id="batchModalTitle">详情</h3>
+    <div id="batchModalBody"><div class="empty">加载中...</div></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -208,10 +271,11 @@ function switchTab(id){
   if(tab)tab.classList.add('active');
   // Highlight nav button
   var btns=document.querySelectorAll('nav button');
-  var map={run:0,global:1,stock:2,history:3};
+  var map={run:0,global:1,allstocks:2,stock:3,history:4};
   if(map[id]!==undefined&&btns[map[id]])btns[map[id]].classList.add('active');
   // Auto-load data
   if(id==='global')loadGlobalRanking();
+  if(id==='allstocks')loadAllStocks();
   if(id==='history')loadHistory();
 }
 
@@ -224,6 +288,8 @@ function startAnalysis(){
   document.getElementById('runStatus').textContent='正在提交...';
   document.getElementById('progressSection').style.display='block';
   document.getElementById('resultSection').style.display='none';
+  updateProgress(0,'running');
+  document.getElementById('progressDetail').textContent='正在提交...';
 
   var body={
     universe:document.getElementById('universe').value,
@@ -239,6 +305,7 @@ function startAnalysis(){
     body:JSON.stringify(body),
     _timeout:4*3600000
   }).then(function(data){
+    if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
     btn.disabled=false;
     btn.textContent='🚀 开始分析';
     if(data.ok||data.batch_id){
@@ -246,11 +313,14 @@ function startAnalysis(){
       showResult(data);
       updateProgress(100,'done');
       document.getElementById('runStatus').textContent='已完成 ('+data.batch_id+')';
+      var doneDetail='完成: '+(data.total_stocks||'-')+' 只股票, '+(data.fitness_records||0)+' 条记录';
+      if(data.elapsed_seconds)doneDetail+=', 耗时 '+formatDuration(data.elapsed_seconds);
+      document.getElementById('progressDetail').textContent=doneDetail;
     }else{
       toast('❌ '+(data.error||'分析失败'));
       document.getElementById('runStatus').textContent='失败: '+(data.error||'');
+      document.getElementById('progressDetail').textContent='失败: '+(data.error||'');
     }
-    if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
   }).catch(function(e){
     btn.disabled=false;
     btn.textContent='🚀 开始分析';
@@ -277,9 +347,9 @@ function checkStatus(){
       badge.className='status-running';
       badge.textContent='● 运行中';
       document.getElementById('progressSection').style.display='block';
-      var total=data.total_strategies||data.total_stocks||1;
-      var done=data.completed_strategies||data.completed_stocks||0;
-      var pct=Math.round(done/total*100);
+      var total=data.total_strategies>0?data.total_strategies:(data.total_stocks||1);
+      var done=typeof data.completed_strategies==='number'?data.completed_strategies:(data.completed_stocks||0);
+      var pct=Math.min(Math.round(done/total*100),100);
       updateProgress(pct,'running');
       var detail=data.phase||(data.completed_strategies?'策略: '+data.completed_strategies+'/'+data.total_strategies:'已完成: '+data.completed_stocks+'/'+data.total_stocks+' 只股票');
       if(data.elapsed_seconds)detail+=' | 耗时: '+formatDuration(data.elapsed_seconds);
@@ -383,6 +453,62 @@ function loadGlobalRanking(){
   });
 }
 
+// ── All Stocks Top Strategy ───────────────────────────
+var _allStocksOffset=0;
+var _allStocksLimit=50;
+var _allStocksTotal=0;
+function loadAllStocks(offset){
+  if(offset!==undefined)_allStocksOffset=offset;
+  document.getElementById('allStocksTable').innerHTML='<div class="loading">加载中...</div>';
+  api('/quant/admin/api/strategy-fitness/all-stocks?limit='+_allStocksLimit+'&offset='+_allStocksOffset,{_timeout:15000}).then(function(data){
+    var stocks=data.stocks||[];
+    _allStocksTotal=data.total||0;
+    document.getElementById('allStocksCount').textContent='共 '+_allStocksTotal+' 只个股';
+    var curPage=Math.floor(_allStocksOffset/_allStocksLimit)+1;
+    var totalPages=Math.ceil(_allStocksTotal/_allStocksLimit)||1;
+    document.getElementById('allStocksPageInfo').textContent='第 '+curPage+'/'+totalPages+' 页';
+    document.getElementById('btnPrev').disabled=(_allStocksOffset<=0);
+    document.getElementById('btnNext').disabled=(_allStocksOffset+_allStocksLimit>=_allStocksTotal);
+    if(!stocks.length){
+      document.getElementById('allStocksTable').innerHTML='<div class="empty">暂无数据，请先运行分析</div>';
+      return;
+    }
+    var html='<table><tr><th>#</th><th>股票代码</th><th>股票名称</th><th>最优策略</th><th>综合得分</th><th>总收益</th><th>年化收益</th><th>夏普</th><th>最大回撤</th><th>胜率</th><th>交易数</th></tr>';
+    stocks.forEach(function(s,i){
+      var idx=_allStocksOffset+i+1;
+      html+='<tr class="clickable-row" onclick="jumpToStock(\\''+esc(s.symbol)+'\\')">';
+      html+='<td style="color:var(--text-dim)">'+idx+'</td>';
+      html+='<td><strong>'+esc(s.symbol)+'</strong></td>';
+      html+='<td>'+esc(s.stockName||s.stock_name||'-')+'</td>';
+      html+='<td>'+esc(s.strategyId||s.strategy_id||'-')+'</td>';
+      html+='<td class="metric-good" style="font-weight:700">'+num(s.compositeScore||s.composite_score)+'</td>';
+      html+='<td style="color:'+pctColor(((s.totalReturn||s.total_return||0))*100)+'">'+pct(((s.totalReturn||s.total_return||0))*100)+'</td>';
+      html+='<td style="color:'+pctColor(((s.annualizedReturn||s.annualized_return||0))*100)+'">'+pct(((s.annualizedReturn||s.annualized_return||0))*100)+'</td>';
+      html+='<td>'+((s.sharpeRatio||s.sharpe_ratio)!=null?(s.sharpeRatio||s.sharpe_ratio).toFixed(2):'-')+'</td>';
+      html+='<td class="metric-bad">'+pct(-((s.maxDrawdown||s.max_drawdown||0))*100)+'</td>';
+      html+='<td>'+((((s.winRate||s.win_rate||0)))*100).toFixed(1)+'%</td>';
+      html+='<td>'+(s.totalTrades||s.total_trades||0)+'</td>';
+      html+='</tr>';
+    });
+    html+='</table>';
+    if(data.batch_id)html+='<div style="font-size:12px;color:var(--text-dim);margin-top:8px">批次: '+esc(data.batch_id)+'</div>';
+    document.getElementById('allStocksTable').innerHTML=html;
+  }).catch(function(){
+    document.getElementById('allStocksTable').innerHTML='<div class="empty">加载失败</div>';
+  });
+}
+function allStocksPage(dir){
+  var newOffset=_allStocksOffset+(dir*_allStocksLimit);
+  if(newOffset<0)newOffset=0;
+  if(newOffset>=_allStocksTotal&&_allStocksTotal>0)return;
+  loadAllStocks(newOffset);
+}
+function jumpToStock(sym){
+  document.getElementById('querySymbol').value=sym;
+  switchTab('stock');
+  queryStock();
+}
+
 // ── Stock Query ──────────────────────────────────────
 function queryStock(){
   var sym=document.getElementById('querySymbol').value.trim();
@@ -423,7 +549,9 @@ document.getElementById('querySymbol').addEventListener('keypress',function(e){
 });
 
 // ── History ──────────────────────────────────────────
+var _currentBatchId=null;
 function loadHistory(){
+  hideBatchDetail();
   document.getElementById('historyTable').innerHTML='<div class="loading">加载中...</div>';
   api('/quant/admin/api/strategy-fitness/history',{_timeout:15000}).then(function(data){
     var batches=data.batches||[];
@@ -431,17 +559,145 @@ function loadHistory(){
       document.getElementById('historyTable').innerHTML='<div class="empty">暂无历史记录</div>';
       return;
     }
-    var html='<table><tr><th>批次ID</th><th>时间</th><th>股票数</th><th>策略数</th></tr>';
+    var html='<table><tr><th>批次ID</th><th>时间</th><th>股票数</th><th>策略数</th><th></th></tr>';
     batches.forEach(function(b){
-      html+='<tr><td>'+esc(b.batchId)+'</td>';
+      html+='<tr class="clickable-row" onclick="showBatchDetail(\\''+esc(b.batchId)+'\\')">'; 
+      html+='<td>'+esc(b.batchId)+'</td>';
       html+='<td>'+esc(b.createdAt||'-')+'</td>';
-      html+='<td>'+b.stockCount+'</td>';
-      html+='<td>'+b.strategyCount+'</td></tr>';
+      html+='<td><span class="clickable-num" onclick="event.stopPropagation();showBatchStocks(\\''+esc(b.batchId)+'\\')">'+b.stockCount+'</span></td>';
+      html+='<td><span class="clickable-num" onclick="event.stopPropagation();showBatchStrategies(\\''+esc(b.batchId)+'\\')">'+b.strategyCount+'</span></td>';
+      html+='<td style="color:var(--accent);font-size:12px">查看详情 →</td>';
+      html+='</tr>';
     });
     html+='</table>';
     document.getElementById('historyTable').innerHTML=html;
   }).catch(function(){
     document.getElementById('historyTable').innerHTML='<div class="empty">加载失败</div>';
+  });
+}
+
+function showBatchDetail(batchId){
+  _currentBatchId=batchId;
+  document.getElementById('batchDetail').style.display='block';
+  document.getElementById('batchDetailTitle').textContent='📊 批次详情 — '+batchId;
+  document.getElementById('batchGlobalTable').innerHTML='<div class="loading">加载中...</div>';
+  document.getElementById('batchStockResult').innerHTML='<div class="empty">输入代码查询该批次的个股适配</div>';
+  // Load global ranking for this batch
+  api('/quant/admin/api/strategy-fitness/global?batch_id='+encodeURIComponent(batchId),{_timeout:15000}).then(function(data){
+    var strats=data.strategies||[];
+    if(!strats.length){
+      document.getElementById('batchGlobalTable').innerHTML='<div class="empty">该批次无全局排名数据</div>';
+      return;
+    }
+    var maxScore=Math.max.apply(null,strats.map(function(s){return s.total_score||0}))||1;
+    var html='<table><tr><th>排名</th><th>策略</th><th>总得分</th><th>覆盖</th><th>均分</th><th>分布</th></tr>';
+    strats.forEach(function(s){
+      var barW=Math.round((s.total_score/maxScore)*100);
+      html+='<tr><td>'+rankBadge(s.rank)+'</td>';
+      html+='<td><strong>'+esc(s.strategy_id)+'</strong></td>';
+      html+='<td class="metric-good" style="font-weight:700">'+num(s.total_score)+'</td>';
+      html+='<td>'+s.stock_count+'</td>';
+      html+='<td>'+num(s.avg_score)+'</td>';
+      html+='<td><span class="score-bar" style="width:'+barW+'px;background:var(--accent)"></span></td></tr>';
+    });
+    html+='</table>';
+    document.getElementById('batchGlobalTable').innerHTML=html;
+  }).catch(function(){
+    document.getElementById('batchGlobalTable').innerHTML='<div class="empty">加载失败</div>';
+  });
+}
+
+function hideBatchDetail(){
+  _currentBatchId=null;
+  document.getElementById('batchDetail').style.display='none';
+}
+
+function queryBatchStock(){
+  if(!_currentBatchId){toast('无批次');return}
+  var sym=document.getElementById('batchQuerySymbol').value.trim();
+  if(!sym||sym.length<6){toast('请输入6位股票代码');return}
+  document.getElementById('batchStockResult').innerHTML='<div class="loading">查询中...</div>';
+  api('/quant/admin/api/strategy-fitness/stock?symbol='+encodeURIComponent(sym)+'&batch_id='+encodeURIComponent(_currentBatchId),{_timeout:15000}).then(function(data){
+    var strats=data.strategies||[];
+    if(!strats.length){
+      document.getElementById('batchStockResult').innerHTML='<div class="empty">该批次无 '+esc(sym)+' 的数据</div>';
+      return;
+    }
+    var html='<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+esc(sym)+' Top '+strats.length+'</div>';
+    html+='<table><tr><th>#</th><th>策略</th><th>得分</th><th>收益</th><th>夏普</th><th>回撤</th></tr>';
+    strats.forEach(function(s){
+      html+='<tr><td>'+rankBadge(s.rank)+'</td>';
+      html+='<td>'+esc(s.strategy_id)+'</td>';
+      html+='<td class="metric-good">'+num(s.composite_score)+'</td>';
+      html+='<td style="color:'+pctColor((s.total_return||0)*100)+'">'+pct((s.total_return||0)*100)+'</td>';
+      html+='<td>'+(s.sharpe_ratio!=null?s.sharpe_ratio.toFixed(2):'-')+'</td>';
+      html+='<td class="metric-bad">'+pct(-(s.max_drawdown||0)*100)+'</td></tr>';
+    });
+    html+='</table>';
+    document.getElementById('batchStockResult').innerHTML=html;
+  }).catch(function(){
+    document.getElementById('batchStockResult').innerHTML='<div class="empty">查询失败</div>';
+  });
+}
+
+document.addEventListener('keypress',function(e){
+  if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='batchQuerySymbol')queryBatchStock();
+});
+
+// ── Batch Modal (stocks / strategies list) ───────────
+function closeBatchModal(){
+  document.getElementById('batchModal').classList.remove('show');
+}
+
+function showBatchStocks(batchId){
+  document.getElementById('batchModalTitle').textContent='📋 股票列表 — '+batchId;
+  document.getElementById('batchModalBody').innerHTML='<div class="loading">加载中...</div>';
+  document.getElementById('batchModal').classList.add('show');
+  api('/quant/admin/api/strategy-fitness/batch-detail?batch_id='+encodeURIComponent(batchId),{_timeout:30000}).then(function(data){
+    var stocks=data.stocks||[];
+    if(!stocks.length){
+      document.getElementById('batchModalBody').innerHTML='<div class="empty">无数据</div>';
+      return;
+    }
+    var html='<div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">共 '+stocks.length+' 只股票（按最高得分排序）</div>';
+    html+='<table><tr><th>#</th><th>代码</th><th>名称</th><th>策略数</th><th>最高得分</th></tr>';
+    stocks.forEach(function(s,i){
+      html+='<tr><td style="color:var(--text-dim)">'+(i+1)+'</td>';
+      html+='<td><strong>'+esc(s.symbol)+'</strong></td>';
+      html+='<td>'+esc(s.stockName||'-')+'</td>';
+      html+='<td>'+s.strategyCount+'</td>';
+      html+='<td class="metric-good">'+num(s.bestScore)+'</td></tr>';
+    });
+    html+='</table>';
+    document.getElementById('batchModalBody').innerHTML=html;
+  }).catch(function(){
+    document.getElementById('batchModalBody').innerHTML='<div class="empty">加载失败</div>';
+  });
+}
+
+function showBatchStrategies(batchId){
+  document.getElementById('batchModalTitle').textContent='📋 策略列表 — '+batchId;
+  document.getElementById('batchModalBody').innerHTML='<div class="loading">加载中...</div>';
+  document.getElementById('batchModal').classList.add('show');
+  api('/quant/admin/api/strategy-fitness/batch-detail?batch_id='+encodeURIComponent(batchId),{_timeout:30000}).then(function(data){
+    var strats=data.strategies||[];
+    if(!strats.length){
+      document.getElementById('batchModalBody').innerHTML='<div class="empty">无数据</div>';
+      return;
+    }
+    var html='<div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">共 '+strats.length+' 个策略（按平均得分排序）</div>';
+    html+='<table><tr><th>#</th><th>策略ID</th><th>策略名称</th><th>覆盖股票数</th><th>平均得分</th></tr>';
+    strats.forEach(function(s,i){
+      html+='<tr><td style="color:var(--text-dim)">'+(i+1)+'</td>';
+      html+='<td><strong>'+esc(s.strategyId)+'</strong></td>';
+      html+='<td>'+esc(s.strategyName||'-')+'</td>';
+      html+='<td>'+s.stockCount+'</td>';
+      html+='<td class="metric-good">'+num(s.avgScore)+'</td></tr>';
+    });
+    html+='</table>';
+    document.getElementById('batchModalBody').innerHTML=html;
+  }).catch(function(){
+    document.getElementById('batchModalBody').innerHTML='<div class="empty">加载失败</div>';
   });
 }
 

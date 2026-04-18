@@ -756,12 +756,24 @@ def get_klines_batch(
                 return sym, None
 
         workers = min(8, len(still_missing))
+        fallback_fetched: dict[str, list] = {}
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futs = {pool.submit(_fallback_one, s): s for s in still_missing}
             for fut in as_completed(futs):
                 sym, bars = fut.result()
                 if bars:
                     result[sym] = bars
+                    fallback_fetched[sym] = bars
+
+        # Save fallback results to cache for next time
+        if fallback_fetched:
+            try:
+                cache = get_cache()
+                for sym, bars in fallback_fetched.items():
+                    cache.save_klines(sym, bars, market, "daily")
+                print(f"[批量回退] {len(fallback_fetched)} 只已缓存", file=sys.stderr)
+            except Exception as e:
+                print(f"[批量回退] 缓存保存失败: {e}", file=sys.stderr)
 
     return result
 

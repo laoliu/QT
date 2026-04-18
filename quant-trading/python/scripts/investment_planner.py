@@ -2501,11 +2501,12 @@ def monitor_portfolio(
     }
 
 
-def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20) -> list[dict]:
+def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20, aipha_strategies: list | None = None) -> list[dict]:
     """使用策略适配数据库选股：每只股票使用其历史最优策略。
 
     从 stock_strategy_fitness 表中读取所有股票的 rank=1 策略，
     按 composite_score 降序排列，返回 top_n 只。
+    若提供 aipha_strategies，则仅返回最优策略在该列表中的股票。
     """
     import sqlite3 as _sql
 
@@ -2545,6 +2546,15 @@ def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20) -> list[dict]:
         if not rows:
             print("[fitness_optimal] 无rank=1数据", file=sys.stderr)
             return []
+
+        # Filter by specific aipha strategies if provided
+        if aipha_strategies:
+            allowed = set(aipha_strategies)
+            rows = [r for r in rows if r["strategy_id"] in allowed]
+            print(f"[fitness_optimal] 按指定策略过滤: {len(allowed)}个策略 → {len(rows)}只股票", file=sys.stderr, flush=True)
+            if not rows:
+                print("[fitness_optimal] 过滤后无数据", file=sys.stderr)
+                return []
 
         # 同时获取全局最优策略列表
         conn2 = _sql.connect(db_path)
@@ -2592,8 +2602,29 @@ def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20) -> list[dict]:
 
         # 按score降序
         candidates.sort(key=lambda x: x["score"], reverse=True)
-        print(f"[fitness_optimal] 返回 {min(len(candidates), top_n)} 只股票", file=sys.stderr)
-        return candidates[:top_n]
+        candidates = candidates[:top_n]
+
+        # 补充实时行情（现价、涨跌幅）
+        try:
+            syms = [c["symbol"] for c in candidates]
+            quotes = _fetch_tencent_batch(syms)
+            for c in candidates:
+                q = quotes.get(c["symbol"])
+                if q and q.get("price", 0) > 0:
+                    c["price"] = q["price"]
+                    c["changePct"] = q.get("changePct", 0)
+                    if q.get("pe"):
+                        c["pe"] = q["pe"]
+                    if q.get("pb"):
+                        c["pb"] = q["pb"]
+                    if q.get("totalMarketCap"):
+                        c["mktcap"] = q["totalMarketCap"]
+            print(f"[fitness_optimal] 实时行情补充完成, {len(quotes)}/{len(syms)}只获取成功", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[fitness_optimal] 实时行情补充失败: {e}", file=sys.stderr, flush=True)
+
+        print(f"[fitness_optimal] 返回 {len(candidates)} 只股票", file=sys.stderr)
+        return candidates
     except Exception as e:
         print(f"[fitness_optimal] 查询失败: {e}", file=sys.stderr)
         return []
@@ -2603,6 +2634,7 @@ def update_screening(
     strategy: str = "auto",
     risk_tolerance: str = "medium",
     top_n: int = 20,
+    aipha_strategies: list | None = None,
 ) -> dict:
     """Run stock screening and return ranked candidates with technical data."""
     import time as _time
@@ -2611,7 +2643,7 @@ def update_screening(
 
     # ── fitness_optimal: use strategy-stock fitness DB to pick each stock's best strategy ──
     if strategy == "fitness_optimal":
-        candidates = _screen_fitness_optimal(profile, top_n)
+        candidates = _screen_fitness_optimal(profile, top_n, aipha_strategies=aipha_strategies)
         if candidates:
             enhanced = list(candidates[:top_n])
             # Skip Round 4 kline re-fetch since fitness data is from full backtest
@@ -3329,6 +3361,7 @@ if __name__ == "__main__":
                 strategy=config.get("strategy", "auto"),
                 risk_tolerance=config.get("risk_tolerance", "medium"),
                 top_n=int(config.get("top_n", 20)),
+                aipha_strategies=config.get("aipha_strategies"),
             )
         elif action == "monitor":
             result = monitor_portfolio(plan=config.get("plan", {}))

@@ -141,11 +141,16 @@ var klineData=[];
 var currentInterval='1d';
 var allKlineData=[];  // full data for MA computation
 var maToggles={ma5:true,ma10:true,ma20:true,ma60:false,ma120:false,ma250:false};
+var _loadSeq=0; // race-condition guard: only latest request renders
+var _drawToken=0; // cancel stale chart-draw polls
+var _abortCtrl=null; // AbortController for in-flight fetch
 
-function api(path){
+function api(path,signal){
   var h={};
   if(_T)h['Authorization']='Bearer '+_T;
-  return fetch(BASE+path,{credentials:'include',headers:h}).then(function(r){return r.json()});
+  var opts={credentials:'include',headers:h,cache:'no-store'};
+  if(signal)opts.signal=signal;
+  return fetch(BASE+path,opts).then(function(r){return r.json()});
 }
 
 function esc(s){var d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
@@ -175,16 +180,26 @@ function loadDetail(){
   var m=sym.match(/^(?:SH|SZ|sh|sz)(\d{6})$/);
   if(m){sym=m[1];document.getElementById('sym-input').value=sym}
   currentSymbol=sym;
+  // Cancel previous in-flight request + chart polling
+  if(_abortCtrl)try{_abortCtrl.abort()}catch(e){}
+  _abortCtrl=new AbortController();
+  var signal=_abortCtrl.signal;
+  ++_drawToken;
+  klineData=[]; allKlineData=[];
   document.getElementById('bc-stock').textContent='📈 '+sym;
   document.getElementById('main-content').innerHTML='<div class="loading">⏳ 加载中…</div>';
   var daysMap={'1d':300,'1w':200,'1M':120,'1Q':80,'6M':60,'1Y':40};
   var days=daysMap[currentInterval]||300;
-  api('/quant/admin/api/stock-detail?symbol='+encodeURIComponent(sym)+'&kline_interval='+currentInterval+'&kline_days='+days).then(function(d){
+  var seq=++_loadSeq;
+  api('/quant/admin/api/stock-detail?symbol='+encodeURIComponent(sym)+'&kline_interval='+currentInterval+'&kline_days='+days,signal).then(function(d){
+    if(seq!==_loadSeq)return;
     if(d.error){document.getElementById('main-content').innerHTML='<div id="error-msg">❌ '+esc(d.error)+'</div>';return}
     klineData=d.klines||[];
     allKlineData=klineData;
     renderDetail(d);
   }).catch(function(e){
+    if(e.name==='AbortError')return; // intentionally cancelled
+    if(seq!==_loadSeq)return;
     document.getElementById('main-content').innerHTML='<div id="error-msg">❌ 请求失败: '+esc(e.message)+'</div>';
   });
 }
@@ -505,8 +520,19 @@ function renderDetail(d){
 
   document.getElementById('main-content').innerHTML=html;
 
-  // Draw charts after DOM update
-  setTimeout(function(){drawKlineChart();drawVolChart()},50);
+  // Draw charts after DOM update — poll until canvas has valid layout dimensions
+  var _myToken=_drawToken; // snapshot: if token changes, a newer load started
+  var _drawAttempt=0;
+  function _tryDrawCharts(){
+    if(_myToken!==_drawToken)return; // cancelled — newer load in progress
+    var c=document.getElementById('kline-canvas');
+    if(!c||!klineData.length){if(++_drawAttempt<30)setTimeout(_tryDrawCharts,100);return}
+    var r=c.getBoundingClientRect();
+    if(r.width<10||r.height<10){if(++_drawAttempt<30)setTimeout(_tryDrawCharts,100);return}
+    try{drawKlineChart()}catch(e){console.error('drawKlineChart error:',e)}
+    try{drawVolChart()}catch(e){console.error('drawVolChart error:',e)}
+  }
+  setTimeout(_tryDrawCharts,0); // defer to next microtask to let browser complete layout
 }
 
 /* ══════ CANDLESTICK CHART (Canvas) ══════ */
@@ -514,12 +540,14 @@ function drawKlineChart(){
   var canvas=document.getElementById('kline-canvas');
   if(!canvas||!klineData.length)return;
   var ctx=canvas.getContext('2d');
+  if(!ctx)return;
   var dpr=window.devicePixelRatio||1;
   var rect=canvas.getBoundingClientRect();
-  canvas.width=rect.width*dpr;
-  canvas.height=rect.height*dpr;
+  var W=rect.width||canvas.width/dpr||800;
+  var H=rect.height||canvas.height/dpr||300;
+  canvas.width=W*dpr;
+  canvas.height=H*dpr;
   ctx.scale(dpr,dpr);
-  var W=rect.width,H=rect.height;
   var bars=klineData.slice(-60); // show last 60 bars
   var n=bars.length;
   if(!n)return;
@@ -643,12 +671,14 @@ function drawVolChart(){
   var canvas=document.getElementById('vol-canvas');
   if(!canvas||!klineData.length)return;
   var ctx=canvas.getContext('2d');
+  if(!ctx)return;
   var dpr=window.devicePixelRatio||1;
   var rect=canvas.getBoundingClientRect();
-  canvas.width=rect.width*dpr;
-  canvas.height=rect.height*dpr;
+  var W=rect.width||canvas.width/dpr||800;
+  var H=rect.height||canvas.height/dpr||100;
+  canvas.width=W*dpr;
+  canvas.height=H*dpr;
   ctx.scale(dpr,dpr);
-  var W=rect.width,H=rect.height;
   var bars=klineData.slice(-60);
   var n=bars.length;if(!n)return;
 

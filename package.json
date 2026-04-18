@@ -37,6 +37,15 @@
       "openclaw",
       "protobufjs",
       "sharp"
+    ],
+    "ignoredBuiltDependencies": [
+      "@matrix-org/matrix-sdk-crypto-nodejs",
+      "better-sqlite3",
+      "esbuild",
+      "koffi",
+      "openclaw",
+      "protobufjs",
+      "sharp"
     ]
   }
 }

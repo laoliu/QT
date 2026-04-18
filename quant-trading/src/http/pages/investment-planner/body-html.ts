@@ -1168,6 +1168,7 @@ export function getPlannerBodyHtml(b: string): string {
         <button class="btn btn-sm" type="button" onclick="selectFitnessStockOptimal()" style="padding:2px 8px;font-size:11px;background:#1f6feb;color:#fff;border-color:#1f6feb" title="使用fitness_optimal策略（根据每只股票的历史最优策略选股）">🎯 个股最优</button>
         <button class="btn btn-sm" type="button" onclick="showFitnessRankingPanel()" style="padding:2px 8px;font-size:11px;border-color:var(--purple);color:var(--purple)" title="查看全局策略排名详情并自选">📊 排名选择</button>
         <span id="dp-fitness-badge" style="font-size:11px;color:var(--text-dim)"></span>
+        <label style="display:none"><input type="checkbox" class="dp-strategy" value="fitness_optimal" style="vertical-align:middle;margin-right:4px">个股最优</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="momentum" checked style="vertical-align:middle;margin-right:4px">趋势动量</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="value" checked style="vertical-align:middle;margin-right:4px">价值投资</label>
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="growth" checked style="vertical-align:middle;margin-right:4px">成长投资</label>

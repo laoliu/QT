@@ -14,6 +14,7 @@ import { createDataProvider } from "../../data/market-data-provider.js";
 import type { AdminRouteDeps } from "../admin-routes.js";
 import { json, parseObjectBody } from "./_helpers.js";
 import type { BacktestResult, QuantTradingConfig } from "../../types.js";
+import type { QuantStorage, StockStrategyFitnessRow, GlobalStrategyRankingRow } from "../../services/sqlite-storage.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -495,6 +496,7 @@ async function mergeAndSave(
   allRawResults: Array<{ strategy_id: string; symbol: string; composite_score: number; [k: string]: unknown }>,
   topNPerStock: number,
   topNGlobal: number,
+  storage?: QuantStorage,
 ): Promise<{ fitnessCount: number; globalRanking: GlobalRankRow[] }> {
   // Group by symbol
   const bySymbol = new Map<string, typeof allRawResults>();
@@ -555,19 +557,73 @@ async function mergeAndSave(
   const globalRanking = strategyAgg.slice(0, topNGlobal);
   globalRanking.forEach((item, i) => { item.rank = i + 1; });
 
-  // Save to DB
+  // Save to DB — prefer using the shared storage connection
+  if (storage && "clearFitnessBatch" in storage) {
+    try {
+      await storage.clearFitnessBatch(batchId);
+      const fitnessRows: StockStrategyFitnessRow[] = stockFitness.map((r) => ({
+        symbol: r.symbol,
+        stockName: r.stock_name,
+        strategyId: r.strategy_id,
+        strategyName: r.strategy_name,
+        rank: r.rank,
+        compositeScore: r.composite_score,
+        totalReturn: r.total_return,
+        annualizedReturn: r.annualized_return,
+        sharpeRatio: r.sharpe_ratio,
+        sortinoRatio: r.sortino_ratio,
+        maxDrawdown: r.max_drawdown,
+        winRate: r.win_rate,
+        profitLossRatio: r.profit_loss_ratio,
+        calmarRatio: r.calmar_ratio,
+        totalTrades: r.total_trades,
+        backtestStart: r.backtest_start,
+        backtestEnd: r.backtest_end,
+        batchId,
+      }));
+      await storage.saveStockStrategyFitness(fitnessRows);
+      const globalRows: GlobalStrategyRankingRow[] = globalRanking.map((r) => ({
+        strategyId: r.strategy_id,
+        strategyName: r.strategy_name,
+        rank: r.rank,
+        totalScore: r.total_score,
+        stockCount: r.stock_count,
+        avgScore: r.avg_score,
+        maxScore: r.max_score,
+        minScore: r.min_score,
+        batchId,
+      }));
+      await storage.saveGlobalStrategyRanking(globalRows);
+      console.log(`[Fitness DB] saved via storage: ${stockFitness.length} fitness + ${globalRanking.length} ranking`);
+    } catch (err) {
+      console.error(`[Fitness DB] storage save failed, trying standalone:`, err);
+      await saveFitnessStandalone(batchId, stockFitness, globalRanking);
+    }
+  } else {
+    await saveFitnessStandalone(batchId, stockFitness, globalRanking);
+  }
+
+  return { fitnessCount: stockFitness.length, globalRanking };
+}
+
+/** Fallback: open a standalone DB connection to save fitness results */
+async function saveFitnessStandalone(
+  batchId: string,
+  stockFitness: FitnessRow[],
+  globalRanking: GlobalRankRow[],
+): Promise<void> {
+  const dbPath = getDbPath();
+  const dir = path.dirname(dbPath);
+  const fsSync = await import("node:fs");
+  fsSync.mkdirSync(dir, { recursive: true });
+  const sqlite3Mod = await import("better-sqlite3");
+  const Database = sqlite3Mod.default ?? sqlite3Mod;
+  const db = new (Database as { new(p: string): Record<string, Function> })(dbPath);
   try {
-    const dbPath = getDbPath();
-    const dir = path.dirname(dbPath);
-    const fsSync = await import("node:fs");
-    fsSync.mkdirSync(dir, { recursive: true });
-    // Dynamic import to avoid hard dependency
-    const sqlite3Mod = await import("better-sqlite3");
-    const Database = sqlite3Mod.default ?? sqlite3Mod;
-    const db = new (Database as { new(p: string): Record<string, Function> })(dbPath);
+    // Set busy timeout to handle WAL lock contention
+    db.pragma("busy_timeout = 30000");
     ensureFitnessTables(db as unknown as { exec(sql: string): void });
 
-    // Delete existing data for this batch (in case of reruns)
     db.prepare("DELETE FROM stock_strategy_fitness WHERE batch_id = ?").run(batchId);
     db.prepare("DELETE FROM global_strategy_ranking WHERE batch_id = ?").run(batchId);
 
@@ -613,13 +669,10 @@ async function mergeAndSave(
       );
     }
 
+    console.log(`[Fitness DB] saved via standalone: ${stockFitness.length} fitness + ${globalRanking.length} ranking`);
+  } finally {
     db.close();
-    console.log(`[Fitness DB] saved ${stockFitness.length} fitness + ${globalRanking.length} ranking`);
-  } catch (err) {
-    console.error(`[Fitness DB] save failed:`, err);
   }
-
-  return { fitnessCount: stockFitness.length, globalRanking };
 }
 
 export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
@@ -763,6 +816,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             allRawResults,
             topNPerStock,
             topNGlobal,
+            deps.dataWarehouse?.storage,
           );
 
           await writeProgress(config, {
@@ -825,13 +879,14 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
     path: "/quant/admin/api/strategy-fitness/status",
     handler: secure(async (_req, res) => {
       try {
-        const result = await runPythonScript<Record<string, unknown>>(
-          "scripts/strategy_fitness.py",
-          { action: "status" },
-          config,
-          { timeoutMs: 10_000 },
-        );
-        json(res, result.ok ? result.data : { status: "unknown", error: result.error });
+        // Read progress directly from JSON file (fast, no Python spawn)
+        const progressPath = getProgressPath(config);
+        const raw = await fs.readFile(progressPath, "utf-8").catch(() => "");
+        if (!raw) {
+          json(res, { status: "idle" });
+          return;
+        }
+        json(res, JSON.parse(raw));
       } catch (err) {
         json(res, { status: "error", error: String(err) }, 500);
       }
@@ -969,6 +1024,63 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           { timeoutMs: 30_000 },
         );
         json(res, result.ok ? result.data : { error: result.error });
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Delete a fitness batch ─────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/delete-batch",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const batchId = (body.batch_id as string) ?? "";
+        if (!batchId) {
+          json(res, { error: "需要 batch_id 参数" }, 400);
+          return;
+        }
+        // Always use Python for delete – MemoryStorage's clearFitnessBatch is a no-op
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/strategy_fitness.py",
+          { action: "delete_batch", batch_id: batchId },
+          config,
+          { timeoutMs: 15_000 },
+        );
+        if (result.ok) {
+          // Also clear from TS storage if available (best-effort)
+          const storage = deps.dataWarehouse?.storage;
+          if (storage && "clearFitnessBatch" in storage) {
+            try { await (storage as { clearFitnessBatch(b: string): Promise<void> }).clearFitnessBatch(batchId); } catch { /* ignore */ }
+          }
+          json(res, { ok: true, ...(result.data as object) });
+        } else {
+          json(res, { error: result.error });
+        }
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Aggregate global ranking across all batches ────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/aggregate-global",
+    handler: secure(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+        const topN = Math.min(Math.max(parseInt(url.searchParams.get("top_n") ?? "10", 10) || 10, 1), 50);
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/strategy_fitness.py",
+          { action: "aggregate_global", top_n: topN },
+          config,
+          { timeoutMs: 15_000 },
+        );
+        json(res, result.ok ? { ok: true, ...(result.data as object) } : { error: result.error });
       } catch (err) {
         json(res, { error: String(err) }, 500);
       }

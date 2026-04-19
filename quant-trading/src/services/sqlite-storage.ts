@@ -394,6 +394,7 @@ export interface QuantStorage {
   getLatestFitnessBatchId(): Promise<string | null>;
   listFitnessBatches(limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>>;
   cleanOldFitnessBatches(keepN?: number): Promise<number>;
+  clearFitnessBatch(batchId: string): Promise<void>;
 
   // ── Lifecycle ────────────────────────────
   close(): Promise<void>;
@@ -729,6 +730,7 @@ export class InMemoryStorage implements QuantStorage {
   async getLatestFitnessBatchId(): Promise<string | null> { return null; }
   async listFitnessBatches(_limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>> { return []; }
   async cleanOldFitnessBatches(_keepN?: number): Promise<number> { return 0; }
+  async clearFitnessBatch(_batchId: string): Promise<void> {}
 
   // ── Lifecycle ─────────────────────────────────────────────
 
@@ -1411,6 +1413,15 @@ export class SqliteStorage implements QuantStorage {
       deleted += r1.changes + r2.changes;
     }
     return deleted;
+  }
+
+  async clearFitnessBatch(batchId: string): Promise<void> {
+    (this.db as Record<string, Function>)
+      .prepare("DELETE FROM stock_strategy_fitness WHERE batch_id = ?")
+      .run(batchId);
+    (this.db as Record<string, Function>)
+      .prepare("DELETE FROM global_strategy_ranking WHERE batch_id = ?")
+      .run(batchId);
   }
 
   private mapFitnessRow(r: Record<string, unknown>): StockStrategyFitnessRow {

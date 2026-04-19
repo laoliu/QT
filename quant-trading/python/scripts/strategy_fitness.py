@@ -931,6 +931,82 @@ def _query_all_stocks(batch_id: str = "", limit: int = 100, offset: int = 0) -> 
         conn.close()
 
 
+def _delete_batch(batch_id: str) -> dict:
+    """删除指定批次的所有数据。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {"deleted": 0}
+    conn = sqlite3.connect(db_path)
+    try:
+        c1 = conn.execute("DELETE FROM stock_strategy_fitness WHERE batch_id = ?", (batch_id,))
+        c2 = conn.execute("DELETE FROM global_strategy_ranking WHERE batch_id = ?", (batch_id,))
+        conn.commit()
+        total = (c1.rowcount or 0) + (c2.rowcount or 0)
+        print(f"[DB] 已删除批次 {batch_id}: {total} 条记录", file=sys.stderr)
+        return {"deleted": total, "batch_id": batch_id}
+    finally:
+        conn.close()
+
+
+def _aggregate_global(top_n: int = 10) -> dict:
+    """跨所有批次聚合全局策略排名。
+
+    计算逻辑：取所有批次的 stock_strategy_fitness 数据，
+    按 strategy_id 聚合 composite_score 的总和、平均值等。
+    """
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {"strategies": [], "batch_count": 0}
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # 获取批次总数
+        batch_count_row = conn.execute(
+            "SELECT COUNT(DISTINCT batch_id) as cnt FROM stock_strategy_fitness"
+        ).fetchone()
+        batch_count = batch_count_row["cnt"] if batch_count_row else 0
+
+        # 聚合：每个策略在所有批次中的表现
+        rows = conn.execute(
+            """
+            SELECT strategy_id,
+                   SUM(composite_score) as total_score,
+                   COUNT(*) as appearance_count,
+                   COUNT(DISTINCT symbol) as stock_count,
+                   COUNT(DISTINCT batch_id) as batch_count,
+                   AVG(composite_score) as avg_score,
+                   MAX(composite_score) as max_score,
+                   MIN(composite_score) as min_score
+            FROM stock_strategy_fitness
+            GROUP BY strategy_id
+            ORDER BY total_score DESC
+            LIMIT ?
+            """,
+            (top_n,),
+        ).fetchall()
+
+        strategies = []
+        for i, r in enumerate(rows):
+            strategies.append({
+                "strategy_id": r["strategy_id"],
+                "rank": i + 1,
+                "total_score": round(r["total_score"], 4) if r["total_score"] else 0,
+                "appearance_count": r["appearance_count"],
+                "stock_count": r["stock_count"],
+                "batch_count": r["batch_count"],
+                "avg_score": round(r["avg_score"], 4) if r["avg_score"] else 0,
+                "max_score": round(r["max_score"], 4) if r["max_score"] else 0,
+                "min_score": round(r["min_score"], 4) if r["min_score"] else 0,
+            })
+
+        return {
+            "strategies": strategies,
+            "total_batch_count": batch_count,
+        }
+    finally:
+        conn.close()
+
+
 def _batch_detail(batch_id: str) -> dict:
     """返回指定批次的股票列表和策略列表。"""
     db_path = _get_db_path()
@@ -1353,6 +1429,14 @@ if __name__ == "__main__":
                 result = {"error": "需要 batch_id 参数"}
             else:
                 result = _batch_detail(bid)
+        elif action == "delete_batch":
+            bid = config.get("batch_id", "")
+            if not bid:
+                result = {"error": "需要 batch_id 参数"}
+            else:
+                result = _delete_batch(bid)
+        elif action == "aggregate_global":
+            result = _aggregate_global(config.get("top_n", 10))
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:

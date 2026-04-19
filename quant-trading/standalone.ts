@@ -85,7 +85,7 @@ function createMockApi(
     registrationMode: "eager" as const,
     config: { gateway: {} } as unknown,
     pluginConfig,
-    runtime: new Proxy({} as unknown, { get: () => () => Promise.reject(new Error("not available in standalone mode")) }),
+    runtime: new Proxy({} as object, { get: () => () => Promise.reject(new Error("not available in standalone mode")) }),
     logger,
     registerHttpRoute: (params: { path: string; handler: unknown; match?: "exact" | "prefix" }) => {
       routeCollector.collect(params as Parameters<typeof routeCollector.collect>[0]);

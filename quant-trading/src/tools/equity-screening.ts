@@ -1,5 +1,5 @@
-import { QuantTradingConfig } from "../config.js";
-import { OpenClawPluginApi } from "@anthropic-ai/openclaw-plugin";
+import type { QuantTradingConfig } from "../types.js";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { spawn } from "child_process";
 import * as path from "path";
 
@@ -43,7 +43,7 @@ export function createEquityScreeningTool(_api: OpenClawPluginApi, config: Quant
       const universe = (args.universe as string) || "ALL_A";
       const params = args.params || {};
 
-      const pythonDir = path.join(config.workingDirectory || ".", "python");
+      const pythonDir = path.join(config.dataDir || ".", "python");
       const enginePath = path.join(pythonDir, "engines", "aipha_screening_engine.py");
 
       const input = JSON.stringify({ strategy, top_k, universe, params });

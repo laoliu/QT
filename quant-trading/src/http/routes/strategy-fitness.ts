@@ -271,13 +271,26 @@ async function runBuiltinFitness(
   let completed = 0;
 
   // Phase 1: Prefetch all klines in parallel batches (each symbol fetched only once)
+  // Use a per-symbol timeout to avoid hanging on slow/failed remote fetches
+  const PER_SYMBOL_TIMEOUT_MS = 30_000;
+  const timedGetKlines = (sym: string) => {
+    return new Promise<KlineBar[]>((resolve) => {
+      const timer = setTimeout(() => {
+        console.log(`[Builtin Fitness] ⚠ ${sym} K线获取超时 (${PER_SYMBOL_TIMEOUT_MS / 1000}s), 跳过`);
+        resolve([]);
+      }, PER_SYMBOL_TIMEOUT_MS);
+      provider.getKlines(sym, "1d", startDate, endDate, "cn_stock")
+        .then((bars) => { clearTimeout(timer); resolve(bars); })
+        .catch(() => { clearTimeout(timer); resolve([]); });
+    });
+  };
   console.log(`[Builtin Fitness] 预加载 ${symbols.length} 只股票K线数据...`);
   const prefetchBatchSize = 16;
   let prefetched = 0;
   for (let i = 0; i < symbols.length; i += prefetchBatchSize) {
     if (signal?.aborted) break;
     const batch = symbols.slice(i, i + prefetchBatchSize);
-    await Promise.all(batch.map((s) => provider.getKlines(s, "1d", startDate, endDate, "cn_stock").catch(() => [])));
+    await Promise.all(batch.map((s) => timedGetKlines(s)));
     prefetched += batch.length;
     if (prefetched % 50 === 0 || prefetched === symbols.length) {
       console.log(`[Builtin Fitness] 已预加载 ${prefetched}/${symbols.length} 只股票K线`);
@@ -594,6 +607,11 @@ async function mergeAndSave(
         batchId,
       }));
       await storage.saveGlobalStrategyRanking(globalRows);
+      // Verify save actually persisted (InMemoryStorage has no-op fitness methods)
+      const verifyBatch = await storage.getLatestFitnessBatchId();
+      if (verifyBatch !== batchId) {
+        throw new Error("Storage save did not persist (likely InMemoryStorage), falling back to standalone");
+      }
       console.log(`[Fitness DB] saved via storage: ${stockFitness.length} fitness + ${globalRanking.length} ranking`);
     } catch (err) {
       console.error(`[Fitness DB] storage save failed, trying standalone:`, err);
@@ -618,7 +636,7 @@ async function saveFitnessStandalone(
   fsSync.mkdirSync(dir, { recursive: true });
   const sqlite3Mod = await import("better-sqlite3");
   const Database = sqlite3Mod.default ?? sqlite3Mod;
-  const db = new (Database as { new(p: string): Record<string, Function> })(dbPath);
+  const db = new (Database as unknown as new(p: string) => Record<string, Function>)(dbPath);
   try {
     // Set busy timeout to handle WAL lock contention
     db.pragma("busy_timeout = 30000");

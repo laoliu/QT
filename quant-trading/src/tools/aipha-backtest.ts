@@ -76,8 +76,6 @@ export function createAiphaBacktestTool(_api: OpenClawPluginApi, config: QuantTr
       const action = (args.action as string) ?? "run";
 
       const pyResult = await runPythonScript<{
-        ok: boolean;
-        data?: {
           strategyId?: string;
           startDate?: string;
           endDate?: string;
@@ -90,8 +88,6 @@ export function createAiphaBacktestTool(_api: OpenClawPluginApi, config: QuantTr
           maxDrawdown?: number;
           dailySnapshots?: Array<Record<string, unknown>>;
           trades?: Array<Record<string, unknown>>;
-        };
-        error?: string;
       }>(
         "engines/aipha_backtest_engine.py",
         {

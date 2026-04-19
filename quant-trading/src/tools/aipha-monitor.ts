@@ -1,5 +1,5 @@
-import { QuantTradingConfig } from "../config.js";
-import { OpenClawPluginApi } from "@anthropic-ai/openclaw-plugin";
+import type { QuantTradingConfig } from "../types.js";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { spawn } from "child_process";
 import * as path from "path";
 
@@ -39,7 +39,7 @@ export function createAiphaMonitorTool(_api: OpenClawPluginApi, config: QuantTra
     },
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
-      const pythonDir = path.join(config.workingDirectory || ".", "python");
+      const pythonDir = path.join(config.dataDir || ".", "python");
       const enginePath = path.join(pythonDir, "engines", "aipha_monitor_engine.py");
 
       const input = JSON.stringify(args);

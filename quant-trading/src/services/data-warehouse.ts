@@ -146,7 +146,7 @@ function computeGaps(
 
 export class HistoricalDataWarehouse {
   private provider: MarketDataProvider;
-  private storage: QuantStorage;
+  readonly storage: QuantStorage;
   private refreshToday: boolean;
   private concurrency: number;
   private maxRangeDays: number;

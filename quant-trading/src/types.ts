@@ -124,7 +124,7 @@ export type QuoteSnapshot = {
 
 // ── Strategy & Backtest ──────────────────────────────────────────
 
-export type BacktestEngine = "builtin" | "backtrader" | "vnpy";
+export type BacktestEngine = "builtin" | "backtrader" | "vnpy" | "qmt";
 
 export type StrategyParameter = {
   name: string;

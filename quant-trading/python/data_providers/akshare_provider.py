@@ -16,7 +16,7 @@ import os
 import sys
 import threading
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ── Proxy bypass for Chinese financial data hosts ─────────────────────────────
 # On macOS the system proxy (e.g. ClashX on 127.0.0.1:7890) is picked up by
@@ -975,8 +975,43 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
 
         # Refine gaps using cache's own gap detection
         gaps = cache.get_klines_missing_range(symbol, start, end, market, period)
-        gap_desc = ", ".join(f"{g[0]}~{g[1]}" for g in gaps)
-        print(f"[本地△] {symbol} 仍缺: {gap_desc}", file=sys.stderr)
+        # Filter out gaps that are entirely non-trading days (weekends/recent holidays)
+        # to avoid unnecessary remote API calls
+        filtered_gaps = []
+        for gs, ge in gaps:
+            try:
+                d0 = datetime.strptime(gs, "%Y-%m-%d")
+                d1 = datetime.strptime(ge, "%Y-%m-%d")
+                span_days = (d1 - d0).days + 1
+                # Only skip short gaps (<=5 days) where all days are weekends
+                if span_days <= 5:
+                    all_weekend = all(
+                        (d0 + timedelta(days=i)).weekday() >= 5
+                        for i in range(span_days)
+                    )
+                    if all_weekend:
+                        continue
+                # Also skip gaps that end in the future (today is not a trading day)
+                now = datetime.now()
+                if d0.date() >= now.date():
+                    continue
+                filtered_gaps.append((gs, ge))
+            except Exception:
+                filtered_gaps.append((gs, ge))
+        if filtered_gaps != gaps:
+            skipped = len(gaps) - len(filtered_gaps)
+            if skipped:
+                print(f"[本地△] {symbol} 跳过 {skipped} 个非交易日gap", file=sys.stderr)
+        gaps = filtered_gaps
+        if gaps:
+            gap_desc = ", ".join(f"{g[0]}~{g[1]}" for g in gaps)
+            print(f"[本地△] {symbol} 仍缺: {gap_desc}", file=sys.stderr)
+        elif collected_bars:
+            collected_bars.sort(key=lambda b: b["timestamp"])
+            seen = set()
+            result = [b for b in collected_bars if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
+            print(f"[Parquet+SQLite] {symbol} 本地全覆盖(含gap过滤): {len(result)} bars", file=sys.stderr)
+            return result
     except Exception as e:
         print(f"[缓存] K线缓存读取失败: {e}", file=sys.stderr)
 

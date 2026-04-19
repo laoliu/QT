@@ -66,11 +66,9 @@ export function createCBAnalysisTool(_api: OpenClawPluginApi, config: QuantTradi
       const maxPrice = args.maxPrice as number | undefined;
       const source = args.source as string | undefined;
 
-      const pyResult = await runPythonScript<{
-        ok: boolean;
-        data?: Record<string, unknown>;
-        error?: string;
-      }>(
+      const pyResult = await runPythonScript<
+        Record<string, unknown>
+      >(
         "engines/aipha_cb_engine.py",
         {
           action,
@@ -80,7 +78,8 @@ export function createCBAnalysisTool(_api: OpenClawPluginApi, config: QuantTradi
           max_price: maxPrice ?? 130,
           source: source ?? "tushare",
         },
-        { timeout: config.pythonTimeout ?? 60_000 },
+        config,
+        { timeoutMs: 60_000 },
       );
 
       if (!pyResult.ok) {

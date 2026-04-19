@@ -62,11 +62,9 @@ export function createStrategyValidationTool(_api: OpenClawPluginApi, config: Qu
       const trainSize = args.trainSize as number | undefined;
       const testSize = args.testSize as number | undefined;
 
-      const pyResult = await runPythonScript<{
-        ok: boolean;
-        data?: Record<string, unknown>;
-        error?: string;
-      }>(
+      const pyResult = await runPythonScript<
+        Record<string, unknown>
+      >(
         "engines/aipha_validation_engine.py",
         {
           action,
@@ -77,7 +75,8 @@ export function createStrategyValidationTool(_api: OpenClawPluginApi, config: Qu
           train_size: trainSize ?? 500,
           test_size: testSize ?? 60,
         },
-        { timeout: config.pythonTimeout ?? 120_000 },
+        config,
+        { timeoutMs: 120_000 },
       );
 
       if (!pyResult.ok) {

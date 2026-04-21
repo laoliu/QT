@@ -56,35 +56,83 @@ th{color:var(--text-dim);font-weight:500}
 </div>
 <script>
 var B="${b}";
-fetch(B+"/quant/dashboard").then(function(r){return r.json()}).then(function(d){
+// Fetch portfolio data and equity summary in parallel
+Promise.all([
+  fetch(B+"/quant/api/portfolio").then(function(r){return r.json()}).catch(function(){return {}}),
+  fetch(B+"/quant/api/equity-history/summary").then(function(r){return r.json()}).catch(function(){return {}})
+]).then(function(results){
+  var portRes=results[0];
+  var eqRes=results[1];
   var el=document.getElementById("kpi");
-  if(!d||d.error){el.innerHTML='<div class="error">'+(d?.error||"暂无数据")+'</div>';return;}
-  var port=d.portfolio||{};
-  var maxDD=d.maxDrawdown!=null?d.maxDrawdown:(port.maxDrawdown||0);
-  var totalVal=port.totalValue||port.total_value||0;
-  var todayPnl=port.todayPnl||port.today_pnl||0;
+  var pf=(portRes&&portRes.data)||portRes||{};
+  var positions=pf.positions||[];
+  var summary=(eqRes&&eqRes.data)||{};
+
+  // Calculate totals from positions
+  var totalVal=0;var todayPnl=0;
+  if(pf.totalAssets!=null){totalVal=pf.totalAssets}
+  else if(pf.totalValue!=null){totalVal=pf.totalValue}
+  else if(pf.total_value!=null){totalVal=pf.total_value}
+  else{
+    var cash=Number(pf.cash||pf.available||0);
+    totalVal=positions.reduce(function(s,p){
+      return s+(p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0));
+    },cash);
+  }
+  if(pf.todayPnl!=null){todayPnl=pf.todayPnl}
+  else if(pf.today_pnl!=null){todayPnl=pf.today_pnl}
+  else if(pf.profit!=null){todayPnl=pf.profit}
+  else{
+    todayPnl=positions.reduce(function(s,p){return s+(p.todayPnl||p.today_pnl||0)},0);
+  }
+
+  // Max drawdown from equity history summary
+  var maxDD=0;
+  if(summary.maxDrawdownPct!=null){maxDD=summary.maxDrawdownPct/100}
+  else if(summary.maxDrawdown!=null){maxDD=summary.maxDrawdown}
+  else if(pf.maxDrawdown!=null){maxDD=pf.maxDrawdown}
+
   el.innerHTML='<div class="kpi-box"><div class="kpi-label">总资产</div><div class="kpi-val">¥'+Number(totalVal).toLocaleString()+'</div></div>'+
     '<div class="kpi-box"><div class="kpi-label">今日盈亏</div><div class="kpi-val" style="color:'+(todayPnl>=0?"var(--green)":"var(--red)")+'">'+(todayPnl>=0?"+":"")+Number(todayPnl).toFixed(2)+'</div></div>'+
     '<div class="kpi-box"><div class="kpi-label">最大回撤</div><div class="kpi-val" style="color:var(--red)">'+Number(maxDD*100).toFixed(2)+'%</div></div>';
+
   // Concentration
-  var positions=d.positions||port.positions||[];
   var concEl=document.getElementById("concentration");
   if(!positions.length){concEl.innerHTML='暂无持仓';return;}
-  var total=positions.reduce(function(s,p){return s+(p.marketValue||p.market_value||0)},0);
+  var totalMV=positions.reduce(function(s,p){
+    return s+(p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0));
+  },0);
   var html='<table><thead><tr><th>标的</th><th>市值</th><th>占比</th></tr></thead><tbody>';
-  positions.sort(function(a,b){return(b.marketValue||b.market_value||0)-(a.marketValue||a.market_value||0)});
+  positions.sort(function(a,b){
+    var mvA=a.marketValue||a.market_value||(a.currentPrice||a.lastPrice||0)*(a.quantity||a.shares||0);
+    var mvB=b.marketValue||b.market_value||(b.currentPrice||b.lastPrice||0)*(b.quantity||b.shares||0);
+    return mvB-mvA;
+  });
   positions.forEach(function(p){
-    var mv=p.marketValue||p.market_value||0;
-    var pct=total>0?(mv/total*100):0;
+    var mv=p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0);
+    var pct=totalMV>0?(mv/totalMV*100):0;
     html+='<tr><td>'+(p.symbol||p.code)+'</td><td>¥'+Number(mv).toLocaleString()+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
   });
   html+='</tbody></table>';
   concEl.innerHTML=html;
+
+  // Drawdown analysis from equity history
+  var ddEl=document.getElementById("drawdown");
+  if(summary.maxDrawdownPct!=null&&summary.totalDays>0){
+    ddEl.innerHTML='<table><thead><tr><th>指标</th><th>数值</th></tr></thead><tbody>'+
+      '<tr><td>最大回撤</td><td style="color:var(--red)">-'+Number(summary.maxDrawdownPct).toFixed(2)+'%</td></tr>'+
+      (summary.totalReturnPct!=null?'<tr><td>总收益率</td><td style="color:'+(summary.totalReturnPct>=0?'var(--green)':'var(--red)')+'">'+Number(summary.totalReturnPct).toFixed(2)+'%</td></tr>':'')+
+      (summary.winRate!=null?'<tr><td>日胜率</td><td>'+Number(summary.winRate).toFixed(1)+'%</td></tr>':'')+
+      '<tr><td>记录天数</td><td>'+summary.totalDays+'天</td></tr>'+
+      (summary.startEquity!=null?'<tr><td>起始权益</td><td>¥'+Number(summary.startEquity).toLocaleString()+'</td></tr>':'')+
+      (summary.endEquity!=null?'<tr><td>当前权益</td><td>¥'+Number(summary.endEquity).toLocaleString()+'</td></tr>':'')+
+      '</tbody></table>';
+  }else{
+    ddEl.innerHTML='<p style="color:var(--text-dim)">回撤曲线需要权益历史数据，请在 Dashboard 中查看详细图表。</p>';
+  }
 }).catch(function(e){
   document.getElementById("kpi").innerHTML='<div class="error">'+e+'</div>';
 });
-// Drawdown placeholder
-document.getElementById("drawdown").innerHTML='<p style="color:var(--text-dim)">回撤曲线需要权益历史数据，请在 Dashboard 中查看详细图表。</p>';
 </script>
 </body>
 </html>`;

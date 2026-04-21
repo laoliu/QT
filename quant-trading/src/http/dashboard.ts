@@ -508,8 +508,11 @@ export function getDashboardHtml(baseUrl: string): string {
       // Auto-select the mode dropdown when in auto mode
       const sel = document.getElementById('modeSwitch');
       if (!viewMode && sel) {
-        sel.value = isPaper ? 'paper' : isLive ? 'live' : '';
+        const detectedMode = isPaper ? 'paper' : isLive ? 'live' : '';
+        sel.value = detectedMode;
         sel.className = 'mode-banner ' + (isLive ? 'mode-live' : 'mode-paper');
+        // Also set viewMode so equity chart and other APIs use the correct mode
+        if (detectedMode) viewMode = detectedMode;
       }
       document.getElementById('portfolioStats').innerHTML =
         '<div class="stat"><span class="value">¥'+fmt(tv)+'</span><span class="label">总资产'+srcLabel+'</span></div>'+
@@ -532,7 +535,8 @@ export function getDashboardHtml(baseUrl: string): string {
       for(const o of orders.slice(-20)){
         const side=o.side==='buy'?'<span class="badge badge-buy">买入</span>':'<span class="badge badge-sell">卖出</span>';
         const st=o.status==='filled'?'<span class="badge badge-filled">已成</span>':'<span class="badge badge-pending">'+esc(o.status??'待处理')+'</span>';
-        h+='<tr><td>'+esc(o.time)+'</td><td>'+esc(o.symbol)+'</td><td>'+side+'</td><td>'+(o.quantity??'')+'</td><td>¥'+fmt(o.price)+'</td><td>'+st+'</td></tr>';}
+        const t=o.createdAt?new Date(o.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):(o.time??'');
+        h+='<tr><td>'+esc(t)+'</td><td>'+esc(o.symbol)+'</td><td>'+side+'</td><td>'+(o.quantity??'')+'</td><td>¥'+fmt(o.price??o.avgFillPrice??o.filledPrice)+'</td><td>'+st+'</td></tr>';}
       document.getElementById('ordersTable').innerHTML=h+'</table>';
     }
 
@@ -936,8 +940,11 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Refresh all ─────────────────────────────────────────
     async function refreshAll() {
+      // Load portfolio first to auto-detect broker mode (paper/live),
+      // so equity chart and other APIs use the correct mode parameter.
+      await loadPortfolio();
       await Promise.all([
-        loadPortfolio(), loadOrders(), loadSignals(), loadStatus(),
+        loadOrders(), loadSignals(), loadStatus(),
         loadPnl(), loadEquityChart(), loadHealth(), loadStaleness(), loadAlerts(),
         loadPriceAlerts(), loadScheduledTasks(), loadBacktestHistory(),
       ]);

@@ -50,7 +50,7 @@ import {
   formatDateYmd,
   parseObjectBody,
 } from "./routes/_helpers.js";
-import { registerDailyPickRoutes } from "./routes/daily-pick.js";
+import { registerDailyPickRoutes, fetchStockNames } from "./routes/daily-pick.js";
 import { registerStrategyFitnessRoutes } from "./routes/strategy-fitness.js";
 import { registerStrategyLabRoutes } from "./routes/strategy-lab.js";
 import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
@@ -1904,23 +1904,13 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         for (const p of positions) {
           if (p.name) nameMap.set(p.symbol, p.name);
         }
-        // Fallback: fetch names via market data provider for missing entries
+        // Fallback: batch-fetch names via Tencent API for missing entries
         const missing = [...new Set(orders.map((o) => o.symbol))].filter(
           (s) => !nameMap.has(s),
         );
         if (missing.length > 0) {
-          await Promise.all(
-            missing.map(async (sym) => {
-              try {
-                const q = await marketDataProvider.getQuote(sym);
-                if (q?.symbol?.name && q.symbol.name !== sym) {
-                  nameMap.set(sym, q.symbol.name);
-                }
-              } catch {
-                /* ignore */
-              }
-            }),
-          );
+          const tencentNames = await fetchStockNames(missing);
+          for (const [sym, name] of tencentNames) nameMap.set(sym, name);
         }
         const enriched = orders.map((o) => ({
           ...o,
@@ -2039,18 +2029,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           (s) => !nameMap.has(s),
         );
         if (missingSyms.length > 0) {
-          await Promise.all(
-            missingSyms.map(async (sym) => {
-              try {
-                const q = await marketDataProvider.getQuote(sym);
-                if (q?.symbol?.name && q.symbol.name !== sym) {
-                  nameMap.set(sym, q.symbol.name);
-                }
-              } catch {
-                /* ignore */
-              }
-            }),
-          );
+          const tencentNames = await fetchStockNames(missingSyms);
+          for (const [sym, name] of tencentNames) nameMap.set(sym, name);
         }
         const enrichedPending = pendingOrders.map((o) => ({
           ...o,
@@ -3692,13 +3672,13 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       let filtered = trades as Array<Record<string, unknown>>;
       if (from) {
         filtered = filtered.filter((t) => {
-          const d = String(t.time || t.timestamp || t.date || "");
+          const d = String(t.exitTime || t.entryTime || t.time || t.timestamp || t.date || "");
           return d >= from;
         });
       }
       if (to) {
         filtered = filtered.filter((t) => {
-          const d = String(t.time || t.timestamp || t.date || "");
+          const d = String(t.exitTime || t.entryTime || t.time || t.timestamp || t.date || "");
           return d <= to + "T23:59:59";
         });
       }
@@ -3709,7 +3689,29 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         filtered = filtered.filter((t) => String(t.side || t.direction || "") === side);
       }
 
-      json(res, { status: "ok", trades: filtered, count: filtered.length });
+      // Enrich trades with stock names
+      const positions = engine.getPositions();
+      const nameMap = new Map<string, string>();
+      for (const p of positions) {
+        if (p.name) nameMap.set(p.symbol, p.name);
+      }
+      // Also pick up names already present in trade records
+      for (const t of filtered) {
+        if (t.name && t.symbol) nameMap.set(String(t.symbol), String(t.name));
+      }
+      const missing = [...new Set(filtered.map((t) => String(t.symbol || t.code || "")))].filter(
+        (s) => s && !nameMap.has(s),
+      );
+      if (missing.length > 0) {
+        const tencentNames = await fetchStockNames(missing);
+        for (const [sym, name] of tencentNames) nameMap.set(sym, name);
+      }
+      const enriched = filtered.map((t) => ({
+        ...t,
+        name: t.name || nameMap.get(String(t.symbol || t.code || "")) || "",
+      }));
+
+      json(res, { status: "ok", trades: enriched, count: enriched.length });
     }),
   });
 

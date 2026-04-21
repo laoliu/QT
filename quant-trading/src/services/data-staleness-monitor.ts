@@ -225,6 +225,12 @@ export class DataStalenessMonitor {
       const warnKey = `warn:${sym.symbol}`;
       const critKey = `crit:${sym.symbol}`;
 
+      // Grace period: skip alerts for symbols that have NEVER received data
+      // within 120s of market open, to allow data feeds time to connect.
+      if (sym.lastReceivedAt === 0 && this.isWithinMarketOpenGrace()) {
+        continue;
+      }
+
       if (sym.status === "critical" && !this.firedAlerts.has(critKey)) {
         this.firedAlerts.add(critKey);
         const msg = `🔴 数据中断: ${sym.symbol} 已 ${formatDuration(sym.ageMs)} 无行情数据`;
@@ -257,6 +263,29 @@ export class DataStalenessMonitor {
     if (report.freshCount > 0 && this.firedAlerts.has("all_critical")) {
       this.firedAlerts.delete("all_critical");
     }
+  }
+  // ── Grace period ─────────────────────────────────────────────
+
+  /** Grace period (ms) after market open for "never received" symbols. */
+  private static readonly MARKET_OPEN_GRACE_MS = 120_000;
+
+  /**
+   * Returns true if we are within the grace window after a CN market
+   * session start (09:30 or 13:00).  During this window, symbols that
+   * have *never* received a quote are not yet alarmed — the data feed
+   * simply hasn't had time to deliver its first tick.
+   */
+  private isWithinMarketOpenGrace(): boolean {
+    const now = new Date();
+    const cst = new Date(now.getTime() + 8 * 60 * 60_000);
+    const hmm = cst.getUTCHours() * 60 + cst.getUTCMinutes(); // minutes since midnight
+    const morning = 9 * 60 + 30;  // 09:30
+    const afternoon = 13 * 60;    // 13:00
+    const graceMin = DataStalenessMonitor.MARKET_OPEN_GRACE_MS / 60_000;
+    return (
+      (hmm >= morning && hmm < morning + graceMin) ||
+      (hmm >= afternoon && hmm < afternoon + graceMin)
+    );
   }
 }
 

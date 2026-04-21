@@ -23,14 +23,14 @@ import * as os from "node:os";
 import * as http from "node:http";
 
 /** Fetch stock names in batch from Tencent finance API (qt.gtimg.cn). */
-async function fetchStockNames(symbols: string[]): Promise<Map<string, string>> {
+export async function fetchStockNames(symbols: string[]): Promise<Map<string, string>> {
   const nameMap = new Map<string, string>();
   if (symbols.length === 0) return nameMap;
 
   // Build Tencent query codes: sh601126,sz300456,...
   const codes = symbols.map((s) => {
     const c = s.replace(/\.(SH|SZ|sh|sz)$/, "");
-    if (c.startsWith("6") || c.startsWith("9")) return `sh${c}`;
+    if (c.startsWith("6") || c.startsWith("9") || c.startsWith("5")) return `sh${c}`;
     return `sz${c}`;
   });
 

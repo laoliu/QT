@@ -31,7 +31,9 @@ th{color:var(--text-dim);font-weight:500;position:sticky;top:0;background:var(--
 .loading{color:var(--text-dim);font-style:italic}
 .error{color:var(--red)}
 .buy{color:var(--red)}.sell{color:var(--green)}
+.profit{color:var(--green)}.loss{color:var(--red)}
 .count{color:var(--text-dim);font-size:13px;margin-bottom:8px}
+.summary{margin-top:12px;font-size:14px;color:var(--text);display:flex;gap:24px}
 </style>
 </head>
 <body>
@@ -48,6 +50,7 @@ th{color:var(--text-dim);font-weight:500;position:sticky;top:0;background:var(--
     <button onclick="loadTrades()">查询</button>
   </div>
   <div class="count" id="count"></div>
+  <div class="summary" id="summary"></div>
   <div id="trades-content" class="loading">加载中…</div>
 </div>
 <script>
@@ -67,16 +70,29 @@ function loadTrades(){
     var el=document.getElementById("trades-content");
     document.getElementById("count").textContent="共 "+(d.count||0)+" 条记录";
     var trades=d.trades||[];
-    if(!trades.length){el.innerHTML='<p class="loading">暂无交易记录</p>';return;}
-    var html='<table><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>金额</th></tr></thead><tbody>';
+    if(!trades.length){el.innerHTML='<p class="loading">暂无交易记录</p>';document.getElementById("summary").innerHTML='';return;}
+    var totalPnl=0,totalAmount=0;
+    var html='<table><thead><tr><th>时间</th><th>代码</th><th>名称</th><th>方向</th><th>成本价</th><th>卖出价</th><th>数量</th><th>金额</th><th>盈亏</th><th>盈亏%</th></tr></thead><tbody>';
     trades.forEach(function(t){
       var side=t.side||t.direction||"";
       var cls=side==="buy"?"buy":"sell";
-      var time=t.time||t.timestamp||t.date||"";
-      html+='<tr><td>'+time+'</td><td>'+(t.symbol||t.code||"")+'</td><td class="'+cls+'">'+(side==="buy"?"买入":"卖出")+'</td><td>'+(t.price||"-")+'</td><td>'+(t.quantity||t.volume||"-")+'</td><td>'+(t.amount||"-")+'</td></tr>';
+      var time=t.exitTime||t.entryTime||t.time||t.timestamp||t.date||"";
+      if(time){try{time=new Date(time).toLocaleString("zh-CN")}catch(e){}}
+      var exitP=t.exitPrice||t.price;
+      var entryP=t.entryPrice;
+      var qty=t.quantity||t.volume||0;
+      var amount=(exitP&&qty)?Number((exitP*qty).toFixed(2)):t.amount;
+      var pnl=t.netPnl!=null?Number(t.netPnl):((exitP&&entryP&&qty)?Number(((exitP-entryP)*qty).toFixed(2)):null);
+      var pnlPct=(entryP&&entryP>0&&pnl!=null)?Number(((pnl/(entryP*qty))*100).toFixed(2)):null;
+      var pnlCls=pnl!=null?(pnl>=0?"profit":"loss"):"";
+      if(pnl!=null)totalPnl+=pnl;
+      if(amount)totalAmount+=amount;
+      html+='<tr><td>'+time+'</td><td>'+(t.symbol||t.code||"")+'</td><td>'+(t.name||"")+"</td><td class='"+cls+"'>"+(side==="buy"?"买入":"卖出")+"</td><td>"+(entryP||"-")+"</td><td>"+(exitP||"-")+"</td><td>"+(qty||"-")+"</td><td>"+(amount||"-")+"</td><td class='"+pnlCls+"'>"+(pnl!=null?(pnl>0?"+":"")+pnl:"-")+"</td><td class='"+pnlCls+"'>"+(pnlPct!=null?(pnlPct>0?"+":"")+pnlPct+"%":"-")+"</td></tr>";
     });
     html+='</tbody></table>';
     el.innerHTML=html;
+    var sCls=totalPnl>=0?"profit":"loss";
+    document.getElementById("summary").innerHTML='<span>总交易额: '+totalAmount.toFixed(2)+'</span><span>总盈亏: <b class="'+sCls+'">'+(totalPnl>0?"+":"")+totalPnl.toFixed(2)+'</b></span>';
   }).catch(function(e){document.getElementById("trades-content").innerHTML='<div class="error">'+e+'</div>'});
 }
 loadTrades();

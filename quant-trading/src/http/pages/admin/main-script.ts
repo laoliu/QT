@@ -353,10 +353,15 @@ function loadTrading(){
   api('/quant/api/orders'+adminModeParam(false)).then(function(o){
     var orders=o.data||o.orders||[];
     document.querySelector('#orders-table tbody').innerHTML=orders.slice(0,50).map(function(od){
-      return '<tr><td style="white-space:nowrap">'+fmtTime(od.createdAt)+'</td><td>'+esc(od.symbol)+'</td><td>'+esc(od.direction)+'</td>'+
-        '<td>'+num(od.price)+'</td><td>'+(od.quantity||'-')+'</td>'+
+      var sideMap={buy:'买入',sell:'卖出',short:'做空',cover:'平仓',buy_open:'买开',sell_close:'卖平',buy_close:'买平',sell_open:'卖开'};
+      var sideLabel=sideMap[od.side]||od.side||'-';
+      var sideClass=(od.side==='buy'||od.side==='buy_open'||od.side==='cover'||od.side==='buy_close')?'green':'red';
+      var canCancel=(od.status==='pending'||od.status==='submitted');
+      return '<tr><td style="white-space:nowrap">'+fmtTime(od.createdAt)+'</td><td>'+esc(od.symbol)+'</td>'+
+        '<td><span class="badge badge-'+sideClass+'">'+sideLabel+'</span></td>'+
+        '<td>'+num(od.price!=null?od.price:(od.avgFillPrice!=null?od.avgFillPrice:od.filledPrice))+'</td><td>'+(od.quantity||'-')+'</td>'+
         '<td><span class="badge badge-'+(od.status==='filled'?'green':od.status==='cancelled'?'red':'yellow')+'">'+esc(od.status)+'</span></td>'+
-        '<td>'+(od.status==='pending'?'<button class="btn btn-sm btn-danger" onclick="cancelOrder(\\''+esc(od.id)+'\\')">撤单</button>':'')+'</td></tr>';
+        '<td>'+(canCancel?'<button class="btn btn-sm btn-danger" onclick="cancelOrder(\\''+esc(od.orderId)+'\\')">撤单</button>':'')+'</td></tr>';
     }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无委托</td></tr>';
   }).catch(function(){});
   api('/quant/api/signals?limit=30'+adminModeParam(true)).then(function(s){

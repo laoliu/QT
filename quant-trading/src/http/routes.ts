@@ -93,11 +93,18 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     securePublic,
   } = deps;
 
-  /** Resolve equity history instance by ?mode= param (paper|live), fallback to active */
+  /** Resolve equity history instance by ?mode= param (paper|live), fallback to active engine's broker */
   function resolveEquityHistory(params: URLSearchParams): EquityHistory {
     const mode = params.get("mode");
     if (mode === "paper" && equityHistoryPaper) return equityHistoryPaper;
     if (mode === "live" && equityHistoryLive) return equityHistoryLive;
+    // No explicit mode — auto-detect from active engine's broker type
+    if (!mode) {
+      try {
+        const bt = getEngine()?.broker?.brokerType;
+        if (bt && bt !== "paper" && equityHistoryLive) return equityHistoryLive;
+      } catch { /* engine not ready */ }
+    }
     return equityHistory;
   }
 

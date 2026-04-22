@@ -3715,6 +3715,48 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Trade History Repair API ──────────────────────────────────
+  // POST /quant/admin/api/trade-history/repair
+  // Body: { costs: { "symbol": costPrice, ... } }   (optional overrides)
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/trade-history/repair",
+    handler: secure(async (req, res) => {
+      const engine = getEngine();
+      if (!engine.orderManager) {
+        json(res, { status: "error", message: "OrderManager not available" });
+        return;
+      }
+      let costOverrides: Map<string, number> | undefined;
+      if (req.method === "POST") {
+        try {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+          if (body.costs && typeof body.costs === "object") {
+            costOverrides = new Map(Object.entries(body.costs).map(([k, v]) => [k, Number(v)]));
+          }
+        } catch {
+          // no body or bad JSON — proceed without overrides
+        }
+      }
+      // Also try to populate from current broker positions
+      try {
+        const positions = engine.getPositions();
+        if (!costOverrides) costOverrides = new Map();
+        for (const p of positions) {
+          if (p.avgCost && p.avgCost > 0 && !costOverrides.has(p.symbol)) {
+            costOverrides.set(p.symbol, p.avgCost);
+          }
+        }
+      } catch {
+        // ignore
+      }
+      const repaired = await engine.orderManager.repairTrades(costOverrides);
+      json(res, { status: "ok", repaired });
+    }),
+  });
+
   // ── Stock Comparison (股票对比) Page ────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

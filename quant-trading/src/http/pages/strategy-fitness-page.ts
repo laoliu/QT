@@ -297,11 +297,11 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
       <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="ctaext" value="cta-supertrend" checked onchange="updateStrategyCount()">CTA超级趋势</label>
     </div>
     <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">T0日内</label>
+      <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto;opacity:0.5">T0日内 (A股暂不支持)</label>
     </div>
     <div class="form-row" style="flex-wrap:wrap;gap:3px 6px;margin-bottom:8px">
-      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-day-trading" checked onchange="updateStrategyCount()">T0日内交易</label>
-      <label style="min-width:auto"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-enhanced" checked onchange="updateStrategyCount()">T0增强</label>
+      <label style="min-width:auto;opacity:0.5"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-day-trading" disabled onchange="updateStrategyCount()">T0日内交易</label>
+      <label style="min-width:auto;opacity:0.5"><input type="checkbox" class="fit-builtin" data-group="t0" value="t0-enhanced" disabled onchange="updateStrategyCount()">T0增强</label>
     </div>
     <div style="margin-bottom:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
       <label style="font-weight:600;color:var(--accent);font-size:12px;min-width:auto">Python趋势</label>

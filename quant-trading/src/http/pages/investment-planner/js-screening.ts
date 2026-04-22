@@ -1161,7 +1161,7 @@ function runSmartStrategy(){
   api('/quant/admin/api/smart-strategy',{
     method:'POST',
     body:JSON.stringify({plan:planPayload}),
-    _timeout:120000
+    _timeout:300000
   }).then(function(d){
     btn.disabled=false;btn.textContent='🧠 智能策略诊断';
     if(d.error){statusEl.textContent='诊断失败: '+d.error;toast('❌ '+d.error);return;}

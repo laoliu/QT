@@ -2839,20 +2839,34 @@ def smart_strategy_advisor(
     regime = macro.get("regime", "unknown")
     regime_desc = macro.get("description", "")
 
-    # 4. Try to get strategy routing recommendations
+    # 4. Try to get strategy routing recommendations (parallelized)
     strategy_recs: dict[str, dict] = {}
     try:
         from engines.strategy_router import recommend_with_regime
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         end_date = datetime.now().strftime("%Y-%m-%d")
-        for sym in symbols:
+
+        def _route_one(sym: str) -> tuple[str, dict | None]:
             try:
                 rec = recommend_with_regime(sym, end_date)
-                if rec.get("ok"):
-                    strategy_recs[sym] = rec
+                return (sym, rec) if rec.get("ok") else (sym, None)
             except Exception as e:
                 print(f"[advisor] routing failed for {sym}: {e}", file=sys.stderr, flush=True)
+                return (sym, None)
+
+        with ThreadPoolExecutor(max_workers=min(len(symbols), 4)) as pool:
+            futs = {pool.submit(_route_one, s): s for s in symbols}
+            for fut in as_completed(futs, timeout=90):
+                try:
+                    sym, rec = fut.result(timeout=30)
+                    if rec:
+                        strategy_recs[sym] = rec
+                except Exception as e:
+                    print(f"[advisor] routing timeout/error: {e}", file=sys.stderr, flush=True)
     except ImportError:
         print("[advisor] strategy_router not available", file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[advisor] routing pool error: {e}", file=sys.stderr, flush=True)
 
     # Calculate portfolio total value
     initial_capital = plan.get("initialCapital", 0)

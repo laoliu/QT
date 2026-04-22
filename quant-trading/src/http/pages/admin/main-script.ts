@@ -157,8 +157,8 @@ function loadData(){
       '数据库大小':(pc.db_size_mb||0)+' MB',
       'K线总量':(kl.total_bars||0).toLocaleString(),
       '品种数':kl.unique_symbols||0,
-      '股票列表':((pc.stock_list||{}).unique_stocks||0)+' ֻ',
-      '基本面':((pc.fundamentals||{}).unique_stocks||0)+' ֻ',
+      '股票列表':((pc.stock_list||{}).unique_stocks||0)+' 只',
+      '基本面':((pc.fundamentals||{}).unique_stocks||0)+' 只',
       '代码名称映射':((pc.code_name_map||{}).entries||0)+' 条'
     })+btnGrp([['','refreshWarehouseStats()','🔄 刷新统计']]));
     c.innerHTML+=card('🌉 QMT 桥接配置',infoList({'RECEIVER端口':d.receiverPort,'主机':d.receiverHost,'自动启动':d.receiverEnabled?'✅ 是':'❌ 否'}));

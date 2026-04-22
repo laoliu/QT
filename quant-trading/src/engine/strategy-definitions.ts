@@ -687,6 +687,7 @@ const builtinTsStrategies: StrategyDefinition[] = [
     version: "1.0.0",
     engine: "builtin",
     entryFile: "",
+    disabled: true, // A股不支持T+0日内交易
     parameters: [
       {
         name: "fastMaPeriod",
@@ -776,6 +777,7 @@ const builtinTsStrategies: StrategyDefinition[] = [
     version: "1.0.0",
     engine: "builtin",
     entryFile: "",
+    disabled: true, // A股不支持T+0日内交易
     parameters: [
       {
         name: "fastMaPeriod",

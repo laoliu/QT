@@ -138,9 +138,9 @@ export const DAILY_PICK_STRATEGIES = [
   "cta-dema-crossover",
   "cta-triple-ma",
   "cta-supertrend",
-  // ── T0 日内策略 ──
-  "t0-day-trading",
-  "t0-enhanced",
+  // ── T0 日内策略 (A股暂不支持T+0，已禁用) ──
+  // "t0-day-trading",
+  // "t0-enhanced",
   // ── Python Backtrader CTA趋势 ──
   "ema-cross",
   "adx-trend",

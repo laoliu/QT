@@ -782,7 +782,8 @@ export function getDashboardHtml(baseUrl: string): string {
       if (!alerts.length) { document.getElementById('alertsList').innerHTML='<div class="empty">暂无未读告警</div>'; return; }
       let h = '';
       for (const a of alerts) {
-        const t = new Date(a.timestamp).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+        const _d = new Date(a.timestamp);
+        const t = _d.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit'})+' '+_d.toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
         const sym = a.metadata?.symbol ?? '';
         const price = a.metadata?.price ?? '';
         const changePct = a.metadata?.changePct ?? '';

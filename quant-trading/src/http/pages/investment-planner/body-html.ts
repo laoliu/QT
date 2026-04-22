@@ -1271,9 +1271,9 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="cta-supertrend" checked style="vertical-align:middle;margin-right:4px">CTA超级趋势</label>
       </div>
       <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
-        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">T0日内</label>
-        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="t0-day-trading" checked style="vertical-align:middle;margin-right:4px">T0日内交易</label>
-        <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="t0-enhanced" checked style="vertical-align:middle;margin-right:4px">T0增强</label>
+        <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto;opacity:0.5">T0日内 (A股暂不支持)</label>
+        <label style="min-width:auto;opacity:0.5"><input type="checkbox" class="dp-strategy" value="t0-day-trading" disabled style="vertical-align:middle;margin-right:4px">T0日内交易</label>
+        <label style="min-width:auto;opacity:0.5"><input type="checkbox" class="dp-strategy" value="t0-enhanced" disabled style="vertical-align:middle;margin-right:4px">T0增强</label>
       </div>
       <div class="form-row" style="flex-wrap:wrap;gap:4px 8px">
         <label style="color:var(--accent);font-weight:600;font-size:11px;min-width:auto">Python趋势</label>
@@ -1576,7 +1576,7 @@ export function getPlannerBodyHtml(b: string): string {
       <!-- Active conditional orders -->
       <div style="overflow-x:auto">
         <table id="cond-order-table">
-          <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>触发时间</th><th>状态</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

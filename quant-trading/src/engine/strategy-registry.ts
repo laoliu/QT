@@ -1127,7 +1127,9 @@ export function listRuleStrategies(): RuleStrategyConfig[] {
 export function listStrategies(): StrategyDefinition[] {
   // Only include builtin strategies that have a registered factory or use backtrader/vnpy engine
   const available = builtinStrategies.filter(
-    (s) => s.engine === "backtrader" || s.engine === "vnpy" || strategyMap.has(s.id),
+    (s) =>
+      !s.disabled &&
+      (s.engine === "backtrader" || s.engine === "vnpy" || strategyMap.has(s.id)),
   );
   return [...available, ...composedDefinitions.values(), ...ruleDefinitions.values()];
 }

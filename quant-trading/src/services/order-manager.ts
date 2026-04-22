@@ -201,6 +201,13 @@ export class OrderManager {
   /** Resolves when openBuys rebuild completes (prevents race with early fills). */
   private readonly initialized: Promise<void>;
 
+  /**
+   * Cache of position cost prices — populated from broker positions at startup
+   * and on every sync. Persists even after positions are fully sold so that
+   * sell fills can still find the correct entry price.
+   */
+  private positionCostCache: Map<string, number> = new Map();
+
   constructor(
     cfg: QuantTradingConfig,
     broker: IBrokerAdapter,
@@ -257,6 +264,51 @@ export class OrderManager {
   /** Set a callback that fires when a trade is completed (sell fill matched to entry). */
   setTradeCallback(cb: (trade: TradeRecord) => void): void {
     this.tradeCb = cb;
+  }
+
+  /**
+   * Update the position cost cache from broker positions.
+   * Should be called on every position sync so that sell fills always
+   * have access to cost prices even after positions are fully sold.
+   */
+  updatePositionCosts(positions: LivePosition[]): void {
+    for (const p of positions) {
+      if (p.avgCost && p.avgCost > 0) {
+        this.positionCostCache.set(p.symbol, p.avgCost);
+      }
+    }
+  }
+
+  /**
+   * Repair trade records where entryPrice === exitPrice and entryOrderId is unknown.
+   * Uses current position cost cache or provided cost map.
+   * Returns the number of repaired records.
+   */
+  async repairTrades(costOverrides?: Map<string, number>): Promise<number> {
+    const release = await tradesMutex.acquire();
+    try {
+      const trades = await loadTrades(this.cfg);
+      let repaired = 0;
+      for (const t of trades) {
+        if (t.entryOrderId !== "unknown" || t.entryPrice !== t.exitPrice) continue;
+        const cost = costOverrides?.get(t.symbol) ?? this.positionCostCache.get(t.symbol);
+        if (!cost || cost <= 0 || cost === t.exitPrice) continue;
+        const oldEntry = t.entryPrice;
+        t.entryPrice = cost;
+        const mul = t.side === "short" || t.side === "buy_close" ? -1 : 1;
+        t.grossPnl = Number(((t.exitPrice! - t.entryPrice) * t.quantity * mul).toFixed(4));
+        t.netPnl = Number((t.grossPnl - t.commission).toFixed(4));
+        repaired++;
+        this.log(`修复交易记录: ${t.symbol} 成本价 ${oldEntry} → ${cost}, 净盈亏 ¥${t.netPnl}`);
+      }
+      if (repaired > 0) {
+        await ensureDir(this.cfg);
+        await fs.writeFile(tradesPath(this.cfg), JSON.stringify(trades, null, 2));
+      }
+      return repaired;
+    } finally {
+      release();
+    }
   }
 
   get confirmationManager(): ConfirmationManager {
@@ -761,7 +813,30 @@ export class OrderManager {
 
       // Reuse orders loaded above instead of re-reading from disk
       const entryOrder = allOrders.find((o) => o.orderId === entryOrderId);
-      const entryPrice = entryOrder?.avgFillPrice ?? entryOrder?.price ?? fill.price;
+      let entryPrice = entryOrder?.avgFillPrice ?? entryOrder?.price ?? 0;
+
+      // If no matching buy order (e.g. manually bought via broker client), use the
+      // position cost cache (populated at startup & every sync) which survives even
+      // after positions are fully sold.  Fall back to a live broker query as last resort.
+      if (!entryPrice) {
+        const cached = this.positionCostCache.get(fill.symbol);
+        if (cached && cached > 0) {
+          entryPrice = cached;
+          this.log(`未找到买入订单, 使用缓存成本价: ${fill.symbol} @ ${entryPrice}`);
+        } else {
+          try {
+            const positions = await this.broker.queryPositions();
+            const pos = positions.find((p) => p.symbol === fill.symbol);
+            if (pos?.avgCost && pos.avgCost > 0) {
+              entryPrice = pos.avgCost;
+              this.log(`未找到买入订单, 使用券商持仓成本价: ${fill.symbol} @ ${entryPrice}`);
+            }
+          } catch {
+            // queryPositions may fail — don't block trade recording
+          }
+        }
+      }
+      if (!entryPrice) entryPrice = fill.price;
 
       const grossPnl =
         (fill.price - entryPrice) *

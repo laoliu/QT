@@ -974,7 +974,6 @@ var _fitnessStratNames={
   'cta-connors-rsi':'CTA Connors RSI','cta-aroon-oscillator':'阿隆振荡器',
   'cta-mfi-trend':'MFI趋势','cta-dema-crossover':'CTA DEMA交叉',
   'cta-triple-ma':'CTA三重均线','cta-supertrend':'CTA超级趋势',
-  't0-day-trading':'T0日内交易','t0-enhanced':'T0增强',
   'ema-cross':'EMA均线交叉','adx-trend':'ADX趋势强度',aroon:'阿隆指标',
   vortex:'漩涡指标',cci:'CCI顺势',trix:'TRIX平滑',dmi:'趋向指标DMI',
   'dema-cross':'DEMA交叉','tema-cross':'TEMA交叉','donchian-breakout':'唐奇安突破',

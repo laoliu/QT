@@ -197,6 +197,14 @@ export class LiveEngine implements OpenClawPluginService {
       if (this.tradeCb) mgr.setTradeCallback(this.tradeCb);
       this.orderMgr = mgr;
 
+      // Seed position cost cache before any fill callbacks can fire
+      try {
+        const positions = await brokerAdapter.queryPositions();
+        mgr.updatePositionCosts(positions);
+      } catch {
+        // Non-critical — syncState will retry in 60s
+      }
+
       // Start Python live_engine.py
       const proc = new PersistentPythonProcess("engines.live_engine", this.cfg);
       this.proc = proc;
@@ -543,6 +551,10 @@ export class LiveEngine implements OpenClawPluginService {
       ]);
       this.lastAccount = account;
       this.lastPositions = positions;
+
+      // Update OrderManager position cost cache so sell fills can find entry prices
+      // even for externally-bought positions or after positions are fully sold.
+      this.orderMgr?.updatePositionCosts(positions);
 
       // Notify account sync callback (EquityHistory recording)
       this.accountSyncCb?.(account, positions);

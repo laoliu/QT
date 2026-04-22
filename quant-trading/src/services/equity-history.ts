@@ -104,14 +104,22 @@ export class EquityHistory {
     const date = now.toISOString().slice(0, 10);
 
     // Compute daily P&L: use todayProfit if available, otherwise compute
-    // delta from the previous snapshot's equity. Never fall back to lifetime
+    // delta from the previous day's equity. Never fall back to lifetime
     // `profit` which would corrupt win/loss day calculations.
     let dailyPnl = account.todayProfit ?? 0;
     if (account.todayProfit == null && this.snapshots.length > 0) {
-      const prev = this.snapshots[this.snapshots.length - 1];
-      // Only use delta if the previous snapshot is from a different date
-      if (prev.date !== date) {
-        dailyPnl = account.totalAssets - prev.equity;
+      // Find the most recent snapshot from a PREVIOUS date (not today).
+      // This is critical for intraday re-snapshots: the last entry may
+      // already be today's snapshot, so we must look further back.
+      let prevDay: EquitySnapshot | undefined;
+      for (let i = this.snapshots.length - 1; i >= 0; i--) {
+        if (this.snapshots[i]!.date !== date) {
+          prevDay = this.snapshots[i];
+          break;
+        }
+      }
+      if (prevDay) {
+        dailyPnl = account.totalAssets - prevDay.equity;
       }
     }
 
@@ -240,19 +248,25 @@ export class EquityHistory {
       }
     }
 
-    // Daily PnL stats
+    // Daily PnL stats — use recorded dailyPnl when available, but fall
+    // back to equity deltas when all recorded values are zero (common with
+    // brokers like QMT that don't report todayProfit).
+    const allPnlZero = sorted.length > 1 && sorted.every((s) => s.dailyPnl === 0);
     let bestDay: { date: string; pnl: number } | null = null;
     let worstDay: { date: string; pnl: number } | null = null;
     let totalPnl = 0;
     let winDays = 0;
     let lossDays = 0;
 
-    for (const s of sorted) {
-      totalPnl += s.dailyPnl;
-      if (!bestDay || s.dailyPnl > bestDay.pnl) bestDay = { date: s.date, pnl: s.dailyPnl };
-      if (!worstDay || s.dailyPnl < worstDay.pnl) worstDay = { date: s.date, pnl: s.dailyPnl };
-      if (s.dailyPnl > 0) winDays++;
-      else if (s.dailyPnl < 0) lossDays++;
+    for (let i = 0; i < sorted.length; i++) {
+      const s = sorted[i]!;
+      // Prefer recorded dailyPnl; when all are zero, derive from equity delta
+      const pnl = allPnlZero && i > 0 ? s.equity - sorted[i - 1]!.equity : s.dailyPnl;
+      totalPnl += pnl;
+      if (!bestDay || pnl > bestDay.pnl) bestDay = { date: s.date, pnl };
+      if (!worstDay || pnl < worstDay.pnl) worstDay = { date: s.date, pnl };
+      if (pnl > 0) winDays++;
+      else if (pnl < 0) lossDays++;
     }
 
     return {

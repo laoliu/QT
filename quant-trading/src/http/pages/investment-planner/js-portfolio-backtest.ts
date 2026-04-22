@@ -12,7 +12,7 @@ var PBT_CATEGORIES=[
   {key:'reversion',icon:'🔄',label:'均值回归',ids:['mean-reversion','rsi-reversal','mean-reversion-cn','mean-reversion-zscore','vwap-reversion','donchian-mid-reversion','double-bottom']},
   {key:'breakout',icon:'⚡',label:'突破策略',ids:['bollinger-breakout','bollinger-bandwidth','keltner-channel','r-breaker','range-breakout','ttm-squeeze','dual-thrust','aberration']},
   {key:'composite',icon:'🎯',label:'综合策略',ids:['composite','gated','scored','enhanced-composite','volume-confirmation','multi-factor']},
-  {key:'intraday',icon:'💹',label:'日内与套利',ids:['t0-day-trading','t0-enhanced','grid','grid-trading','pair-trading','auction','dragon-return','spread-arbitrage']},
+  {key:'intraday',icon:'💹',label:'日内与套利',ids:['grid','grid-trading','pair-trading','auction','dragon-return','spread-arbitrage']},
   {key:'quant',icon:'🛡️',label:'CTA量化',ids:['volatility-target','momentum-rotation','pivot-point','chandelier-exit','atr-trailing']}
 ];
 

@@ -150,6 +150,11 @@ export type StrategyDefinition = {
    * Empty = all markets.
    */
   markets?: MarketType[];
+  /**
+   * If true, strategy is hidden from UI and excluded from daily picks.
+   * (e.g. A-share market does not support T+0 intraday trading)
+   */
+  disabled?: boolean;
 };
 
 /**

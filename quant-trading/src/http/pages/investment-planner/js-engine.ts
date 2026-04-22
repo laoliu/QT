@@ -315,7 +315,7 @@ function loadEngineStatus(){
       if(mode==='starting'){
         toggleBtn='<span style="margin-left:6px;font-size:10px;color:orange">⏳</span>';
       }else if(d.isRunning){
-        toggleBtn='<button onclick="toggleEngine(false)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--red);color:var(--red);background:transparent;cursor:pointer">ֹͣ</button>';
+        toggleBtn='<button onclick="toggleEngine(false)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--red);color:var(--red);background:transparent;cursor:pointer">停止</button>';
       }else{
         toggleBtn='<button onclick="toggleEngine(true)" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--green);color:var(--green);background:transparent;cursor:pointer">启动</button>';
       }
@@ -473,7 +473,7 @@ function loadConditionalOrders(){
       document.getElementById('cond-status').textContent='共 '+orders.length+' 条记录，活跃 '+(d.activeCount||0)+' 条';
       var tbody=document.querySelector('#cond-order-table tbody');
       if(!orders.length){
-        tbody.innerHTML='<tr><td colspan="12" style="color:var(--text-dim)">暂无条件单</td></tr>';
+        tbody.innerHTML='<tr><td colspan="13" style="color:var(--text-dim)">暂无条件单</td></tr>';
         return;
       }
       var rows='';
@@ -498,6 +498,7 @@ function loadConditionalOrders(){
         }
         var actionHtml=o.triggered?'-':'<button class="btn btn-sm" style="padding:2px 8px;font-size:11px;color:var(--red)" onclick="removeConditionalOrder(\\''+esc(o.id)+'\\')">删除</button>';
         var time=o.createdAt?(new Date(o.createdAt)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+        var triggerTime=o.triggeredAt?(new Date(o.triggeredAt)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
         rows+='<tr>'+
           '<td style="font-size:11px">'+esc(o.id)+'</td>'+
           '<td style="cursor:pointer" onclick="viewStock(\\''+esc(o.symbol).replace(/'/g,"\\\\'")+'\\')"><strong><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.symbol)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.symbol)+'</a></strong></td>'+
@@ -509,6 +510,7 @@ function loadConditionalOrders(){
           '<td>'+esc(o.strategyId||'-')+'</td>'+
           '<td style="font-size:11px">'+esc(o.description||'-')+'</td>'+
           '<td style="font-size:11px">'+time+'</td>'+
+          '<td style="font-size:11px">'+triggerTime+'</td>'+
           '<td>'+statusHtml+'</td>'+
           '<td>'+actionHtml+'</td>'+
           '</tr>';

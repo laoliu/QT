@@ -22,6 +22,7 @@ import { Worker } from "node:worker_threads";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { getPythonDir } from "../../bridge/python-dir.js";
+import { applyComboToPaper } from "../../services/portfolio-combo-backtest.js";
 
 // ── Composite score (same formula as Python + daily-pick) ────────
 function compositeScore(m: {
@@ -1101,6 +1102,119 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         json(res, result.ok ? { ok: true, ...(result.data as object) } : { error: result.error });
       } catch (err) {
         json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Top-N Portfolio Combo Backtest ─────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/portfolio-backtest",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const result = await runPythonScript<Record<string, unknown>>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          {
+            action: "run_top10",
+            batch_id: (body.batch_id as string) ?? "",
+            top_n: Number(body.top_n) || 10,
+            allocation_mode: (body.allocation_mode as string) ?? "equal",
+            rebalance_freq: (body.rebalance_freq as string) ?? "monthly",
+            period_days: Number(body.period_days) || 252,
+            initial_capital: Number(body.initial_capital) || 1_000_000,
+            custom_weights: Array.isArray(body.custom_weights) ? body.custom_weights : null,
+          },
+          config,
+          { timeoutMs: 10 * 60_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Portfolio backtest progress status ─────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/portfolio-backtest/status",
+    handler: secure(async (_req, res) => {
+      try {
+        const pythonDir = getPythonDir();
+        const logsDir = path.join(path.dirname(pythonDir), "logs");
+        const progressPath = path.join(logsDir, "combo-backtest-progress.json");
+        const raw = await fs.readFile(progressPath, "utf-8").catch(() => "");
+        if (!raw) {
+          json(res, { status: "idle" });
+          return;
+        }
+        json(res, JSON.parse(raw));
+      } catch (err) {
+        json(res, { status: "error", error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Apply combo result to paper trading ────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/portfolio-backtest/apply-paper",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const allocations = body.allocations;
+        if (!Array.isArray(allocations) || allocations.length === 0) {
+          json(res, { ok: false, error: "需要 allocations 数组" }, 400);
+          return;
+        }
+        const result = await applyComboToPaper(
+          {
+            allocations: allocations as Array<{ strategy_name: string; weight: number; latest_signals?: unknown[] }>,
+            dryRun: body.dry_run === true,
+            executePct: Number(body.execute_pct) || 100,
+            createConditionalOrders: body.create_conditional_orders === true,
+            trailingStopPct: Number(body.trailing_stop_pct) || 5,
+          },
+          config,
+        );
+        json(res, result);
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Compare allocation modes side-by-side ──────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/portfolio-backtest/compare",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const modes = Array.isArray(body.modes)
+          ? (body.modes as string[]).filter((s) => typeof s === "string")
+          : ["equal", "risk_parity", "max_sharpe", "min_variance"];
+        const result = await runPythonScript<Record<string, unknown>>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          {
+            action: "compare_allocations",
+            batch_id: (body.batch_id as string) ?? "",
+            top_n: Number(body.top_n) || 10,
+            modes,
+            rebalance_freq: (body.rebalance_freq as string) ?? "monthly",
+            period_days: Number(body.period_days) || 252,
+            initial_capital: Number(body.initial_capital) || 1_000_000,
+          },
+          config,
+          { timeoutMs: 30 * 60_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
       }
     }),
   });

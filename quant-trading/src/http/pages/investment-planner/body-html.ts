@@ -30,6 +30,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-sim" data-tab="institution">🏦 机构行为</div>
     <div class="tab tab-sim" data-tab="accumulation">🧲 主力吸筹</div>
     <div class="tab tab-sim" data-tab="backtest">🧪 策略回测</div>
+    <div class="tab tab-sim" data-tab="combo-backtest">🔬 组合回测</div>
     <div class="tab tab-sim" data-tab="pf-backtest">📊 持仓回测</div>
     <div class="tab tab-sim" data-tab="portfolio">💼 模拟持仓</div>
   </div>
@@ -52,6 +53,7 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="nav-btn nav-btn-sim" onclick="activateTab('institution');history.pushState(null,null,'#institution')">🏦 机构行为</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('accumulation');history.pushState(null,null,'#accumulation')">🧲 主力吸筹</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('backtest');history.pushState(null,null,'#backtest')">🧪 策略回测</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('combo-backtest');history.pushState(null,null,'#combo-backtest')">🔬 组合回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('pf-backtest');history.pushState(null,null,'#pf-backtest')">📊 持仓回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('portfolio');history.pushState(null,null,'#portfolio')">💼 模拟持仓</button>
     </div>
@@ -1916,6 +1918,127 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="btn btn-sm" onclick="loadPbtHistory()" style="font-size:11px">🔄 刷新</button>
     </h3>
     <div id="pbt-history-content"><span style="color:var(--text-dim);font-size:12px">完成首次回测后自动显示</span></div>
+  </div>
+</div>
+
+<!-- ═══ Combo Backtest Tab ═══ -->
+<div class="tab-content" id="tab-combo-backtest">
+  <div class="card">
+    <h3>🔬 Top-N 策略组合回测</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">从 Fitness 分析选出的 Top-N 策略出发，进行综合组合回测。支持多种配权模式对比，验证策略组合的收益率、胜率和夏普比率。</p>
+    <div id="combo-top-strategies" style="margin-bottom:12px"><span style="color:var(--text-dim)">加载中...</span></div>
+    <div class="form-row">
+      <label>Top N 策略</label>
+      <input type="number" id="combo-top-n" value="10" min="2" max="20" style="width:60px">
+      <label>配权模式</label>
+      <select id="combo-alloc-mode">
+        <option value="equal" selected>等权分配</option>
+        <option value="risk_parity">风险平价</option>
+        <option value="max_sharpe">最大夏普</option>
+        <option value="min_variance">最小方差</option>
+        <option value="inverse_vol">波动率倒数</option>
+        <option value="target_vol">目标波动率</option>
+        <option value="max_diversification">最大分散化</option>
+        <option value="custom">自定义权重</option>
+      </select>
+    </div>
+    <!-- Custom weight editor (hidden by default) -->
+    <div id="combo-custom-weights-panel" style="display:none;margin:8px 0;padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong style="font-size:12px">\u2699\ufe0f 自定义策略权重</strong>
+        <button class="btn btn-sm" onclick="resetComboCustomWeights()" style="font-size:11px">\u21ba 重置为等权</button>
+      </div>
+      <div id="combo-weight-sliders" style="font-size:12px"></div>
+      <div style="margin-top:6px;font-size:11px;color:var(--text-dim)">总权重: <span id="combo-weight-total">0%</span></div>
+    </div>
+    <div class="form-row">
+      <label>再平衡频率</label>
+      <select id="combo-rebalance">
+        <option value="monthly" selected>每月</option>
+        <option value="quarterly">每季</option>
+        <option value="weekly">每周</option>
+      </select>
+      <label>回测天数</label>
+      <input type="number" id="combo-period" value="252" min="20" max="1260" style="width:80px">
+      <label>初始资金</label>
+      <input type="number" id="combo-capital" value="1000000" style="width:140px">
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btn-combo-run" onclick="runComboBacktest()">▶️ 运行组合回测</button>
+      <button class="btn btn-warning" id="btn-combo-compare" onclick="runComboCompare()">⚡ 对比配权模式</button>
+    </div>
+    <div id="combo-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
+  </div>
+
+  <!-- Combo Backtest Results -->
+  <div id="combo-results" style="display:none">
+    <div class="kpi-row" id="combo-kpis"></div>
+    <div class="cards">
+      <div class="card" style="flex:2">
+        <h3>📈 组合净值曲线</h3>
+        <div class="bt-chart" style="height:300px"><canvas id="combo-equity-canvas"></canvas></div>
+        <div id="combo-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:11px"></div>
+      </div>
+      <div class="card">
+        <h3>📅 月度收益</h3>
+        <div id="combo-monthly" style="height:120px;padding:8px 4px"></div>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h3>🎯 策略贡献度</h3>
+        <div id="combo-contributions"></div>
+      </div>
+      <div class="card">
+        <h3>📉 回撤曲线</h3>
+        <div style="height:150px;position:relative"><canvas id="combo-dd-canvas" style="width:100%;height:100%"></canvas></div>
+      </div>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h3>📋 子策略详情</h3>
+        <div style="overflow-x:auto"><table id="combo-sub-table">
+          <thead><tr><th>策略</th><th>权重</th><th>年化收益</th><th>最大回撤</th><th>夏普</th><th>交易数</th><th>手续费</th></tr></thead>
+          <tbody id="combo-sub-tbody"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h3>🔗 相关性矩阵</h3>
+        <div id="combo-correlation" style="overflow-x:auto;font-size:11px"></div>
+      </div>
+    </div>
+    <div id="combo-errors"></div>
+    <!-- Paper trading apply -->
+    <div class="card" style="margin-top:14px;border-left:3px solid var(--green)">
+      <h3>\ud83d\udcb0 应用到模拟盘</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px">将组合回测的最优方案按策略权重分配资金，生成模拟盘批量订单。</p>
+      <div class="form-row">
+        <label>执行比例</label>
+        <input type="number" id="combo-paper-pct" value="100" min="10" max="100" step="10" style="width:60px">
+        <span style="font-size:12px;color:var(--text-dim)">%</span>
+        <label style="margin-left:12px"><input type="checkbox" id="combo-paper-cond" checked style="vertical-align:middle;margin-right:4px">创建条件单</label>
+        <label style="margin-left:12px"><input type="checkbox" id="combo-paper-dry" checked style="vertical-align:middle;margin-right:4px">先试运行</label>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-combo-paper" onclick="applyComboToPaper()">\ud83d\udcc4 生成模拟盘订单</button>
+      </div>
+      <div id="combo-paper-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
+      <div id="combo-paper-result" style="display:none;margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Compare Results -->
+  <div id="combo-compare-results" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <h3>⚡ 配权模式对比</h3>
+      <div style="overflow-x:auto"><table id="combo-compare-table"></table></div>
+      <div id="combo-compare-recommendation"></div>
+    </div>
+    <div class="card">
+      <h3>📈 各模式净值对比</h3>
+      <div class="bt-chart" style="height:300px"><canvas id="combo-compare-canvas"></canvas></div>
+      <div id="combo-compare-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:11px"></div>
+    </div>
   </div>
 </div>
 

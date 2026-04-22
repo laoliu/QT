@@ -26,6 +26,7 @@ import { getAccPresetsJs } from "./js-acc-presets.js";
 import { getAccScanJs } from "./js-acc-scan.js";
 import { getAddPositionJs } from "./js-add-position.js";
 import { getBacktestJs } from "./js-backtest.js";
+import { getComboBacktestJs } from "./js-combo-backtest.js";
 import { getDailyPickJs } from "./js-daily-pick.js";
 import { getEngineJs } from "./js-engine.js";
 import { getInstPresetsJs } from "./js-inst-presets.js";
@@ -62,6 +63,7 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getAddPositionJs(),
     getEngineJs(),
     getAccScanJs(),
+    getComboBacktestJs(),
     getPortfolioBacktestJs(),
     `/* auto-load today plan on page init */
 try{loadTodayPlan();}catch(e){console.warn('[init] loadTodayPlan',e);}`,

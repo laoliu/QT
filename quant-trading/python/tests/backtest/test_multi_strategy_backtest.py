@@ -6,6 +6,9 @@
 - NAV 合成（_combine_nav_series）
 - 组合指标计算（_compute_portfolio_metrics）
 - 相关性矩阵计算（_compute_correlation）
+- 配权算法（_allocate_weights）
+- 胜率/Calmar/月度收益/回撤/贡献度计算
+- 进度 I/O（_write_combo_progress / _read_combo_progress）
 """
 
 from __future__ import annotations
@@ -25,6 +28,23 @@ from aipha.backtest.multi_strategy_backtest import (
     build_sub_strategy_config,
     parse_multi_strategy_config,
 )
+
+# New function imports for top-10 combo backtest
+from aipha.backtest.multi_strategy_backtest import (
+    ALLOCATION_MODE_MAP,
+    _allocate_weights,
+    _compute_calmar,
+    _compute_contributions,
+    _compute_drawdown_curve,
+    _compute_monthly_returns,
+    _compute_win_rate,
+    _get_combo_progress_path,
+    _read_combo_progress,
+    _write_combo_progress,
+)
+
+import numpy as np
+import pandas as pd
 
 
 # ============================================================================
@@ -368,3 +388,226 @@ class TestMultiStrategyResult:
         )
         assert len(r.sub_results) == 1
         assert r.portfolio_sharpe == 1.5
+
+
+# ============================================================================
+# 配权算法 (_allocate_weights)
+# ============================================================================
+
+
+def _make_nav(seed: int, drift: float = 0.0005, vol: float = 0.01, n: int = 100) -> pd.Series:
+    """创建一个随机 NAV Series 用于测试配权。"""
+    rng = np.random.RandomState(seed)
+    dates = pd.bdate_range("2024-01-02", periods=n)
+    vals = 1e6 * (1 + rng.normal(drift, vol, n)).cumprod()
+    return pd.Series(vals, index=dates)
+
+
+class TestAllocateWeights:
+    """_allocate_weights 配权算法测试"""
+
+    def test_empty_list(self):
+        assert _allocate_weights([]) == []
+
+    def test_single_strategy(self):
+        w = _allocate_weights([_make_nav(42)])
+        assert w == [1.0]
+
+    def test_equal_mode(self):
+        navs = [_make_nav(i) for i in range(3)]
+        w = _allocate_weights(navs, mode="equal")
+        assert len(w) == 3
+        for wi in w:
+            assert abs(wi - 1 / 3) < 1e-10
+
+    @pytest.mark.parametrize("mode", [
+        "equal", "risk_parity", "inverse_vol", "max_sharpe",
+        "min_variance", "target_vol", "max_diversification",
+    ])
+    def test_weights_sum_to_one(self, mode):
+        navs = [_make_nav(i) for i in range(4)]
+        w = _allocate_weights(navs, mode=mode)
+        assert abs(sum(w) - 1.0) < 1e-6, f"{mode}: sum={sum(w)}"
+
+    @pytest.mark.parametrize("mode", [
+        "equal", "risk_parity", "inverse_vol", "max_sharpe",
+        "min_variance", "target_vol", "max_diversification",
+    ])
+    def test_weights_non_negative(self, mode):
+        navs = [_make_nav(i) for i in range(4)]
+        w = _allocate_weights(navs, mode=mode)
+        for wi in w:
+            assert wi >= -1e-10, f"{mode}: negative weight {wi}"
+
+    def test_custom_weights(self):
+        navs = [_make_nav(i) for i in range(3)]
+        w = _allocate_weights(navs, mode="custom", custom_weights=[0.5, 0.3, 0.2])
+        assert abs(w[0] - 0.5) < 1e-10
+
+    def test_custom_weights_normalized(self):
+        navs = [_make_nav(i) for i in range(3)]
+        w = _allocate_weights(navs, mode="custom", custom_weights=[2, 3, 5])
+        assert abs(sum(w) - 1.0) < 1e-10
+        assert abs(w[0] - 0.2) < 1e-10
+
+    def test_custom_wrong_length_fallback(self):
+        navs = [_make_nav(i) for i in range(3)]
+        w = _allocate_weights(navs, mode="custom", custom_weights=[0.5, 0.5])
+        assert len(w) == 3
+
+    def test_unknown_mode_fallback(self):
+        navs = [_make_nav(i) for i in range(3)]
+        w = _allocate_weights(navs, mode="something_unknown")
+        for wi in w:
+            assert abs(wi - 1 / 3) < 1e-10
+
+    def test_inverse_vol_favors_low_vol(self):
+        # nav0 has low vol, nav1 has high vol
+        nav_low = _make_nav(42, vol=0.005)
+        nav_high = _make_nav(7, vol=0.03)
+        w = _allocate_weights([nav_low, nav_high], mode="inverse_vol")
+        assert w[0] > w[1]
+
+    def test_short_series_fallback(self):
+        dates = pd.bdate_range("2024-01-02", periods=3)
+        navs = [pd.Series([100, 101, 102], index=dates),
+                pd.Series([100, 99, 98], index=dates)]
+        w = _allocate_weights(navs, mode="risk_parity")
+        assert abs(sum(w) - 1.0) < 1e-6
+
+
+# ============================================================================
+# 胜率/Calmar/月度收益/回撤曲线
+# ============================================================================
+
+
+class TestComputeWinRate:
+    def test_rising_nav(self):
+        nav = _make_nav(42, drift=0.002)
+        wr = _compute_win_rate(nav)
+        assert 0.0 <= wr <= 1.0
+        assert wr > 0.4
+
+    def test_empty(self):
+        assert _compute_win_rate(pd.Series(dtype=float)) == 0.0
+
+    def test_single_point(self):
+        assert _compute_win_rate(pd.Series([100.0])) == 0.0
+
+    def test_flat(self):
+        dates = pd.bdate_range("2024-01-02", periods=50)
+        flat = pd.Series([1e6] * 50, index=dates)
+        assert _compute_win_rate(flat) == 0.0
+
+
+class TestComputeCalmar:
+    def test_rising(self):
+        nav = _make_nav(42, drift=0.002)
+        assert _compute_calmar(nav) > 0
+
+    def test_empty(self):
+        assert _compute_calmar(pd.Series(dtype=float)) == 0.0
+
+    def test_single_point(self):
+        assert _compute_calmar(pd.Series([100.0])) == 0.0
+
+    def test_flat(self):
+        dates = pd.bdate_range("2024-01-02", periods=50)
+        flat = pd.Series([1e6] * 50, index=dates)
+        assert _compute_calmar(flat) == 0.0
+
+
+class TestComputeMonthlyReturns:
+    def test_format(self):
+        nav = _make_nav(42)
+        mr = _compute_monthly_returns(nav)
+        assert isinstance(mr, list)
+        for m in mr:
+            assert "month" in m and "return" in m
+            assert len(m["month"]) == 7
+
+    def test_empty(self):
+        assert _compute_monthly_returns(pd.Series(dtype=float)) == []
+
+
+class TestComputeDrawdownCurve:
+    def test_values_non_positive(self):
+        nav = _make_nav(42)
+        dd = _compute_drawdown_curve(nav)
+        for p in dd:
+            assert p["drawdown"] <= 0.001  # rounding tolerance
+
+    def test_empty(self):
+        assert _compute_drawdown_curve(pd.Series(dtype=float)) == []
+
+    def test_capped_at_500(self):
+        dates = pd.bdate_range("2020-01-02", periods=2000)
+        nav = pd.Series(np.linspace(100, 110, 2000), index=dates)
+        dd = _compute_drawdown_curve(nav)
+        assert len(dd) <= 510  # ~500 + tolerance
+
+
+# ============================================================================
+# 贡献度
+# ============================================================================
+
+
+class TestComputeContributions:
+    def test_basic(self):
+        navs = [_make_nav(i) for i in range(3)]
+        subs = [SubStrategyResult(name=f"s{i}", weight=1 / 3, nav_series=n)
+                for i, n in enumerate(navs)]
+        combined_nav = pd.Series(
+            sum(n * (1 / 3) for n in navs),
+        )
+        # Use first nav's index
+        combined_nav.index = navs[0].index
+        contribs = _compute_contributions(subs, combined_nav)
+        assert len(contribs) == 3
+        assert all("strategy_id" in c for c in contribs)
+
+    def test_empty(self):
+        combined = pd.Series([100, 110], index=pd.bdate_range("2024-01-02", periods=2))
+        assert _compute_contributions([], combined) == []
+
+
+# ============================================================================
+# 进度 I/O
+# ============================================================================
+
+
+class TestProgressIO:
+    def test_write_and_read(self, tmp_path, monkeypatch):
+        progress_file = tmp_path / "combo-backtest-progress.json"
+        monkeypatch.setattr(
+            "aipha.backtest.multi_strategy_backtest._get_combo_progress_path",
+            lambda: str(progress_file),
+        )
+        _write_combo_progress({"status": "running", "phase": "test"})
+        result = _read_combo_progress()
+        assert result["status"] == "running"
+        assert result["phase"] == "test"
+
+    def test_read_missing_returns_idle(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "aipha.backtest.multi_strategy_backtest._get_combo_progress_path",
+            lambda: str(tmp_path / "nonexistent.json"),
+        )
+        result = _read_combo_progress()
+        assert result.get("status") in ("idle", None) or result == {}
+
+
+# ============================================================================
+# ALLOCATION_MODE_MAP
+# ============================================================================
+
+
+class TestAllocationModeMap:
+    def test_all_modes(self):
+        expected = {"equal", "risk_parity", "inverse_vol", "max_sharpe",
+                    "min_variance", "target_vol", "max_diversification", "custom"}
+        assert set(ALLOCATION_MODE_MAP.keys()) == expected
+
+    def test_labels_nonempty(self):
+        for label in ALLOCATION_MODE_MAP.values():
+            assert len(label) >= 2

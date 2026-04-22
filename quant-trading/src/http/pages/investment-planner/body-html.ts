@@ -36,6 +36,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div class="tab-group" data-mode="live">
     <span class="tab-group-label">实盘 · 操作</span>
     <div class="tab tab-live" data-tab="recommend">🎯 建仓推荐</div>
+    <div class="tab tab-live" data-tab="add-position">📈 加仓推荐</div>
     <div class="tab tab-live" data-tab="rebalance">⚖️ 调仓建议</div>
     <div class="tab tab-live" data-tab="signals">🚨 交易信号</div>
     <div class="tab tab-live" data-tab="milestones">📊 目标追踪</div>
@@ -59,6 +60,7 @@ export function getPlannerBodyHtml(b: string): string {
     <span class="nav-guide-title">🔴 实盘功能导航</span>
     <div class="nav-guide-btns">
       <button class="nav-btn nav-btn-live" onclick="activateTab('recommend');history.pushState(null,null,'#recommend')">🎯 建仓推荐</button>
+      <button class="nav-btn nav-btn-live" onclick="activateTab('add-position');history.pushState(null,null,'#add-position')">📈 加仓推荐</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('rebalance');history.pushState(null,null,'#rebalance')">⚖️ 调仓建议</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('milestones');history.pushState(null,null,'#milestones')">📊 目标追踪</button>
@@ -564,6 +566,93 @@ export function getPlannerBodyHtml(b: string): string {
           </table></div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Add Position (加仓推荐) Tab ═══ -->
+<div class="tab-content" id="tab-add-position">
+  <div class="card" style="margin-bottom:14px;border-left:3px solid var(--green)">
+    <h3>📈 加仓推荐</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">自动扫描当前持仓，结合技术面 + 主力吸筹 + 资金面 + 风控检查，生成加仓推荐。一键执行复用建仓下单链路。</p>
+    <div class="form-row">
+      <label>加仓预算(¥)</label>
+      <input type="number" id="ap-budget" value="100000" style="width:140px">
+      <label>最大加仓比例</label>
+      <select id="ap-max-add-pct" style="width:100px">
+        <option value="25">25%</option>
+        <option value="50" selected>50%</option>
+        <option value="75">75%</option>
+        <option value="100">100%</option>
+      </select>
+      <label>最低置信度</label>
+      <input type="number" id="ap-min-confidence" value="60" min="30" max="95" style="width:70px">%
+    </div>
+    <div class="form-row">
+      <label>数据源</label>
+      <select id="ap-source">
+        <option value="auto" selected>自动（优先实盘持仓）</option>
+        <option value="live">仅实盘持仓</option>
+        <option value="plan">仅投资计划</option>
+      </select>
+      <label style="margin-left:16px;cursor:pointer"><input type="checkbox" id="ap-check-accumulation" checked> 参考主力吸筹信号</label>
+      <label style="margin-left:16px;cursor:pointer"><input type="checkbox" id="ap-check-risk" checked> 启用风控检查</label>
+    </div>
+    <div class="btn-group" style="gap:8px">
+      <button class="btn btn-primary" id="btn-ap-run" onclick="runAddPositionRecommend()">📈 生成加仓推荐</button>
+      <button class="btn" id="btn-ap-refresh" onclick="loadAddPositionPortfolio()">🔄 刷新持仓</button>
+    </div>
+    <div id="ap-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
+  </div>
+
+  <!-- Current Holdings Summary -->
+  <div class="kpi-row" id="ap-portfolio-kpis"></div>
+
+  <!-- Recommendation Results -->
+  <div id="ap-results" style="display:none">
+    <div class="kpi-row" id="ap-rec-kpis"></div>
+
+    <!-- Recommendation cards -->
+    <div id="ap-rec-cards"></div>
+
+    <!-- Execution panel -->
+    <div class="card" style="margin-top:14px;border:1px solid rgba(13,148,136,.35)">
+      <h3>⚡ 加仓执行</h3>
+      <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap">
+        <label>执行比例</label>
+        <input type="number" id="ap-exec-pct" min="10" max="100" value="100" style="width:80px">%
+        <label>跟踪止损</label>
+        <input type="number" id="ap-exec-trailing" min="2" max="20" value="8" style="width:70px">%
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="ap-exec-conds" checked>
+          自动创建止损/止盈条件单
+        </label>
+      </div>
+      <div class="btn-group" style="margin-top:8px;flex-wrap:wrap;gap:6px">
+        <button class="btn" id="btn-ap-dry-run" onclick="executeAddPosition(true)">🧪 试运行（不下单）</button>
+        <button class="btn btn-primary" id="btn-ap-exec" onclick="executeAddPosition(false)">🚀 执行加仓（真实下单）</button>
+        <button class="btn" id="btn-ap-premarket" onclick="executeAddPosition(false,true)" title="跳过交易时段检查，直接提交限价委托到QMT">📋 预埋委托（盘前下单）</button>
+      </div>
+      <div id="ap-exec-mode-hint" style="font-size:12px;margin-top:6px;padding:4px 8px;border-radius:4px;display:none"></div>
+      <div id="ap-exec-status" style="font-size:12px;color:var(--text-dim);margin-top:4px"></div>
+      <div id="ap-exec-result" style="margin-top:8px"></div>
+    </div>
+
+    <!-- Detail table -->
+    <div class="card" style="margin-top:14px">
+      <h3>📋 加仓推荐明细 <span id="ap-sel-hint" style="font-size:12px;font-weight:normal;color:var(--text-dim);margin-left:8px"></span></h3>
+      <div style="overflow-x:auto">
+        <table id="ap-table">
+          <thead><tr><th style="width:32px"><input type="checkbox" id="ap-select-all" checked onchange="toggleApSelectAll(this.checked)"></th><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>持仓</th><th>盈亏%</th><th>建议加仓</th><th>金额</th><th>加仓入场</th><th>止盈/止损</th><th>置信度</th><th>评分</th><th style="min-width:240px">推荐理由</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Skip list -->
+    <div id="ap-skip-panel" style="display:none;margin-top:14px" class="card">
+      <h3 style="color:var(--text-dim)">⏭️ 不建议加仓</h3>
+      <div id="ap-skip-list"></div>
     </div>
   </div>
 </div>
@@ -1415,6 +1504,14 @@ export function getPlannerBodyHtml(b: string): string {
           <input type="number" id="at-final-limit" value="8" min="3" max="8" style="width:55px">
           <label>调仓周期</label>
           <input type="number" id="at-rebalance" value="5" min="1" max="30" style="width:55px">天
+        </div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="at-use-fitness" checked> 使用适配度优选策略
+          </label>
+          <label>优选策略数</label>
+          <input type="number" id="at-fitness-top-n" value="6" min="3" max="15" style="width:55px">
+          <span style="font-size:11px;color:var(--text-dim)">勾选后仅用策略适配度分析筛出的Top策略，跳过全量策略遍历（大幅提速）</span>
         </div>
         <div class="btn-group" style="margin-top:10px;flex-wrap:wrap;gap:6px">
           <button class="btn btn-primary" id="btn-at-save" onclick="saveAutoTradeConfig()">💾 保存配置</button>

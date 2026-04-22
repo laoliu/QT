@@ -579,7 +579,7 @@ function executeRecommend(dryRun,forcePremarket){
         if(items.length){
           html+='<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>限价</th><th>金额</th></tr></thead><tbody>';
           items.forEach(function(it){
-            html+='<tr><td>'+esc(it.code)+'</td><td>'+numInt(it.quantity)+'</td><td>'+num(it.limitPrice)+'</td><td>¥'+numInt(it.notional)+'</td></tr>';
+            html+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(it.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(it.code)+'</a></td><td>'+numInt(it.quantity)+'</td><td>'+num(it.limitPrice)+'</td><td>¥'+numInt(it.notional)+'</td></tr>';
           });
           html+='</tbody></table></div>';
         }
@@ -601,7 +601,7 @@ function executeRecommend(dryRun,forcePremarket){
 
       var rows='';
       (exec.orders||[]).forEach(function(o){
-        rows+='<tr><td>'+esc(o.code)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
+        rows+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.code)+'</a></td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
       });
       var failHtml='';
       if(Array.isArray(exec.failures)&&exec.failures.length){
@@ -702,7 +702,7 @@ function scheduleStrategy(){
       if(orders.length){
         html+='<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>名称</th><th>数量</th><th>限价</th><th>金额</th></tr></thead><tbody>';
         orders.forEach(function(o){
-          html+='<tr><td>'+esc(o.code)+'</td><td>'+esc(o.name)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>¥'+numInt(o.quantity*o.price)+'</td></tr>';
+          html+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.code)+'</a></td><td>'+esc(o.name)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>¥'+numInt(o.quantity*o.price)+'</td></tr>';
         });
         html+='</tbody></table></div>';
       }
@@ -1156,6 +1156,8 @@ function loadAutoTradeStatus(){
     document.getElementById('at-top-strat').value=cfg.topStrategyCount||3;
     document.getElementById('at-final-limit').value=cfg.finalStockLimit||8;
     document.getElementById('at-rebalance').value=cfg.rebalanceDays||5;
+    document.getElementById('at-use-fitness').checked=cfg.useFitnessStrategies!==false;
+    document.getElementById('at-fitness-top-n').value=cfg.fitnessTopN||6;
     // Risk select
     var riskSel=document.getElementById('at-risk');
     for(var i=0;i<riskSel.options.length;i++){if(riskSel.options[i].value===(cfg.riskTolerance||'high'))riskSel.selectedIndex=i;}
@@ -1205,7 +1207,9 @@ function captureAutoTradeConfig(){
     topNPerStrategy:Number(document.getElementById('at-top-n').value)||8,
     topStrategyCount:Number(document.getElementById('at-top-strat').value)||3,
     finalStockLimit:Number(document.getElementById('at-final-limit').value)||8,
-    rebalanceDays:Number(document.getElementById('at-rebalance').value)||5
+    rebalanceDays:Number(document.getElementById('at-rebalance').value)||5,
+    useFitnessStrategies:document.getElementById('at-use-fitness').checked,
+    fitnessTopN:Number(document.getElementById('at-fitness-top-n').value)||6
   };
 }
 
@@ -1238,7 +1242,7 @@ function renderAllocTable(allocs){
     var amt=a.amount||(a.shares*a.price)||0;
     totalAmt+=amt;
     h+='<tr style="border-bottom:1px solid var(--border-dim)">';
-    h+='<td style="padding:4px 8px">'+esc(a.code)+'</td>';
+    h+='<td style="padding:4px 8px"><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(a.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(a.code)+'</a></td>';
     h+='<td style="padding:4px 8px">'+esc(a.name||a.code)+'</td>';
     h+='<td style="text-align:right;padding:4px 8px">'+a.shares+'</td>';
     h+='<td style="text-align:right;padding:4px 8px">'+(a.price?'¥'+Number(a.price).toFixed(2):'-')+'</td>';

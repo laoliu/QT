@@ -1280,6 +1280,46 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Add Position Recommendation API (加仓推荐) ──────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/add-position-recommend",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const result = await runPythonScript(
+          "scripts/investment_planner.py",
+          {
+            action: "add_position_recommend",
+            plan: body.plan ?? {},
+            budget: body.budget ?? 100000,
+            max_add_pct: body.max_add_pct ?? 50,
+            min_confidence: body.min_confidence ?? 60,
+            source: body.source ?? "auto",
+            check_accumulation: body.check_accumulation ?? true,
+            check_risk: body.check_risk ?? true,
+          },
+          config,
+        );
+        if (!result.ok) {
+          json(res, { error: result.error ?? "加仓推荐分析失败" }, 500);
+          return;
+        }
+        json(res, result.data);
+      } catch (err) {
+        json(
+          res,
+          { error: `加仓推荐分析失败: ${err instanceof Error ? err.message : String(err)}` },
+          500,
+        );
+      }
+    }),
+  });
+
   // ── Stock Recommendation API ─────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

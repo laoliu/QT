@@ -24,6 +24,7 @@
 import { getAccFormsJs } from "./js-acc-forms.js";
 import { getAccPresetsJs } from "./js-acc-presets.js";
 import { getAccScanJs } from "./js-acc-scan.js";
+import { getAddPositionJs } from "./js-add-position.js";
 import { getBacktestJs } from "./js-backtest.js";
 import { getDailyPickJs } from "./js-daily-pick.js";
 import { getEngineJs } from "./js-engine.js";
@@ -58,6 +59,7 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getBacktestJs(),
     getOptimizerJs(),
     getDailyPickJs(),
+    getAddPositionJs(),
     getEngineJs(),
     getAccScanJs(),
     getPortfolioBacktestJs(),

@@ -94,6 +94,9 @@ var _recExecRunning = false;
 var _recExecuted = false;
 var _recCurrentBatch = 1;  // which batch was last executed (1, 2, or 3)
 var _recBatchHistory = [];  // track batch execution: [{batch, pct, orders}]
+var _addPosRecData = null;
+var _addPosExecRunning = false;
+var _addPosExecuted = false;
 var _accTop3State = null;
 var _accScanState = null;
 `;

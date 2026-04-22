@@ -51,6 +51,10 @@ export interface AutoTradeConfig {
   rebalanceDays: number;
   /** Recommend strategy key. */
   recommendStrategy: string;
+  /** Use top strategies from fitness analysis instead of running all strategies. */
+  useFitnessStrategies: boolean;
+  /** Number of top fitness strategies to use (3-15, default 6). */
+  fitnessTopN: number;
 }
 
 export interface AutoTradeStatus {
@@ -89,6 +93,8 @@ const DEFAULT_CONFIG: AutoTradeConfig = {
   forcePremarket: false,
   rebalanceDays: 5,
   recommendStrategy: "mixed",
+  useFitnessStrategies: true,
+  fitnessTopN: 6,
 };
 
 // ── Service ──────────────────────────────────────────────────────
@@ -168,6 +174,7 @@ export class AutoTradeScheduler {
     this.config.topStrategyCount = Math.max(2, Math.min(5, this.config.topStrategyCount));
     this.config.finalStockLimit = Math.max(3, Math.min(8, this.config.finalStockLimit));
     this.config.initialCapital = Math.max(10_000, this.config.initialCapital);
+    this.config.fitnessTopN = Math.max(3, Math.min(15, this.config.fitnessTopN));
 
     this.saveToDisk();
 
@@ -368,10 +375,47 @@ export class AutoTradeScheduler {
     this.notify("🔍 自动交易：开始每日综合选股…");
 
     try {
+      // Step 0: Resolve strategies from fitness data if enabled
+      let resolvedStrategies: string[] | undefined = undefined;
+      if (this.config.strategies.length > 0) {
+        // User explicitly specified strategies — use them directly
+        resolvedStrategies = this.config.strategies;
+      } else if (this.config.useFitnessStrategies) {
+        // Auto-resolve top strategies from fitness analysis
+        try {
+          const fitnessResult = await this.callGetApi(
+            `/quant/admin/api/strategy-fitness/global`,
+          );
+          const fitnessStrategies = Array.isArray(fitnessResult.strategies)
+            ? fitnessResult.strategies as Array<{ strategy_id?: string; rank?: number }>
+            : [];
+          if (fitnessStrategies.length > 0) {
+            resolvedStrategies = fitnessStrategies
+              .slice(0, this.config.fitnessTopN)
+              .map((s) => String(s.strategy_id ?? ""))
+              .filter(Boolean);
+            if (resolvedStrategies.length > 0) {
+              this.notify(
+                `📊 已从策略适配度分析中选取 ${resolvedStrategies.length} 个优选策略: ${resolvedStrategies.join(", ")}`,
+              );
+            } else {
+              resolvedStrategies = undefined;
+            }
+          }
+        } catch {
+          // Fitness query failed — fall back to all strategies
+          console.log("[AutoTrade] fitness query failed, falling back to all strategies");
+        }
+        if (!resolvedStrategies) {
+          this.notify("⚠️ 策略适配度数据不可用，将使用全量策略筛选（较慢）");
+        }
+      }
+      // else: useFitnessStrategies=false and strategies=[] → undefined → daily-picks uses all
+
       // Step 1: Run daily picks
       const startDate = this.config.startDate || this.defaultStartDate();
       const pickBody: Record<string, unknown> = {
-        strategies: this.config.strategies.length > 0 ? this.config.strategies : undefined,
+        strategies: resolvedStrategies,
         top_n_per_strategy: this.config.topNPerStrategy,
         top_strategy_count: this.config.topStrategyCount,
         final_stock_limit: this.config.finalStockLimit,
@@ -529,6 +573,46 @@ export class AutoTradeScheduler {
   }
 
   // ── Internal: HTTP helper ──────────────────────────────────
+
+  private callGetApi(path: string): Promise<Record<string, unknown>> {
+    return new Promise((resolve) => {
+      const url = new URL(path, this.baseUrl);
+
+      const req = http.request(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+          timeout: 30_000,
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            try {
+              const text = Buffer.concat(chunks).toString("utf-8");
+              resolve(JSON.parse(text) as Record<string, unknown>);
+            } catch {
+              resolve({ error: "响应解析失败" });
+            }
+          });
+        },
+      );
+
+      req.on("error", (err) => {
+        resolve({ error: `HTTP 请求失败: ${err.message}` });
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        resolve({ error: "请求超时" });
+      });
+      req.end();
+    });
+  }
 
   private callApi(path: string, body: unknown): Promise<Record<string, unknown>> {
     return new Promise((resolve) => {

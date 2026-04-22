@@ -415,6 +415,114 @@ def _fetch_tencent_batch(symbols: list[str]) -> dict[str, dict]:
     return results
 
 
+def _fetch_quotes_via_bridge(symbols: list[str]) -> dict[str, dict]:
+    """Fetch real-time quotes through qmt_data_bridge → xtdata.get_full_tick().
+
+    Uses the same bridge (WINDOWS_XTDATA_URL, default :58088) as kline fetching.
+    Endpoint: POST /quote  body: {"codes": ["600519.SH", ...]}
+    Returns {plain_symbol: quote_dict} with same shape as _fetch_tencent_batch.
+    Returns empty dict if bridge is unreachable or QMT is offline.
+    """
+    if not symbols:
+        return {}
+
+    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+
+    # Convert plain codes to QMT format (same logic as _fetch_klines_via_bridge)
+    qmt_codes = []
+    plain_map: dict[str, str] = {}  # qmt_code → plain
+    for sym in symbols:
+        sym = str(sym).strip()
+        if "." in sym:
+            qmt = sym
+            plain = sym.split(".")[0]
+        elif sym.startswith("6") or sym.startswith("5"):
+            qmt = sym + ".SH"
+            plain = sym
+        elif sym.startswith(("0", "1", "3")):
+            qmt = sym + ".SZ"
+            plain = sym
+        else:
+            qmt = sym + ".SH"
+            plain = sym
+        qmt_codes.append(qmt)
+        plain_map[qmt] = plain
+
+    body = json.dumps({"codes": qmt_codes}, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(
+        f"{bridge_url}/quote",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    results: dict[str, dict] = {}
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        # qmt_data_bridge returns: {"ok": true, "data": {"quotes": {"600519.SH": {...}}}}
+        raw_quotes = data.get("data", {}).get("quotes", {})
+        for qmt_code, q in raw_quotes.items():
+            if not q or not isinstance(q, dict):
+                continue
+            price = float(q.get("lastPrice", 0) or 0)
+            if price <= 0:
+                continue
+            plain = plain_map.get(qmt_code, qmt_code.split(".")[0])
+            last_close = float(q.get("lastClose", 0) or 0)
+            change = price - last_close if last_close > 0 else 0
+            change_pct = (change / last_close * 100) if last_close > 0 else 0
+            results[plain] = {
+                "name": q.get("name", plain),
+                "price": price,
+                "prevClose": last_close,
+                "open": float(q.get("open", 0) or 0),
+                "high": float(q.get("high", 0) or 0),
+                "low": float(q.get("low", 0) or 0),
+                "change": round(change, 4),
+                "changePct": round(change_pct, 2),
+                "volume": int(q.get("volume", 0) or 0),
+                "amount": float(q.get("amount", 0) or 0),
+                "turnoverRate": 0,  # not available from xtdata tick
+                "pe": 0,
+                "pb": 0,
+                "totalMarketCap": 0,
+                "circulatingMarketCap": 0,
+                "amplitude": 0,
+                "volumeRatio": 0,
+            }
+    except Exception as e:
+        print(f"[planner] qmt_data_bridge quotes failed: {e}", file=sys.stderr, flush=True)
+    return results
+
+
+def _fetch_quotes_qmt_first(symbols: list[str]) -> dict[str, dict]:
+    """Fetch real-time quotes with QMT priority, Tencent fallback.
+
+    1. Try RECEIVER/BRIDGE → QMT (fastest when Windows QMT online)
+    2. Fall back to Tencent API for any missing symbols
+    """
+    import time as _time
+    t0 = _time.time()
+    quotes = _fetch_quotes_via_bridge(symbols)
+    bridge_count = len(quotes)
+    if bridge_count:
+        print("[planner:timing] bridge quotes: %.1fs (%d/%d stocks)" % (
+            _time.time() - t0, bridge_count, len(symbols)),
+            file=sys.stderr, flush=True)
+
+    # Fill missing with Tencent
+    missing = [s for s in symbols if s not in quotes]
+    if missing:
+        t1 = _time.time()
+        tencent = _fetch_tencent_batch(missing)
+        quotes.update(tencent)
+        print("[planner:timing] tencent fallback: %.1fs (%d/%d missing)" % (
+            _time.time() - t1, len(tencent), len(missing)),
+            file=sys.stderr, flush=True)
+
+    return quotes
+
+
 # ── Risk Profile Definitions ──────────────────────────────────────
 
 RISK_PROFILES = {
@@ -3353,6 +3461,296 @@ def rebalance_portfolio(
     }
 
 
+def add_position_recommend(
+    plan: dict,
+    budget: float = 100000,
+    max_add_pct: float = 50,
+    min_confidence: float = 60,
+    source: str = "auto",
+    check_accumulation: bool = True,
+    check_risk: bool = True,
+) -> dict:
+    """Scan current holdings and recommend which to add positions to.
+
+    Combines technical analysis, manipulation detection, macro regime,
+    and risk checks to produce actionable add-position recommendations.
+
+    Returns:
+      - recommendations: list of add-position recommendations
+      - skipped: list of positions not recommended
+      - summary: aggregate statistics
+    """
+    portfolio = plan.get("portfolio", [])
+    if not portfolio:
+        return {"error": "无持仓数据，请先建仓", "recommendations": [], "skipped": []}
+
+    symbols = [p["symbol"] for p in portfolio]
+
+    # 1. Fetch real-time quotes (QMT priority, Tencent fallback)
+    quotes = _fetch_quotes_qmt_first(symbols)
+
+    # 2. Fetch klines for technical analysis (Bridge/QMT priority, akshare fallback)
+    klines_map = _fetch_klines_via_bridge(symbols, count=90)
+
+    # 3. Get macro regime
+    macro = _get_macro_regime()
+    regime = macro.get("regime", "unknown")
+
+    # 4. Calculate portfolio total value
+    initial_capital = plan.get("initialCapital", 0)
+    total_value = 0.0
+    for pos in portfolio:
+        q = quotes.get(pos["symbol"], {})
+        price = q.get("price", pos.get("price", 0))
+        total_value += price * pos.get("shares", 0)
+    if total_value <= 0:
+        total_value = initial_capital or 500000
+
+    remaining_budget = budget
+    recommendations: list[dict] = []
+    skipped: list[dict] = []
+
+    # 5. Analyze each position for add opportunity
+    candidates: list[dict] = []
+    for pos in portfolio:
+        sym = pos["symbol"]
+        q = quotes.get(sym, {})
+        current_price = q.get("price", 0)
+        if current_price <= 0:
+            skipped.append({"symbol": sym, "name": pos.get("name", sym), "reason": "无法获取实时行情"})
+            continue
+
+        buy_price = pos.get("price", 0)
+        shares = pos.get("shares", 0)
+        stop_loss = pos.get("stopLoss", 0)
+        take_profit = pos.get("takeProfit", 0)
+        position_value = current_price * shares
+        weight = position_value / total_value * 100 if total_value > 0 else 0
+        pnl_pct = (current_price / buy_price - 1) * 100 if buy_price > 0 else 0
+        change_pct = q.get("changePct", 0)
+        name = q.get("name", pos.get("name", sym))
+        volume_ratio = q.get("volumeRatio", 0)
+
+        # Technical indicators from klines
+        klines = klines_map.get(sym, [])
+        technicals = _compute_technicals_from_klines(klines) if len(klines) >= 20 else {}
+
+        # Manipulation pattern detection
+        manipulation = _detect_manipulation_patterns(klines) if len(klines) >= 20 else {}
+
+        # Volume classification
+        vr = technicals.get("volume_ratio", volume_ratio) or volume_ratio
+        vol_tier, vol_desc = _classify_volume_ratio(vr) if vr > 0 else ("unknown", "未知")
+
+        rsi = technicals.get("rsi14", 50)
+        trend_score = technicals.get("trend_score", 2)
+        momentum_5d = technicals.get("momentum_5d", 0)
+        momentum_20d = technicals.get("momentum_20d", 0)
+        price_pos = technicals.get("price_position", 0.5)
+        ma5 = technicals.get("ma5", 0)
+        ma20 = technicals.get("ma20", 0)
+        manip_pattern = manipulation.get("pattern", "none")
+
+        # ── Risk check: skip if position should NOT be added ──
+        skip_reason = None
+        if check_risk:
+            if stop_loss > 0 and current_price <= stop_loss * 1.02:
+                skip_reason = f"接近止损位 {stop_loss}，不宜加仓"
+            elif pnl_pct <= -8:
+                skip_reason = f"当前亏损 {pnl_pct:.1f}%，超过风控阈值"
+            elif weight > 30:
+                skip_reason = f"仓位已达 {weight:.1f}%，过于集中"
+            elif manip_pattern == "distribution":
+                skip_reason = "检测到出货迹象，不宜追加"
+            elif rsi and rsi > 75:
+                skip_reason = f"RSI={rsi:.0f} 严重超买，不宜追涨"
+
+        if skip_reason:
+            skipped.append({"symbol": sym, "name": name, "reason": skip_reason})
+            continue
+
+        # ── Score add-position opportunity ──
+        score = 0
+        signals: list[str] = []
+        reasons: list[str] = []
+        risk_flags: list[str] = []
+
+        # Trend intact + pullback
+        if trend_score >= 3 and rsi and 30 < rsi < 55:
+            score += 25
+            signals.append("趋势回调")
+            reasons.append(f"趋势强劲(得分{trend_score})，RSI={rsi:.0f}回调到位")
+
+        # RSI oversold in uptrend
+        if rsi and rsi < 35 and trend_score >= 2:
+            score += 20
+            signals.append("超卖反弹")
+            reasons.append(f"RSI={rsi:.0f}超卖，但趋势未破(得分{trend_score})")
+
+        # Profitable but low weight → room to add
+        if pnl_pct > 5 and weight < 15:
+            score += 15
+            signals.append("盈利低仓")
+            reasons.append(f"盈利{pnl_pct:.1f}%且仓位仅{weight:.1f}%，有加仓空间")
+
+        # Accumulation pattern detected
+        if check_accumulation and manip_pattern == "accumulation":
+            manip_conf = manipulation.get("confidence", 0)
+            score += 20
+            signals.append("主力吸筹")
+            reasons.append(f"检测到吸筹迹象(置信{manip_conf:.0f}%)")
+
+        # Volume contraction at support → good entry
+        if vol_tier in ("mild_shrink", "extreme_low") and price_pos < 0.35 and trend_score >= 2:
+            score += 15
+            signals.append("缩量支撑")
+            reasons.append(f"缩量({vol_desc})在低位支撑区")
+
+        # MA support: price near MA20 from above
+        if ma20 > 0 and current_price > ma20 and (current_price / ma20 - 1) < 0.03:
+            score += 10
+            signals.append("均线支撑")
+            reasons.append(f"股价贴近20日均线(偏离仅{(current_price / ma20 - 1) * 100:.1f}%)")
+
+        # Strong momentum recovering after dip
+        if momentum_20d > 5 and momentum_5d < 0 and momentum_5d > -5:
+            score += 10
+            signals.append("短期回调")
+            reasons.append(f"20日动量+{momentum_20d:.1f}%强劲，5日仅回调{momentum_5d:.1f}%")
+
+        # Macro boost
+        if regime == "recovery":
+            score += 5
+            reasons.append("宏观复苏期，适合加仓")
+        elif regime in ("stagflation", "recession"):
+            score -= 10
+            risk_flags.append(f"当前宏观处于{regime}周期，加仓需谨慎")
+
+        # High volatility warning
+        volatility = technicals.get("volatility", 0)
+        if volatility and volatility > 0.04:
+            risk_flags.append(f"近期波动率较高({volatility * 100:.1f}%)，注意控制仓位")
+
+        # Approaching take profit → don't add
+        if take_profit > 0 and current_price > take_profit * 0.9:
+            score -= 15
+            risk_flags.append(f"接近止盈位 {take_profit}，加仓性价比低")
+
+        # Calculate confidence from score
+        confidence = max(20, min(95, score + 40))
+
+        if confidence < min_confidence:
+            skipped.append({
+                "symbol": sym,
+                "name": name,
+                "reason": f"置信度{confidence}%低于阈值{min_confidence}%",
+            })
+            continue
+
+        # ── Calculate add shares and amount ──
+        max_add_amount = min(
+            remaining_budget,
+            position_value * (max_add_pct / 100),  # max % of current position
+            budget * 0.4,  # max 40% of total budget per stock
+        )
+        if max_add_amount < current_price * 100:
+            skipped.append({
+                "symbol": sym,
+                "name": name,
+                "reason": f"预算不足（需至少 ¥{current_price * 100:.0f}）",
+            })
+            continue
+
+        # Round to lot size (100 shares for A-shares)
+        add_shares = int(max_add_amount / current_price / 100) * 100
+        if add_shares < 100:
+            add_shares = 100
+        add_amount = round(add_shares * current_price, 2)
+
+        # Entry price: slight discount (limit order)
+        entry_price = round(current_price * 0.998, 2)
+
+        # Stop loss: 8% below current
+        new_stop = round(current_price * 0.92, 2)
+        if stop_loss > 0:
+            new_stop = max(new_stop, stop_loss)  # don't lower existing stop
+
+        # Take profit: 15% above current (or keep existing if higher)
+        new_tp = round(current_price * 1.15, 2)
+        if take_profit > 0:
+            new_tp = max(new_tp, take_profit)
+
+        candidates.append({
+            "symbol": sym,
+            "name": name,
+            "currentPrice": round(current_price, 2),
+            "costPrice": round(buy_price, 2),
+            "changePct": round(change_pct, 2),
+            "pnlPct": round(pnl_pct, 2),
+            "currentShares": shares,
+            "weight": round(weight, 2),
+            "addShares": add_shares,
+            "addAmount": add_amount,
+            "entryPrice": entry_price,
+            "stopLoss": new_stop,
+            "takeProfit": new_tp,
+            "score": score,
+            "confidence": confidence,
+            "signals": signals,
+            "reasons": reasons,
+            "riskFlags": risk_flags,
+            "technicals": {
+                "rsi14": rsi,
+                "trendScore": trend_score,
+                "momentum5d": round(momentum_5d, 2),
+                "momentum20d": round(momentum_20d, 2),
+                "pricePosition": price_pos,
+                "volumeTier": vol_desc,
+            },
+            "manipulationPattern": manip_pattern,
+        })
+
+    # Sort by score descending, take best ones within budget
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+
+    total_add_amount = 0
+    for c in candidates:
+        if total_add_amount + c["addAmount"] > budget:
+            # Try fitting a smaller amount
+            leftover = budget - total_add_amount
+            if leftover >= c["currentPrice"] * 100:
+                c["addShares"] = int(leftover / c["currentPrice"] / 100) * 100
+                c["addAmount"] = round(c["addShares"] * c["currentPrice"], 2)
+            else:
+                skipped.append({
+                    "symbol": c["symbol"],
+                    "name": c["name"],
+                    "reason": "预算已用完",
+                })
+                continue
+        total_add_amount += c["addAmount"]
+        recommendations.append(c)
+
+    summary = {
+        "totalPositions": len(portfolio),
+        "recommendCount": len(recommendations),
+        "skippedCount": len(skipped),
+        "totalAddAmount": round(total_add_amount, 2),
+        "remainingBudget": round(budget - total_add_amount, 2),
+        "avgConfidence": round(
+            sum(r["confidence"] for r in recommendations) / max(len(recommendations), 1), 1
+        ),
+        "macroRegime": regime,
+    }
+
+    return {
+        "recommendations": recommendations,
+        "skipped": skipped,
+        "summary": summary,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
 if __name__ == "__main__":
     _raw = os.environ.get("QUANT_CONFIG") or sys.stdin.read()
     config = json.loads(_raw)
@@ -3389,6 +3787,16 @@ if __name__ == "__main__":
         elif action == "smart_strategy":
             result = smart_strategy_advisor(
                 plan=config.get("plan", {}),
+            )
+        elif action == "add_position_recommend":
+            result = add_position_recommend(
+                plan=config.get("plan", {}),
+                budget=config.get("budget", 100000),
+                max_add_pct=config.get("max_add_pct", 50),
+                min_confidence=config.get("min_confidence", 60),
+                source=config.get("source", "auto"),
+                check_accumulation=config.get("check_accumulation", True),
+                check_risk=config.get("check_risk", True),
             )
         else:
             result = {"error": f"未知操作: {action}"}

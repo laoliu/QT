@@ -33,6 +33,7 @@ import type { ReceiverService } from "../services/receiver-service.js";
 import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { UserStrategyStore } from "../services/strategy-template.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
+import type { AutoTradeScheduler } from "../services/auto-trade-scheduler.js";
 import { analyzeTechMoat, collectTechMoatInputs } from "../services/tech-moat-analysis.js";
 import type { TickHistoryStore } from "../services/tick-history-store.js";
 import type { TickIngressService } from "../services/tick-ingress-service.js";
@@ -81,6 +82,7 @@ export interface AdminRouteDeps {
   tickStrategyService?: TickStrategyService | null;
   tickHistoryStore?: TickHistoryStore | null;
   signalHitRateTracker?: SignalHitRateTracker;
+  autoTradeScheduler?: AutoTradeScheduler;
   secure: (handler: HttpHandler) => HttpHandler;
   securePublic: (handler: HttpHandler) => HttpHandler;
 }
@@ -119,7 +121,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     secure,
     securePublic,
   } = deps;
-  const { signalHitRateTracker } = deps;
+  const { signalHitRateTracker, autoTradeScheduler } = deps;
   const marketDataProvider = createDataProvider(config);
 
   // ── OpenClaw iframe proxy ──────────────────────────────────────
@@ -1996,6 +1998,36 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Conditional Orders History API ──────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/conditional-orders-history",
+    handler: secure(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit")) || 100));
+      const history = conditionalOrderService.getHistory(limit);
+      // Enrich with stock names
+      const engine = getEngine();
+      const positions = engine.getPositions();
+      const nameMap = new Map<string, string>();
+      for (const p of positions) {
+        if (p.name) nameMap.set(p.symbol, p.name);
+      }
+      const missing = [...new Set(history.map((o) => o.symbol))].filter(
+        (s) => !nameMap.has(s),
+      );
+      if (missing.length > 0) {
+        const tencentNames = await fetchStockNames(missing);
+        for (const [sym, name] of tencentNames) nameMap.set(sym, name);
+      }
+      const enriched = history.map((o) => ({
+        ...o,
+        name: nameMap.get(o.symbol) ?? "",
+      }));
+      json(res, { history: enriched });
+    }),
+  });
+
   // ── Engine Status API ───────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -3391,6 +3423,84 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         activeCount: priceAlertService.activeCount,
         total: alerts.length,
       });
+    }),
+  });
+
+  // ── Auto-Trade Scheduler API ────────────────────────────────────
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/auto-trade/status",
+    handler: secure((_req, res) => {
+      if (!autoTradeScheduler) {
+        json(res, { error: "自动交易服务未初始化" }, 503);
+        return;
+      }
+      json(res, autoTradeScheduler.getStatus());
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/auto-trade/config",
+    handler: secure(async (req, res) => {
+      if (!autoTradeScheduler) {
+        json(res, { error: "自动交易服务未初始化" }, 503);
+        return;
+      }
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        const updated = autoTradeScheduler.updateConfig(body);
+        json(res, { ok: true, config: updated });
+      } catch (err) {
+        json(res, { error: `配置更新失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/auto-trade/trigger-screen",
+    handler: secure(async (req, res) => {
+      if (!autoTradeScheduler) {
+        json(res, { error: "自动交易服务未初始化" }, 503);
+        return;
+      }
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const result = await autoTradeScheduler.triggerScreen();
+        json(res, result);
+      } catch (err) {
+        json(res, { error: `手动筛选失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
+    }),
+  });
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/auto-trade/trigger-execute",
+    handler: secure(async (req, res) => {
+      if (!autoTradeScheduler) {
+        json(res, { error: "自动交易服务未初始化" }, 503);
+        return;
+      }
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const result = await autoTradeScheduler.triggerExecute();
+        json(res, result);
+      } catch (err) {
+        json(res, { error: `手动执行失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
     }),
   });
 

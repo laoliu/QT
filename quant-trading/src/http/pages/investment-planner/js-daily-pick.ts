@@ -1126,5 +1126,144 @@ function _highlightFitnessRankBadges(strats){
   });
 }
 
+/* ══════ AUTO-TRADE SCHEDULER ══════ */
+var _autoTradeExpanded=false;
+
+function toggleAutoTradePanel(){
+  _autoTradeExpanded=!_autoTradeExpanded;
+  document.getElementById('at-panel').style.display=_autoTradeExpanded?'block':'none';
+  document.getElementById('at-toggle').textContent=_autoTradeExpanded?'▼ 收起':'▶ 展开';
+  if(_autoTradeExpanded)loadAutoTradeStatus();
+}
+
+function loadAutoTradeStatus(){
+  api('/quant/admin/api/auto-trade/status',{_timeout:10000}).then(function(d){
+    if(d.error){
+      document.getElementById('at-status-bar').textContent='❌ '+d.error;
+      return;
+    }
+    var cfg=d.config||{};
+    document.getElementById('at-enabled').checked=!!d.enabled;
+    document.getElementById('at-dry-run').checked=cfg.dryRun!==false;
+    document.getElementById('at-screen-cron').value=cfg.screenCron||'30 7 * * 1-5';
+    document.getElementById('at-execute-cron').value=cfg.executeCron||'31 9 * * 1-5';
+    document.getElementById('at-exec-pct').value=cfg.executePct||60;
+    document.getElementById('at-trailing').value=cfg.trailingStopPct||8;
+    document.getElementById('at-cond-orders').checked=cfg.createConditionalOrders!==false;
+    document.getElementById('at-force-pre').checked=!!cfg.forcePremarket;
+    document.getElementById('at-capital').value=cfg.initialCapital||500000;
+    document.getElementById('at-top-n').value=cfg.topNPerStrategy||8;
+    document.getElementById('at-top-strat').value=cfg.topStrategyCount||3;
+    document.getElementById('at-final-limit').value=cfg.finalStockLimit||8;
+    document.getElementById('at-rebalance').value=cfg.rebalanceDays||5;
+    // Risk select
+    var riskSel=document.getElementById('at-risk');
+    for(var i=0;i<riskSel.options.length;i++){if(riskSel.options[i].value===(cfg.riskTolerance||'high'))riskSel.selectedIndex=i;}
+    // Recommend strategy
+    var recSel=document.getElementById('at-rec-strategy');
+    for(var j=0;j<recSel.options.length;j++){if(recSel.options[j].value===(cfg.recommendStrategy||'mixed'))recSel.selectedIndex=j;}
+
+    // Status bar
+    var parts=[];
+    parts.push(d.enabled?'<span style="color:var(--green)">● 已启用</span>':'<span style="color:var(--text-dim)">○ 未启用</span>');
+    if(cfg.dryRun)parts.push('<span style="color:var(--orange)">🧪 试运行</span>');
+    if(d.lastScreenAt)parts.push('上次筛选: '+formatDailyPickTime(d.lastScreenAt));
+    if(d.lastScreenResult)parts.push(d.lastScreenResult);
+    if(d.lastExecuteAt)parts.push('上次执行: '+formatDailyPickTime(d.lastExecuteAt));
+    if(d.lastExecuteResult)parts.push(d.lastExecuteResult);
+    var pending=Array.isArray(d.pendingSymbols)?d.pendingSymbols:[];
+    if(pending.length)parts.push('待执行: '+pending.join(', '));
+    document.getElementById('at-status-bar').innerHTML=parts.join(' | ');
+    if(d.lastError){
+      document.getElementById('at-result').innerHTML='<div style="color:var(--red);padding:6px;background:rgba(248,81,73,.08);border-radius:4px">最近错误: '+esc(d.lastError)+'</div>';
+    }else{
+      document.getElementById('at-result').innerHTML='';
+    }
+  }).catch(function(e){
+    document.getElementById('at-status-bar').textContent='加载失败: '+e.message;
+  });
+}
+
+function captureAutoTradeConfig(){
+  return {
+    enabled:document.getElementById('at-enabled').checked,
+    dryRun:document.getElementById('at-dry-run').checked,
+    screenCron:document.getElementById('at-screen-cron').value.trim()||'30 7 * * 1-5',
+    executeCron:document.getElementById('at-execute-cron').value.trim()||'31 9 * * 1-5',
+    executePct:Number(document.getElementById('at-exec-pct').value)||60,
+    trailingStopPct:Number(document.getElementById('at-trailing').value)||8,
+    createConditionalOrders:document.getElementById('at-cond-orders').checked,
+    forcePremarket:document.getElementById('at-force-pre').checked,
+    initialCapital:Number(document.getElementById('at-capital').value)||500000,
+    riskTolerance:document.getElementById('at-risk').value||'high',
+    recommendStrategy:document.getElementById('at-rec-strategy').value||'mixed',
+    topNPerStrategy:Number(document.getElementById('at-top-n').value)||8,
+    topStrategyCount:Number(document.getElementById('at-top-strat').value)||3,
+    finalStockLimit:Number(document.getElementById('at-final-limit').value)||8,
+    rebalanceDays:Number(document.getElementById('at-rebalance').value)||5
+  };
+}
+
+function saveAutoTradeConfig(){
+  var cfg=captureAutoTradeConfig();
+  var btn=document.getElementById('btn-at-save');
+  btn.disabled=true;btn.textContent='保存中…';
+  api('/quant/admin/api/auto-trade/config',{method:'POST',body:JSON.stringify(cfg),_timeout:10000})
+    .then(function(resp){
+      if(resp.error){toast('❌ '+resp.error);return;}
+      toast('✅ 自动交易配置已保存'+(cfg.enabled?' — 定时任务已启用':' — 定时任务未启用'));
+      loadAutoTradeStatus();
+    })
+    .catch(function(e){toast('❌ 保存失败: '+e.message);})
+    .finally(function(){btn.disabled=false;btn.textContent='💾 保存配置';});
+}
+
+function triggerAutoTradeScreen(){
+  var btn=document.getElementById('btn-at-screen');
+  btn.disabled=true;btn.textContent='⏳ 筛选中…';
+  document.getElementById('at-result').innerHTML='<div style="color:var(--text-dim)">正在运行综合选股 + 生成推荐，请稍候（约1-4分钟）…</div>';
+  api('/quant/admin/api/auto-trade/trigger-screen',{method:'POST',body:'{}',_timeout:1800000})
+    .then(function(resp){
+      if(!resp.ok){
+        document.getElementById('at-result').innerHTML='<div style="color:var(--red)">筛选失败: '+esc(resp.error||'未知错误')+'</div>';
+        toast('❌ 筛选失败');
+        return;
+      }
+      var symbols=Array.isArray(resp.symbols)?resp.symbols:[];
+      document.getElementById('at-result').innerHTML='<div style="color:var(--green)">✅ 筛选完成，入围 '+symbols.length+' 只: '+esc(symbols.join(', '))+'</div>';
+      toast('✅ 自动交易筛选完成');
+      loadAutoTradeStatus();
+    })
+    .catch(function(e){
+      document.getElementById('at-result').innerHTML='<div style="color:var(--red)">筛选异常: '+esc(e.message)+'</div>';
+    })
+    .finally(function(){btn.disabled=false;btn.textContent='🔍 立即筛选';});
+}
+
+function triggerAutoTradeExec(){
+  var btn=document.getElementById('btn-at-exec');
+  var isDry=document.getElementById('at-dry-run').checked;
+  if(!isDry){
+    if(!confirm('确认立即执行真实下单？此操作将提交买入委托。'))return;
+  }
+  btn.disabled=true;btn.textContent='⏳ 执行中…';
+  document.getElementById('at-result').innerHTML='<div style="color:var(--text-dim)">正在'+(isDry?'试运行':'执行下单')+'…</div>';
+  api('/quant/admin/api/auto-trade/trigger-execute',{method:'POST',body:'{}',_timeout:600000})
+    .then(function(resp){
+      if(!resp.ok){
+        document.getElementById('at-result').innerHTML='<div style="color:var(--red)">执行失败: '+esc(resp.error||'未知错误')+'</div>';
+        toast('❌ 执行失败');
+        return;
+      }
+      document.getElementById('at-result').innerHTML='<div style="color:var(--green)">✅ 执行完成</div>';
+      toast('✅ 自动交易执行完成');
+      loadAutoTradeStatus();
+    })
+    .catch(function(e){
+      document.getElementById('at-result').innerHTML='<div style="color:var(--red)">执行异常: '+esc(e.message)+'</div>';
+    })
+    .finally(function(){btn.disabled=false;btn.textContent='🚀 立即执行';});
+}
+
 `;
 }

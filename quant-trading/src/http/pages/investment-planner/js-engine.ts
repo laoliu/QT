@@ -575,6 +575,71 @@ function addManualConditional(){
     });
 }
 
+/* ── Conditional Order History ── */
+
+function toggleCondHistory(){
+  var panel=document.getElementById('cond-history-panel');
+  var visible=panel.style.display!=='none';
+  panel.style.display=visible?'none':'block';
+  if(!visible)loadCondHistory();
+}
+
+function loadCondHistory(){
+  document.getElementById('cond-history-status').textContent='加载中…';
+  api('/quant/admin/api/conditional-orders-history?limit=200',{_timeout:30000})
+    .then(function(d){
+      var items=d.history||[];
+      document.getElementById('cond-history-status').textContent='共 '+items.length+' 条历史记录';
+      var tbody=document.querySelector('#cond-history-table tbody');
+      if(!items.length){
+        tbody.innerHTML='<tr><td colspan="14" style="color:var(--text-dim)">暂无历史记录</td></tr>';
+        return;
+      }
+      var rows='';
+      items.forEach(function(o){
+        var typeLabel=o.type==='stop_loss'?'<span class="badge badge-red">止损</span>':
+          o.type==='take_profit'?'<span class="badge badge-green">止盈</span>':
+          o.type==='trailing_stop'?'<span class="badge badge-blue">跟踪止损</span>':
+          o.type==='trailing_atr'?'<span class="badge badge-blue">ATR止损</span>':
+          o.type==='trailing_tp'?'<span class="badge badge-green">跟踪止盈</span>':
+          o.type==='staged_tp'?'<span class="badge badge-green">分批止盈</span>':
+          o.type==='indicator_stop'?'<span class="badge badge-yellow">均线止损</span>':
+          '<span class="badge">'+esc(o.type)+'</span>';
+        var triggerDisplay;
+        if(o.type==='trailing_stop'||o.type==='trailing_atr'){
+          triggerDisplay=(o.triggerValue*100).toFixed(1)+'%';
+        }else{
+          triggerDisplay=num(o.triggerValue);
+        }
+        var resultHtml=o.triggerResult==='exit_submitted'?'<span class="badge badge-green">已提交</span>':
+          o.triggerResult==='all_tiers_completed'?'<span class="badge badge-green">全部完成</span>':
+          '<span class="badge badge-red">'+esc(o.triggerResult||'-')+'</span>';
+        var reasonLabel=o.archiveReason==='auto_cleanup'?'自动清理':'手动删除';
+        var fmtTime=function(t){return t?(new Date(t)).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';};
+        rows+='<tr>'+
+          '<td style="font-size:11px">'+esc(o.id)+'</td>'+
+          '<td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.symbol)+'" target="_blank" style="color:var(--accent)">'+esc(o.symbol)+'</a></td>'+
+          '<td style="font-size:11px">'+esc(o.name||'')+'</td>'+
+          '<td>'+typeLabel+'</td>'+
+          '<td>'+num(o.entryPrice)+'</td>'+
+          '<td>'+triggerDisplay+'</td>'+
+          '<td>'+numInt(o.quantity)+'</td>'+
+          '<td>'+esc(o.strategyId||'-')+'</td>'+
+          '<td style="font-size:11px">'+esc(o.description||'-')+'</td>'+
+          '<td style="font-size:11px">'+fmtTime(o.createdAt)+'</td>'+
+          '<td style="font-size:11px">'+fmtTime(o.triggeredAt)+'</td>'+
+          '<td>'+resultHtml+'</td>'+
+          '<td style="font-size:11px">'+fmtTime(o.archivedAt)+'</td>'+
+          '<td style="font-size:11px">'+esc(reasonLabel)+'</td>'+
+          '</tr>';
+      });
+      tbody.innerHTML=rows;
+    })
+    .catch(function(e){
+      document.getElementById('cond-history-status').textContent='加载失败: '+e.message;
+    });
+}
+
 /* ── Breakout Monitor (突破监控) ── */
 
 var _boExpanded=false;

@@ -17,6 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isTradingDay } from "../utils/trading-calendar.js";
 
 export type ConditionalOrderType =
   | "stop_loss"
@@ -117,6 +118,16 @@ export interface ConditionalOrderServiceOptions {
   maxOrders?: number;
   /** Data directory for persistence. */
   dataDir?: string | null;
+  /** Auto-cleanup triggered orders after N trading days (default: 2, 0 = disabled). */
+  autoCleanupTradingDays?: number;
+}
+
+/** A completed conditional order archived for history. */
+export interface ConditionalOrderHistoryEntry extends ConditionalOrder {
+  /** When the record was archived (auto-cleanup or manual removal). */
+  archivedAt: string;
+  /** Reason for archival. */
+  archiveReason: "auto_cleanup" | "manual_remove";
 }
 
 export class ConditionalOrderService {
@@ -126,6 +137,10 @@ export class ConditionalOrderService {
   private readonly checkIntervalMs: number;
   private readonly maxOrders: number;
   private readonly dataDir: string | null;
+  /** Number of trading days after trigger before auto-cleanup (0 = disabled). */
+  private readonly autoCleanupTradingDays: number;
+  /** Max history entries to keep (rolling). */
+  private readonly maxHistoryEntries: number;
   private notifyFn?: (message: string) => void | Promise<void>;
   private quoteFn?: (symbol: string) => Promise<{ price: number } | null>;
   private exitFn?: (
@@ -140,6 +155,8 @@ export class ConditionalOrderService {
     this.checkIntervalMs = opts.checkIntervalMs ?? 30_000;
     this.maxOrders = opts.maxOrders ?? 100;
     this.dataDir = opts.dataDir ?? null;
+    this.autoCleanupTradingDays = opts.autoCleanupTradingDays ?? 2;
+    this.maxHistoryEntries = 500;
     this.loadFromDisk();
   }
 
@@ -488,11 +505,17 @@ export class ConditionalOrderService {
     return id;
   }
 
-  /** Remove a conditional order by ID. */
+  /** Remove a conditional order by ID. Archives triggered orders to history. */
   removeOrder(id: string): boolean {
-    const ok = this.orders.delete(id);
-    if (ok) this.saveToDisk();
-    return ok;
+    const order = this.orders.get(id);
+    if (!order) return false;
+    // Archive triggered orders to history before removal
+    if (order.triggered) {
+      this.appendToHistory([order], "manual_remove");
+    }
+    this.orders.delete(id);
+    this.saveToDisk();
+    return true;
   }
 
   /** List all conditional orders. */
@@ -751,7 +774,73 @@ export class ConditionalOrderService {
       );
       this.saveToDisk();
     }
+
+    // Auto-cleanup: remove completed triggered orders after N trading days
+    this.cleanupTriggeredOrders();
+
     return triggered;
+  }
+
+  // ── Auto-cleanup of old triggered orders ───────────────────
+
+  /**
+   * Count the number of trading days between two dates (exclusive of start, inclusive of end).
+   */
+  private countTradingDaysBetween(startDate: string, endDate: string): number {
+    const start = new Date(startDate.slice(0, 10) + "T00:00:00");
+    const end = new Date(endDate.slice(0, 10) + "T00:00:00");
+    let count = 0;
+    const cursor = new Date(start);
+    cursor.setDate(cursor.getDate() + 1); // start from next day
+    while (cursor <= end) {
+      const yyyy = cursor.getFullYear();
+      const mm = String(cursor.getMonth() + 1).padStart(2, "0");
+      const dd = String(cursor.getDate()).padStart(2, "0");
+      if (isTradingDay(`${yyyy}-${mm}-${dd}`)) count++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return count;
+  }
+
+  /**
+   * Remove triggered orders whose exit succeeded (exit_submitted / all_tiers_completed)
+   * and have been triggered for more than `autoCleanupTradingDays` trading days.
+   * Orders with exit_failed are kept (still retrying).
+   */
+  private cleanupTriggeredOrders(): void {
+    if (this.autoCleanupTradingDays <= 0) return;
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const toRemove: string[] = [];
+
+    for (const order of this.orders.values()) {
+      if (!order.triggered || !order.triggeredAt) continue;
+      // Only clean up successfully completed orders
+      if (
+        order.triggerResult !== "exit_submitted" &&
+        order.triggerResult !== "all_tiers_completed"
+      ) continue;
+
+      const elapsed = this.countTradingDaysBetween(order.triggeredAt, todayStr);
+      if (elapsed >= this.autoCleanupTradingDays) {
+        toRemove.push(order.id);
+      }
+    }
+
+    if (toRemove.length > 0) {
+      const archived: ConditionalOrder[] = [];
+      for (const id of toRemove) {
+        const order = this.orders.get(id);
+        if (order) archived.push(order);
+        this.orders.delete(id);
+      }
+      this.appendToHistory(archived, "auto_cleanup");
+      console.log(
+        `[conditional-order] auto-cleanup: removed ${toRemove.length} completed order(s) (>${this.autoCleanupTradingDays} trading days): ${toRemove.join(", ")}`,
+      );
+      this.saveToDisk();
+    }
   }
 
   // ── Retry failed exits ─────────────────────────────────────
@@ -776,6 +865,7 @@ export class ConditionalOrderService {
         }
         // If still failed, keep the updated reason (may change from "not found" to "非交易时段" etc.)
         else if (result.reason !== order.triggerResult?.replace("exit_failed: ", "")) {
+          console.log(`[conditional-order] retry exit ${order.id}: reason changed from "${order.triggerResult}" to "exit_failed: ${result.reason}"`);
           order.triggerResult = `exit_failed: ${result.reason}`;
           changed = true;
         }
@@ -784,6 +874,58 @@ export class ConditionalOrderService {
       }
     }
     if (changed) this.saveToDisk();
+  }
+
+  // ── History ────────────────────────────────────────────────
+
+  private historyPath(): string | null {
+    if (!this.dataDir) return null;
+    return `${this.dataDir}/conditional-orders-history.json`;
+  }
+
+  /** Append triggered orders to the history log. */
+  private appendToHistory(
+    orders: ConditionalOrder[],
+    reason: "auto_cleanup" | "manual_remove",
+  ): void {
+    const hp = this.historyPath();
+    if (!hp || orders.length === 0) return;
+    const now = new Date().toISOString();
+    const entries: ConditionalOrderHistoryEntry[] = orders.map((o) => ({
+      ...o,
+      archivedAt: now,
+      archiveReason: reason,
+    }));
+    // Load existing history
+    let history: ConditionalOrderHistoryEntry[] = [];
+    try {
+      if (existsSync(hp)) {
+        history = JSON.parse(readFileSync(hp, "utf-8")) as ConditionalOrderHistoryEntry[];
+      }
+    } catch {
+      // Ignore corrupt history
+    }
+    history.push(...entries);
+    // Keep only the latest N entries
+    if (history.length > this.maxHistoryEntries) {
+      history = history.slice(history.length - this.maxHistoryEntries);
+    }
+    const dir = dirname(hp);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(hp, JSON.stringify(history, null, 2));
+  }
+
+  /** Get archived history entries. */
+  getHistory(limit = 100): ConditionalOrderHistoryEntry[] {
+    const hp = this.historyPath();
+    if (!hp || !existsSync(hp)) return [];
+    try {
+      const all = JSON.parse(readFileSync(hp, "utf-8")) as ConditionalOrderHistoryEntry[];
+      // Return newest first, limited
+      return all.slice(-limit).reverse();
+    } catch {
+      return [];
+    }
   }
 
   // ── Persistence ────────────────────────────────────────────

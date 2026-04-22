@@ -116,6 +116,7 @@ import { InMemoryStorage } from "./src/services/sqlite-storage.js";
 import { StrategyHealthMonitor } from "./src/services/strategy-health.js";
 import { UserStrategyStore } from "./src/services/strategy-template.js";
 import { TaskScheduler } from "./src/services/task-scheduler.js";
+import { AutoTradeScheduler } from "./src/services/auto-trade-scheduler.js";
 import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
@@ -872,15 +873,18 @@ const quantTradingPlugin = {
       const mgr = liveEngine.orderManager;
       if (!mgr) return { ok: false, reason: "引擎未启动" };
       const { detectMarketFromSymbol } = await import("./src/data/market-data-provider.js");
-      const result = await mgr.submit({
-        symbol,
-        market: detectMarketFromSymbol(symbol),
-        side: "sell",
-        orderType: "market",
-        quantity,
-        strategyId: strategyId ?? "conditional_exit",
-        signalId: `cond_${Date.now()}`,
-      });
+      const result = await mgr.submit(
+        {
+          symbol,
+          market: detectMarketFromSymbol(symbol),
+          side: "sell",
+          orderType: "market",
+          quantity,
+          strategyId: strategyId ?? "conditional_exit",
+          signalId: `cond_${Date.now()}`,
+        },
+        { skipMarketHours: true },
+      );
       return result.ok ? { ok: true } : { ok: false, reason: result.reason };
     });
     // Wire indicator function for MA-based stop-loss
@@ -1325,6 +1329,14 @@ const quantTradingPlugin = {
       persistPath: config.dataDir ? `${config.dataDir}/trade-plans.json` : null,
     });
 
+    // ── Auto-Trade Scheduler ─────────────────────────────────────
+    const autoTradeScheduler = new AutoTradeScheduler({
+      dataDir: config.dataDir ?? null,
+      baseUrl: `http://127.0.0.1:${standalonePort || 18891}`,
+      authToken: config.apiToken ?? "",
+    });
+    autoTradeScheduler.setNotify((m: string) => tryNotify(api, m));
+
     registerQuantRoutes({
       api,
       config,
@@ -1370,6 +1382,7 @@ const quantTradingPlugin = {
       tickStrategyService: tickStrategyServiceRef,
       tickHistoryStore: tickHistoryStoreRef,
       signalHitRateTracker,
+      autoTradeScheduler,
       secure,
       securePublic,
     });
@@ -1381,6 +1394,14 @@ const quantTradingPlugin = {
         id: "standalone-http",
         async start() { /* already started above */ },
         async stop() { stopStandaloneServer(); },
+      });
+
+      // ── Auto-Trade Scheduler (requires standalone server) ───
+      autoTradeScheduler.start();
+      api.registerService({
+        id: "auto-trade-scheduler",
+        async start() { /* already started above */ },
+        async stop() { autoTradeScheduler.destroy(); },
       });
     }
 

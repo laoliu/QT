@@ -1352,6 +1352,80 @@ export function getPlannerBodyHtml(b: string): string {
       <div id="dp-status" style="font-size:12px;color:var(--text-dim);margin-top:8px"></div>
     </div>
 
+    <!-- Auto-Trade Scheduler Panel -->
+    <div class="card" style="margin-bottom:12px;border:1px solid rgba(251,191,36,.35)">
+      <h3 style="cursor:pointer;user-select:none" onclick="toggleAutoTradePanel()">
+        🤖 自动交易定时任务
+        <span id="at-toggle" style="float:right;font-size:12px;color:var(--text-dim)">▶ 展开</span>
+      </h3>
+      <div id="at-panel" style="display:none;margin-top:12px">
+        <div id="at-status-bar" style="font-size:12px;color:var(--text-dim);margin-bottom:10px">加载中…</div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600">
+            <input type="checkbox" id="at-enabled"> 启用自动交易
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--orange)">
+            <input type="checkbox" id="at-dry-run" checked> 试运行模式（不实际下单）
+          </label>
+        </div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <label>筛选时间 (cron)</label>
+          <input type="text" id="at-screen-cron" value="30 7 * * 1-5" style="width:160px" placeholder="30 7 * * 1-5">
+          <label>下单时间 (cron)</label>
+          <input type="text" id="at-execute-cron" value="31 9 * * 1-5" style="width:160px" placeholder="31 9 * * 1-5">
+          <span style="font-size:11px;color:var(--text-dim)">格式: 分 时 日 月 周(1-5=周一至周五) | A股开盘9:30，9:30前自动走预埋单</span>
+        </div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <label>执行比例</label>
+          <input type="number" id="at-exec-pct" min="10" max="100" value="60" style="width:70px">%
+          <label>跟踪止损</label>
+          <input type="number" id="at-trailing" min="2" max="20" value="8" style="width:60px">%
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="at-cond-orders" checked> 创建条件单
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="at-force-pre"> 盘前预埋
+          </label>
+        </div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <label>投资资金</label>
+          <input type="number" id="at-capital" value="500000" style="width:130px">
+          <label>风险</label>
+          <select id="at-risk" style="width:80px">
+            <option value="low">稳健</option>
+            <option value="medium">均衡</option>
+            <option value="high" selected>进取</option>
+            <option value="aggressive">激进</option>
+          </select>
+          <label>推荐策略</label>
+          <select id="at-rec-strategy" style="width:100px">
+            <option value="mixed" selected>混合策略</option>
+            <option value="momentum">趋势动量</option>
+            <option value="value">价值投资</option>
+            <option value="growth">成长投资</option>
+            <option value="swing">波段交易</option>
+          </select>
+        </div>
+        <div class="form-row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <label>每策略前N</label>
+          <input type="number" id="at-top-n" value="8" min="5" max="20" style="width:55px">
+          <label>入围策略</label>
+          <input type="number" id="at-top-strat" value="3" min="2" max="5" style="width:55px">
+          <label>最终股票</label>
+          <input type="number" id="at-final-limit" value="8" min="3" max="8" style="width:55px">
+          <label>调仓周期</label>
+          <input type="number" id="at-rebalance" value="5" min="1" max="30" style="width:55px">天
+        </div>
+        <div class="btn-group" style="margin-top:10px;flex-wrap:wrap;gap:6px">
+          <button class="btn btn-primary" id="btn-at-save" onclick="saveAutoTradeConfig()">💾 保存配置</button>
+          <button class="btn" id="btn-at-screen" onclick="triggerAutoTradeScreen()">🔍 立即筛选</button>
+          <button class="btn" id="btn-at-exec" onclick="triggerAutoTradeExec()">🚀 立即执行</button>
+          <button class="btn" id="btn-at-refresh" onclick="loadAutoTradeStatus()">🔄 刷新状态</button>
+        </div>
+        <div id="at-result" style="margin-top:10px;font-size:12px"></div>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:12px">
       <h3 style="display:flex;align-items:center;gap:8px">🕘 每日综合选股历史 <span style="flex:1"></span><button class="btn btn-sm" onclick="loadDailyPickHistory()">🔄 刷新</button></h3>
       <div id="dp-history-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px">暂无历史</div>
@@ -1570,6 +1644,7 @@ export function getPlannerBodyHtml(b: string): string {
       <div class="btn-group" style="margin:8px 0;gap:6px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="loadConditionalOrders()">🔄 刷新条件单</button>
         <button class="btn" onclick="checkConditionalNow()">⚡ 立即检查触发</button>
+        <button class="btn" onclick="toggleCondHistory()">📜 触发历史</button>
       </div>
       <div id="cond-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
 
@@ -1579,6 +1654,21 @@ export function getPlannerBodyHtml(b: string): string {
           <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>触发时间</th><th>状态</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+
+      <!-- Conditional order history -->
+      <div id="cond-history-panel" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h4 style="font-size:13px;margin:0">📜 条件单触发历史</h4>
+          <button class="btn btn-sm" onclick="document.getElementById('cond-history-panel').style.display='none'">✕ 收起</button>
+        </div>
+        <div id="cond-history-status" style="font-size:12px;color:var(--text-dim);margin-bottom:6px"></div>
+        <div style="overflow-x:auto">
+          <table id="cond-history-table">
+            <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>触发时间</th><th>结果</th><th>归档时间</th><th>归档原因</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Add manual conditional order -->

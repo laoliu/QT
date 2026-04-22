@@ -602,29 +602,31 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         const backtestPool = combinedList.slice(0, backtestPoolSize);
         const backtestPoolSymbols = backtestPool.map((item) => item.symbol);
 
-        // ── Load per-stock fitness data for candidate boost ────
-        for (const sym of backtestPoolSymbols) {
-          try {
-            const fitRes = await runPythonScript<Record<string, unknown>>(
-              "scripts/strategy_fitness.py",
-              { action: "query_stock", symbol: sym },
-              config,
-              { timeoutMs: 5_000 },
-            );
-            if (fitRes.ok && fitRes.data) {
-              const strategies = fitRes.data.strategies as Array<Record<string, unknown>> | undefined;
-              if (strategies && strategies.length > 0) {
-                const best = strategies[0]!;
-                fitnessMap.set(sym, {
-                  bestStrategy: String(best.strategy_id),
-                  score: Number(best.composite_score) || 0,
-                });
+        // ── Load per-stock fitness data for candidate boost (parallel) ────
+        await Promise.all(
+          backtestPoolSymbols.map(async (sym) => {
+            try {
+              const fitRes = await runPythonScript<Record<string, unknown>>(
+                "scripts/strategy_fitness.py",
+                { action: "query_stock", symbol: sym },
+                config,
+                { timeoutMs: 5_000 },
+              );
+              if (fitRes.ok && fitRes.data) {
+                const strategies = fitRes.data.strategies as Array<Record<string, unknown>> | undefined;
+                if (strategies && strategies.length > 0) {
+                  const best = strategies[0]!;
+                  fitnessMap.set(sym, {
+                    bestStrategy: String(best.strategy_id),
+                    score: Number(best.composite_score) || 0,
+                  });
+                }
               }
+            } catch {
+              // Optional — continue without fitness data
             }
-          } catch {
-            // Optional — continue without fitness data
-          }
-        }
+          }),
+        );
 
         let stockBacktestRanking: StockBacktestEntry[] = [];
         if (backtestPool.length > 0) {
@@ -636,8 +638,8 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
             strategyScreenMap.set(run.strategy, run.screenStrategy);
           }
 
-          // Concurrency limiter: run at most 4 Python backtests in parallel
-          const CONCURRENCY = 4;
+          // Concurrency limiter: run at most 6 Python backtests in parallel
+          const CONCURRENCY = 6;
           const queue = [...backtestPool];
           const results: StockBacktestEntry[] = [];
           const runOne = async (stock: (typeof backtestPool)[number]): Promise<StockBacktestEntry> => {

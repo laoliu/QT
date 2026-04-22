@@ -1471,9 +1471,16 @@ function loadSignals(){
       }).join('');
     }
 
-    // Signal history table (per mode)
+    // Signal history table (per mode) with dedup – skip if same symbol+type within 5min
     if(d.signals&&d.signals.length){
-      d.signals.forEach(function(s){s.timestamp=d.timestamp;s._mode=_mode;signalHistory[_mode].unshift(s)});
+      var DEDUP_MS=5*60*1000;
+      d.signals.forEach(function(s){
+        s.timestamp=d.timestamp;s._mode=_mode;
+        var dup=signalHistory[_mode].some(function(h){
+          return h.symbol===s.symbol&&h.type===s.type&&(new Date(s.timestamp).getTime()-new Date(h.timestamp).getTime()<DEDUP_MS);
+        });
+        if(!dup){signalHistory[_mode].unshift(s)}
+      });
       if(signalHistory[_mode].length>100)signalHistory[_mode]=signalHistory[_mode].slice(0,100);
     }
     var ht=document.querySelector('#signal-history-table tbody');

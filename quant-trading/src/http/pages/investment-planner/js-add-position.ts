@@ -21,7 +21,9 @@ function loadAddPositionPortfolio(){
     // Live positions
     if(source!=='plan'&&liveData&&liveData.data&&liveData.data.positions&&liveData.data.positions.length){
       positions=liveData.data.positions.map(function(p){
-        return {symbol:p.symbol,name:p.name||p.symbol,shares:p.shares||p.quantity||0,cost:p.avgCost||p.cost||p.buyPrice||0,currentPrice:p.currentPrice||p.price||0,pnlPct:p.pnlPct||0,value:p.currentValue||p.value||0};
+        var qty=p.quantity||p.shares||0;
+        var price=p.currentPrice||p.price||0;
+        return {symbol:p.symbol,name:p.name||p.symbol,shares:qty,cost:p.avgCost||p.cost||p.buyPrice||0,currentPrice:price,pnlPct:p.unrealizedPnlPct!=null?p.unrealizedPnlPct*100:(p.pnlPct||0),value:p.marketValue||(qty*price)};
       });
     }
     // Fallback to plan

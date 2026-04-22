@@ -25,6 +25,7 @@ function _onTabDataLoad(tabName){
     if(tabName==='plan'){loadTodayPlan();loadPlanHistory();restoreCachedPlan();}
     if(tabName==='recommend'){loadDailyPickHistory();loadOptHistory();}
     if(tabName==='rebalance'){refreshGlobalMode();loadRebalancePortfolio();}
+    if(tabName==='add-position')loadAddPositionPortfolio();
     if(tabName==='recommend')refreshGlobalMode();
   }catch(e){console.error('[tab-data-load]',e)}
 }

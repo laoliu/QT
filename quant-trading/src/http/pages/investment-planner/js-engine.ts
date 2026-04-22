@@ -411,7 +411,7 @@ function renderPositionsTable(){
       '<td>'+(p.currentPrice!=null?num(p.currentPrice):'-')+'</td>'+
       '<td>'+(p.marketValue!=null?'¥'+numInt(p.marketValue):'-')+'</td>'+
       '<td style="color:'+pnlColor+'">'+(pnl!=null?(pnl>=0?'+':'')+num(pnl):'-')+'</td>'+
-      '<td style="color:'+pnlColor+'">'+(pnlPct!=null?(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'%':'-')+'</td>'+
+      '<td style="color:'+pnlColor+'">'+(pnlPct!=null?(pnlPct>=0?'+':'')+(pnlPct*100).toFixed(2)+'%':'-')+'</td>'+
       '</tr>';
   });
   tbody.innerHTML=rows;

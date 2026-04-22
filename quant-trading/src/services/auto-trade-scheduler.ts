@@ -362,7 +362,7 @@ export class AutoTradeScheduler {
 
   // ── Internal: Phases ───────────────────────────────────────
 
-  private async runScreenPhase(): Promise<{ ok: boolean; symbols: string[]; error?: string }> {
+  private async runScreenPhase(): Promise<{ ok: boolean; symbols: string[]; error?: string; allocations?: Array<{ code: string; name: string; shares: number; price: number; amount: number }> }> {
     this.running = true;
     this.status.lastScreenAt = new Date().toISOString();
     this.notify("🔍 自动交易：开始每日综合选股…");
@@ -436,7 +436,13 @@ export class AutoTradeScheduler {
         `✅ 自动交易筛选完成\n入围 ${finalSymbols.length} 只: ${symbolList}\n推荐 ${allocations.length} 只已就绪，等待 ${this.config.executeCron} 执行下单${this.config.dryRun ? "（试运行模式）" : ""}`,
       );
 
-      return { ok: true, symbols: finalSymbols };
+      // Return allocation summaries for UI display
+      const allocSummary = allocations.map((a: unknown) => {
+        const r = a as Record<string, unknown>;
+        return { code: String(r.code ?? ""), name: String(r.name ?? ""), shares: Number(r.shares ?? 0), price: Number(r.price ?? 0), amount: Number(r.amount ?? 0) };
+      });
+
+      return { ok: true, symbols: finalSymbols, allocations: allocSummary };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.status.lastScreenResult = `异常: ${msg}`;

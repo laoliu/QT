@@ -564,7 +564,7 @@ export function createQuantCommands(
             const lines = [
               `📊 **实盘持仓** (${account.brokerType})`,
               `资产: ¥${account.totalAssets.toFixed(2)}  现金: ¥${account.cash.toFixed(2)}  市值: ¥${account.marketValue.toFixed(2)}`,
-              `今日盈亏: ${account.todayProfit != null ? `¥${account.todayProfit.toFixed(2)}` : "--"}  总浮盈: ${account.profitPct >= 0 ? "+" : ""}${account.profitPct.toFixed(2)}%`,
+              `今日盈亏: ${account.todayProfit != null ? `¥${account.todayProfit.toFixed(2)}` : "--"}  总浮盈: ${account.profitPct >= 0 ? "+" : ""}${(account.profitPct * 100).toFixed(2)}%`,
               "",
             ];
             if (positions.length === 0) {
@@ -575,7 +575,7 @@ export function createQuantCommands(
                 const price = pos.currentPrice ? `¥${pos.currentPrice.toFixed(2)}` : "--";
                 const pnl =
                   pos.unrealizedPnlPct != null
-                    ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${pos.unrealizedPnlPct.toFixed(2)}%`
+                    ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${(pos.unrealizedPnlPct * 100).toFixed(2)}%`
                     : "";
                 const mv = pos.marketValue ? `  市值¥${pos.marketValue.toFixed(0)}` : "";
                 lines.push(
@@ -609,7 +609,7 @@ export function createQuantCommands(
             const price = pos.currentPrice ? `¥${pos.currentPrice.toFixed(2)}` : "--";
             const pnl =
               pos.unrealizedPnlPct != null
-                ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${pos.unrealizedPnlPct.toFixed(2)}%`
+                ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${(pos.unrealizedPnlPct * 100).toFixed(2)}%`
                 : "";
             lines.push(
               `  • ${pos.symbol} ${name}  ${String(pos.quantity)}股  均价¥${pos.avgCost.toFixed(2)}  现价${price} ${pnl}`,
@@ -762,7 +762,7 @@ export function createQuantCommands(
         if (account) {
           lines.push(
             `总资产: ¥${account.totalAssets.toFixed(2)}  今日实现: ¥${netPnl.toFixed(2)}`,
-            `浮动盈亏: ${account.profitPct >= 0 ? "+" : ""}${account.profitPct.toFixed(2)}%`,
+            `浮动盈亏: ${account.profitPct >= 0 ? "+" : ""}${(account.profitPct * 100).toFixed(2)}%`,
           );
         } else {
           lines.push(`净盈亏: ¥${netPnl.toFixed(2)}`);
@@ -777,7 +777,7 @@ export function createQuantCommands(
             const pnlAbs = pos.unrealizedPnl != null ? `¥${pos.unrealizedPnl.toFixed(0)}` : "--";
             const pnlPct =
               pos.unrealizedPnlPct != null
-                ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${pos.unrealizedPnlPct.toFixed(2)}%`
+                ? `${pos.unrealizedPnlPct >= 0 ? "+" : ""}${(pos.unrealizedPnlPct * 100).toFixed(2)}%`
                 : "";
             const icon = (pos.unrealizedPnl ?? 0) >= 0 ? "📈" : "📉";
             lines.push(`  ${icon} ${pos.symbol} ${name}  ${pnlAbs} ${pnlPct}`);

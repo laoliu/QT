@@ -305,9 +305,9 @@ function renderDailyCompositePick(d){
   document.getElementById('dp-kpis').innerHTML=
     kpiHtml(esc(bestLabel),'最佳策略')+
     kpiHtml(bestScore,'策略综合分')+
-    kpiHtml(finalSymbols.length+'ֻ','最终入围')+
+    kpiHtml(finalSymbols.length+'只','最终入围')+
     kpiHtml(selected.length+'个','入围策略')+
-    kpiHtml(okStockBt+'ֻ','单股可回测');
+    kpiHtml(okStockBt+'只','单股可回测');
 
   // Strategy ranking table
   var stBody=document.querySelector('#dp-strategy-table tbody');
@@ -1176,8 +1176,13 @@ function loadAutoTradeStatus(){
     document.getElementById('at-status-bar').innerHTML=parts.join(' | ');
     if(d.lastError){
       document.getElementById('at-result').innerHTML='<div style="color:var(--red);padding:6px;background:rgba(248,81,73,.08);border-radius:4px">最近错误: '+esc(d.lastError)+'</div>';
-    }else{
-      document.getElementById('at-result').innerHTML='';
+    }else if(Array.isArray(d.pendingAllocations)&&d.pendingAllocations.length){
+      var curResult=document.getElementById('at-result').innerHTML;
+      if(!curResult||curResult.indexOf('筛选完成')===-1){
+        var html='<div style="color:var(--green);margin-bottom:4px">'+esc(d.lastScreenResult||('待执行 '+d.pendingAllocations.length+' 只'))+'</div>';
+        html+=renderAllocTable(d.pendingAllocations);
+        document.getElementById('at-result').innerHTML=html;
+      }
     }
   }).catch(function(e){
     document.getElementById('at-status-bar').textContent='加载失败: '+e.message;
@@ -1218,6 +1223,35 @@ function saveAutoTradeConfig(){
     .finally(function(){btn.disabled=false;btn.textContent='💾 保存配置';});
 }
 
+function renderAllocTable(allocs){
+  if(!allocs||!allocs.length)return '';
+  var h='<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px">';
+  h+='<tr style="border-bottom:1px solid var(--border)">';
+  h+='<th style="text-align:left;padding:4px 8px">代码</th>';
+  h+='<th style="text-align:left;padding:4px 8px">名称</th>';
+  h+='<th style="text-align:right;padding:4px 8px">建议股数</th>';
+  h+='<th style="text-align:right;padding:4px 8px">参考价</th>';
+  h+='<th style="text-align:right;padding:4px 8px">金额</th></tr>';
+  var totalAmt=0;
+  for(var i=0;i<allocs.length;i++){
+    var a=allocs[i];
+    var amt=a.amount||(a.shares*a.price)||0;
+    totalAmt+=amt;
+    h+='<tr style="border-bottom:1px solid var(--border-dim)">';
+    h+='<td style="padding:4px 8px">'+esc(a.code)+'</td>';
+    h+='<td style="padding:4px 8px">'+esc(a.name||a.code)+'</td>';
+    h+='<td style="text-align:right;padding:4px 8px">'+a.shares+'</td>';
+    h+='<td style="text-align:right;padding:4px 8px">'+(a.price?'¥'+Number(a.price).toFixed(2):'-')+'</td>';
+    h+='<td style="text-align:right;padding:4px 8px">'+(amt?'¥'+Math.round(amt).toLocaleString():'-')+'</td></tr>';
+  }
+  if(allocs.length>1){
+    h+='<tr style="font-weight:bold"><td colspan="4" style="padding:4px 8px;text-align:right">合计</td>';
+    h+='<td style="text-align:right;padding:4px 8px">¥'+Math.round(totalAmt).toLocaleString()+'</td></tr>';
+  }
+  h+='</table>';
+  return h;
+}
+
 function triggerAutoTradeScreen(){
   var btn=document.getElementById('btn-at-screen');
   btn.disabled=true;btn.textContent='⏳ 筛选中…';
@@ -1230,7 +1264,10 @@ function triggerAutoTradeScreen(){
         return;
       }
       var symbols=Array.isArray(resp.symbols)?resp.symbols:[];
-      document.getElementById('at-result').innerHTML='<div style="color:var(--green)">✅ 筛选完成，入围 '+symbols.length+' 只: '+esc(symbols.join(', '))+'</div>';
+      var allocs=Array.isArray(resp.allocations)?resp.allocations:[];
+      var html='<div style="color:var(--green);margin-bottom:4px">✅ 筛选完成，入围 '+symbols.length+' 只，推荐 '+allocs.length+' 只</div>';
+      html+=renderAllocTable(allocs);
+      document.getElementById('at-result').innerHTML=html;
       toast('✅ 自动交易筛选完成');
       loadAutoTradeStatus();
     })

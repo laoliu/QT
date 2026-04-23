@@ -20,7 +20,7 @@ function dateOffset(daysBack: number): string {
 }
 
 export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
-  const { api, config, conditionalOrderService, secure } = deps;
+  const { api, config, conditionalOrderService, secure, getEngine } = deps;
 
   // ── Scan holdings for swing suitability ─────────────────────────
   api.registerHttpRoute({
@@ -252,6 +252,9 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           current_price: number;
           ma_center: number;
           bias: number;
+          core_shares: number;
+          swing_shares: number;
+          swing_total: number;
           active_grid_orders: number;
           grid_levels: number[];
           filled_grids: Record<number, boolean>;
@@ -260,6 +263,14 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
         }> = [];
 
         const provider = createDataProvider(config);
+
+        // Fetch broker/paper positions for core-shares lookup
+        const engine = getEngine();
+        const positions = engine.getPositions();
+        const posMap = new Map<string, { quantity: number; name: string }>();
+        for (const p of positions) {
+          posMap.set(p.symbol, { quantity: p.quantity, name: p.name ?? p.symbol });
+        }
 
         for (const [symbol, orders] of allBySymbol) {
           // Get active (non-triggered) orders for this symbol
@@ -294,12 +305,29 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           // Compute PnL from persistent trade log
           const pnlSummary = conditionalOrderService.getSwingPnlSummary(symbol);
 
+          // Position data: core shares from broker/paper, swing shares from trade log
+          const pos = posMap.get(symbol);
+          const totalHeld = pos?.quantity ?? 0;
+          const posName = pos?.name ?? symbol;
+
+          // Swing shares = net buys - net sells from grid trades
+          const symbolTrades = conditionalOrderService.getSwingTradeLog(symbol);
+          let swingNetShares = 0;
+          for (const t of symbolTrades) {
+            swingNetShares += t.direction === "buy" ? t.quantity : -t.quantity;
+          }
+          const swingShares = Math.max(0, swingNetShares);
+          const coreShares = Math.max(0, totalHeld - swingShares);
+
           overlays.push({
             symbol,
-            name: symbol,
+            name: posName,
             current_price: currentPrice,
             ma_center: centerLevel,
             bias,
+            core_shares: coreShares,
+            swing_shares: swingShares,
+            swing_total: totalHeld,
             active_grid_orders: activeOrders.length,
             grid_levels: gridLevels,
             filled_grids: filledGrids,

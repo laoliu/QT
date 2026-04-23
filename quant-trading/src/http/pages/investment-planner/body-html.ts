@@ -33,6 +33,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-sim" data-tab="combo-backtest">🔬 组合回测</div>
     <div class="tab tab-sim" data-tab="pf-backtest">📊 持仓回测</div>
     <div class="tab tab-sim" data-tab="portfolio">💼 模拟持仓</div>
+    <div class="tab tab-sim" data-tab="signals">🚨 交易信号</div>
   </div>
   <div class="tab-group" data-mode="live">
     <span class="tab-group-label">实盘 · 操作</span>
@@ -56,6 +57,7 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="nav-btn nav-btn-sim" onclick="activateTab('combo-backtest');history.pushState(null,null,'#combo-backtest')">🔬 组合回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('pf-backtest');history.pushState(null,null,'#pf-backtest')">📊 持仓回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('portfolio');history.pushState(null,null,'#portfolio')">💼 模拟持仓</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
     </div>
   </div>
   <div class="nav-guide-live">
@@ -758,7 +760,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div class="kpi-row" id="signal-kpis"></div>
   <div id="signal-list"></div>
   <div class="card" style="margin-top:12px">
-    <h3>📜 信号历史</h3>
+    <h3>📜 信号历史 <span id="signal-history-mode-badge" style="font-size:12px;margin-left:8px"></span></h3>
     <div style="overflow-x:auto"><table id="signal-history-table">
       <thead><tr><th>时间</th><th>类型</th><th>股票</th><th>操作</th><th>价格</th><th>盈亏%</th><th>消息</th></tr></thead>
       <tbody></tbody>
@@ -1831,8 +1833,11 @@ export function getPlannerBodyHtml(b: string): string {
       <h4>⚙️ 回测参数</h4>
       <div class="pbt-input-group">
         <div class="pbt-field" style="grid-column:span 2">
-          <label>股票代码 <span style="font-size:10px;opacity:.7">逗号分隔</span></label>
+          <label>股票代码 <span style="font-size:10px;opacity:.7">逗号分隔</span>
+            <button class="btn btn-sm" onclick="pbtLoadHoldings()" style="margin-left:8px;font-size:10px;padding:1px 8px">📂 从持仓导入</button>
+          </label>
           <input type="text" id="pbt-symbols" placeholder="600519,000858,300750" title="逗号分隔多只股票代码">
+          <div id="pbt-holding-chips" style="display:none;margin-top:6px;display:flex;flex-wrap:wrap;gap:4px"></div>
         </div>
         <div class="pbt-field">
           <label>起始日期</label>
@@ -1865,7 +1870,7 @@ export function getPlannerBodyHtml(b: string): string {
 
     <div class="pbt-actions">
       <button class="btn btn-primary" id="btn-pbt-run" onclick="runPortfolioBacktest()">🚀 开始回测</button>
-      <button class="btn btn-sm" onclick="pbtSelectAll()">ȫѡ</button>
+      <button class="btn btn-sm" onclick="pbtSelectAll()">全选</button>
       <button class="btn btn-sm" onclick="pbtClearAll()">清除</button>
       <button class="btn btn-sm" onclick="pbtSelectRecommended()">⭐ 推荐组合</button>
       <span id="pbt-selected-count" style="font-size:11px;color:var(--text-dim)"></span>

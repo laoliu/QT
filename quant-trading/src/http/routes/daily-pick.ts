@@ -500,7 +500,14 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           .filter((run) => run.summary && !run.error)
           .slice(0, topStrategyCount);
         if (selectedStrategies.length === 0) {
-          json(res, { error: "所有策略执行失败，请稍后重试" }, 500);
+          const errors = sortedRuns
+            .filter((run) => run.error)
+            .map((run) => `${run.strategyLabel}: ${run.error}`)
+            .slice(0, 5);
+          json(res, {
+            error: "所有策略执行失败，请稍后重试",
+            details: errors,
+          }, 500);
           return;
         }
 

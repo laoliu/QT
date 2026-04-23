@@ -140,6 +140,81 @@ function pbtSelectRecommended(){
   pbtUpdateSelectedCount();
 }
 
+/* ── Load holdings from portfolio API ── */
+var _pbtHoldings=[];
+function pbtLoadHoldings(){
+  toast('🔄 加载持仓…');
+  var chipsEl=document.getElementById('pbt-holding-chips');
+  chipsEl.innerHTML='<span style="font-size:11px;color:var(--text-dim)">加载中…</span>';
+  chipsEl.style.display='flex';
+
+  var liveP=api('/quant/api/portfolio?mode=live',{_timeout:15000}).catch(function(){return null});
+  var paperP=api('/quant/api/portfolio?mode=paper',{_timeout:15000}).catch(function(){return null});
+
+  Promise.all([liveP,paperP]).then(function(results){
+    var positions=[];
+    // prefer live positions
+    var liveData=results[0];
+    if(liveData&&liveData.data&&liveData.data.positions&&liveData.data.positions.length){
+      positions=liveData.data.positions;
+    } else {
+      var paperData=results[1];
+      if(paperData&&paperData.data&&paperData.data.positions&&paperData.data.positions.length){
+        positions=paperData.data.positions;
+      }
+    }
+    if(!positions.length){
+      chipsEl.innerHTML='<span style="font-size:11px;color:var(--text-dim)">暂无持仓数据</span>';
+      toast('暂无持仓数据');
+      return;
+    }
+    _pbtHoldings=positions.map(function(p){
+      return {symbol:p.symbol,name:p.name||p.symbol,qty:p.quantity||p.shares||0};
+    });
+    pbtRenderHoldingChips();
+    // auto-select all
+    pbtSelectAllHoldings();
+    toast('✅ 已加载 '+_pbtHoldings.length+' 只持仓股票');
+  }).catch(function(e){
+    chipsEl.innerHTML='<span style="font-size:11px;color:var(--red)">加载失败: '+esc(e.message)+'</span>';
+  });
+}
+
+function pbtRenderHoldingChips(){
+  var chipsEl=document.getElementById('pbt-holding-chips');
+  chipsEl.style.display='flex';
+  var html='<button class="btn btn-sm" onclick="pbtSelectAllHoldings()" style="font-size:10px;padding:1px 6px">全选</button>';
+  html+='<button class="btn btn-sm" onclick="pbtClearHoldings()" style="font-size:10px;padding:1px 6px">清除</button>';
+  _pbtHoldings.forEach(function(h){
+    html+='<div class="chip selected" data-pbt-holding="'+esc(h.symbol)+'" onclick="pbtToggleHolding(this)" style="cursor:pointer;font-size:11px;padding:2px 8px" title="'+esc(h.name)+' ('+h.qty+'股)">';
+    html+=esc(h.name||h.symbol)+' <span style="opacity:.6;font-size:10px">'+esc(h.symbol)+'</span></div>';
+  });
+  chipsEl.innerHTML=html;
+}
+
+function pbtToggleHolding(el){
+  el.classList.toggle('selected');
+  pbtSyncHoldingsToInput();
+}
+
+function pbtSelectAllHoldings(){
+  document.querySelectorAll('[data-pbt-holding]').forEach(function(c){c.classList.add('selected')});
+  pbtSyncHoldingsToInput();
+}
+
+function pbtClearHoldings(){
+  document.querySelectorAll('[data-pbt-holding]').forEach(function(c){c.classList.remove('selected')});
+  pbtSyncHoldingsToInput();
+}
+
+function pbtSyncHoldingsToInput(){
+  var selected=[];
+  document.querySelectorAll('[data-pbt-holding].selected').forEach(function(c){
+    selected.push(c.getAttribute('data-pbt-holding'));
+  });
+  document.getElementById('pbt-symbols').value=selected.join(',');
+}
+
 function runPortfolioBacktest(){
   var symbols=document.getElementById('pbt-symbols').value.trim();
   if(!symbols){toast('请输入股票代码');return}
@@ -273,7 +348,7 @@ function renderPbtHistory(entries){
     var ret=best?pbtFmt(best.totalReturn)+'%':'N/A';
     var retCl=best&&best.totalReturn>=0?'up':'down';
     html+='<tr>';
-    html+='<td style="white-space:nowrap;font-size:11px">'+esc(e.createdAt.replace('T',' ').slice(0,19))+'</td>';
+    html+='<td style="white-space:nowrap;font-size:11px">'+esc(new Date(e.createdAt).toLocaleString('zh-CN'))+'</td>';
     html+='<td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="'+esc(e.symbols.join(','))+'">'+esc(e.symbols.slice(0,3).join(','))+(e.symbols.length>3?'...':'')+'</td>';
     html+='<td style="font-size:11px">'+esc(e.period)+'</td>';
     html+='<td>'+e.successCount+'/'+e.strategyCount+'</td>';

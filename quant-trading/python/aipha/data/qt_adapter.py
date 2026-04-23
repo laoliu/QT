@@ -38,19 +38,13 @@ class QTAKShareAdapter:
         )
 
     def load_bars(self, *, symbol: str, start: date, end: date, frequency: str) -> list[Bar]:
-        from data_providers.akshare_provider import get_stock_klines
+        from data_providers.akshare_provider import get_klines
 
-        period_map = {"1d": "daily", "1w": "weekly", "1m": "1"}
-        period = period_map.get(frequency, "daily")
-        adjust_map = {"qfq": "qfq", "hfq": "hfq", "none": ""}
-        adj = adjust_map.get(self._adjust, "qfq")
-
-        raw = get_stock_klines(
+        raw = get_klines(
             symbol=symbol,
-            period=period,
-            start_date=start.strftime("%Y%m%d"),
-            end_date=end.strftime("%Y%m%d"),
-            adjust=adj,
+            interval=frequency,
+            start=start.strftime("%Y-%m-%d"),
+            end=end.strftime("%Y-%m-%d"),
         )
 
         if not raw or not isinstance(raw, list):
@@ -59,16 +53,20 @@ class QTAKShareAdapter:
         bars: list[Bar] = []
         for item in raw:
             try:
-                dt = _parse_datetime(item.get("date") or item.get("日期"))
+                ts = item.get("timestamp")
+                if ts is not None:
+                    dt = datetime.fromtimestamp(ts / 1000)
+                else:
+                    dt = _parse_datetime(item.get("date") or item.get("日期"))
                 bars.append(Bar(
                     symbol=symbol,
                     start_ts=dt,
                     end_ts=dt,
-                    open=float(item.get("open", item.get("开盘", 0))),
-                    high=float(item.get("high", item.get("最高", 0))),
-                    low=float(item.get("low", item.get("最低", 0))),
-                    close=float(item.get("close", item.get("收盘", 0))),
-                    volume=float(item.get("volume", item.get("成交量", 0))),
+                    open=float(item.get("open", 0)),
+                    high=float(item.get("high", 0)),
+                    low=float(item.get("low", 0)),
+                    close=float(item.get("close", 0)),
+                    volume=float(item.get("volume", 0)),
                     prev_close=_safe_float(item.get("prev_close")),
                 ))
             except Exception as e:

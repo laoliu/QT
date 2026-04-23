@@ -169,7 +169,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           totalReturn: r.totalReturn ?? null,
           annualizedReturn: r.annualizedReturn ?? null,
           finalValue: r.finalValue ?? null,
-          profit: r.finalValue != null ? r.finalValue - initialCash : null,
+          profit: r.finalValue != null ? r.finalValue - (r.initialCash ?? initialCash) : null,
           maxDrawdown: r.maxDrawdown ?? null,
           sharpeRatio: r.sharpeRatio ?? null,
           winRate: r.winRate ?? null,

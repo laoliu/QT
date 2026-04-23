@@ -26,6 +26,7 @@ export interface BatchBacktestResultItem {
   profitFactor?: number;
   totalTrades?: number;
   finalValue?: number;
+  initialCash?: number;
 }
 
 export interface BatchBacktestSummary {
@@ -97,6 +98,7 @@ export async function runBatchBacktest(
         profitFactor: result.profitFactor,
         totalTrades: result.totalTrades,
         finalValue: result.finalValue,
+        initialCash: result.initialCash,
       });
     } catch (err) {
       results.push({

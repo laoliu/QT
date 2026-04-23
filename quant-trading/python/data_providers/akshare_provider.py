@@ -488,11 +488,14 @@ def _flush_qmt_batch(bridge_url: str):
                 timeout=max(30, len(sub_batch) // 3),
             )
             data = resp.json()
-            if data.get("status") != "ok":
+            if not data.get("ok") and data.get("status") != "ok":
                 print(f"[QMT自动合批] 请求失败: {data.get('error', '未知')}", file=sys.stderr)
                 continue
 
+            # Response may be {ok, data: {bars: {...}}} or {status, data: {...}}
             raw_data = data.get("data", {})
+            if isinstance(raw_data, dict) and "bars" in raw_data:
+                raw_data = raw_data["bars"]
             for key, raw_bars in raw_data.items():
                 if key in qmt_to_entry:
                     plain, entry = qmt_to_entry[key]
@@ -617,11 +620,14 @@ def _fetch_qmt_klines_batch(
                 timeout=max(30, len(batch) // 5),  # scale timeout with batch size
             )
             data = resp.json()
-            if data.get("status") != "ok":
+            if not data.get("ok") and data.get("status") != "ok":
                 print(f"[QMT批量] 批次{batch_num}/{total_batches} 失败: {data.get('error', '未知')}", file=sys.stderr)
                 continue
 
+            # Response may be {ok, data: {bars: {...}}} or {status, data: {...}}
             raw_data = data.get("data", {})
+            if isinstance(raw_data, dict) and "bars" in raw_data:
+                raw_data = raw_data["bars"]
             for key, raw_bars in raw_data.items():
                 # key may be QMT code (600519.SH) or plain (600519)
                 plain = qmt_to_plain.get(key, key.split(".")[0])

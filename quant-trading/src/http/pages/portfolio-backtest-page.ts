@@ -74,8 +74,10 @@ canvas{width:100%!important;height:100%!important}
   <div class="form-row">
     <label>股票代码</label>
     <input type="text" id="symbols" placeholder="600519,000858,300750" style="width:300px" title="逗号分隔多只股票代码">
+    <button class="btn btn-sm" onclick="loadHoldingsStandalone()" style="font-size:11px">📂 从持仓导入</button>
     <span style="font-size:11px;color:var(--text-dim)">逗号分隔，如: 600519,000858,300750</span>
   </div>
+  <div id="sa-holding-chips" style="display:none;margin:-8px 0 8px;padding-left:90px;display:flex;flex-wrap:wrap;gap:4px"></div>
   <div class="form-row">
     <label>起始日期</label>
     <input type="text" id="startDate" placeholder="YYYY-MM-DD" style="width:130px">
@@ -92,7 +94,7 @@ canvas{width:100%!important;height:100%!important}
 
   <div class="form-row" style="margin-top:16px">
     <button class="btn btn-primary" id="run-btn" onclick="runBacktest()">🚀 开始回测</button>
-    <button class="btn btn-sm" onclick="selectAllStrategies()">ȫѡ</button>
+    <button class="btn btn-sm" onclick="selectAllStrategies()">全选</button>
     <button class="btn btn-sm" onclick="clearAllStrategies()">清除</button>
     <button class="btn btn-sm" onclick="selectRecommended()">推荐组合</button>
     <span id="status-text" style="font-size:12px;color:var(--text-dim)"></span>
@@ -218,6 +220,60 @@ function selectRecommended(){
       c.classList.remove('selected');
     }
   });
+}
+
+/* ── Load holdings ── */
+var _saHoldings=[];
+function loadHoldingsStandalone(){
+  var chipsEl=document.getElementById('sa-holding-chips');
+  chipsEl.style.display='flex';
+  chipsEl.innerHTML='<span style="font-size:11px;color:var(--text-dim)">加载中…</span>';
+  var liveP=fetch('${b}/quant/api/portfolio?mode=live').then(function(r){return r.json()}).catch(function(){return null});
+  var paperP=fetch('${b}/quant/api/portfolio?mode=paper').then(function(r){return r.json()}).catch(function(){return null});
+  Promise.all([liveP,paperP]).then(function(results){
+    var positions=[];
+    var liveData=results[0];
+    if(liveData&&liveData.data&&liveData.data.positions&&liveData.data.positions.length){
+      positions=liveData.data.positions;
+    } else {
+      var paperData=results[1];
+      if(paperData&&paperData.data&&paperData.data.positions&&paperData.data.positions.length){
+        positions=paperData.data.positions;
+      }
+    }
+    if(!positions.length){
+      chipsEl.innerHTML='<span style="font-size:11px;color:var(--text-dim)">暂无持仓数据</span>';
+      return;
+    }
+    _saHoldings=positions.map(function(p){
+      return {symbol:p.symbol,name:p.name||p.symbol,qty:p.quantity||p.shares||0};
+    });
+    saRenderHoldingChips();
+    saSelectAllHoldings();
+  }).catch(function(e){
+    chipsEl.innerHTML='<span style="font-size:11px;color:var(--red)">加载失败</span>';
+  });
+}
+
+function saRenderHoldingChips(){
+  var chipsEl=document.getElementById('sa-holding-chips');
+  chipsEl.style.display='flex';
+  var html='<button class="btn btn-sm" onclick="saSelectAllHoldings()" style="font-size:10px;padding:1px 6px">全选</button>';
+  html+='<button class="btn btn-sm" onclick="saClearHoldings()" style="font-size:10px;padding:1px 6px">清除</button>';
+  _saHoldings.forEach(function(h){
+    html+='<div class="chip selected" data-sa-holding="'+h.symbol+'" onclick="saToggleHolding(this)" style="cursor:pointer;font-size:11px;padding:2px 8px" title="'+(h.name)+' ('+h.qty+'股)">';
+    html+=(h.name||h.symbol)+' <span style="opacity:.6;font-size:10px">'+h.symbol+'</span></div>';
+  });
+  chipsEl.innerHTML=html;
+}
+
+function saToggleHolding(el){el.classList.toggle('selected');saSyncHoldingsToInput()}
+function saSelectAllHoldings(){document.querySelectorAll('[data-sa-holding]').forEach(function(c){c.classList.add('selected')});saSyncHoldingsToInput()}
+function saClearHoldings(){document.querySelectorAll('[data-sa-holding]').forEach(function(c){c.classList.remove('selected')});saSyncHoldingsToInput()}
+function saSyncHoldingsToInput(){
+  var sel=[];
+  document.querySelectorAll('[data-sa-holding].selected').forEach(function(c){sel.push(c.getAttribute('data-sa-holding'))});
+  document.getElementById('symbols').value=sel.join(',');
 }
 
 function runBacktest(){

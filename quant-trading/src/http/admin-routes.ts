@@ -1158,6 +1158,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           {
             action: "monitor",
             plan: body.plan ?? {},
+            mode: body.mode ?? "paper",
           },
           config,
         );

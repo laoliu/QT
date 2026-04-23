@@ -305,7 +305,7 @@ function refreshFiles(){
     if(files.length===0){el.innerHTML='<div class="empty-state">1704</div>';return}
     var html='<table><thead><tr><th>04/th><th>С</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
     files.forEach(function(f){
-      html+='<tr><td>'+esc(f.filename)+'</td><td>'+formatSize(f.size)+'</td><td>'+esc(f.createdAt.replace('T',' ').slice(0,19))+'</td>';
+      html+='<tr><td>'+esc(f.filename)+'</td><td>'+formatSize(f.size)+'</td><td>'+esc(new Date(f.createdAt).toLocaleString('zh-CN'))+'</td>';
       html+='<td><a href="'+B+'/quant/api/data-export/download?file='+encodeURIComponent(f.filename)+'" class="btn btn-sm" style="margin-right:4px">下载</a>';
       html+='<button class="btn btn-sm btn-danger" onclick="deleteFile(\\''+esc(f.filename)+'\\')">01</button></td></tr>';
     });

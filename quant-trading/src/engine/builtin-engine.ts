@@ -580,20 +580,23 @@ export async function runPortfolioBacktest(
       dateMap.set(date, (dateMap.get(date) ?? 0) + value);
     }
   }
+  const uninvestedCashForCurve = request.initialCash - perSymbolCash * perSymbolResults.length;
   const equityCurve = [...dateMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, value]) => ({ date, value }));
+    .map(([date, value]) => ({ date, value: value + uninvestedCashForCurve }));
 
   // Aggregate signals from all symbols
   const allSignals = perSymbolResults.flatMap(({ result }) => result.signals);
   allSignals.sort((a, b) => a.timestamp - b.timestamp);
 
-  // Portfolio-level metrics based on successful symbols only
-  const finalValue = perSymbolResults.reduce((sum, { result }) => sum + result.finalValue, 0);
+  // Portfolio-level metrics — include uninvested cash from failed symbols
+  const investedValue = perSymbolResults.reduce((sum, { result }) => sum + result.finalValue, 0);
   const actualInitialCash = perSymbolCash * perSymbolResults.length;
+  const uninvestedCash = request.initialCash - actualInitialCash; // cash from failed symbols
+  const finalValue = investedValue + uninvestedCash;
   const tradingDays = equityCurve.length;
   const years = tradingDays / 252;
-  const annualizedReturn = years > 0 ? (finalValue / actualInitialCash) ** (1 / years) - 1 : 0;
+  const annualizedReturn = years > 0 ? (investedValue / actualInitialCash) ** (1 / years) - 1 : 0;
 
   // Portfolio Sharpe from merged equity curve
   const dailyReturns: number[] = [];
@@ -640,9 +643,9 @@ export async function runPortfolioBacktest(
     symbols: perSymbolResults.map(({ symbol }) => symbol),
     startDate: request.startDate,
     endDate: request.endDate,
-    initialCash: actualInitialCash,
+    initialCash: request.initialCash,
     finalValue,
-    totalReturn: ((finalValue - actualInitialCash) / actualInitialCash) * 100,
+    totalReturn: ((finalValue - request.initialCash) / request.initialCash) * 100,
     annualizedReturn: annualizedReturn * 100,
     maxDrawdown: maxDrawdown * 100,
     maxDrawdownDuration,

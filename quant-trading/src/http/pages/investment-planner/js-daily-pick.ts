@@ -1263,7 +1263,11 @@ function triggerAutoTradeScreen(){
   api('/quant/admin/api/auto-trade/trigger-screen',{method:'POST',body:'{}',_timeout:1800000})
     .then(function(resp){
       if(!resp.ok){
-        document.getElementById('at-result').innerHTML='<div style="color:var(--red)">筛选失败: '+esc(resp.error||'未知错误')+'</div>';
+        var errHtml='<div style="color:var(--red)">筛选失败: '+esc(resp.error||'未知错误')+'</div>';
+        if(Array.isArray(resp.details)&&resp.details.length>0){
+          errHtml+='<div style="color:var(--text-dim);font-size:12px;margin-top:4px">'+resp.details.map(function(d){return esc(d)}).join('<br>')+'</div>';
+        }
+        document.getElementById('at-result').innerHTML=errHtml;
         toast('❌ 筛选失败');
         return;
       }

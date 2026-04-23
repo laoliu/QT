@@ -6,13 +6,12 @@ function _getSyncedPlan(plan){
   var mode=window._currentViewMode||'paper';
   if(mode!=='live')return Promise.resolve(plan);
   return api('/quant/api/portfolio?mode=live',{_timeout:15000}).then(function(d){
-    if(!d||!d.data||!d.data.positions||!d.data.positions.length)return plan;
+    if(!d||!d.data||!d.data.positions||!d.data.positions.length)return Object.assign({},plan,{portfolio:[]});
     var liveSymbols={};
     d.data.positions.forEach(function(p){liveSymbols[p.symbol]=p});
     var filtered=plan.portfolio.filter(function(p){return !!liveSymbols[p.symbol]});
-    if(!filtered.length)return plan;
     return Object.assign({},plan,{portfolio:filtered});
-  }).catch(function(){return plan});
+  }).catch(function(){return Object.assign({},plan,{portfolio:[]})});
 }
 
 function refreshPortfolio(){
@@ -42,10 +41,10 @@ function refreshPortfolio(){
     return;
   }
   toast('🔄 刷新持仓行情…');
+  var _mode=window._currentViewMode||'paper';
   _getSyncedPlan(currentPlan).then(function(syncedPlan){
-  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan}),_timeout:60000}).then(function(d){
+  api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan,mode:_mode}),_timeout:60000}).then(function(d){
     var s=d.summary;
-    var _mode=window._currentViewMode||'paper';
     _lastPortfolioSignals[_mode]=d.signals||[];
     document.getElementById('portfolio-kpis').innerHTML=[
       kpiHtml('¥'+numInt(s.totalCost),'总成本'),
@@ -1483,6 +1482,8 @@ function loadSignals(){
       });
       if(signalHistory[_mode].length>100)signalHistory[_mode]=signalHistory[_mode].slice(0,100);
     }
+    var _histBadge=document.getElementById('signal-history-mode-badge');
+    if(_histBadge){_histBadge.innerHTML=_mode==='live'?'<span class="badge badge-red">实盘</span>':'<span class="badge badge-green">模拟盘</span>';}
     var ht=document.querySelector('#signal-history-table tbody');
     ht.innerHTML=(signalHistory[_mode]||[]).slice(0,50).map(function(s){
       return '<tr>'+

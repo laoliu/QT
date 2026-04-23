@@ -244,6 +244,70 @@ def _load_global_top_strategies(batch_id: str = "", top_n: int = 10) -> list[dic
         conn.close()
 
 
+def _load_strategy_symbols(batch_id: str, strategy_ids: list[str], top_per_strategy: int = 10) -> list[str]:
+    """从 stock_strategy_fitness 获取各策略的最优股票（每策略取 top N），合并去重。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        placeholders = ",".join("?" for _ in strategy_ids)
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT symbol FROM (
+                SELECT symbol,
+                       ROW_NUMBER() OVER (PARTITION BY strategy_id ORDER BY composite_score DESC) AS rn
+                FROM stock_strategy_fitness
+                WHERE batch_id = ? AND strategy_id IN ({placeholders})
+            ) WHERE rn <= ?
+            """,
+            [batch_id] + strategy_ids + [top_per_strategy],
+        ).fetchall()
+        symbols = [r[0] for r in rows]
+        # 如果 stock_strategy_fitness 无数据，回退到全局前 N 只股票
+        if not symbols:
+            rows = conn.execute(
+                "SELECT DISTINCT symbol FROM stock_strategy_fitness WHERE batch_id = ? LIMIT ?",
+                (batch_id, top_per_strategy * len(strategy_ids)),
+            ).fetchall()
+            symbols = [r[0] for r in rows]
+        logger.info("_load_strategy_symbols: %d strategies × top %d → %d unique symbols",
+                     len(strategy_ids), top_per_strategy, len(symbols))
+        return symbols
+    finally:
+        conn.close()
+
+
+def _load_strategy_symbols_map(batch_id: str, strategy_ids: list[str], top_per_strategy: int = 10) -> dict[str, list[str]]:
+    """获取每个策略的最优股票列表（返回 {strategy_id: [symbols]}）。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path)
+    try:
+        placeholders = ",".join("?" for _ in strategy_ids)
+        rows = conn.execute(
+            f"""
+            SELECT strategy_id, symbol FROM (
+                SELECT strategy_id, symbol,
+                       ROW_NUMBER() OVER (PARTITION BY strategy_id ORDER BY composite_score DESC) AS rn
+                FROM stock_strategy_fitness
+                WHERE batch_id = ? AND strategy_id IN ({placeholders})
+            ) WHERE rn <= ?
+            ORDER BY strategy_id, rn
+            """,
+            [batch_id] + strategy_ids + [top_per_strategy],
+        ).fetchall()
+        result: dict[str, list[str]] = {}
+        for sid, symbol in rows:
+            result.setdefault(sid, []).append(symbol)
+        logger.info("_load_strategy_symbols_map: %s",
+                     {k: len(v) for k, v in result.items()})
+        return result
+    finally:
+        conn.close()
+
+
 def _allocate_weights(
     nav_list: list[pd.Series],
     mode: str = "equal",
@@ -416,34 +480,57 @@ def run_top10_portfolio_backtest(
     end_date = date.today()
     start_date = end_date - timedelta(days=int(period_days * 365 / 252))
 
-    # 3) 加载 K线数据
-    _write_combo_progress({"status": "running", "phase": "加载K线数据...", "completed": 0, "total": len(strategies)})
+    # 2.5) 收集各策略的关联股票
+    strategy_ids = [s["strategy_id"] for s in strategies]
+    batch = strategies[0].get("batch_id", batch_id) or batch_id
+    all_symbols = _load_strategy_symbols(batch, strategy_ids)
+    if not all_symbols:
+        _write_combo_progress({"status": "error", "phase": "无法获取策略关联的股票"})
+        return {"error": "未找到策略关联的股票数据，请确认 fitness 分析结果包含 stock_strategy_fitness 记录"}
+
+    # 3) 分批加载 K线数据 (每批50只，带进度)
+    _write_combo_progress({"status": "running", "phase": f"加载K线数据 ({len(all_symbols)} 只股票)...", "completed": 0, "total": len(strategies)})
     try:
         from aipha.backtest.data_loader import load_bars_by_date
     except ImportError:
         _write_combo_progress({"status": "error", "phase": "导入失败"})
         return {"error": "无法导入 aipha.backtest.data_loader，请检查 Python 环境"}
 
-    logger.info("加载 K线数据: %s ~ %s", start_date, end_date)
-    bars_by_date = load_bars_by_date(start_date=start_date, end_date=end_date)
+    BATCH_SIZE = 50
+    bars_by_date: dict = {}
+    total_symbols = len(all_symbols)
+    for batch_start in range(0, total_symbols, BATCH_SIZE):
+        batch_symbols = all_symbols[batch_start:batch_start + BATCH_SIZE]
+        loaded = min(batch_start + len(batch_symbols), total_symbols)
+        _write_combo_progress({
+            "status": "running",
+            "phase": f"加载K线数据 ({loaded}/{total_symbols} 只股票)...",
+            "completed": 0,
+            "total": len(strategies),
+        })
+        logger.info("加载 K线 batch %d-%d / %d", batch_start + 1, loaded, total_symbols)
+        chunk = load_bars_by_date(symbols=batch_symbols, start=start_date, end=end_date)
+        for d, sym_bars in chunk.items():
+            if d not in bars_by_date:
+                bars_by_date[d] = {}
+            bars_by_date[d].update(sym_bars)
+
     if not bars_by_date:
         _write_combo_progress({"status": "error", "phase": "无K线数据"})
         return {"error": "无法加载 K线数据"}
 
-    # 4) 对每个策略运行回测，收集 NAV 曲线
+    logger.info("K线加载完成: %d 交易日, %d 只股票", len(bars_by_date), total_symbols)
+
+    # 4) 对每个策略，基于其选出的股票构建等权组合 NAV
+    #    (fitness策略可能来自TS引擎或Python引擎，无需重新运行策略，
+    #     直接用策略选股结果 + 实际价格数据计算收益)
     sub_results: list[SubStrategyResult] = []
     errors: list[str] = []
-
-    try:
-        import aipha.strategy.register_all  # noqa: F401
-        from aipha.strategy.registry import StrategyRegistry
-        from aipha.backtest.engine import BacktestEngine, BacktestConfig
-    except ImportError as e:
-        _write_combo_progress({"status": "error", "phase": str(e)})
-        return {"error": f"策略引擎导入失败: {e}"}
-
-    reg = StrategyRegistry()
+    sorted_dates = sorted(bars_by_date.keys())
     t0 = datetime.now()
+
+    # 获取每个策略的股票列表 (从 stock_strategy_fitness)
+    strategy_symbols_map = _load_strategy_symbols_map(batch, strategy_ids)
 
     for strat in strategies:
         sid = strat["strategy_id"]
@@ -451,57 +538,82 @@ def run_top10_portfolio_backtest(
         elapsed = (datetime.now() - t0).total_seconds()
         _write_combo_progress({
             "status": "running",
-            "phase": f"策略回测: {idx}/{len(strategies)} — {sid}",
+            "phase": f"计算策略净值: {idx}/{len(strategies)} — {sid}",
             "completed": idx - 1,
             "total": len(strategies),
             "elapsed_seconds": round(elapsed),
             "allocation_mode": allocation_mode,
         })
-        logger.info("回测策略 [%d/%d]: %s", idx, len(strategies), sid)
-        try:
-            strategy = reg.create(sid)
-            bt_config = BacktestConfig(initial_capital=initial_capital)
-            engine = BacktestEngine(config=bt_config, strategy=strategy)
-            result = engine.run(bars_by_date)
+        logger.info("计算策略净值 [%d/%d]: %s", idx, len(strategies), sid)
 
-            # 构建 NAV Series
-            sorted_dates = sorted(bars_by_date.keys())
+        try:
+            # 获取该策略的股票池
+            strat_syms = strategy_symbols_map.get(sid, [])
+            if not strat_syms:
+                errors.append(f"{sid}: 无关联股票")
+                continue
+
+            # 构建等权组合的每日 NAV: 每只股票按收盘价涨跌幅等权加总
             nav_values = []
             nav_dates = []
-            for snap in result.daily_snapshots:
-                nav_values.append(snap.nav)
-                nav_dates.append(snap.date)
+            prev_prices: dict[str, float] = {}
 
-            if not nav_values:
-                # Fallback: 用 equity 手动算
-                equity = initial_capital
-                for d in sorted_dates:
-                    nav_values.append(equity)
-                    nav_dates.append(d)
-                if not nav_values:
-                    errors.append(f"{sid}: 无净值数据")
+            for d in sorted_dates:
+                day_bars = bars_by_date.get(d, {})
+                # 找到有数据的股票
+                available = [s for s in strat_syms if s in day_bars]
+                if not available:
                     continue
 
-            nav_series = pd.Series(nav_values, index=pd.DatetimeIndex(nav_dates))
+                if not nav_values:
+                    # 首日：初始化
+                    nav_values.append(initial_capital)
+                    nav_dates.append(d)
+                    prev_prices = {s: day_bars[s].close for s in available if day_bars[s].close > 0}
+                else:
+                    # 计算等权日收益率
+                    daily_returns = []
+                    for s in available:
+                        if s in prev_prices and prev_prices[s] > 0 and day_bars[s].close > 0:
+                            ret = (day_bars[s].close - prev_prices[s]) / prev_prices[s]
+                            daily_returns.append(ret)
 
-            # 计算子策略指标
+                    if daily_returns:
+                        avg_ret = sum(daily_returns) / len(daily_returns)
+                        nav_values.append(nav_values[-1] * (1 + avg_ret))
+                    else:
+                        nav_values.append(nav_values[-1])
+                    nav_dates.append(d)
+
+                    # 更新价格
+                    for s in available:
+                        if day_bars[s].close > 0:
+                            prev_prices[s] = day_bars[s].close
+
+            if len(nav_values) < 2:
+                errors.append(f"{sid}: 净值数据不足 ({len(nav_values)} 天)")
+                continue
+
+            nav_series = pd.Series(nav_values, index=pd.DatetimeIndex(nav_dates))
             metrics = _compute_portfolio_metrics(nav_series)
             sub_results.append(SubStrategyResult(
                 name=sid,
-                weight=1.0,  # 临时，后面重新分配
+                weight=1.0,
                 nav_series=nav_series,
                 annual_return=metrics["annual_return"],
                 max_drawdown=metrics["max_drawdown"],
                 sharpe=metrics["sharpe"],
-                total_trades=len(result.trades),
-                total_fees=sum(t.fees.total for t in result.trades) if result.trades else 0.0,
+                total_trades=0,
+                total_fees=0.0,
             ))
+            logger.info("策略 %s: %d 只股票, 年化=%.2f%%, 夏普=%.2f",
+                        sid, len(strat_syms), metrics["annual_return"] * 100, metrics["sharpe"])
         except Exception as e:
             errors.append(f"{sid}: {e}")
-            logger.warning("策略 %s 回测失败: %s", sid, e, exc_info=True)
+            logger.warning("策略 %s 计算失败: %s", sid, e, exc_info=True)
 
     if not sub_results:
-        _write_combo_progress({"status": "error", "phase": "所有策略回测均失败"})
+        _write_combo_progress({"status": "error", "phase": "所有策略回测均失败", "errors": errors[:5]})
         return {"error": "所有策略回测均失败", "details": errors}
 
     _write_combo_progress({

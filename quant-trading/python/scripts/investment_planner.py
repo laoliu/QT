@@ -1553,8 +1553,12 @@ def _score_sina_stocks(
         open_price = _safe_float(s.get("open"))
         settlement = _safe_float(s.get("settlement"))  # prev close
 
+        # Before market open (09:30), trade price is 0; use prev close as fallback
         if price <= 0:
-            continue
+            if settlement > 0:
+                price = settlement
+            else:
+                continue
         if mkt_cap < min_cap and mkt_cap > 0:
             continue
         if pe_max > 0 and pe > 0 and (pe < pe_min or pe > pe_max):

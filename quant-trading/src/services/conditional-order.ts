@@ -161,6 +161,12 @@ export class ConditionalOrderService {
   private readonly autoCleanupTradingDays: number;
   /** Max history entries to keep (rolling). */
   private readonly maxHistoryEntries: number;
+  /** In-memory swing trade log (used when dataDir is null, also as cache). */
+  private swingTradeMemLog: Array<{
+    orderId: string; symbol: string; direction: "buy" | "sell";
+    gridPrice: number; fillPrice: number; quantity: number;
+    timestamp: string; reverseOrderId?: string;
+  }> = [];
   private notifyFn?: (message: string) => void | Promise<void>;
   private quoteFn?: (symbol: string) => Promise<{ price: number } | null>;
   private exitFn?: (
@@ -617,6 +623,11 @@ export class ConditionalOrderService {
     return [...this.orders.values()].filter((o) => !o.triggered).length;
   }
 
+  /** Get unique symbols from all active (non-triggered) orders. */
+  getActiveSymbols(): string[] {
+    return [...new Set([...this.orders.values()].filter((o) => !o.triggered).map((o) => o.symbol))];
+  }
+
   /** Start the periodic check loop. */
   start(): void {
     if (this.timer) return;
@@ -924,6 +935,138 @@ export class ConditionalOrderService {
     return triggered;
   }
 
+  /**
+   * Check conditional orders for a SINGLE symbol with a known price.
+   * Called when a real-time tick/quote is pushed (e.g. from QMT), avoiding
+   * the overhead of polling quotes for all symbols.
+   *
+   * Only evaluates swing_grid, stop_loss, take_profit orders for the symbol.
+   * Trailing / indicator orders still rely on the periodic checkAll().
+   */
+  async checkSymbol(symbol: string, price: number): Promise<string[]> {
+    if (price <= 0) return [];
+
+    const active = this.listOrders(true).filter((o) => o.symbol === symbol);
+    if (active.length === 0) return [];
+
+    const triggered: string[] = [];
+
+    for (const order of active) {
+      let shouldTrigger = false;
+      let triggerReason = "";
+
+      switch (order.type) {
+        case "stop_loss":
+          if (price <= order.triggerValue) {
+            shouldTrigger = true;
+            triggerReason = `止损触发(实时): ${order.symbol} ¥${price.toFixed(2)} ≤ ¥${order.triggerValue.toFixed(2)}`;
+          }
+          break;
+        case "take_profit":
+          if (price >= order.triggerValue) {
+            shouldTrigger = true;
+            triggerReason = `止盈触发(实时): ${order.symbol} ¥${price.toFixed(2)} ≥ ¥${order.triggerValue.toFixed(2)}`;
+          }
+          break;
+        case "trailing_stop": {
+          if (price > (order.peakPrice ?? order.entryPrice)) {
+            order.peakPrice = price;
+            order.trailingStopPrice = price * (1 - order.triggerValue);
+          }
+          const stopPrice = order.trailingStopPrice ?? order.entryPrice * (1 - order.triggerValue);
+          if (price <= stopPrice) {
+            shouldTrigger = true;
+            triggerReason = `跟踪止损触发(实时): ${order.symbol} ¥${price.toFixed(2)} ≤ ¥${stopPrice.toFixed(2)}`;
+          }
+          break;
+        }
+        case "swing_grid": {
+          const gp = order.gridPrice ?? order.triggerValue;
+          if (order.swingDirection === "buy" && price <= gp) {
+            shouldTrigger = true;
+            triggerReason = `波段网格低吸(实时): ${order.symbol} ¥${price.toFixed(2)} ≤ ¥${gp.toFixed(2)} (第${order.gridIndex ?? 0}层)`;
+          } else if (order.swingDirection === "sell" && price >= gp) {
+            shouldTrigger = true;
+            triggerReason = `波段网格高抛(实时): ${order.symbol} ¥${price.toFixed(2)} ≥ ¥${gp.toFixed(2)} (第${order.gridIndex ?? 0}层)`;
+          }
+          break;
+        }
+        default:
+          // trailing_atr, trailing_tp, staged_tp, indicator_stop → handled by periodic checkAll
+          continue;
+      }
+
+      if (shouldTrigger) {
+        order.triggered = true;
+        order.triggeredAt = nowCSTISO();
+        triggered.push(order.id);
+
+        if (this.exitFn) {
+          const result = await this.exitFn(
+            order.symbol,
+            order.quantity,
+            triggerReason,
+            order.strategyId,
+            order.exitSide,
+          );
+          order.triggerResult = result.ok ? "exit_submitted" : `exit_failed: ${result.reason}`;
+        } else {
+          order.triggerResult = "no_exit_fn_configured";
+        }
+
+        // Swing grid: record fill, create reverse order
+        if (order.type === "swing_grid") {
+          order.swingFillPrice = price;
+          this.appendSwingTrade({
+            orderId: order.id,
+            symbol: order.symbol,
+            direction: order.swingDirection ?? "buy",
+            gridPrice: order.gridPrice ?? order.triggerValue,
+            fillPrice: price,
+            quantity: order.quantity,
+            timestamp: order.triggeredAt!,
+          });
+          const gridPct = order.swingGridPct ?? 3.0;
+          const reverseDir: "buy" | "sell" = order.swingDirection === "buy" ? "sell" : "buy";
+          const reversePrice =
+            order.swingDirection === "buy"
+              ? price * (1 + gridPct / 100)
+              : price * (1 - gridPct / 100);
+          if (reversePrice > 0) {
+            const reverseId = this.addSwingGrid({
+              symbol: order.symbol,
+              gridPrice: reversePrice,
+              gridIndex: order.gridIndex ?? 0,
+              swingDirection: reverseDir,
+              quantity: order.quantity,
+              entryPrice: price,
+              strategyId: order.strategyId,
+              gridPct,
+              description:
+                `波段${reverseDir === "buy" ? "低吸" : "高抛"}(自动): ${order.symbol} ¥${reversePrice.toFixed(2)} ← 反向单`,
+            });
+            order.linkedOrderId = reverseId;
+          }
+        }
+
+        const resultSuffix =
+          order.triggerResult === "exit_submitted"
+            ? order.exitSide === "buy" ? "，买入委托已提交" : "，卖出委托已提交"
+            : `（${order.triggerResult}）`;
+        void this.notifyFn?.(`🔔 ${triggerReason}${resultSuffix}`);
+      }
+    }
+
+    if (triggered.length > 0) {
+      console.log(
+        `[conditional-order] checkSymbol(${symbol}, ¥${price.toFixed(2)}) triggered ${triggered.length}: ${triggered.join(", ")}`,
+      );
+      this.saveToDisk();
+    }
+
+    return triggered;
+  }
+
   // ── Auto-cleanup of old triggered orders ───────────────────
 
   /**
@@ -1027,7 +1170,7 @@ export class ConditionalOrderService {
     return `${this.dataDir}/swing-trade-log.json`;
   }
 
-  /** Append a swing trade to the persistent log. */
+  /** Append a swing trade to the persistent log + memory. */
   private appendSwingTrade(entry: {
     orderId: string;
     symbol: string;
@@ -1038,6 +1181,13 @@ export class ConditionalOrderService {
     timestamp: string;
     reverseOrderId?: string;
   }): void {
+    // Always add to memory
+    this.swingTradeMemLog.push(entry);
+    if (this.swingTradeMemLog.length > 2000) {
+      this.swingTradeMemLog = this.swingTradeMemLog.slice(-2000);
+    }
+
+    // Also persist to disk if dataDir is available
     const fp = this.swingTradePath();
     if (!fp) return;
     let log: Array<typeof entry> = [];
@@ -1047,8 +1197,7 @@ export class ConditionalOrderService {
       }
     } catch { /* ignore */ }
     log.push(entry);
-    // Keep last 2000 entries
-    if (log.length > 2000) log = log.slice(log.length - 2000);
+    if (log.length > 2000) log = log.slice(-2000);
     const dir = dirname(fp);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(fp, JSON.stringify(log, null, 2));
@@ -1064,23 +1213,16 @@ export class ConditionalOrderService {
     quantity: number;
     timestamp: string;
   }> {
+    // Try disk first, fall back to memory
     const fp = this.swingTradePath();
-    if (!fp || !existsSync(fp)) return [];
-    try {
-      const all = JSON.parse(readFileSync(fp, "utf-8")) as Array<{
-        orderId: string;
-        symbol: string;
-        direction: "buy" | "sell";
-        gridPrice: number;
-        fillPrice: number;
-        quantity: number;
-        timestamp: string;
-      }>;
-      if (symbol) return all.filter((e) => e.symbol === symbol);
-      return all;
-    } catch {
-      return [];
+    let all = this.swingTradeMemLog;
+    if (fp && existsSync(fp)) {
+      try {
+        all = JSON.parse(readFileSync(fp, "utf-8")) as typeof all;
+      } catch { /* use memory */ }
     }
+    if (symbol) return all.filter((e) => e.symbol === symbol);
+    return all;
   }
 
   /**

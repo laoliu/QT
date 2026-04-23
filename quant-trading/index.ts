@@ -1188,14 +1188,36 @@ const quantTradingPlugin = {
       tickIngressService.onBar((symbol, bar, interval) => {
         tickHistoryStore.appendBar(symbol, interval, bar);
       });
+
+      // Wire real-time quotes to conditional order checks (low-latency grid triggers)
+      tickIngressService.onQuote((quote) => {
+        if (quote.price > 0) {
+          void conditionalOrderService.checkSymbol(quote.symbol.code, quote.price).catch(() => {});
+        }
+      });
       liveEngine.setWatchedSymbolsCallback((symbols) => {
-        void tickIngressService.syncSubscriptions(symbols).catch((err) => {
+        // Merge engine symbols + conditional order symbols for tick subscription
+        const coSymbols = conditionalOrderService.getActiveSymbols();
+        const allSymbols = [...new Set([...symbols, ...coSymbols])];
+        void tickIngressService.syncSubscriptions(allSymbols).catch((err) => {
           api.logger.warn(
             `[quant-trading] tick ingress subscription sync failed: ${(err as Error).message}`,
           );
         });
         tickStrategyService.setActiveSymbols(symbols);
       });
+
+      // Initial tick subscription for conditional order symbols (engine may have 0 strategies)
+      {
+        const coSymbols = conditionalOrderService.getActiveSymbols();
+        if (coSymbols.length > 0) {
+          void tickIngressService.syncSubscriptions(coSymbols).catch((err) => {
+            api.logger.warn(
+              `[quant-trading] tick ingress initial CO subscription failed: ${(err as Error).message}`,
+            );
+          });
+        }
+      }
 
       // Wire regime auto-switch callback (Python macro regime → TS price-action fallback)
       let priceRegimeDetect: (() => Promise<string | null>) | null = null;

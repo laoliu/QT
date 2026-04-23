@@ -214,6 +214,7 @@ def get_quote(symbol, market="cn_stock"):
             }
 
         elif market == "fund":
+            import akshare as ak
             df = ak.fund_etf_spot_em()
             row = df[df["代码"] == symbol]
             if row.empty:

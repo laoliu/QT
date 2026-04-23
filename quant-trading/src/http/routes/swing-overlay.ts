@@ -156,14 +156,23 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        // Build grid levels around MA center
+        // Build grid levels around current price (not MA center).
+        // MA center is recorded for reference but using it as the grid center
+        // causes all sell grids to instantly trigger when price is above MA.
+        const gridCenter = currentPrice;
         const gridOrders: string[] = [];
+        let skipped = 0;
         for (let i = -gridCount; i <= gridCount; i++) {
           if (i === 0) continue; // Skip center level
-          const gridPrice = maCenter * (1 + i * (gridPct / 100));
+          const gridPrice = gridCenter * (1 + i * (gridPct / 100));
           if (gridPrice <= 0) continue;
 
           const direction = i < 0 ? "buy" : "sell";
+
+          // Skip grid levels that would instantly trigger
+          if (direction === "sell" && gridPrice <= currentPrice) { skipped++; continue; }
+          if (direction === "buy" && gridPrice >= currentPrice) { skipped++; continue; }
+
           const quantity = 100; // Minimum lot for A-shares; actual sizing computed by user
 
           const orderId = conditionalOrderService.addSwingGrid({
@@ -186,6 +195,8 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           symbol,
           grid_orders: gridOrders,
           grid_count: gridOrders.length,
+          skipped_instant: skipped,
+          grid_center: gridCenter,
           ma_center: maCenter,
           current_price: currentPrice,
           params: { coreRatio, gridPct, gridCount, biasBuy, biasSell },

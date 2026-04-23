@@ -3992,6 +3992,54 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   // Swing Overlay (持仓波段套利 extracted to routes/swing-overlay.ts)
   registerSwingOverlayRoutes(deps);
 
+  // ── Quote Push (QMT 实时行情推送 → 即时触发条件单) ──────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/quote-push",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = await parseObjectBody(req);
+        // Support batch: { quotes: [{ symbol, price }, ...] }
+        // Or single: { symbol, price }
+        const quotes: Array<{ symbol: string; price: number }> = [];
+        if (Array.isArray(body.quotes)) {
+          for (const q of body.quotes as Array<Record<string, unknown>>) {
+            const sym = String(q.symbol ?? "");
+            const px = Number(q.price ?? 0);
+            if (sym && px > 0) quotes.push({ symbol: sym, price: px });
+          }
+        } else if (body.symbol && body.price) {
+          const sym = String(body.symbol);
+          const px = Number(body.price);
+          if (sym && px > 0) quotes.push({ symbol: sym, price: px });
+        }
+        if (quotes.length === 0) {
+          json(res, { error: "需要 symbol + price 或 quotes 数组" }, 400);
+          return;
+        }
+
+        const allTriggered: string[] = [];
+        for (const q of quotes) {
+          const triggered = await conditionalOrderService.checkSymbol(q.symbol, q.price);
+          allTriggered.push(...triggered);
+        }
+
+        json(res, {
+          ok: true,
+          received: quotes.length,
+          triggered: allTriggered.length,
+          triggered_ids: allTriggered,
+        });
+      } catch (err) {
+        json(res, { error: `推送处理失败: ${String(err)}` }, 500);
+      }
+    }),
+  });
+
   // ── Strategy Fitness Analysis Page ─────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

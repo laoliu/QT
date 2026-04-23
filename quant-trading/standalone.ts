@@ -62,11 +62,13 @@ function parsePort(args: string[], fallback: number): number {
 
 // ── Mock OpenClaw Plugin API ─────────────────────────────────────
 
+type ServiceEntry = { id: string; start?: () => Promise<void>; stop?: () => Promise<void> };
+
 function createMockApi(
   pluginConfig: Record<string, unknown>,
   routeCollector: ReturnType<typeof createRouteCollector>,
-): OpenClawPluginApi {
-  const services: Array<{ id: string; start?: () => Promise<void>; stop?: () => Promise<void> }> = [];
+): { api: OpenClawPluginApi; services: ServiceEntry[] } {
+  const services: ServiceEntry[] = [];
 
   const logger = {
     info: (msg: string) => console.log(`[info] ${msg}`),
@@ -130,7 +132,7 @@ function createMockApi(
     on: noop,
   } as unknown as OpenClawPluginApi;
 
-  return api;
+  return { api, services };
 }
 
 // ── Main ──────────────────────────────────────────────────────────
@@ -143,13 +145,25 @@ async function main() {
   console.log(`[standalone] bootstrapping quant-trading plugin (port ${port})...`);
 
   const routeCollector = createRouteCollector();
-  const api = createMockApi(pluginConfig, routeCollector);
+  const { api, services } = createMockApi(pluginConfig, routeCollector);
 
   // Dynamically import the plugin and call register()
   const { default: plugin } = await import("./index.js");
   plugin.register(api);
 
   console.log(`[standalone] ${routeCollector.routes.length} routes collected`);
+
+  // Start all registered services (TickIngress, Receiver, etc.)
+  for (const svc of services) {
+    if (svc.start) {
+      try {
+        await svc.start();
+        console.log(`[standalone] service '${svc.id}' started`);
+      } catch (err) {
+        console.warn(`[standalone] service '${svc.id}' failed to start:`, err);
+      }
+    }
+  }
 
   // Start the HTTP server
   startStandaloneServer(routeCollector.routes, port, {
@@ -161,6 +175,11 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     console.log("\n[standalone] shutting down...");
+    for (const svc of services) {
+      if (svc.stop) {
+        try { await svc.stop(); } catch { /* ignore */ }
+      }
+    }
     const { stopStandaloneServer } = await import("./src/http/standalone-server.js");
     stopStandaloneServer();
     process.exit(0);

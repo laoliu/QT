@@ -25,7 +25,16 @@ export function formatDateCST(date: Date): string {
 
 /** Current timestamp as ISO string in CST (for display / createdAt fields). */
 export function nowCSTISO(): string {
-  return toCSTDate().toISOString();
+  const cst = toCSTDate();
+  // Manual format with +08:00 offset instead of toISOString()'s Z suffix.
+  // Using Z caused frontends (new Date(ts).toLocaleString()) to double-shift
+  // by 8 hours because the browser treated the CST value as UTC.
+  const p = (n: number, w = 2) => String(n).padStart(w, "0");
+  return (
+    `${cst.getUTCFullYear()}-${p(cst.getUTCMonth() + 1)}-${p(cst.getUTCDate())}` +
+    `T${p(cst.getUTCHours())}:${p(cst.getUTCMinutes())}:${p(cst.getUTCSeconds())}` +
+    `.${p(cst.getUTCMilliseconds(), 3)}+08:00`
+  );
 }
 
 /** Convert a UTC ISO timestamp to CST for display. */

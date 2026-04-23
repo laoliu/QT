@@ -9,33 +9,69 @@ var _swingActiveOverlays = {};  // symbol → {params, gridOrders, stats}
 function scanSwingSuitability() {
   var el = document.getElementById('swing-scan-results');
   if (!el) return;
-  el.innerHTML = '<div style="text-align:center;padding:30px"><div class="spinner"></div><br>正在分析持仓波段适合度…</div>';
+  el.innerHTML = '<div style="text-align:center;padding:30px"><div class="spinner"></div><br>正在加载持仓K线并分析波段适合度…<br><span style="font-size:12px;color:var(--text-dim)">首次扫描可能需要20-30秒</span></div>';
 
-  // Get portfolio symbols
-  var symbols = [];
-  if (currentPlan && currentPlan.portfolio) {
-    currentPlan.portfolio.forEach(function(p) { if (p.symbol) symbols.push(p.symbol); });
-  }
-  if (!symbols.length) {
-    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-dim)">⚠️ 暂无持仓数据。请先在"制定计划"中生成投资计划。</div>';
-    return;
-  }
-
-  var mode = window._currentViewMode || 'paper';
-  api('/quant/admin/api/swing-overlay/scan', {
-    method: 'POST',
-    body: JSON.stringify({ symbols: symbols, lookback_days: 60, mode: mode }),
-    _timeout: 60000
-  }).then(function(d) {
-    if (!d || !d.results) {
-      el.innerHTML = '<div style="padding:20px;color:var(--text-dim)">扫描完成，无适合波段操作的股票。</div>';
+  // Try live portfolio API first, then fall back to plan-based portfolio
+  _getSwingHoldings().then(function(holdings) {
+    if (!holdings.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-dim)">⚠️ 暂无持仓数据。请先在"制定计划"中生成投资计划，或确保实盘已连接。</div>';
       return;
     }
-    _swingScanResults = d.results;
-    renderSwingScanResults(d.results);
-  }).catch(function(e) {
-    el.innerHTML = '<div style="padding:20px;color:#e74c3c">⚠️ 扫描失败: ' + esc(String(e)) + '</div>';
+
+    // Build symbol→name map and pass to backend
+    var symbolNames = {};
+    holdings.forEach(function(h) { symbolNames[h.symbol] = h.name; });
+
+    var mode = window._currentViewMode || 'paper';
+    api('/quant/admin/api/swing-overlay/scan', {
+      method: 'POST',
+      body: JSON.stringify({ symbols: holdings.map(function(h){return h.symbol}), symbol_names: symbolNames, lookback_days: 60, mode: mode }),
+      _timeout: 180000
+    }).then(function(d) {
+      if (!d || !d.results) {
+        el.innerHTML = '<div style="padding:20px;color:var(--text-dim)">扫描完成，无适合波段操作的股票。</div>';
+        return;
+      }
+      _swingScanResults = d.results;
+      renderSwingScanResults(d.results);
+    }).catch(function(e) {
+      el.innerHTML = '<div style="padding:20px;color:#e74c3c">⚠️ 扫描失败: ' + esc(String(e)) + '</div>';
+    });
   });
+}
+
+/** Collect holding symbols from live portfolio API or plan fallback */
+function _getSwingHoldings() {
+  return api('/quant/api/portfolio', {_timeout: 15000}).then(function(d) {
+    if (d && d.status === 'ok' && d.data && d.data.positions && d.data.positions.length) {
+      return d.data.positions.map(function(p) { return { symbol: p.symbol, name: p.name || p.symbol, market: p.market || '' }; }).filter(function(x){ return !!x.symbol; });
+    }
+    return _getSwingHoldingsFromPlan();
+  }).catch(function() {
+    return _getSwingHoldingsFromPlan();
+  });
+}
+
+function _getSwingHoldingsFromPlan() {
+  var holdings = [];
+  if (currentPlan && currentPlan.portfolio) {
+    currentPlan.portfolio.forEach(function(p) { if (p.symbol) holdings.push({ symbol: p.symbol, name: p.name || p.symbol, market: '' }); });
+  }
+  if (holdings.length) return Promise.resolve(holdings);
+
+  // Try loading latest plan from history
+  return api('/quant/admin/api/plan-history').then(function(d) {
+    if (!d.entries || !d.entries.length) return [];
+    var latest = d.entries[0];
+    return api('/quant/admin/api/plan-history?id=' + encodeURIComponent(latest.id)).then(function(r) {
+      if (r.status === 'ok' && r.entry && r.entry.fullPlan) {
+        currentPlan = r.entry.fullPlan;
+        try { sessionStorage.setItem('openclaw-plan-cache', JSON.stringify(currentPlan)); } catch(e) {}
+        return (currentPlan.portfolio || []).map(function(p) { return { symbol: p.symbol, name: p.name || p.symbol, market: '' }; }).filter(function(x){ return !!x.symbol; });
+      }
+      return [];
+    });
+  }).catch(function() { return []; });
 }
 
 function renderSwingScanResults(results) {

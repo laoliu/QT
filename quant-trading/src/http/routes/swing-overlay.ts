@@ -8,7 +8,7 @@
  *  - Querying active swing overlay status
  */
 import { runPythonScript } from "../../bridge/python-bridge.js";
-import { createDataProvider } from "../../data/market-data-provider.js";
+import { createDataProvider, detectMarketFromSymbol } from "../../data/market-data-provider.js";
 import type { AdminRouteDeps } from "../admin-routes.js";
 import { json, parseObjectBody } from "./_helpers.js";
 
@@ -34,6 +34,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
       try {
         const body = (await parseObjectBody(req)) as Record<string, unknown>;
         const symbols = (body.symbols as string[]) ?? [];
+        const symbolNames = (body.symbol_names as Record<string, string>) ?? {};
         const lookbackDays = (body.lookback_days as number) ?? 60;
 
         if (!symbols.length) {
@@ -41,24 +42,42 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        // Fetch kline data for each symbol
+        // Fetch kline data for each symbol (parallel with per-symbol timeout)
         const provider = createDataProvider(config);
         const stockData: Record<string, { name: string; klines: unknown[] }> = {};
         const endDate = dateOffset(0);
-        const startDate = dateOffset(lookbackDays + 30);
+        const startDate = dateOffset(Math.ceil(lookbackDays * 1.8) + 30);
+        const targetSymbols = symbols.slice(0, 20);
+        const PER_SYM_TIMEOUT = 20_000; // 20s per symbol max
 
-        for (const sym of symbols.slice(0, 50)) {
-          try {
-            const klines = await provider.getKlines(sym, "1d", startDate, endDate, "cn_stock");
-            if (klines && klines.length > 0) {
-              stockData[sym] = { name: sym, klines };
-            }
-          } catch {
-            // Skip symbols with no data
+        const timedGetKlines = (sym: string) =>
+          new Promise<{ sym: string; klines: unknown[] }>((resolve) => {
+            const market = detectMarketFromSymbol(sym);
+            const timer = setTimeout(() => {
+              console.log(`[swing-overlay/scan] ⚠ ${sym} (${market}) K线获取超时 (${PER_SYM_TIMEOUT / 1000}s), 跳过`);
+              resolve({ sym, klines: [] });
+            }, PER_SYM_TIMEOUT);
+            provider
+              .getKlines(sym, "1d", startDate, endDate, market)
+              .then((klines) => {
+                clearTimeout(timer);
+                resolve({ sym, klines: klines ?? [] });
+              })
+              .catch(() => {
+                clearTimeout(timer);
+                resolve({ sym, klines: [] });
+              });
+          });
+
+        // Fetch all in parallel (all at once — timeout protects against hangs)
+        const fetched = await Promise.all(targetSymbols.map(timedGetKlines));
+        for (const { sym, klines } of fetched) {
+          if (klines.length > 0) {
+            stockData[sym] = { name: symbolNames[sym] ?? sym, klines };
           }
         }
 
-        // Run Python screener for better scoring
+        // Run Python screener
         const result = await runPythonScript<{ results: unknown[] }>("scripts/swing_suitability_scan.py", {
           stock_data: stockData,
           lookback: lookbackDays,
@@ -118,7 +137,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
         let currentPrice = 0;
         let maCenter = 0;
         try {
-          const klines = await provider.getKlines(symbol, "1d", dateOffset(40), dateOffset(0), "cn_stock");
+          const klines = await provider.getKlines(symbol, "1d", dateOffset(40), dateOffset(0), detectMarketFromSymbol(symbol));
           if (klines && klines.length > 0) {
             currentPrice = klines[klines.length - 1]!.close;
             // Compute MA20 for grid center
@@ -235,7 +254,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
         for (const [symbol, orders] of bySymbol) {
           let currentPrice = 0;
           try {
-            const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), "cn_stock");
+            const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(symbol));
             if (klines?.length) {
               currentPrice = klines[klines.length - 1]!.close;
             }

@@ -10,7 +10,7 @@ export const TAB_NAV_SCRIPT = `
 
   /* ── paper tabs / live tabs sets ── */
   var PAPER_TABS=['plan','screen','institution','accumulation','backtest','combo-backtest','pf-backtest','portfolio','swing-overlay','signals','milestones'];
-  var LIVE_TABS=['plan','recommend','add-position','rebalance','signals','milestones'];
+  var LIVE_TABS=['plan','recommend','add-position','rebalance','swing-overlay','signals','milestones'];
   function _isTabVisible(name){
     var mode=window._currentViewMode||'paper';
     var allowed=mode==='live'?LIVE_TABS:PAPER_TABS;

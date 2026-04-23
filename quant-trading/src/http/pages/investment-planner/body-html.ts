@@ -42,6 +42,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-live" data-tab="recommend">🎯 建仓推荐</div>
     <div class="tab tab-live" data-tab="add-position">📈 加仓推荐</div>
     <div class="tab tab-live" data-tab="rebalance">⚖️ 调仓建议</div>
+    <div class="tab tab-live" data-tab="swing-overlay">💹 持仓波段</div>
     <div class="tab tab-live" data-tab="signals">🚨 交易信号</div>
     <div class="tab tab-live" data-tab="milestones">📊 目标追踪</div>
   </div>
@@ -69,6 +70,7 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="nav-btn nav-btn-live" onclick="activateTab('recommend');history.pushState(null,null,'#recommend')">🎯 建仓推荐</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('add-position');history.pushState(null,null,'#add-position')">📈 加仓推荐</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('rebalance');history.pushState(null,null,'#rebalance')">⚖️ 调仓建议</button>
+      <button class="nav-btn nav-btn-live" onclick="activateTab('swing-overlay');history.pushState(null,null,'#swing-overlay')">💹 持仓波段</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
       <button class="nav-btn nav-btn-live" onclick="activateTab('milestones');history.pushState(null,null,'#milestones')">📊 目标追踪</button>
     </div>

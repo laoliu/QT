@@ -174,6 +174,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
             quantity,
             entryPrice: currentPrice,
             strategyId: "swing-overlay",
+            gridPct,
             description:
               `波段${direction === "buy" ? "低吸" : "高抛"}: ${symbol} 第${Math.abs(i)}层${direction === "buy" ? "下" : "上"}网格 ¥${gridPrice.toFixed(2)}`,
           });
@@ -226,14 +227,23 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
     path: "/quant/admin/api/swing-overlay/status",
     handler: secure(async (_req, res) => {
       try {
-        const swingOrders = conditionalOrderService.listSwingGridOrders();
+        // Get ALL swing orders (including triggered) for accurate status
+        const allSwingOrders = conditionalOrderService.listAllSwingGridOrders();
+        const activeSwingOrders = conditionalOrderService.listSwingGridOrders();
 
-        // Group by symbol
-        const bySymbol = new Map<string, typeof swingOrders>();
-        for (const order of swingOrders) {
-          const list = bySymbol.get(order.symbol) ?? [];
+        // Group by symbol (use all orders for display, active for grid counts)
+        const allBySymbol = new Map<string, typeof allSwingOrders>();
+        for (const order of allSwingOrders) {
+          const list = allBySymbol.get(order.symbol) ?? [];
           list.push(order);
-          bySymbol.set(order.symbol, list);
+          allBySymbol.set(order.symbol, list);
+        }
+        // Also include symbols that only have trade history (all orders cleaned up)
+        const tradeLog = conditionalOrderService.getSwingTradeLog();
+        for (const t of tradeLog) {
+          if (!allBySymbol.has(t.symbol)) {
+            allBySymbol.set(t.symbol, []);
+          }
         }
 
         const overlays: Array<{
@@ -251,7 +261,10 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
 
         const provider = createDataProvider(config);
 
-        for (const [symbol, orders] of bySymbol) {
+        for (const [symbol, orders] of allBySymbol) {
+          // Get active (non-triggered) orders for this symbol
+          const activeOrders = orders.filter((o) => !o.triggered);
+
           let currentPrice = 0;
           try {
             const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(symbol));
@@ -262,7 +275,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
             // best-effort
           }
 
-          const gridLevels = orders
+          const gridLevels = activeOrders
             .map((o) => o.gridPrice ?? o.triggerValue)
             .filter((p) => p > 0)
             .sort((a, b) => a - b);
@@ -272,13 +285,14 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           const bias = centerLevel > 0 ? ((currentPrice - centerLevel) / centerLevel) * 100 : 0;
 
           const filledGrids: Record<number, boolean> = {};
-          let roundTrips = 0;
           for (const o of orders) {
             if (o.triggered) {
               filledGrids[o.gridIndex ?? 0] = true;
-              roundTrips++;
             }
           }
+
+          // Compute PnL from persistent trade log
+          const pnlSummary = conditionalOrderService.getSwingPnlSummary(symbol);
 
           overlays.push({
             symbol,
@@ -286,11 +300,11 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
             current_price: currentPrice,
             ma_center: centerLevel,
             bias,
-            active_grid_orders: orders.filter((o) => !o.triggered).length,
+            active_grid_orders: activeOrders.length,
             grid_levels: gridLevels,
             filled_grids: filledGrids,
-            round_trips: Math.floor(roundTrips / 2), // buy+sell = 1 round trip
-            swing_pnl: 0, // Would need trade history to compute
+            round_trips: pnlSummary.roundTrips,
+            swing_pnl: pnlSummary.pnlPct,
           });
         }
 

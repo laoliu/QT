@@ -55,8 +55,8 @@ export interface ConditionalOrder {
   /** Shares to sell on trigger. */
   quantity: number;
   /** Exit side when triggered. Defaults to "sell" for long positions.
-   *  Use "cover" for short positions, "sell_close" for options. */
-  exitSide?: "sell" | "cover" | "buy_close" | "sell_close";
+   *  Use "buy" for swing grid buy, "cover" for short positions, "sell_close" for options. */
+  exitSide?: "sell" | "buy" | "cover" | "buy_close" | "sell_close";
   /** Strategy that created this conditional order (optional). */
   strategyId?: string;
   /** Human-readable description. */
@@ -101,6 +101,10 @@ export interface ConditionalOrder {
   swingParentSymbol?: string;
   /** Shares per grid level. */
   swingGridShares?: number;
+  /** Grid percentage spacing (for computing reverse order price). */
+  swingGridPct?: number;
+  /** Approximate fill price when triggered (for PnL calculation). */
+  swingFillPrice?: number;
   /** Linked order ID (the reverse order created after fill). */
   linkedOrderId?: string;
 
@@ -474,6 +478,7 @@ export class ConditionalOrderService {
     entryPrice: number;
     strategyId?: string;
     description?: string;
+    gridPct?: number;
   }): string {
     const dir = params.swingDirection === "buy" ? "低吸" : "高抛";
     return this.addOrder({
@@ -482,7 +487,7 @@ export class ConditionalOrderService {
       entryPrice: params.entryPrice,
       triggerValue: params.gridPrice,
       quantity: params.quantity,
-      exitSide: params.swingDirection === "sell" ? "sell" : undefined,
+      exitSide: params.swingDirection === "sell" ? "sell" : "buy",
       strategyId: params.strategyId ?? "swing-overlay",
       description:
         params.description ??
@@ -490,6 +495,7 @@ export class ConditionalOrderService {
       swingDirection: params.swingDirection,
       gridPrice: params.gridPrice,
       gridIndex: params.gridIndex,
+      swingGridPct: params.gridPct,
     });
   }
 
@@ -535,6 +541,8 @@ export class ConditionalOrderService {
       gridIndex?: number;
       swingParentSymbol?: string;
       swingGridShares?: number;
+      swingGridPct?: number;
+      swingFillPrice?: number;
       linkedOrderId?: string;
     },
   ): string {
@@ -574,6 +582,8 @@ export class ConditionalOrderService {
       gridIndex: params.gridIndex,
       swingParentSymbol: params.swingParentSymbol,
       swingGridShares: params.swingGridShares,
+      swingGridPct: params.swingGridPct,
+      swingFillPrice: params.swingFillPrice,
       linkedOrderId: params.linkedOrderId,
     };
 
@@ -848,10 +858,54 @@ export class ConditionalOrderService {
           order.triggerResult = "no_exit_fn_configured";
         }
 
+        // ── Swing grid: record fill price, log trade, create reverse order ──
+        if (order.type === "swing_grid") {
+          const fillPrice = quotes.get(order.symbol) ?? order.gridPrice ?? order.triggerValue;
+          order.swingFillPrice = fillPrice;
+
+          // Log the trade for PnL tracking
+          this.appendSwingTrade({
+            orderId: order.id,
+            symbol: order.symbol,
+            direction: order.swingDirection ?? "buy",
+            gridPrice: order.gridPrice ?? order.triggerValue,
+            fillPrice,
+            quantity: order.quantity,
+            timestamp: order.triggeredAt!,
+          });
+
+          // Auto-create reverse order (buy→sell, sell→buy)
+          const gridPct = order.swingGridPct ?? 3.0;
+          const reverseDir: "buy" | "sell" = order.swingDirection === "buy" ? "sell" : "buy";
+          const reversePrice =
+            order.swingDirection === "buy"
+              ? fillPrice * (1 + gridPct / 100) // bought low → sell higher
+              : fillPrice * (1 - gridPct / 100); // sold high → buy lower
+
+          if (reversePrice > 0) {
+            const reverseId = this.addSwingGrid({
+              symbol: order.symbol,
+              gridPrice: reversePrice,
+              gridIndex: order.gridIndex ?? 0,
+              swingDirection: reverseDir,
+              quantity: order.quantity,
+              entryPrice: fillPrice,
+              strategyId: order.strategyId,
+              gridPct,
+              description:
+                `波段${reverseDir === "buy" ? "低吸" : "高抛"}(自动): ${order.symbol} ¥${reversePrice.toFixed(2)} ← 反向单`,
+            });
+            order.linkedOrderId = reverseId;
+            console.log(
+              `[conditional-order] swing_grid auto-reverse: ${order.id}(${order.swingDirection}) → ${reverseId}(${reverseDir}) @ ¥${reversePrice.toFixed(2)}`,
+            );
+          }
+        }
+
         // Notify user
         const resultSuffix =
           order.triggerResult === "exit_submitted"
-            ? "，卖出委托已提交"
+            ? order.exitSide === "buy" ? "，买入委托已提交" : "，卖出委托已提交"
             : `（${order.triggerResult}）`;
         void this.notifyFn?.(`🔔 ${triggerReason}${resultSuffix}`);
       }
@@ -963,6 +1017,117 @@ export class ConditionalOrderService {
       }
     }
     if (changed) this.saveToDisk();
+  }
+
+  // ── Swing Trade Log (persistent PnL tracking) ──────────────
+
+  /** A single swing grid trade entry. */
+  private swingTradePath(): string | null {
+    if (!this.dataDir) return null;
+    return `${this.dataDir}/swing-trade-log.json`;
+  }
+
+  /** Append a swing trade to the persistent log. */
+  private appendSwingTrade(entry: {
+    orderId: string;
+    symbol: string;
+    direction: "buy" | "sell";
+    gridPrice: number;
+    fillPrice: number;
+    quantity: number;
+    timestamp: string;
+    reverseOrderId?: string;
+  }): void {
+    const fp = this.swingTradePath();
+    if (!fp) return;
+    let log: Array<typeof entry> = [];
+    try {
+      if (existsSync(fp)) {
+        log = JSON.parse(readFileSync(fp, "utf-8")) as typeof log;
+      }
+    } catch { /* ignore */ }
+    log.push(entry);
+    // Keep last 2000 entries
+    if (log.length > 2000) log = log.slice(log.length - 2000);
+    const dir = dirname(fp);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(fp, JSON.stringify(log, null, 2));
+  }
+
+  /** Get swing trade log entries for a symbol (or all). */
+  getSwingTradeLog(symbol?: string): Array<{
+    orderId: string;
+    symbol: string;
+    direction: "buy" | "sell";
+    gridPrice: number;
+    fillPrice: number;
+    quantity: number;
+    timestamp: string;
+  }> {
+    const fp = this.swingTradePath();
+    if (!fp || !existsSync(fp)) return [];
+    try {
+      const all = JSON.parse(readFileSync(fp, "utf-8")) as Array<{
+        orderId: string;
+        symbol: string;
+        direction: "buy" | "sell";
+        gridPrice: number;
+        fillPrice: number;
+        quantity: number;
+        timestamp: string;
+      }>;
+      if (symbol) return all.filter((e) => e.symbol === symbol);
+      return all;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Compute swing PnL summary for a symbol.
+   * Pairs buys and sells chronologically (FIFO) to form round trips.
+   */
+  getSwingPnlSummary(symbol: string): { roundTrips: number; totalPnl: number; pnlPct: number } {
+    const trades = this.getSwingTradeLog(symbol);
+    const buys: Array<{ fillPrice: number; quantity: number }> = [];
+    const sells: Array<{ fillPrice: number; quantity: number }> = [];
+
+    for (const t of trades) {
+      if (t.direction === "buy") buys.push({ fillPrice: t.fillPrice, quantity: t.quantity });
+      else sells.push({ fillPrice: t.fillPrice, quantity: t.quantity });
+    }
+
+    // Match buy/sell pairs FIFO
+    let roundTrips = 0;
+    let totalPnl = 0;
+    let totalCost = 0;
+    let bi = 0;
+    let si = 0;
+
+    while (bi < buys.length && si < sells.length) {
+      const buy = buys[bi]!;
+      const sell = sells[si]!;
+      const qty = Math.min(buy.quantity, sell.quantity);
+
+      totalPnl += (sell.fillPrice - buy.fillPrice) * qty;
+      totalCost += buy.fillPrice * qty;
+      roundTrips++;
+
+      buy.quantity -= qty;
+      sell.quantity -= qty;
+      if (buy.quantity <= 0) bi++;
+      if (sell.quantity <= 0) si++;
+    }
+
+    const pnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+    return { roundTrips, totalPnl, pnlPct };
+  }
+
+  /** List ALL swing grid orders (including triggered) for status/PnL queries. */
+  listAllSwingGridOrders(symbol?: string): ConditionalOrder[] {
+    return [...this.orders.values()].filter(
+      (o) => o.type === "swing_grid" && (!symbol || o.symbol === symbol),
+    );
   }
 
   // ── History ────────────────────────────────────────────────

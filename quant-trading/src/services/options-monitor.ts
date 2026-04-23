@@ -16,6 +16,7 @@ import { runPythonScript } from "../bridge/python-bridge.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { GreeksSnapshot, LivePosition, QuantTradingConfig } from "../types.js";
 import { tryNotify } from "./notify-helper.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ export function createOptionsMonitorService(
       severity,
       type,
       message,
-      timestamp: new Date().toISOString(),
+      timestamp: nowCSTISO(),
       symbol,
     };
     alertHistory.push(alert);

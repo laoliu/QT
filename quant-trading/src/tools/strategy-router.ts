@@ -17,6 +17,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { StockProfile, StrategyRecommendation } from "../engine/dynamic-composer.js";
 import type { QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Result Types ─────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ async function runProfile(args: Record<string, unknown>, config: QuantTradingCon
         "请提供标的代码 (symbols)。如果刚调用过 stock_screen，请将返回的股票代码传入 symbols 参数；或直接使用 stock_recommend 工具一步完成选股+回测。",
     };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
 
   try {
     const result = await runPythonScript<ProfileResult>(
@@ -245,7 +246,7 @@ async function runRecommend(args: Record<string, unknown>, config: QuantTradingC
         "请提供标的代码 (symbols)。如果刚调用过 stock_screen，请将返回的股票代码传入 symbols 参数；或直接使用 stock_recommend 工具一步完成选股+回测。",
     };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
 
   try {
     const result = await runPythonScript<RecommendResult>(
@@ -279,7 +280,7 @@ async function runRoutePortfolio(args: Record<string, unknown>, config: QuantTra
         "请提供标的代码 (symbols)。如果刚调用过 stock_screen，请将返回的股票代码传入 symbols 参数；或直接使用 stock_recommend 工具一步完成选股+回测。",
     };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
 
   try {
     const result = await runPythonScript<RecommendResult>(
@@ -355,7 +356,7 @@ async function runGetRoutingTable(config: QuantTradingConfig) {
 // ── Build Table Handler ──────────────────────────────────────────
 
 async function runBuildTable(args: Record<string, unknown>, config: QuantTradingConfig) {
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
   const startDate = (args.startDate as string) ?? getDefaultStartDate();
   const maxStocks = (args.maxStocks as number) ?? 10;
   const minBars = (args.minBars as number) ?? 120;
@@ -396,7 +397,7 @@ async function runRecommendWithRegime(args: Record<string, unknown>, config: Qua
         "请提供标的代码 (symbols)。如果刚调用过 stock_screen，请将返回的股票代码传入 symbols 参数；或直接使用 stock_recommend 工具一步完成选股+回测。",
     };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
 
   try {
     const result = await runPythonScript<RecommendResult>(
@@ -430,7 +431,7 @@ async function runProfileRouteBacktest(args: Record<string, unknown>, config: Qu
         "请提供标的代码 (symbols)。如果刚调用过 stock_screen，请将返回的股票代码传入 symbols 参数；或直接使用 stock_recommend 工具一步完成选股+回测。",
     };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
   const startDate = (args.startDate as string) ?? getDefaultStartDate();
 
   try {
@@ -480,7 +481,7 @@ async function runEnrichWithRouting(args: Record<string, unknown>, config: Quant
   const candidates = args.candidates as Array<Record<string, unknown>> | undefined;
   if (!candidates?.length) return { error: "请提供候选股列表 (candidates)" };
 
-  const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.endDate as string) ?? todayCST();
 
   try {
     const result = await runPythonScript<EnrichResult>(

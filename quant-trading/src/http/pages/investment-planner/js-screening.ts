@@ -1502,8 +1502,10 @@ function loadSignals(){
 
 /* ══════ MILESTONES ══════ */
 function loadMilestones(){
+  var _mode=window._currentViewMode||'paper';
+  var modeBadge=_mode==='live'?'<span class="badge badge-red" style="font-size:12px;margin-left:8px">实盘目标</span>':'<span class="badge badge-green" style="font-size:12px;margin-left:8px">模拟盘目标</span>';
   if(!currentPlan||!currentPlan.milestones){
-    document.getElementById('milestone-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
+    document.getElementById('milestone-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先在'+(_mode==='live'?'实盘':'模拟盘')+'模式下生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
     return;
   }
   var plan=currentPlan.plan;
@@ -1517,6 +1519,7 @@ function loadMilestones(){
     kpiHtml('¥'+numInt(plan.targetCapital),'目标资金'),
     kpiHtml(plan.requiredReturn+'%','目标收益'),
     kpiHtml(monthsElapsed+'/'+plan.timeframeMonths,'已过/总月数'),
+    kpiHtml(modeBadge,'当前模式'),
   ].join('');
 
   // Milestone chart

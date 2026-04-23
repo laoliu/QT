@@ -25,6 +25,7 @@ import type {
   QuoteSnapshot,
   SymbolInfo,
 } from "../types.js";
+import { formatTimestampToDateCST } from "../utils/cst-time.js";
 
 // ── Provider Interface ───────────────────────────────────────────
 
@@ -608,7 +609,7 @@ class QMTBridgeProvider implements MarketDataProvider {
         };
       })
       .filter((b) => {
-        const bDate = new Date(b.timestamp).toISOString().slice(0, 10);
+        const bDate = formatTimestampToDateCST(b.timestamp);
         return bDate >= _start && bDate <= _end;
       });
   }

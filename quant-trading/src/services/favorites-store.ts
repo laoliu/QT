@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export interface FavoriteStock {
   /** Stock code (e.g., "600519") */
@@ -83,7 +84,7 @@ export class FavoritesStore {
     const release = await this.writeMutex.acquire();
     try {
       const normalized = code.trim().toUpperCase();
-      const now = new Date().toISOString();
+      const now = nowCSTISO();
 
       const existing = this.favorites.get(normalized);
       const favorite: FavoriteStock = {

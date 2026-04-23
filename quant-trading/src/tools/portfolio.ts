@@ -8,6 +8,7 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 function getPortfolioPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -443,7 +444,7 @@ export function createPortfolioTool(
           if (!engine.orderManager) return { error: "订单管理器未就绪" };
           const netPnl = await engine.orderManager.getDailyPnl();
           return {
-            date: new Date().toISOString().slice(0, 10),
+            date: todayCST(),
             netPnl: `¥${netPnl.toFixed(2)}`,
           };
         }

@@ -12,6 +12,7 @@ import type { QuantTradingConfig } from "../types.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export class AuctionMonitorService {
     this.stop();
 
     // Reset alerts for new session
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     if (this.sessionDate !== today) {
       this.alertedKeys.clear();
       this.sessionDate = today;

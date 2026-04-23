@@ -8,6 +8,7 @@
  *  - Equity and drawdown curves
  */
 import type { TradeRecord } from "../types.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -257,7 +258,7 @@ export class PerformanceReportService {
         accountId: req.accountId ?? "default",
         dateFrom: req.dateFrom,
         dateTo: req.dateTo,
-        generatedAt: new Date().toISOString(),
+        generatedAt: nowCSTISO(),
       },
       summary: {
         totalReturn,

@@ -38,6 +38,7 @@ import type {
   ModifyOrderRequest,
 } from "./adapter.js";
 import { isMarketOpen } from "./paper-broker.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Raw shapes returned by futu_broker.py ─────────────────────────
 
@@ -281,7 +282,7 @@ export class FutuBroker implements IBrokerAdapter {
   }
 
   async placeOrder(req: OrderRequest): Promise<Order> {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();
     const orderId = randomUUID();
 
@@ -353,7 +354,7 @@ export class FutuBroker implements IBrokerAdapter {
       stock_code: toFutuSymbol(order.symbol),
     });
     order.status = "cancelled";
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = nowCSTISO();
     for (const cb of this.statusCbs) cb(orderId, "cancelled", order);
   }
 
@@ -371,7 +372,7 @@ export class FutuBroker implements IBrokerAdapter {
     // Update cached order
     if (update.price !== undefined) original.price = update.price;
     if (update.quantity !== undefined) original.quantity = update.quantity;
-    original.updatedAt = new Date().toISOString();
+    original.updatedAt = nowCSTISO();
 
     return original;
   }
@@ -427,7 +428,7 @@ export class FutuBroker implements IBrokerAdapter {
       profit: raw.profit,
       profitPct: raw.profit_ratio,
       todayProfit: raw.today_profit ?? undefined,
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 
@@ -953,7 +954,7 @@ export class FutuBroker implements IBrokerAdapter {
           status: order.status,
           filledQty: order.filledQty,
           avgFillPrice: order.avgFillPrice,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowCSTISO(),
         });
       }
       for (const cb of this.statusCbs) cb(localId, order.status, order);
@@ -985,7 +986,7 @@ export class FutuBroker implements IBrokerAdapter {
   }
 
   private mapRawOrder(r: RawOrder, localId?: string): Order {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const sym = fromFutuSymbol(r.stock_code);
     const market = detectMarketFromFutu(r.stock_code);
     const side = (r.side as Order["side"]) || "buy";
@@ -1040,7 +1041,7 @@ export class FutuBroker implements IBrokerAdapter {
       unrealizedPnl,
       unrealizedPnlPct,
       source: "broker",
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 

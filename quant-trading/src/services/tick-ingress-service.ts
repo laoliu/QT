@@ -16,6 +16,7 @@ import type {
 import type { KlineBar } from "../types.js";
 import type { EventBus } from "./event-bus.js";
 import { createDefaultTickSourceAdapter, type TickSourceAdapter } from "./tick-source-adapter.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 type TickHandler = (tick: TickData) => void;
 type QuoteHandler = (quote: QuoteSnapshot) => void;
@@ -175,7 +176,7 @@ export class TickIngressService implements OpenClawPluginService {
         const seqFile = join(this.config.dataDir!, "tick-seq.json");
         void promisify(writeFile)(
           seqFile,
-          JSON.stringify({ afterSeq: seq, updatedAt: new Date().toISOString() }, null, 2),
+          JSON.stringify({ afterSeq: seq, updatedAt: nowCSTISO() }, null, 2),
         ).catch(() => {
           // Fail silently; seq persistence is best-effort
         });

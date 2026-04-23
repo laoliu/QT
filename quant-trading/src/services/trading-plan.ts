@@ -9,6 +9,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { QuantTradingConfig } from "../types.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -91,8 +92,8 @@ export class TradingPlanService {
       ...input,
       planId: `plan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       status: "draft",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
+      updatedAt: nowCSTISO(),
     };
     this.plans.push(plan);
     await this.save();
@@ -116,7 +117,7 @@ export class TradingPlanService {
   async update(planId: string, updates: Partial<TradingPlan>): Promise<TradingPlan | null> {
     const plan = this.plans.find((p) => p.planId === planId);
     if (!plan) return null;
-    Object.assign(plan, updates, { updatedAt: new Date().toISOString() });
+    Object.assign(plan, updates, { updatedAt: nowCSTISO() });
     await this.save();
     return plan;
   }
@@ -130,7 +131,7 @@ export class TradingPlanService {
   async complete(planId: string, result?: TradingPlan["actualResult"]): Promise<TradingPlan | null> {
     return this.update(planId, {
       status: "completed",
-      completedAt: new Date().toISOString(),
+      completedAt: nowCSTISO(),
       actualResult: result,
     });
   }

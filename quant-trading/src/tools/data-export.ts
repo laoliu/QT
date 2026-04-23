@@ -31,6 +31,7 @@ import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { QuantStorage } from "../services/sqlite-storage.js";
 import type { TradeJournal } from "../services/trade-journal.js";
 import type { Portfolio, QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── CSV helpers ─────────────────────────────────────────────────
 
@@ -357,7 +358,7 @@ export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDep
           }
           const interval = (args.interval as string) ?? "1d";
           const start = startDate ?? "2000-01-01";
-          const end = endDate ?? new Date().toISOString().slice(0, 10);
+          const end = endDate ?? todayCST();
           const rows = await quantStorage.getKlines(symbol, interval, start, end);
           headers = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
           data = rows.slice(0, limit).map((r) => ({ ...r }));
@@ -892,7 +893,7 @@ async function exportPerformance(
   const headers = ["metric", "value"];
 
   const dateFrom = startDate ?? "2000-01-01";
-  const dateTo = endDate ?? new Date().toISOString().slice(0, 10);
+  const dateTo = endDate ?? todayCST();
 
   const trades = await quantStorage.getTrades({ limit: 100000 });
   const closedTrades = trades.filter((t) => {
@@ -1020,7 +1021,7 @@ async function batchExport(
         }
         const interval = (args.interval as string) ?? "1d";
         const start = startDate ?? "2000-01-01";
-        const end = endDate ?? new Date().toISOString().slice(0, 10);
+        const end = endDate ?? todayCST();
         data = (await quantStorage.getKlines(symbol, interval, start, end)).slice(0, limit).map((r) => ({ ...r }));
         headers = ["symbol", "date", "interval", "open", "high", "low", "close", "volume", "amount"];
         dataset = `klines_${symbol}`;

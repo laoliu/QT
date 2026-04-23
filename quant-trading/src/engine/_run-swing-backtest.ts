@@ -6,6 +6,7 @@
  *   npx tsx quant-trading/src/engine/_run-swing-backtest.ts --akshare # 用akshare数据源
  */
 import { runBacktest } from "./strategy-registry.js";
+import { todayCST } from "../utils/cst-time.js";
 
 const dataProvider = process.argv.includes("--demo")
   ? "demo"
@@ -74,7 +75,7 @@ if (dataProvider) {
 }
 
 console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-console.log(`  波段交易策略回测  |  ${new Date().toISOString().slice(0, 10)}`);
+console.log(`  波段交易策略回测  |  ${todayCST()}`);
 console.log(`  数据源: ${dataProvider ?? "qmt-remote (auto)"}`);
 console.log(`  标的数: ${stocks.length}  |  策略数: ${strategies.length}`);
 console.log(`  回测区间: 2024-06-01 ~ 2025-12-31 (Լ18个月)`);

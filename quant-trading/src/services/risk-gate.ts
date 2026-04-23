@@ -37,6 +37,7 @@ import type {
   RiskLimitsConfig,
   RiskRuleId,
 } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // Default limits (conservative)
 const DEFAULT_LIMITS: Required<RiskLimitsConfig> = {
@@ -101,7 +102,7 @@ export class RiskGate {
    * This updates the daily trade counter used by the MAX_DAILY_TRADES rule.
    */
   recordTrade(): void {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     if (today !== this.dailyTradeDate) {
       this.dailyTradeDate = today;
       this.dailyTradeCount = 0;
@@ -123,7 +124,7 @@ export class RiskGate {
     try {
       const raw = await fs.readFile(filePath, "utf-8");
       const state = JSON.parse(raw) as { date?: string; count?: number };
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayCST();
       if (state.date === today) {
         this.dailyTradeDate = state.date;
         this.dailyTradeCount = state.count ?? 0;
@@ -531,7 +532,7 @@ export class RiskGate {
 
     // 16. Max daily trades (round-trips)
     if (limits.maxDailyTrades > 0 && isRiskOpening) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayCST();
       if (today !== this.dailyTradeDate) {
         this.dailyTradeDate = today;
         this.dailyTradeCount = 0;

@@ -126,3 +126,4 @@ export {
   ctaTripleMa,
   ctaSupertrendCta,
 } from "./cta-extended.js";
+export { swingOverlay } from "./swing-overlay.js";

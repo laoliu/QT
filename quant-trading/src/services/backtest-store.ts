@@ -23,6 +23,7 @@ import {
 import { join } from "node:path";
 import type { BacktestResult } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ export class BacktestStore {
       const id = generateRunId();
       const record: BacktestRecord = {
         id,
-        createdAt: new Date().toISOString(),
+        createdAt: nowCSTISO(),
         tags: opts?.tags ?? [],
         notes: opts?.notes,
         starred: false,

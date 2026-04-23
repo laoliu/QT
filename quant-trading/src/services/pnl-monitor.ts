@@ -16,6 +16,7 @@ import { isMarketOpen } from "../broker/paper-broker.js";
 import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
 import { tryNotify } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Alert types ──────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export function createPnlMonitorService(
   let lastTradingDay = "";
 
   const resetDailyState = () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     if (today !== lastTradingDay) {
       firedToday = new Set();
       lastTradingDay = today;

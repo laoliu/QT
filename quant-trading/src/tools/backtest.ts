@@ -6,6 +6,7 @@ import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { QuantTradingConfig } from "../types.js";
 import { toCSV, type CsvColumn } from "../utils/csv-export.js";
+import { todayCST, formatDateCST, formatTimestampToDateCST } from "../utils/cst-time.js";
 
 /** Safe toFixed — returns "N/A" when the value is nullish or not a finite number. */
 function fmt(v: unknown, digits: number): string {
@@ -104,7 +105,7 @@ export function createBacktestTool(
 
         const symbols = ((args.symbols as string) ?? "000300").split(",").map((s) => s.trim());
         const startDate = (args.startDate as string) ?? getDefaultStartDate();
-        const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (args.endDate as string) ?? todayCST();
         const initialCash = (args.initialCash as number) ?? 100000;
 
         const parameters: Record<string, unknown> = {};
@@ -169,7 +170,7 @@ export function createBacktestTool(
                   }))
                 : undefined,
             signals: result.signals.slice(-10).map((s) => ({
-              date: new Date(s.timestamp).toISOString().slice(0, 10),
+              date: formatTimestampToDateCST(s.timestamp),
               direction: s.direction,
               symbol: s.symbol,
               price: fmt(s.price, 2),
@@ -203,7 +204,7 @@ export function createBacktestTool(
           { label: "原因", key: "reason" },
         ];
         const rows: SignalRow[] = record.result.signals.map((s) => ({
-          date: new Date(s.timestamp).toISOString().slice(0, 10),
+          date: formatTimestampToDateCST(s.timestamp),
           symbol: s.symbol,
           direction: s.direction,
           price: typeof s.price === "number" && Number.isFinite(s.price) ? s.price.toFixed(2) : "",
@@ -227,7 +228,7 @@ export function createBacktestTool(
 function getDefaultStartDate(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return formatDateCST(d);
 }
 
 /** Analyze the last signals to determine if there are active buy signals near the end date. */
@@ -284,7 +285,7 @@ function analyzeForwardSignals(
       details.push({
         symbol: sym,
         direction: lastSig.direction,
-        date: new Date(lastSig.timestamp).toISOString().slice(0, 10),
+        date: formatTimestampToDateCST(lastSig.timestamp),
         price: fmt(lastSig.price, 2),
         reason: lastSig.reason,
       });

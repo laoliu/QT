@@ -36,6 +36,7 @@ import type {
   OrderStatusCallback,
   ModifyOrderRequest,
 } from "./adapter.js";
+import { todayCST, nowCSTISO } from "../utils/cst-time.js";
 
 // Per-file mutexes to serialize portfolio/orders I/O
 const portfolioMutex = new AsyncMutex();
@@ -104,15 +105,15 @@ async function loadPortfolio(cfg: QuantTradingConfig): Promise<Portfolio> {
       cash: 100_000,
       totalValue: 100_000,
       positions: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
+      updatedAt: nowCSTISO(),
     };
   }
 }
 
 async function savePortfolio(p: Portfolio, cfg: QuantTradingConfig): Promise<void> {
   await ensureDir(cfg);
-  p.updatedAt = new Date().toISOString();
+  p.updatedAt = nowCSTISO();
   await fs.writeFile(portfolioPath(cfg), JSON.stringify(p, null, 2));
 }
 
@@ -148,13 +149,6 @@ async function saveOrders(orders: Order[], cfg: QuantTradingConfig): Promise<voi
 }
 
 // ── T+1 helpers (A-share: today's buy cannot be sold today) ─────
-
-/** Get today's date string in CST (YYYY-MM-DD). */
-function todayCST(): string {
-  const now = new Date();
-  const cst = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return cst.toISOString().slice(0, 10);
-}
 
 /**
  * Compute the sellable quantity for an A-share position, respecting T+1.
@@ -279,7 +273,7 @@ export class PaperBroker implements IBrokerAdapter {
       throw new Error("下单失败: 限价单必须指定正数 price");
     }
 
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const orderId = randomUUID();
     const order: Order = {
       orderId,
@@ -331,7 +325,7 @@ export class PaperBroker implements IBrokerAdapter {
     if (!["submitted", "partial", "pending"].includes(o.status)) {
       throw new Error(`Cannot cancel order in status ${o.status}`);
     }
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     o.status = "cancelled";
     o.updatedAt = now;
     orders[idx] = o;
@@ -380,7 +374,7 @@ export class PaperBroker implements IBrokerAdapter {
 
   async queryPositions(): Promise<LivePosition[]> {
     const p = await loadPortfolio(this.cfg);
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
 
     // Refresh currentPrice from live quotes and compute PnL
     if (p.positions.length > 0) {
@@ -448,7 +442,7 @@ export class PaperBroker implements IBrokerAdapter {
       marketValue: mv,
       profit,
       profitPct: profit / initCash,
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 
@@ -553,7 +547,7 @@ export class PaperBroker implements IBrokerAdapter {
 
   private async executeFill(order: Order, fillPrice: number, qty: number): Promise<void> {
     const commission = calcCommission(order.side, fillPrice, qty, order.market);
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const fill: Fill = {
       fillId: randomUUID(),
       orderId: order.orderId,

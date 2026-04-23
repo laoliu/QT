@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ export class RecommendationTracker {
   ): Promise<{ updated: number; resolved: number }> {
     const release = await this.writeMutex.acquire();
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayCST();
       let updated = 0;
       let resolved = 0;
 

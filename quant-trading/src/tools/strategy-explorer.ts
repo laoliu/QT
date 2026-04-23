@@ -13,6 +13,7 @@ import type { BacktestStore } from "../services/backtest-store.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../services/batch-backtest.js";
 import type { ComposedStrategyStore } from "../services/composed-strategy-store.js";
 import type { QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Strategy categories for intelligent pairing ─────────────────
 
@@ -170,7 +171,7 @@ export function createStrategyExplorerTool(
             d.setFullYear(d.getFullYear() - 1);
             return d.toISOString().slice(0, 10);
           })();
-        const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (args.endDate as string) ?? todayCST();
         const initialCash = (args.initialCash as number) ?? 100000;
         const candidateCount = Math.min((args.candidateCount as number) ?? 10, 30);
         const minStrategies = (args.minStrategies as number) ?? 2;

@@ -229,7 +229,7 @@ function exportCsv(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='trades_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='trades_'+(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})()+'.csv';
   a.click();
 }
 

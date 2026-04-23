@@ -24,6 +24,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OrderRequest } from "../broker/adapter.js";
 import type { ConfirmationStatus, PendingConfirmation, QuantTradingConfig } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 const confirmsMutex = new AsyncMutex();
 
@@ -288,7 +289,7 @@ export class ConfirmationManager {
   /** Returns all waiting confirmations (for status queries). */
   async listPending(): Promise<PendingConfirmation[]> {
     const items = await loadConfirms(this.cfg);
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     return items.filter((c) => c.status === "waiting" && c.expiresAt > now);
   }
 
@@ -336,7 +337,7 @@ export class ConfirmationManager {
       const idx = items.findIndex((c) => c.confirmId === confirmId);
       if (idx >= 0) {
         items[idx].status = status;
-        items[idx].respondedAt = new Date().toISOString();
+        items[idx].respondedAt = nowCSTISO();
         if (respondedBy) items[idx].respondedBy = respondedBy;
         await saveConfirms(items, this.cfg);
       }

@@ -14,6 +14,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { TradeJournal } from "../services/trade-journal.js";
 import { toCSV, type CsvColumn } from "../utils/csv-export.js";
+import { todayCST } from "../utils/cst-time.js";
 
 export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJournal) {
   return {
@@ -206,7 +207,7 @@ export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJo
           const csv = toCSV(rows, columns);
           return {
             csv,
-            filename: `trade_journal_${new Date().toISOString().slice(0, 10)}.csv`,
+            filename: `trade_journal_${todayCST()}.csv`,
             rows: rows.length,
           };
         }

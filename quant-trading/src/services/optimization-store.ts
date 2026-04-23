@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { AsyncMutex } from "../utils/async-mutex.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ export class OptimizationStore {
       const record: OptimizationRecord = {
         ...data,
         id,
-        createdAt: new Date().toISOString(),
+        createdAt: nowCSTISO(),
         tags: opts?.tags ?? [],
         starred: false,
         notes: opts?.notes,

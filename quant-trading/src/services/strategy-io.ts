@@ -14,6 +14,7 @@ import { getStrategy } from "../engine/strategy-registry.js";
 import type { BacktestResult } from "../types.js";
 import type { UserStrategy, UserStrategyStore, ParamValidationError } from "./strategy-template.js";
 import { validateParameters, mergeWithDefaults } from "./strategy-template.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ export function exportStrategies(
 ): StrategyPackage {
   return {
     formatVersion: EXPORT_FORMAT_VERSION,
-    exportedAt: new Date().toISOString(),
+    exportedAt: nowCSTISO(),
     exportedBy: opts?.exportedBy,
     strategies: strategies.map((s) => ({
       originalId: s.id,

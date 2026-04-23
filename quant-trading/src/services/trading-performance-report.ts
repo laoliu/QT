@@ -15,6 +15,7 @@
  */
 import type { TradeRecord } from "../types.js";
 import type { EquitySnapshot } from "./equity-history.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -481,7 +482,7 @@ export function generatePerformanceReport(
   const rangeTo = allDates[allDates.length - 1] ?? "";
 
   return {
-    reportDate: new Date().toISOString().slice(0, 10),
+    reportDate: todayCST(),
     dateRange: { from: rangeFrom, to: rangeTo },
     equity: {
       startEquity,

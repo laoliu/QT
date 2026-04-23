@@ -8,6 +8,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ export class DataExportService {
         break;
     }
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayCST();
     const ts = Date.now();
     const ext = format === "json" ? "json": "csv";
     const filename = `${prefix}-${date}-${ts}.${ext}`;

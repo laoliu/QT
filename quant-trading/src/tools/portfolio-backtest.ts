@@ -14,6 +14,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import { runBatchBacktest } from "../services/batch-backtest.js";
 import type { BacktestResult, Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -162,7 +163,7 @@ export function createPortfolioBacktestTool(_api: OpenClawPluginApi, config: Qua
       }
 
       const startDate = (args.startDate as string) ?? getDefaultStartDate();
-      const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+      const endDate = (args.endDate as string) ?? todayCST();
       const weightMode = (args.weightMode as string) ?? "by_position";
 
       // Calculate initial capital

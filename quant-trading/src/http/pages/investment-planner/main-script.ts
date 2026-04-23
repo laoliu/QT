@@ -35,6 +35,7 @@ import { getOptimizerJs } from "./js-optimizer.js";
 import { getPlanJs } from "./js-plan.js";
 import { getPortfolioBacktestJs } from "./js-portfolio-backtest.js";
 import { getScreeningJs } from "./js-screening.js";
+import { getSwingOverlayJs } from "./js-swing-overlay.js";
 import { getStateJs } from "./js-state.js";
 import { getTabInitJs } from "./js-tab-init.js";
 import { getTradePlanJs } from "./js-trade-plan.js";
@@ -57,6 +58,7 @@ export function getPlannerMainScript(baseUrlJson: string): string {
     getInstPresetsJs(),
     getInstitutionJs(),
     getScreeningJs(),
+    getSwingOverlayJs(),
     getBacktestJs(),
     getOptimizerJs(),
     getDailyPickJs(),

@@ -6,6 +6,7 @@ import type { CompositionMethod } from "../../engine/dynamic-composer.js";
 import type { TickStrategyId } from "../../types.js";
 import type { QuantTradingConfig } from "../../types.js";
 import { parseJsonBody } from "../parse-body.js";
+import { formatDateCST } from "../../utils/cst-time.js";
 
 export function json(res: ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data, null, 2);
@@ -32,7 +33,7 @@ export function round2(value: number): number {
 }
 
 export function formatDateYmd(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return formatDateCST(date);
 }
 
 export type JsonBody = Record<string, unknown>;

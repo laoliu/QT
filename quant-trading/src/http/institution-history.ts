@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { QuantTradingConfig } from "../types.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 interface InstitutionActivityHistoryEntry {
   id: string;
@@ -398,6 +399,7 @@ export async function appendInstitutionActivityHistory(
 ): Promise<void> {
   const history = await loadInstitutionHistory(config);
   const now = new Date();
+  const nowISO = nowCSTISO();
   const candidates = Array.isArray(scan.candidates) ? scan.candidates : [];
   const leaders = Array.isArray(scan.leaders) ? scan.leaders : [];
   const storedTopLeaders = Array.isArray(scan.topLeaders) ? scan.topLeaders : leaders;
@@ -407,9 +409,9 @@ export async function appendInstitutionActivityHistory(
       ? (scan.marketSummary as Record<string, unknown>)
       : {};
   const entry: InstitutionActivityHistoryEntry = {
-    id: now.toISOString().replace(/[:.]/g, "-"),
+    id: nowISO.replace(/[:.]/g, "-"),
     version: generateVersion(history, now),
-    timestamp: now.toISOString(),
+    timestamp: nowISO,
     params: sanitizeParams(params),
     summary: {
       asOfDate: String(scan.asOfDate ?? params.as_of_date ?? params.asOfDate ?? ""),
@@ -421,7 +423,7 @@ export async function appendInstitutionActivityHistory(
         marketSummary.northboundNetIn == null
           ? null
           : toFiniteNumber(marketSummary.northboundNetIn),
-      generatedAt: String(scan.generatedAt ?? now.toISOString()),
+      generatedAt: String(scan.generatedAt ?? nowISO),
     },
     candidateSymbols: pickSymbolList(candidates),
     leaderSymbols: pickSymbolList(leaders),

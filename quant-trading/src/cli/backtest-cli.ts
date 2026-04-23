@@ -3,6 +3,7 @@ import { runBacktest, listStrategies } from "../engine/strategy-registry.js";
  * CLI command: openclaw quant backtest
  */
 import type { QuantTradingConfig } from "../types.js";
+import { todayCST, formatDateCST } from "../utils/cst-time.js";
 
 export async function runCliBacktest(
   strategy: string,
@@ -39,7 +40,7 @@ export async function runCliBacktest(
         strategyId: strategy,
         symbols: (opts.symbols ?? "000300").split(","),
         startDate: opts.start ?? getDefaultStartDate(),
-        endDate: opts.end ?? new Date().toISOString().slice(0, 10),
+        endDate: opts.end ?? todayCST(),
         initialCash: Number(opts.cash ?? 100000),
         engine: (opts.engine as "builtin" | "backtrader") ?? undefined,
       },
@@ -62,5 +63,5 @@ export async function runCliBacktest(
 function getDefaultStartDate(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return formatDateCST(d);
 }

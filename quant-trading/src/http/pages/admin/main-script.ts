@@ -33,6 +33,8 @@ window.addEventListener('popstate',function(){
   var h=(location.hash||'').replace('#','');
   if(h) activateTab(h);
 })();
+function _localDate(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function _tsToDate(ts){return _localDate(new Date(ts))}
 function toast(msg,ms){
   ms=ms||2500;var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
   setTimeout(function(){el.classList.remove('show')},ms);
@@ -49,7 +51,7 @@ function api(path,opts){
 }
 setInterval(function(){document.getElementById('clock').textContent=new Date().toLocaleString('zh-CN')},1000);
 // Set default end date for kline query to today
-(function(){var el=document.getElementById('kline-end');if(el)el.value=new Date().toISOString().slice(0,10)})();
+(function(){var el=document.getElementById('kline-end');if(el)el.value=_localDate()})();
 function loadTab(name){
   var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,chat:loadChat,'ai-chat':loadAiChat,config:loadConfig};
   if(m[name])m[name]();
@@ -268,9 +270,9 @@ function queryKlines(){
   var symbol=document.getElementById('kline-symbol').value.trim();
   var interval=document.getElementById('kline-interval').value;
   var start=document.getElementById('kline-start').value;
-  var end=document.getElementById('kline-end').value||new Date().toISOString().slice(0,10);
+  var end=document.getElementById('kline-end').value||_localDate();
   if(!symbol){toast('请输入代码');return}
-  if(!start){var d=new Date();d.setMonth(d.getMonth()-6);start=d.toISOString().slice(0,10)}
+  if(!start){var d=new Date();d.setMonth(d.getMonth()-6);start=_localDate(d)}
   toast('⏳ 查询中…');
   api('/quant/admin/api/query-klines?symbol='+encodeURIComponent(symbol)+'&interval='+interval+'&start='+encodeURIComponent(start)+'&end='+encodeURIComponent(end)).then(function(r){
     var bars=r.data||r.bars||r||[];
@@ -279,7 +281,7 @@ function queryKlines(){
     var h='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">来源: '+src+' | 共 '+bars.length+' 条</div>';
     h+='<table><thead><tr><th>日期</th><th>开</th><th>高</th><th>低</th><th>收</th><th>量</th></tr></thead><tbody>';
     bars.slice(-50).forEach(function(b){
-      var dt=b.date||b.timestamp;if(typeof dt==='number'){dt=new Date(dt).toISOString().slice(0,10)}
+      var dt=b.date||b.timestamp;if(typeof dt==='number'){dt=_tsToDate(dt)}
       h+='<tr><td>'+esc(dt)+'</td><td>'+num(b.open)+'</td><td>'+num(b.high)+'</td><td>'+num(b.low)+'</td><td>'+num(b.close)+'</td><td>'+(b.volume||0).toLocaleString()+'</td></tr>';
     });
     h+='</tbody></table>';

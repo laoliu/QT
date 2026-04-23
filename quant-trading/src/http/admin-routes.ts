@@ -56,6 +56,8 @@ import { registerStrategyFitnessRoutes } from "./routes/strategy-fitness.js";
 import { registerStrategyLabRoutes } from "./routes/strategy-lab.js";
 import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
 import { registerStrategyRoutingRoutes } from "./routes/strategy-routing.js";
+import { registerSwingOverlayRoutes } from "./routes/swing-overlay.js";
+import { todayCST, formatDateCST, nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -862,7 +864,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const { appendPlanHistory } = await import("./portfolio-api.js");
           const plan = (body.plan as Record<string, unknown>) ?? {};
           const params = (body.params as Record<string, unknown>) ?? {};
-          await appendPlanHistory(config, plan, params);
+          const mode = body.mode === "live" ? "live" as const : "paper" as const;
+          await appendPlanHistory(config, plan, params, mode);
           json(res, { status: "ok" });
         } catch (err) {
           json(
@@ -905,14 +908,16 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         return;
       }
 
-      // GET — with id: get single plan with full data; without id: list all
+      // GET — with id: get single plan with full data; without id: list all (optionally filtered by mode)
       try {
         if (planId) {
           const { handleGetPlanByIdApi } = await import("./portfolio-api.js");
           json(res, await handleGetPlanByIdApi(config, planId));
         } else {
+          const modeParam = url.searchParams.get("mode");
+          const mode = modeParam === "paper" || modeParam === "live" ? modeParam : undefined;
           const { handleGetPlanHistoryApi } = await import("./portfolio-api.js");
-          json(res, await handleGetPlanHistoryApi(config));
+          json(res, await handleGetPlanHistoryApi(config, mode));
         }
       } catch (err) {
         json(
@@ -986,7 +991,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             candidates,
             strategy: result.data?.screenerName ?? "一夜持股法",
             riskProfile: "短线价差",
-            timestamp: new Date().toISOString(),
+            timestamp: nowCSTISO(),
           };
           // Save to screener history for comparison
           const codes = candidates.map((c: { symbol: unknown }) => String(c.symbol));
@@ -1040,7 +1045,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             candidates,
             strategy: result.data?.screenerName ?? "板块热点竞价候选",
             riskProfile: "短线热点跟风",
-            timestamp: new Date().toISOString(),
+            timestamp: nowCSTISO(),
           };
           const codes = candidates.map((c: { symbol: unknown }) => String(c.symbol));
           appendScreenerHistory(config, codes, "板块热点竞价候选").catch(() => {});
@@ -1101,7 +1106,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             candidates,
             strategy: result.data?.screenerName ?? "真龙战法",
             riskProfile: "短线打板",
-            timestamp: new Date().toISOString(),
+            timestamp: nowCSTISO(),
           };
           const codes = candidates.map((c: { symbol: unknown }) => String(c.symbol));
           appendScreenerHistory(config, codes, "真龙战法").catch(() => {});
@@ -3164,7 +3169,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const symbol = params.get("symbol");
       const interval = params.get("interval") ?? "1d";
       const start = params.get("start");
-      const end = params.get("end") ?? new Date().toISOString().slice(0, 10);
+      const end = params.get("end") ?? todayCST();
       if (!symbol) {
         json(res, { status: "error", message: "symbol required" }, 400);
         return;
@@ -3174,7 +3179,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         (() => {
           const d = new Date();
           d.setMonth(d.getMonth() - 6);
-          return d.toISOString().slice(0, 10);
+          return formatDateCST(d);
         })();
 
       // Map UI intervals to Python cache period names
@@ -3946,8 +3951,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         try {
           const market = detectMarketFromSymbol(symbol);
           // Calculate date range from limit (days back from today)
-          const end = new Date().toISOString().slice(0, 10);
-          const start = new Date(Date.now() - limit * 86400000).toISOString().slice(0, 10);
+          const end = todayCST();
+          const start = formatDateCST(new Date(Date.now() - limit * 86400000));
           const klines = await marketDataProvider.getKlines(symbol, "1d", start, end, market);
           json(res, { klines: klines || [] });
         } catch (e: unknown) {
@@ -3983,6 +3988,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
 
   // Strategy-Stock Fitness Analysis (extracted to routes/strategy-fitness.ts)
   registerStrategyFitnessRoutes(deps);
+
+  // Swing Overlay (持仓波段套利 extracted to routes/swing-overlay.ts)
+  registerSwingOverlayRoutes(deps);
 
   // ── Strategy Fitness Analysis Page ─────────────────────────────
   api.registerHttpRoute({

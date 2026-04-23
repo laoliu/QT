@@ -9,6 +9,8 @@
  *  - 00 Webhook (webhook) — 08 HTTP POST
  */
 
+import { nowCSTISO } from "../utils/cst-time.js";
+
 // ── Types ────────────────────────────────────────────────────
 
 export type NotificationChannelType = "wechat_work" | "dingtalk" | "bark" | "pushplus" | "webhook";
@@ -137,7 +139,7 @@ async function sendWebhook(cfg: NotificationChannelConfig, msg: NotificationMess
     content: msg.content,
     severity: msg.severity,
     category: msg.category,
-    timestamp: new Date().toISOString(),
+    timestamp: nowCSTISO(),
   };
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (cfg.secret) {
@@ -251,7 +253,7 @@ export class NotificationService {
 
   private recordHistory(channel: string, title: string, success: boolean): void {
     this.sendHistory.push({
-      time: new Date().toISOString(),
+      time: nowCSTISO(),
       channel,
       title,
       success,

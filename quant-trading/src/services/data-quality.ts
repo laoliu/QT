@@ -11,6 +11,7 @@
  * Works alongside the HistoricalDataWarehouse (E2) and DataStalenessMonitor.
  */
 import type { KlineRow, QuantStorage } from "./sqlite-storage.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ function daysBetween(a: string, b: string): number {
 }
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayCST();
 }
 
 // ── Validator ────────────────────────────────────────────────

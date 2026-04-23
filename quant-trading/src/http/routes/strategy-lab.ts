@@ -27,6 +27,7 @@ import {
   type StrategyCatalogItem,
   type AiCompositionCandidate,
 } from "./_helpers.js";
+import { todayCST } from "../../utils/cst-time.js";
 
 export function registerStrategyLabRoutes(deps: AdminRouteDeps): void {
   const { api, config, secure, securePublic, composedStrategyStore, explorationHistoryStore } =
@@ -59,7 +60,7 @@ export function registerStrategyLabRoutes(deps: AdminRouteDeps): void {
             d.setFullYear(d.getFullYear() - 1);
             return d.toISOString().slice(0, 10);
           })();
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const initialCash = toFiniteNumber(body.initialCash, 100000);
         const candidateCount = clampInteger(body.candidateCount, 3, 30, 10);
         const minStrategies = clampInteger(body.minStrategies, 2, 6, 2);
@@ -394,7 +395,7 @@ export function registerStrategyLabRoutes(deps: AdminRouteDeps): void {
             d.setFullYear(d.getFullYear() - 1);
             return d.toISOString().slice(0, 10);
           })();
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const initialCash = toFiniteNumber(body.initialCash, 100000);
 
         if (!Array.isArray(strategyIds) || strategyIds.length === 0) {

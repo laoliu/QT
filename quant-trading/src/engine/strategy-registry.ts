@@ -99,6 +99,7 @@ import {
   ctaDemaCrossover,
   ctaTripleMa,
   ctaSupertrendCta,
+  swingOverlay,
 } from "./builtin-engine.js";
 import type { BuiltinStrategy } from "./builtin-engine.js";
 
@@ -993,6 +994,20 @@ const strategyMap = new Map<string, StrategyFactory>([
     "cta-supertrend",
     (p) =>
       ctaSupertrendCta((p?.atrPeriod as number) ?? 10, (p?.multiplier as number) ?? 3.0),
+  ],
+  [
+    "swing-overlay",
+    (p) =>
+      swingOverlay(
+        (p?.coreRatio as number) ?? 0.6,
+        (p?.gridPct as number) ?? 3.0,
+        (p?.gridCount as number) ?? 3,
+        (p?.biasBuy as number) ?? -5.0,
+        (p?.biasSell as number) ?? 3.5,
+        (p?.volMult as number) ?? 1.5,
+        (p?.maxHoldBars as number) ?? 8,
+        (p?.maPeriod as number) ?? 20,
+      ),
   ],
 ]);
 

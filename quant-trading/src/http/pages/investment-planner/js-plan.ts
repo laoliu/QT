@@ -1,9 +1,11 @@
 /** Investment Planner — investment plan generation, rendering, and history management */
 export function getPlanJs(): string {
   return `
+function _planCacheKey(){return 'openclaw-plan-cache-'+(window._currentViewMode||'paper')}
+
 function restoreCachedPlan(){
   try{
-    var raw=sessionStorage.getItem('openclaw-plan-cache');
+    var raw=sessionStorage.getItem(_planCacheKey());
     if(raw&&!currentPlan){
       currentPlan=JSON.parse(raw);
       renderPlan(currentPlan);
@@ -43,10 +45,11 @@ function generatePlan(){
     currentPlan=d;
     currentPlanVersion=null;
     renderPlan(d);
-    // Cache for browser back
-    try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(d))}catch(e){}
-    // Auto-save to server history
-    api('/quant/admin/api/plan-history',{method:'POST',body:JSON.stringify({plan:d,params:body})}).then(function(r){
+    // Cache for browser back (mode-specific)
+    try{sessionStorage.setItem(_planCacheKey(),JSON.stringify(d))}catch(e){}
+    // Auto-save to server history with mode
+    var _saveMode=window._currentViewMode||'paper';
+    api('/quant/admin/api/plan-history',{method:'POST',body:JSON.stringify({plan:d,params:body,mode:_saveMode})}).then(function(r){
       loadPlanHistory();
       // Set version from latest entry
       if(r&&r.status==='ok'){
@@ -182,13 +185,14 @@ function loadPlanHistory(){
   var statusEl=document.getElementById('plan-history-status');
   if(!panel||!statusEl)return;
   statusEl.textContent='加载历史…';
-  api('/quant/admin/api/plan-history').then(function(d){
+  var _mode=window._currentViewMode||'paper';
+  api('/quant/admin/api/plan-history?mode='+_mode).then(function(d){
     if(!d.entries||d.entries.length===0){
-      statusEl.textContent='暂无历史记录，请先生成投资计划';
+      statusEl.textContent=(_mode==='live'?'实盘':'模拟盘')+'暂无历史记录，请先生成投资计划';
       panel.style.display='none';
       return;
     }
-    statusEl.textContent='共 '+d.count+' 个版本';
+    statusEl.textContent=(_mode==='live'?'🔴 实盘':'🟢 模拟盘')+' · 共 '+d.count+' 个版本';
     panel.style.display='block';
 
     // Top stocks KPIs
@@ -310,7 +314,7 @@ function restoreHistoryPlan(){
     currentPlan=d.entry.fullPlan;
     currentPlanVersion=d.entry.version||null;
     renderPlan(currentPlan);
-    try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+    try{sessionStorage.setItem(_planCacheKey(),JSON.stringify(currentPlan))}catch(e){}
     closePlanDetail();
     toast('✅ 已恢复计划 '+(d.entry.version||''));
   }).catch(function(){toast('❌ 恢复失败')});
@@ -322,7 +326,7 @@ function quickRestorePlan(planId){
     currentPlan=d.entry.fullPlan;
     currentPlanVersion=d.entry.version||null;
     renderPlan(currentPlan);
-    try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+    try{sessionStorage.setItem(_planCacheKey(),JSON.stringify(currentPlan))}catch(e){}
     toast('✅ 已恢复计划 '+(d.entry.version||''));
   }).catch(function(){toast('❌ 恢复失败')});
 }
@@ -351,7 +355,7 @@ function monitorPlanById(planId){
     currentPlan=d.entry.fullPlan;
     currentPlanVersion=d.entry.version||null;
     renderPlan(currentPlan);
-    try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+    try{sessionStorage.setItem(_planCacheKey(),JSON.stringify(currentPlan))}catch(e){}
     closePlanDetail();
     startMonitoring();
     toast('✅ 已加载 '+(d.entry.version||'')+' 并开始监控');

@@ -14,6 +14,7 @@
  *   equity    — equity curve point (periodic snapshot)
  */
 import type { ServerResponse } from "node:http";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Event Types ──────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ export class EventBus {
     const event: QuantEvent = {
       id: this.nextId++,
       category,
-      timestamp: new Date().toISOString(),
+      timestamp: nowCSTISO(),
       data,
     };
 

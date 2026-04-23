@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export interface TradePlanStock {
   code: string;
@@ -114,7 +115,7 @@ export class TradePlanStoreImpl implements TradePlanStore {
       budget: input.budget,
       stocks: input.stocks,
       notes: input.notes,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
     };
     this.plans.push(plan);
     this.save();
@@ -135,7 +136,7 @@ export class TradePlanStoreImpl implements TradePlanStore {
     const plan = this.plans.find((p) => p.id === id);
     if (!plan || plan.status === "closed") return undefined;
     plan.status = "closed";
-    plan.closedAt = new Date().toISOString();
+    plan.closedAt = nowCSTISO();
     this.save();
     const executedCount = plan.stocks.filter((s) => s.executed).length;
     return {

@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { RuleStrategyConfig } from "../engine/rule-strategy.js";
 import { registerRuleStrategy, unregisterRuleStrategy } from "../engine/strategy-registry.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export class CustomStrategyStore {
   private strategies = new Map<string, RuleStrategyConfig>();
@@ -43,7 +44,7 @@ export class CustomStrategyStore {
 
   /** Create or update a custom strategy. */
   async upsert(config: RuleStrategyConfig): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const existing = this.strategies.get(config.id);
     config.createdAt = existing?.createdAt ?? now;
     config.updatedAt = now;

@@ -11,6 +11,7 @@ import { runPythonScript } from "../bridge/python-bridge.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../services/batch-backtest.js";
 import type { ComposedStrategyStore } from "../services/composed-strategy-store.js";
 import type { QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Result Types ─────────────────────────────────────────────────
 
@@ -143,7 +144,7 @@ export function createStrategyOptimizerTool(
 
       const symbols = ((args.symbols as string) ?? "000300").split(",").map((s) => s.trim());
       const startDate = (args.startDate as string) ?? getDefaultStartDate();
-      const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+      const endDate = (args.endDate as string) ?? todayCST();
       const initialCash = (args.initialCash as number) ?? 100000;
 
       if (action === "optimize") {

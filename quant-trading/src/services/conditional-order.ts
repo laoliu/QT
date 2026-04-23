@@ -18,6 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isTradingDay } from "../utils/trading-calendar.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export type ConditionalOrderType =
   | "stop_loss"
@@ -26,7 +27,8 @@ export type ConditionalOrderType =
   | "trailing_atr"
   | "trailing_tp"
   | "staged_tp"
-  | "indicator_stop";
+  | "indicator_stop"
+  | "swing_grid";
 
 /** A single tier in a staged take-profit order. */
 export interface StagedTier {
@@ -87,6 +89,20 @@ export interface ConditionalOrder {
   ratchetUpAtr?: number;
   /** When stop moves up, it moves by ratchetMoveAtr × ATR. */
   ratchetMoveAtr?: number;
+
+  // ── Swing grid state ──
+  /** Grid direction: "buy" = waiting for price to drop to grid, "sell" = waiting for price to rise. */
+  swingDirection?: "buy" | "sell";
+  /** Grid price level for this order. */
+  gridPrice?: number;
+  /** Grid index (0-based from lowest). */
+  gridIndex?: number;
+  /** Parent swing overlay symbol (for grouping). */
+  swingParentSymbol?: string;
+  /** Shares per grid level. */
+  swingGridShares?: number;
+  /** Linked order ID (the reverse order created after fill). */
+  linkedOrderId?: string;
 
   // ── Indicator-based stop state ──
   /** Moving average period (e.g. 10, 20, 60). */
@@ -448,6 +464,55 @@ export class ConditionalOrderService {
     });
   }
 
+  /** Create a swing grid conditional order (波段网格). */
+  addSwingGrid(params: {
+    symbol: string;
+    gridPrice: number;
+    gridIndex: number;
+    swingDirection: "buy" | "sell";
+    quantity: number;
+    entryPrice: number;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    const dir = params.swingDirection === "buy" ? "低吸" : "高抛";
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "swing_grid",
+      entryPrice: params.entryPrice,
+      triggerValue: params.gridPrice,
+      quantity: params.quantity,
+      exitSide: params.swingDirection === "sell" ? "sell" : undefined,
+      strategyId: params.strategyId ?? "swing-overlay",
+      description:
+        params.description ??
+        `波段${dir}: ${params.symbol} 第${params.gridIndex}层 ¥${params.gridPrice.toFixed(2)} ${dir} ${String(params.quantity)} 股`,
+      swingDirection: params.swingDirection,
+      gridPrice: params.gridPrice,
+      gridIndex: params.gridIndex,
+    });
+  }
+
+  /** Remove all swing grid orders for a specific symbol. Returns count removed. */
+  removeSwingGridOrders(symbol: string): number {
+    let count = 0;
+    for (const [id, order] of this.orders) {
+      if (order.type === "swing_grid" && order.symbol === symbol && !order.triggered) {
+        this.orders.delete(id);
+        count++;
+      }
+    }
+    if (count > 0) this.saveToDisk();
+    return count;
+  }
+
+  /** List active swing grid orders for a symbol. */
+  listSwingGridOrders(symbol?: string): ConditionalOrder[] {
+    return [...this.orders.values()].filter(
+      (o) => o.type === "swing_grid" && !o.triggered && (!symbol || o.symbol === symbol),
+    );
+  }
+
   private addOrder(
     params: Omit<ConditionalOrder, "id" | "createdAt" | "triggered"> & {
       peakPrice?: number;
@@ -465,6 +530,12 @@ export class ConditionalOrderService {
       callbackPct?: number;
       tpActivated?: boolean;
       trailingTpPrice?: number;
+      swingDirection?: "buy" | "sell";
+      gridPrice?: number;
+      gridIndex?: number;
+      swingParentSymbol?: string;
+      swingGridShares?: number;
+      linkedOrderId?: string;
     },
   ): string {
     if (this.activeCount >= this.maxOrders) {
@@ -481,7 +552,7 @@ export class ConditionalOrderService {
       quantity: params.quantity,
       strategyId: params.strategyId,
       description: params.description,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
       triggered: false,
       peakPrice: params.peakPrice,
       trailingStopPrice: params.trailingStopPrice,
@@ -498,6 +569,12 @@ export class ConditionalOrderService {
       callbackPct: params.callbackPct,
       tpActivated: params.tpActivated,
       trailingTpPrice: params.trailingTpPrice,
+      swingDirection: params.swingDirection,
+      gridPrice: params.gridPrice,
+      gridIndex: params.gridIndex,
+      swingParentSymbol: params.swingParentSymbol,
+      swingGridShares: params.swingGridShares,
+      linkedOrderId: params.linkedOrderId,
     };
 
     this.orders.set(id, order);
@@ -716,7 +793,7 @@ export class ConditionalOrderService {
             // Mark whole order as triggered only when ALL tiers are done
             if (order.tiers.every((t) => t.triggered)) {
               order.triggered = true;
-              order.triggeredAt = new Date().toISOString();
+              order.triggeredAt = nowCSTISO();
               order.triggerResult = "all_tiers_completed";
             }
           }
@@ -738,11 +815,23 @@ export class ConditionalOrderService {
           }
           break;
         }
+
+        case "swing_grid": {
+          const gp = order.gridPrice ?? order.triggerValue;
+          if (order.swingDirection === "buy" && price <= gp) {
+            shouldTrigger = true;
+            triggerReason = `波段网格低吸: ${order.symbol} 当前价 ¥${price.toFixed(2)} ≤ 网格价 ¥${gp.toFixed(2)} (第${order.gridIndex ?? 0}层)`;
+          } else if (order.swingDirection === "sell" && price >= gp) {
+            shouldTrigger = true;
+            triggerReason = `波段网格高抛: ${order.symbol} 当前价 ¥${price.toFixed(2)} ≥ 网格价 ¥${gp.toFixed(2)} (第${order.gridIndex ?? 0}层)`;
+          }
+          break;
+        }
       }
 
       if (shouldTrigger) {
         order.triggered = true;
-        order.triggeredAt = new Date().toISOString();
+        order.triggeredAt = nowCSTISO();
         triggered.push(order.id);
 
         // Submit exit order
@@ -890,7 +979,7 @@ export class ConditionalOrderService {
   ): void {
     const hp = this.historyPath();
     if (!hp || orders.length === 0) return;
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const entries: ConditionalOrderHistoryEntry[] = orders.map((o) => ({
       ...o,
       archivedAt: now,

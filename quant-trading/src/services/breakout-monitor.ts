@@ -17,6 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export type BreakoutSetupStatus =
   | "watching" // waiting for breakout
@@ -225,7 +226,7 @@ export class BreakoutMonitor {
       symbol: params.symbol,
       triggerPrice: params.triggerPrice,
       description: params.description ?? `${params.symbol} 突破 ¥${params.triggerPrice.toFixed(2)}`,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
       status: "watching",
       bufferPct: params.bufferPct ?? 0.002,
       volumeCondition: params.volumeCondition,
@@ -282,7 +283,7 @@ export class BreakoutMonitor {
       bufferPct: params.bufferPct ?? 0,
       exitAction: params.exitAction ?? "close_all",
       active: true,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
       description:
         params.description ??
         `${params.symbol} 收盘跌破${params.maPeriod}日均线 → ${params.exitAction === "reduce_half" ? "减半" : "清仓"}`,
@@ -533,7 +534,7 @@ export class BreakoutMonitor {
   private async executeEntry(setup: BreakoutSetup, currentPrice: number): Promise<boolean> {
     if (!this.orderFn) {
       setup.status = "triggered";
-      setup.triggeredAt = new Date().toISOString();
+      setup.triggeredAt = nowCSTISO();
       setup.orderResult = "no_order_fn";
       this.saveToDisk();
       return true;
@@ -554,7 +555,7 @@ export class BreakoutMonitor {
       });
 
       setup.status = "triggered";
-      setup.triggeredAt = new Date().toISOString();
+      setup.triggeredAt = nowCSTISO();
       setup.orderResult = result.ok ? `ok:${result.orderId ?? ""}` : `fail:${result.reason ?? ""}`;
       this.saveToDisk();
 

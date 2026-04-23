@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Alert types ──────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export class AlertStore {
   ): string {
     const alert: Alert = {
       id: this.generateId(),
-      timestamp: new Date().toISOString(),
+      timestamp: nowCSTISO(),
       severity,
       source,
       message,

@@ -123,6 +123,7 @@ def _load_all_screeners() -> None:
         "screeners.dragon_master_screener",
         "screeners.cb_stock_quality",
         "screeners.ml_ranking_screener",
+        "screeners.swing_suitability_screener",
     ]
     for mod_name in modules:
         try:

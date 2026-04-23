@@ -10,6 +10,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ActiveLiveStrategy, KlineInterval, QuantTradingConfig } from "../types.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 function registryPath(cfg: QuantTradingConfig): string {
   const dir = cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -68,7 +69,7 @@ export class LiveStrategyRegistry {
       enabled: true,
       maxPositionPct: options?.maxPositionPct,
       maxOrderValue: options?.maxOrderValue,
-      addedAt: new Date().toISOString(),
+      addedAt: nowCSTISO(),
       timeWindows: options?.timeWindows,
       confirmationBars: options?.confirmationBars,
       regimes: options?.regimes,

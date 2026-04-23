@@ -112,10 +112,12 @@ export {
   ctaDemaCrossover,
   ctaTripleMa,
   ctaSupertrendCta,
+  swingOverlay,
 } from "./strategies/index.js";
 
 import type { BuiltinStrategy } from "./strategies/index.js";
 import type { BuiltinStrategyContext } from "./strategies/index.js";
+import { formatTimestampToDateCST } from "../utils/cst-time.js";
 
 // ── Engine ────────────────────────────────────────────────────────
 
@@ -360,7 +362,7 @@ export async function runBuiltinBacktest(
       position >= 0
         ? cash + position * bar.close
         : cash + (shortEntryNotional - Math.abs(position) * bar.close);
-    const dateStr = new Date(bar.timestamp).toISOString().slice(0, 10);
+    const dateStr = formatTimestampToDateCST(bar.timestamp);
     equityCurve.push({ date: dateStr, value: equity });
 
     // Drawdown
@@ -481,7 +483,7 @@ export async function runBuiltinBacktest(
       if (benchBars.length > 0) {
         const benchStart = benchBars[0]!.close;
         benchmarkCurve = benchBars.map((b) => ({
-          date: new Date(b.timestamp).toISOString().slice(0, 10),
+          date: formatTimestampToDateCST(b.timestamp),
           value: (b.close / benchStart) * request.initialCash,
         }));
       }

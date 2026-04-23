@@ -21,6 +21,7 @@
 import type { BacktestResult, TradingSignal, TradeRecord } from "../types.js";
 import type { EquityHistory, EquitySnapshot } from "./equity-history.js";
 import type { BacktestStore } from "./backtest-store.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -1622,7 +1623,7 @@ export class LiveBacktestComparison {
     }
 
     return {
-      timestamp: new Date().toISOString(),
+      timestamp: nowCSTISO(),
       totalStrategies: entries.length,
       healthDistribution,
       strategies: entries,

@@ -15,6 +15,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { TradingSignal } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 export type HitCheckResult = "pending" | "hit" | "miss" | "no_data";
 
@@ -136,7 +137,7 @@ export class SignalHitRateTracker {
   async checkAccuracy(): Promise<number> {
     if (!this.quoteFn) return 0;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     let updated = 0;
 
     // Collect symbols needing quotes

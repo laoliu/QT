@@ -21,6 +21,7 @@ import {
   formatCategoryOverview,
   showCategoryHelp,
 } from "./categories.js";
+import { todayCST, formatDateCST, formatTimestampToDateCST } from "../utils/cst-time.js";
 
 /**
  * Run qmt_screener_mac.py with --stdout flag.
@@ -491,12 +492,12 @@ export function createQuantCommands(
         }
 
         const symbol = symbolArg || "000300";
-        if (!endDate) endDate = new Date().toISOString().slice(0, 10);
+        if (!endDate) endDate = todayCST();
         if (!startDate) {
           // Default: 6 months back
           const d = new Date();
           d.setMonth(d.getMonth() - 6);
-          startDate = d.toISOString().slice(0, 10);
+          startDate = formatDateCST(d);
         }
 
         try {
@@ -537,7 +538,7 @@ export function createQuantCommands(
             lines.push("", "**最近信号:**");
             for (const sig of result.signals.slice(-5)) {
               const dir = sig.direction === "buy" ? "🟢 买" : "🔴 卖";
-              const dt = new Date(sig.timestamp).toISOString().slice(0, 10);
+              const dt = formatTimestampToDateCST(sig.timestamp);
               lines.push(
                 `  ${dir} ${dt} ¥${sig.price.toFixed(2)}${sig.reason ? ` (${sig.reason})` : ""}`,
               );
@@ -755,7 +756,7 @@ export function createQuantCommands(
         if (!engine) return "❌ 实盘引擎未启动";
         if (!engine.orderManager) return "❌ 订单管理器未就绪";
         const netPnl = await engine.orderManager.getDailyPnl();
-        const date = new Date().toISOString().slice(0, 10);
+        const date = todayCST();
         const account = engine.getAccount?.();
         const positions = engine.getPositions?.() ?? [];
         const lines = [`📊 **今日盈亏** (${date})`];
@@ -1900,7 +1901,7 @@ export function createQuantCommands(
           const sigs = JSON.parse(
             await fs.readFile(path.join(dir, "signals.json"), "utf-8"),
           ) as unknown[];
-          const today = new Date().toISOString().slice(0, 10);
+          const today = todayCST();
           const todayCount = sigs.filter(
             (s) =>
               typeof s === "object" &&

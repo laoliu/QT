@@ -11,6 +11,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export interface TradeNote {
   id: string;
@@ -79,7 +80,7 @@ export class TradeJournal {
       this.notes = this.notes.slice(Math.floor(this.maxNotes * 0.1));
     }
 
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const id = `tn-${String(++this.idCounter).padStart(5, "0")}`;
     const note: TradeNote = {
       id,
@@ -115,7 +116,7 @@ export class TradeJournal {
     if (patch.tags !== undefined) note.tags = patch.tags;
     if (patch.rating !== undefined) note.rating = patch.rating;
     if (patch.lesson !== undefined) note.lesson = patch.lesson;
-    note.updatedAt = new Date().toISOString();
+    note.updatedAt = nowCSTISO();
     this.saveToDisk();
     return true;
   }

@@ -18,6 +18,7 @@ import type { QuantTradingConfig } from "../types.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { tryNotify } from "./notify-helper.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -234,7 +235,7 @@ export class STRestructuringMonitor {
     const preStage = records.filter((r) => r.current_stage.startsWith("PRE-"));
 
     const lines = [
-      `96 **ST重整日报** (${new Date().toISOString().slice(0, 10)})`,
+      `96 **ST重整日报** (${todayCST()})`,
       `09 ${result.total} 0107`,
     ];
 

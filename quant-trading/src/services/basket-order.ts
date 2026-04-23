@@ -20,6 +20,7 @@ import type { OrderRequest } from "../broker/adapter.js";
 import type { MarketType, OrderSide, OrderType, QuantTradingConfig } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
 import type { OrderManager, SubmitResult } from "./order-manager.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -166,7 +167,7 @@ export class BasketOrderService {
       throw new Error("篮子订单至少需要一个标");
     }
 
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const basket: BasketOrder = {
       basketId: randomUUID(),
       name: params.name,
@@ -238,7 +239,7 @@ export class BasketOrderService {
         });
       }
       basket.totalItems = basket.items.length;
-      basket.updatedAt = new Date().toISOString();
+      basket.updatedAt = nowCSTISO();
       await this.persist();
       return basket;
     } finally {
@@ -261,7 +262,7 @@ export class BasketOrderService {
 
       basket.items.splice(idx, 1);
       basket.totalItems = basket.items.length;
-      basket.updatedAt = new Date().toISOString();
+      basket.updatedAt = nowCSTISO();
       await this.persist();
       return basket;
     } finally {
@@ -285,7 +286,7 @@ export class BasketOrderService {
     if (pendingItems.length === 0) throw new Error("04096308");
 
     basket.status = "submitting";
-    basket.submittedAt = new Date().toISOString();
+    basket.submittedAt = nowCSTISO();
     basket.updatedAt = basket.submittedAt;
     await this.persistSafe();
 
@@ -332,7 +333,7 @@ export class BasketOrderService {
         basket.failedCount++;
       }
 
-      basket.updatedAt = new Date().toISOString();
+      basket.updatedAt = nowCSTISO();
       await this.persistSafe();
 
       // Inter-order delay (skip after last item)
@@ -370,7 +371,7 @@ export class BasketOrderService {
       }
 
       basket.status = "cancelled";
-      basket.updatedAt = new Date().toISOString();
+      basket.updatedAt = nowCSTISO();
 
       // Cancel submitted orders via OrderManager
       const orderMgr = this.getOrderMgr();
@@ -392,7 +393,7 @@ export class BasketOrderService {
         }
       }
 
-      basket.completedAt = new Date().toISOString();
+      basket.completedAt = nowCSTISO();
       await this.persist();
       return basket;
     } finally {
@@ -428,7 +429,7 @@ export class BasketOrderService {
 
     if (changed) {
       this.recalcStatus(basket);
-      basket.updatedAt = new Date().toISOString();
+      basket.updatedAt = nowCSTISO();
       await this.persistSafe();
     }
 
@@ -489,7 +490,7 @@ export class BasketOrderService {
     if (basket.status !== "cancelled") {
       if (allTerminal) {
         basket.status = "completed";
-        basket.completedAt = new Date().toISOString();
+        basket.completedAt = nowCSTISO();
       } else if (basket.submittedCount > 0) {
         basket.status = "active";
       }

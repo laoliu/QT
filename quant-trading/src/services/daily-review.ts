@@ -13,6 +13,7 @@ import { runInlinePython } from "../bridge/python-bridge.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ export class DailyReviewService {
     const portfolio = getPortfolio?.() ?? { totalValue: 0, dailyPnl: 0, dailyPnlPct: 0, positions: [] };
     const trades = getTrades?.() ?? [];
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayCST();
     const report = this.formatReport(date, marketData, portfolio, trades);
 
     // Save to file

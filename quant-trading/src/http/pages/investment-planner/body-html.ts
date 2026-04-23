@@ -33,7 +33,9 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="tab tab-sim" data-tab="combo-backtest">🔬 组合回测</div>
     <div class="tab tab-sim" data-tab="pf-backtest">📊 持仓回测</div>
     <div class="tab tab-sim" data-tab="portfolio">💼 模拟持仓</div>
+    <div class="tab tab-sim" data-tab="swing-overlay">💹 持仓波段</div>
     <div class="tab tab-sim" data-tab="signals">🚨 交易信号</div>
+    <div class="tab tab-sim" data-tab="milestones">📊 目标追踪</div>
   </div>
   <div class="tab-group" data-mode="live">
     <span class="tab-group-label">实盘 · 操作</span>
@@ -57,6 +59,7 @@ export function getPlannerBodyHtml(b: string): string {
       <button class="nav-btn nav-btn-sim" onclick="activateTab('combo-backtest');history.pushState(null,null,'#combo-backtest')">🔬 组合回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('pf-backtest');history.pushState(null,null,'#pf-backtest')">📊 持仓回测</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('portfolio');history.pushState(null,null,'#portfolio')">💼 模拟持仓</button>
+      <button class="nav-btn nav-btn-sim" onclick="activateTab('swing-overlay');history.pushState(null,null,'#swing-overlay')">💹 持仓波段</button>
       <button class="nav-btn nav-btn-sim" onclick="activateTab('signals');history.pushState(null,null,'#signals')">🚨 交易信号</button>
     </div>
   </div>
@@ -160,8 +163,9 @@ export function getPlannerBodyHtml(b: string): string {
           <option value="manipulation">跟庄策略</option>
         </select>
       </div>
-      <div class="btn-group">
+      <div class="btn-group" style="align-items:center">
         <button class="btn btn-primary" onclick="generatePlan()" id="btn-gen-plan">🎯 生成投资计划</button>
+        <span id="plan-mode-indicator" style="font-size:12px;margin-left:8px"></span>
       </div>
     </div>
     <div class="card" id="plan-risk-card" style="display:none">
@@ -751,6 +755,31 @@ export function getPlannerBodyHtml(b: string): string {
         <thead><tr><th>操作</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>目标仓位</th><th>当前仓位</th><th>建议数量</th><th>理由</th></tr></thead>
         <tbody></tbody>
       </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Swing Overlay Tab (持仓波段) ═══ -->
+<div class="tab-content" id="tab-swing-overlay">
+  <div class="card" style="margin-bottom:16px">
+    <h3>💹 持仓波段套利
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" onclick="scanSwingSuitability()">🔍 扫描适合度</button>
+      <button class="btn btn-sm" onclick="refreshSwingDashboard()" style="margin-left:8px">🔄 刷新状态</button>
+    </h3>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+      在整体上涨的持仓股票上，保留核心仓位不动，用波段仓位在动态网格内高抛低吸，钻取振荡利润。<br>
+      <strong>操作流程：</strong>① 扫描持仓适合度 → ② 选择高分股票配置参数 → ③ 激活波段监控 → ④ 系统自动创建网格条件单
+    </div>
+    <div id="swing-scan-results">
+      <div style="text-align:center;padding:30px;color:var(--text-dim)">点击"🔍 扫描适合度"开始分析持仓股票的波段特征</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📊 活跃波段监控</h3>
+    <div id="swing-active-dashboard">
+      <div style="text-align:center;padding:30px;color:var(--text-dim)">暂无激活的波段监控</div>
     </div>
   </div>
 </div>

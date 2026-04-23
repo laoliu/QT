@@ -14,6 +14,7 @@ import {
  *   daily_scan       — Daily strategy screening with auto-compare vs previous run
  */
 import type { QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 export type ReportTemplateId =
   | "morning_brief"
@@ -248,7 +249,7 @@ async function generateMarketClose(
   try {
     const signalRaw = await executeTool("trading_signal", { action: "recent", limit: 20 });
     const signalData = JSON.parse(signalRaw);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     const todaySignals = (signalData.signals ?? []).filter((s: Record<string, unknown>) =>
       String(s.timestamp ?? s.createdAt ?? "").startsWith(today),
     );
@@ -838,7 +839,7 @@ async function generateDailyJournal(
   _config: QuantTradingConfig,
 ): Promise<string> {
   const sections: string[] = ["📝 **交易日志**", ""];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayCST();
 
   // 1. Index performance
   const idxLines: string[] = [];
@@ -1184,7 +1185,7 @@ async function generateAfterMarketReview(
   _config: QuantTradingConfig,
 ): Promise<string> {
   const sections: string[] = ["📊 **收盘自动复盘**", ""];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayCST();
 
   // ── 1. 大盘回顾 ──────────────────────────────────────────────
   sections.push("## 一、大盘回顾", "");

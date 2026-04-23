@@ -10,6 +10,7 @@ import type { LiveEngine } from "../engine/live-engine.js";
  */
 import type { Portfolio, QuantTradingConfig, OrderSide, OrderType, MarketType } from "../types.js";
 import { loadPortfolioStore } from "../tools/portfolio.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Pagination Helper ────────────────────────────────────────────
 
@@ -366,13 +367,13 @@ export async function readDailyPnlFromFile(
   try {
     const raw = await fs.readFile(filePath, "utf-8");
     const trades = JSON.parse(raw) as { exitTime?: string; netPnl: number }[];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     const pnl = trades
       .filter((t) => t.exitTime?.startsWith(today))
       .reduce((sum, t) => sum + t.netPnl, 0);
     return { status: "ok", mode, data: { date: today, netPnl: pnl } };
   } catch {
-    return { status: "ok", mode, data: { date: new Date().toISOString().slice(0, 10), netPnl: 0 } };
+    return { status: "ok", mode, data: { date: todayCST(), netPnl: 0 } };
   }
 }
 
@@ -427,7 +428,7 @@ export async function handlePnlApi(
   const netPnl = await engine.orderManager.getDailyPnl();
   return {
     status: "ok",
-    data: { date: new Date().toISOString().slice(0, 10), netPnl },
+    data: { date: todayCST(), netPnl },
   };
 }
 
@@ -599,7 +600,7 @@ export async function appendScreenerHistory(
   strategy = "",
 ): Promise<void> {
   const history = await loadScreenerHistory(config);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayCST();
   history[today] = { codes, strategy };
   // Keep last 30 days
   const dates = Object.keys(history).sort().reverse();
@@ -679,6 +680,8 @@ interface PlanHistoryEntry {
   timestamp: string;
   /** User-provided label/notes for this plan */
   label: string;
+  /** Trading mode: paper (模拟盘) or live (实盘) */
+  mode: "paper" | "live";
   params: Record<string, unknown>;
   summary: Record<string, unknown>;
   stocks: string[];
@@ -699,7 +702,7 @@ async function loadPlanHistory(config: QuantTradingConfig): Promise<PlanHistoryE
   try {
     const raw = await fs.readFile(getPlanHistoryPath(config), "utf-8");
     const entries = JSON.parse(raw) as PlanHistoryEntry[];
-    // Migrate old entries: add version if missing
+    // Migrate old entries: add version/label/mode if missing
     let migrated = false;
     for (const entry of entries) {
       if (!entry.version) {
@@ -708,6 +711,10 @@ async function loadPlanHistory(config: QuantTradingConfig): Promise<PlanHistoryE
       }
       if (entry.label === undefined) {
         entry.label = "";
+        migrated = true;
+      }
+      if (!entry.mode) {
+        entry.mode = "paper";
         migrated = true;
       }
     }
@@ -734,6 +741,7 @@ export async function appendPlanHistory(
   config: QuantTradingConfig,
   plan: Record<string, unknown>,
   params: Record<string, unknown>,
+  mode: "paper" | "live" = "paper",
 ): Promise<void> {
   const history = await loadPlanHistory(config);
   const portfolio = (plan.portfolio ?? []) as Array<Record<string, unknown>>;
@@ -745,6 +753,7 @@ export async function appendPlanHistory(
     version: generateVersion(history, now),
     timestamp: now.toISOString(),
     label: "",
+    mode,
     params,
     summary: {
       strategy: planMeta.strategyLabel ?? planMeta.strategy ?? "",
@@ -773,9 +782,11 @@ export async function appendPlanHistory(
 
 export async function handleGetPlanHistoryApi(
   config: QuantTradingConfig,
+  mode?: "paper" | "live",
 ): Promise<Record<string, unknown>> {
-  const history = await loadPlanHistory(config);
-  if (history.length === 0) return { status: "ok", entries: [], count: 0 };
+  const allHistory = await loadPlanHistory(config);
+  const history = mode ? allHistory.filter((e) => e.mode === mode) : allHistory;
+  if (history.length === 0) return { status: "ok", entries: [], count: 0, mode: mode ?? "all" };
 
   // Build stock frequency analysis across all plans
   const stockFreq: Record<string, number> = {};
@@ -798,6 +809,7 @@ export async function handleGetPlanHistoryApi(
     entries,
     count: history.length,
     topStocks,
+    mode: mode ?? "all",
   };
 }
 

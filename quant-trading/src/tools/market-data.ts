@@ -5,6 +5,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { QuantTradingConfig, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Technical indicator types ────────────────────────────────────
 interface IndicatorResult {
@@ -158,7 +159,7 @@ export function createMarketDataTool(
           if (!symbol) return { error: "请提供标的代码 (symbol)" };
           const interval = (args.interval as string) ?? "1d";
           const startDate = (args.startDate as string) ?? getDefaultStartDate();
-          const endDate = (args.endDate as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.endDate as string) ?? todayCST();
           const limit = (args.limit as number) ?? 120;
           const wantIndicators = (args.indicators as boolean) ?? false;
 

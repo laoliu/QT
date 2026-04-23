@@ -12,6 +12,7 @@ import { runInlinePython } from "../bridge/python-bridge.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export class MorningBriefService {
     const globalMarkets = await this.fetchGlobalMarkets();
     const watchData = await this.fetchWatchlistStatus();
 
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayCST();
     const brief = this.formatBrief(date, globalMarkets, watchData);
 
     // Save

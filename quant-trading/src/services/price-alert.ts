@@ -11,6 +11,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export type AlertConditionType =
   | "price_above"
@@ -189,7 +190,7 @@ export class PriceAlertService {
       type: params.type,
       threshold: params.threshold,
       description,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
       triggered: false,
       repeating: params.repeating ?? false,
       orderAction: params.orderAction,
@@ -343,7 +344,7 @@ export class PriceAlertService {
             }
 
             alert.triggered = true;
-            alert.lastTriggeredAt = new Date().toISOString();
+            alert.lastTriggeredAt = nowCSTISO();
             triggered.push(alert.id);
 
             const msg = this.formatAlert(alert, quote);
@@ -439,7 +440,7 @@ export class PriceAlertService {
               }
 
               alert.triggered = true;
-              alert.lastTriggeredAt = new Date().toISOString();
+              alert.lastTriggeredAt = nowCSTISO();
               triggered.push(alert.id);
 
               const msg = this.formatSentimentAlert(alert, sentiment);

@@ -35,6 +35,7 @@ import type {
   BatchOrderResult,
 } from "./adapter.js";
 import { isCnMarketOpen } from "./paper-broker.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── QMT‑specific helpers (same as qmt-broker.ts) ────────────────
 
@@ -238,7 +239,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
   }
 
   async placeOrder(req: OrderRequest): Promise<Order> {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();
     const orderId = randomUUID();
 
@@ -289,7 +290,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       stock_code: toQmtSymbol(order.symbol),
     });
     order.status = "cancelled";
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = nowCSTISO();
     for (const cb of this.statusCbs) cb(orderId, "cancelled", order);
   }
 
@@ -370,7 +371,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       marketValue: (raw.market_value as number) ?? 0,
       profit: (raw.profit as number) ?? 0,
       profitPct: (raw.profit_ratio as number) ?? 0,
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 
@@ -480,7 +481,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       if (cached) {
         cached.status = status;
         cached.filledQty = (raw.traded_volume as number) ?? cached.filledQty;
-        cached.updatedAt = new Date().toISOString();
+        cached.updatedAt = nowCSTISO();
       }
       const order =
         cached ??
@@ -524,7 +525,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
   }
 
   private mapRawOrder(r: Record<string, unknown>, localId?: string): Order {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const sym = fromQmtSymbol(String(r.stock_code ?? ""));
     return {
       orderId: localId ?? String(r.order_id ?? ""),
@@ -584,7 +585,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       unrealizedPnl,
       unrealizedPnlPct,
       source: "broker",
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 }

@@ -24,6 +24,7 @@ import type { AlertStore } from "./alert-store.js";
 import type { EventBus } from "./event-bus.js";
 import { tryNotifyWithPush } from "./notify-helper.js";
 import type { OrderManager } from "./order-manager.js";
+import { todayCST } from "../utils/cst-time.js";
 
 function getSignalsPath(config: QuantTradingConfig): string {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
@@ -151,7 +152,7 @@ async function generateActiveSignals(
   const active = registry.list(true /* enabledOnly */);
   if (active.length === 0) return [];
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayCST();
 
   /** Choose how many calendar days to look back based on interval. */
   function lookbackDays(interval: string | undefined): number {

@@ -9,6 +9,7 @@ import type { BrokerAccount } from "../types.js";
 import type { OrderManager } from "../services/order-manager.js";
 import type { RiskGate } from "../services/risk-gate.js";
 import type { AccountConfig, AccountStore } from "./account-store.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export class AccountManager {
     this.states.set(accountId, {
       accountId,
       connected: true,
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
       positionCount: 0,
       pendingOrderCount: 0,
     });

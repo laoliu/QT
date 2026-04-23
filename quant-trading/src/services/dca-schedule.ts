@@ -14,6 +14,7 @@ import type { QuantTradingConfig } from "../types.js";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import type { OrderManager } from "./order-manager.js";
 import { computePositionSize } from "./position-sizer.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ export class DcaScheduleService {
       totalInvested: 0,
       nextExecutionAt: nextAt.toISOString(),
       maxExecutions: opts.maxExecutions,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
       description:
         opts.description ?? `${FREQ_LABEL[opts.frequency]}定投 ${opts.symbol} ¥${opts.amount}`,
     };
@@ -217,7 +218,7 @@ export class DcaScheduleService {
     });
 
     plan.executionCount++;
-    plan.lastExecutedAt = new Date().toISOString();
+    plan.lastExecutedAt = nowCSTISO();
 
     if (submitResult.ok) {
       plan.totalInvested += result.quantity * price;

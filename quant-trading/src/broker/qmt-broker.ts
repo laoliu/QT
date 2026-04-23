@@ -39,6 +39,7 @@ import type {
   BatchOrderResult,
 } from "./adapter.js";
 import { isCnMarketOpen } from "./paper-broker.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Raw shapes returned by qmt_broker.py ─────────────────────────
 
@@ -276,7 +277,7 @@ export class QMTBroker implements IBrokerAdapter {
   }
 
   async placeOrder(req: OrderRequest): Promise<Order> {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();
     const orderId = randomUUID(); // local UUID
 
@@ -346,7 +347,7 @@ export class QMTBroker implements IBrokerAdapter {
       stock_code: toQmtSymbol(order.symbol),
     });
     order.status = "cancelled";
-    order.updatedAt = new Date().toISOString();
+    order.updatedAt = nowCSTISO();
     for (const cb of this.statusCbs) cb(orderId, "cancelled", order);
   }
 
@@ -414,7 +415,7 @@ export class QMTBroker implements IBrokerAdapter {
       marketValue: raw.market_value,
       profit: raw.profit,
       profitPct: raw.profit_ratio,
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 
@@ -556,7 +557,7 @@ export class QMTBroker implements IBrokerAdapter {
           status: order.status,
           filledQty: order.filledQty,
           avgFillPrice: order.avgFillPrice,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowCSTISO(),
         });
       }
       for (const cb of this.statusCbs) cb(localId, order.status, order);
@@ -577,7 +578,7 @@ export class QMTBroker implements IBrokerAdapter {
   }
 
   private mapRawOrder(r: RawOrder, localId?: string): Order {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const sym = fromQmtSymbol(r.stock_code);
     const side = mapQmtSide(r.order_type);
     // Detect option market from order side — option sides (48-51) indicate option orders
@@ -639,7 +640,7 @@ export class QMTBroker implements IBrokerAdapter {
       unrealizedPnl,
       unrealizedPnlPct,
       source: "broker",
-      lastSyncAt: new Date().toISOString(),
+      lastSyncAt: nowCSTISO(),
     };
   }
 

@@ -13,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { listStrategies, getStrategy } from "../engine/strategy-registry.js";
 import type { StrategyDefinition, StrategyParameter } from "../types.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -274,7 +275,7 @@ export class UserStrategyStore {
     const errors = validateParameters(stratDef, params);
     if (errors.length > 0) return { errors };
 
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const strategy: UserStrategy = {
       id: `us-${Date.now().toString(36)}`,
       name: opts.name,
@@ -325,7 +326,7 @@ export class UserStrategyStore {
     if (updates.symbols !== undefined) existing.symbols = updates.symbols;
     if (updates.tags !== undefined) existing.tags = updates.tags;
     if (updates.starred !== undefined) existing.starred = updates.starred;
-    existing.updatedAt = new Date().toISOString();
+    existing.updatedAt = nowCSTISO();
 
     await this.save();
     return { strategy: existing };

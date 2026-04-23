@@ -21,6 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as http from "node:http";
+import { nowCSTISO } from "../../utils/cst-time.js";
 
 /** Fetch stock names in batch from Tencent finance API (qt.gtimg.cn). */
 export async function fetchStockNames(symbols: string[]): Promise<Map<string, string>> {
@@ -1019,7 +1020,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
 
         json(res, {
           status: "ok",
-          generatedAt: new Date().toISOString(),
+          generatedAt: nowCSTISO(),
           enrichment: enrichmentContext,
           input: {
             strategies,
@@ -1285,7 +1286,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
       try {
         const body = await parseJsonBody<Record<string, unknown>>(req, 10_485_760);
         const id = String(body.id ?? "");
-        const createdAt = String(body.createdAt ?? new Date().toISOString());
+        const createdAt = String(body.createdAt ?? nowCSTISO());
         const params = body.params ?? {};
         const summary = body.summary ?? {};
         const result = body.result ?? {};

@@ -5,6 +5,8 @@
  * log-viewer UI while still forwarding to the original logger.
  */
 
+import { nowCSTISO } from "../utils/cst-time.js";
+
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 export interface LogEntry {
@@ -38,7 +40,7 @@ export class LogStore {
       id: this.nextId++,
       level,
       message,
-      timestamp: new Date().toISOString(),
+      timestamp: nowCSTISO(),
       source,
     });
 

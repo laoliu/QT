@@ -16,6 +16,7 @@ import type {
   OptionQuote,
   QuantTradingConfig,
 } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 export function createOptionsDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
   const provider = createOptionsDataProvider(config);
@@ -360,7 +361,7 @@ function formatIVSurface(surface: IVSurface) {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayCST();
 }
 
 function getDefaultStartDate(daysBack: number): string {

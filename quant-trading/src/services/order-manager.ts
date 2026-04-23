@@ -30,6 +30,7 @@ import { AsyncMutex } from "../utils/async-mutex.js";
 import { ConfirmationManager } from "./confirmation-manager.js";
 import { computePositionSize } from "./position-sizer.js";
 import { RiskGate } from "./risk-gate.js";
+import { todayCST } from "../utils/cst-time.js";
 
 const ordersMutex = new AsyncMutex();
 const tradesMutex = new AsyncMutex();
@@ -736,7 +737,7 @@ export class OrderManager {
   /** Return today's net PnL (realised fills today). */
   async getDailyPnl(): Promise<number> {
     const trades = await loadTrades(this.cfg);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     return trades
       .filter((t) => t.exitTime?.startsWith(today))
       .reduce((sum, t) => sum + t.netPnl, 0);

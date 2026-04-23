@@ -9,6 +9,7 @@
  */
 import type { QuantTradingConfig, Order, Position } from "../types.js";
 import type { ConditionalOrderService } from "./conditional-order.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export class StopLossEngine {
       stopPrice,
       takeProfitPrice,
       highWaterMark: entryPrice,
-      createdAt: new Date().toISOString(),
+      createdAt: nowCSTISO(),
     };
 
     // Register with ConditionalOrderService if available
@@ -192,7 +193,7 @@ export class StopLossEngine {
       stopPrice,
       takeProfitPrice: existing?.takeProfitPrice,
       highWaterMark: existing?.highWaterMark,
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      createdAt: existing?.createdAt ?? nowCSTISO(),
     };
 
     if (this.conditionalOrderSvc) {

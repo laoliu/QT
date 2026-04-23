@@ -112,8 +112,8 @@ async function loadChart(){
 
   try{
     // Fetch klines
-    const end=new Date().toISOString().slice(0,10);
-    const start=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+    const end=(function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
+    const start=(function(){var d=new Date(Date.now()-days*86400000);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})();
     const kRes=await fetch(B+'/quant/api/klines?symbol='+symbol+'&start='+start+'&end='+end+'&interval=1d');
     if(!kRes.ok)throw new Error('K170002');
     const kData=await kRes.json();

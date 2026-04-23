@@ -32,6 +32,7 @@ import {
   SUPPORTED_TICK_STRATEGY_IDS,
   type TickStrategyConfig,
 } from "./_helpers.js";
+import { todayCST } from "../../utils/cst-time.js";
 
 export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
   const { api, config, secure, securePublic } = deps;
@@ -52,7 +53,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           json(res, { error: "请提供 symbols" }, 400);
           return;
         }
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const result = await runPythonScript<Record<string, unknown>>(
           "engines/stock_profiler.py",
           { action: "profile", symbols, endDate },
@@ -85,7 +86,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           json(res, { error: "请提供 symbols" }, 400);
           return;
         }
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const result = await runPythonScript<Record<string, unknown>>(
           "engines/strategy_router.py",
           { action: "recommend", symbols, endDate },
@@ -143,7 +144,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
             d.setFullYear(d.getFullYear() - 1);
             return d.toISOString().slice(0, 10);
           })();
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const initialCash = toNumberOrDefault(body.initialCash, 100000);
 
         const batchItems = strategyIds.map((id) => {
@@ -268,7 +269,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           json(res, { error: "请提供 symbols" }, 400);
           return;
         }
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const result = await runPythonScript<Record<string, unknown>>(
           "engines/strategy_router.py",
           { action: "route_portfolio", symbols, endDate },
@@ -311,7 +312,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
         // Build routing table
         try {
           const body = (await parseObjectBody(req)) as Record<string, unknown>;
-          const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (body.endDate as string) ?? todayCST();
           const startDate =
             (body.startDate as string) ??
             (() => {
@@ -357,7 +358,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           json(res, { error: "请提供 symbols 参数" }, 400);
           return;
         }
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const startDate =
           (body.startDate as string) ??
           (() => {
@@ -398,7 +399,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
           json(res, { error: "请提供 candidates 数组" }, 400);
           return;
         }
-        const endDate = (body.endDate as string) ?? new Date().toISOString().slice(0, 10);
+        const endDate = (body.endDate as string) ?? todayCST();
         const result = await runPythonScript<Record<string, unknown>>(
           "engines/strategy_router.py",
           { action: "enrich_with_routing", candidates, endDate },

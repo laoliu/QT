@@ -12,6 +12,7 @@ import {
   registerComposedStrategy,
   unregisterComposedStrategy,
 } from "../engine/strategy-registry.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 export class ComposedStrategyStore {
   private compositions = new Map<string, CompositionConfig>();
@@ -45,7 +46,7 @@ export class ComposedStrategyStore {
 
   /** Create or update a composed strategy. */
   async upsert(config: CompositionConfig): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowCSTISO();
     const existing = this.compositions.get(config.id);
     config.createdAt = existing?.createdAt ?? now;
     config.updatedAt = now;

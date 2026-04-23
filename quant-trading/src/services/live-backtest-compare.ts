@@ -6,6 +6,8 @@
  * performance diverges significantly from backtest expectations.
  */
 
+import { nowCSTISO } from "../utils/cst-time.js";
+
 // ── Types ────────────────────────────────────────────────────
 
 export interface CompareRequest {
@@ -210,7 +212,7 @@ export class LiveBacktestCompareService {
     if (decayAlertTriggered) {
       this.alerts.push({
         strategyId: req.strategyId,
-        detectedAt: new Date().toISOString(),
+        detectedAt: nowCSTISO(),
         returnDeviation,
         threshold,
         message: `Strategy ${req.strategyId} live return deviates ${(returnDeviation * 100).toFixed(1)}% from backtest (threshold: ${(threshold * 100).toFixed(0)}%)`,

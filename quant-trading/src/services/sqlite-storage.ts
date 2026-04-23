@@ -17,6 +17,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -628,7 +629,7 @@ export class InMemoryStorage implements QuantStorage {
       order.status = status;
       if (filledQty !== undefined) order.filledQty = filledQty;
       if (filledPrice !== undefined) order.filledPrice = filledPrice;
-      order.updatedAt = new Date().toISOString();
+      order.updatedAt = nowCSTISO();
     }
     await this.maybePersist();
   }
@@ -680,7 +681,7 @@ export class InMemoryStorage implements QuantStorage {
   async updateTradePlan(id: string, patch: Partial<TradePlanRow>): Promise<boolean> {
     const plan = this.tradePlans.get(id);
     if (!plan) return false;
-    Object.assign(plan, patch, { updatedAt: new Date().toISOString() });
+    Object.assign(plan, patch, { updatedAt: nowCSTISO() });
     await this.maybePersist();
     return true;
   }

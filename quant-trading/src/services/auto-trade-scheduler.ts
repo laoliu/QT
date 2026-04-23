@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import http from "node:http";
 import { isTradingDay } from "../utils/trading-calendar.js";
+import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -371,7 +372,7 @@ export class AutoTradeScheduler {
 
   private async runScreenPhase(): Promise<{ ok: boolean; symbols: string[]; error?: string; allocations?: Array<{ code: string; name: string; shares: number; price: number; amount: number }> }> {
     this.running = true;
-    this.status.lastScreenAt = new Date().toISOString();
+    this.status.lastScreenAt = nowCSTISO();
     this.notify("🔍 自动交易：开始每日综合选股…");
 
     try {
@@ -500,7 +501,7 @@ export class AutoTradeScheduler {
 
   private async runExecutePhase(): Promise<{ ok: boolean; result?: unknown; error?: string }> {
     this.running = true;
-    this.status.lastExecuteAt = new Date().toISOString();
+    this.status.lastExecuteAt = nowCSTISO();
 
     if (this.status.pendingAllocations.length === 0) {
       this.running = false;

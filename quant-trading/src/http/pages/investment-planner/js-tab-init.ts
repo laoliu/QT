@@ -28,6 +28,7 @@ function _onTabDataLoad(tabName){
     if(tabName==='add-position')loadAddPositionPortfolio();
     if(tabName==='combo-backtest')loadComboTopStrategies();
     if(tabName==='recommend')refreshGlobalMode();
+    if(tabName==='swing-overlay')refreshSwingDashboard();
   }catch(e){console.error('[tab-data-load]',e)}
 }
 /* wire the callback so the isolated tab script triggers data loads */
@@ -119,6 +120,11 @@ function refreshGlobalMode(){
       var mode=sel.value;
       localStorage.setItem('qt-view-mode',mode);
       if(window._applyViewMode)window._applyViewMode(mode);
+      /* reload plan data for this mode */
+      currentPlan=null;currentPlanVersion=null;
+      restoreCachedPlan();
+      loadPlanHistory();
+      updatePlanModeIndicator();
       /* load data for the default tab of this mode */
       var activeTab=document.querySelector('.tab.active');
       if(activeTab)_onTabDataLoad(activeTab.dataset.tab);
@@ -142,10 +148,22 @@ function updateRebalanceModeHint(isLive,brokerType){
   }
 }
 
+function updatePlanModeIndicator(){
+  var el=document.getElementById('plan-mode-indicator');
+  if(!el)return;
+  var mode=window._currentViewMode||'paper';
+  if(mode==='live'){
+    el.innerHTML='<span class="badge badge-red">🔴 实盘计划</span>';
+  }else{
+    el.innerHTML='<span class="badge badge-green">🟢 模拟盘计划</span>';
+  }
+}
+
 // Initial data load (hash already restored by the isolated tab script)
 (function(){
   loadComposedStrategies();
   refreshGlobalMode();
+  updatePlanModeIndicator();
   loadPlanHistory();restoreCachedPlan();
   var h=(location.hash||'').replace('#','');
   if(h){_onTabDataLoad(h);}

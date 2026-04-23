@@ -12,6 +12,7 @@ import type { RecommendationTracker } from "../services/recommendation-tracker.j
 import type { ScanHistoryStore } from "../services/scan-history-store.js";
 import { computeStopAdvice } from "../services/stop-advisor.js";
 import type { KlineBar, QuantTradingConfig } from "../types.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Screener rotation to avoid returning the same stocks every call ──
 // When the AI doesn't specify a screenerId, we cycle through diverse screeners
@@ -194,7 +195,7 @@ export function createStockRecommendTool(
 
       // ── Step 2: Route + Backtest via strategy_router ─────────────
       const symbols = screenResult.codes.slice(0, 15); // cap at 15 to avoid timeout
-      const endDate = new Date().toISOString().slice(0, 10);
+      const endDate = todayCST();
       const startDate = getOneYearAgo();
 
       const routeResult = await runPythonScript<{
@@ -253,7 +254,7 @@ export function createStockRecommendTool(
       const stopAdviceMap = new Map<string, { stopLoss: string; takeProfit: string; stopLossPct: string; takeProfitPct: string; rewardRiskRatio: string; method: string; description: string }>();
       if (getDataProvider) {
         const provider = getDataProvider();
-        const klEndDate = new Date().toISOString().slice(0, 10);
+        const klEndDate = todayCST();
         const klStartDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
         await Promise.all(
           recommended.map(async (r) => {
@@ -572,7 +573,7 @@ async function runPredictiveRecommend(
   const stopAdviceMap = new Map<string, { stopLoss: string; takeProfit: string; stopLossPct: string; takeProfitPct: string; rewardRiskRatio: string; method: string; description: string }>();
   if (getDataProvider) {
     const provider = getDataProvider();
-    const klEndDate = new Date().toISOString().slice(0, 10);
+    const klEndDate = todayCST();
     const klStartDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await Promise.all(
       recommended.map(async (r) => {

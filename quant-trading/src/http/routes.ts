@@ -25,6 +25,7 @@ import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
 import { parseJsonBody } from "./parse-body.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -876,7 +877,7 @@ function registerTradingRoutes({ api, config, getEngine, secure }: RouteDeps): v
       const pnl = await engine.orderManager.getDailyPnl();
       json(res, {
         status: "ok",
-        data: { date: new Date().toISOString().slice(0, 10), netPnl: pnl },
+        data: { date: todayCST(), netPnl: pnl },
       });
     }),
   });
@@ -1373,7 +1374,7 @@ function registerMarketDataRoutes({ api, config, secure }: RouteDeps): void {
       }
       const market = p.get("market") ?? detectMarketFromSymbol(symbol);
       const interval = p.get("interval") ?? "1d";
-      const endDate = p.get("endDate") ?? new Date().toISOString().slice(0, 10);
+      const endDate = p.get("endDate") ?? todayCST();
       const startDate =
         p.get("startDate") ??
         (() => {
@@ -1575,7 +1576,7 @@ function registerTradePlanRoutes({ api, tradePlanStore, secure }: RouteDeps): vo
           return;
         }
         const id = tpStore.createPlan({
-          date: (body.date as string) ?? new Date().toISOString().slice(0, 10),
+          date: (body.date as string) ?? todayCST(),
           stocks: body.stocks as never,
           budget: body.budget as number,
           notes: body.notes as string | undefined,

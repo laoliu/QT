@@ -21,6 +21,7 @@ import type { AlertStore } from "../services/alert-store.js";
 import { LiveBacktestComparison } from "../services/live-backtest-comparison.js";
 import { runBacktest } from "../engine/strategy-registry.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
+import { todayCST } from "../utils/cst-time.js";
 
 /** Safe toFixed 66returns "N/A? when the value is nullish or not a finite number. */
 function fmt(v: unknown, digits: number): string {
@@ -190,7 +191,7 @@ export function createLiveBacktestComparisonTool(
           if (!strategyId) return { error: "请提供strategy_id" };
 
           const symbols = parseSymbols(args.symbols as string | undefined);
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
           const backtestId = args.backtest_id as string | undefined;
           const rerunBacktest = args.rerun_backtest as boolean | undefined;
@@ -263,7 +264,7 @@ export function createLiveBacktestComparisonTool(
           if (!strategyId) return { error: "请提供strategy_id" };
 
           const symbols = parseSymbols(args.symbols as string | undefined);
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const rollingDays = (args.rolling_days as number) ?? 30;
           const stepDays = (args.step_days as number) ?? 7;
           const rerunBacktest = args.rerun_backtest as boolean | undefined;
@@ -333,7 +334,7 @@ export function createLiveBacktestComparisonTool(
           const strategyIds = strategyIdsStr.split(",").map((s) => s.trim()).filter(Boolean);
           if (strategyIds.length < 2) return { error: "批量对比至少需要个策略ID" };
 
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
 
           const engine = getEngine();
@@ -398,7 +399,7 @@ export function createLiveBacktestComparisonTool(
           if (!strategyId) return { error: "请提供strategy_id" };
 
           const symbols = parseSymbols(args.symbols as string | undefined);
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
           const backtestId = args.backtest_id as string | undefined;
           const rerunBacktest = args.rerun_backtest as boolean | undefined;
@@ -471,7 +472,7 @@ export function createLiveBacktestComparisonTool(
           if (!strategyId) return { error: "请提供strategy_id" };
 
           const symbols = parseSymbols(args.symbols as string | undefined);
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
           const backtestId = args.backtest_id as string | undefined;
           const rerunBacktest = args.rerun_backtest as boolean | undefined;
@@ -560,7 +561,7 @@ export function createLiveBacktestComparisonTool(
           if (!strategyId) return { error: "请提供strategy_id" };
 
           const symbols = parseSymbols(args.symbols as string | undefined);
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
           const backtestId = args.backtest_id as string | undefined;
           const rerunBacktest = args.rerun_backtest as boolean | undefined;
@@ -656,7 +657,7 @@ export function createLiveBacktestComparisonTool(
         }
 
         case "summary_dashboard": {
-          const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+          const endDate = (args.end_date as string) ?? todayCST();
           const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
 
           const engine = getEngine();
@@ -781,7 +782,7 @@ async function runCompare(
   args: Record<string, unknown>,
 ) {
   const symbols = parseSymbols(args.symbols as string | undefined);
-  const endDate = (args.end_date as string) ?? new Date().toISOString().slice(0, 10);
+  const endDate = (args.end_date as string) ?? todayCST();
   const startDate = (args.start_date as string) ?? getDefaultStartDate(endDate);
   const backtestId = args.backtest_id as string | undefined;
   const rerunBacktest = args.rerun_backtest as boolean | undefined;

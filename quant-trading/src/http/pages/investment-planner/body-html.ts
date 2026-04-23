@@ -784,6 +784,30 @@ export function getPlannerBodyHtml(b: string): string {
       <div style="text-align:center;padding:30px;color:var(--text-dim)">暂无激活的波段监控</div>
     </div>
   </div>
+
+  <!-- Swing Chart Modal -->
+  <div id="swing-chart-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);align-items:center;justify-content:center">
+    <div style="background:var(--bg2);border-radius:12px;width:92vw;max-width:1200px;max-height:90vh;overflow:auto;padding:20px;position:relative">
+      <div style="display:flex;align-items:center;margin-bottom:12px">
+        <h3 id="swing-chart-title" style="margin:0;flex:1">📈 K线图</h3>
+        <div style="display:flex;gap:4px;margin-right:12px">
+          <button id="swing-chart-mode-kline" class="btn btn-sm btn-primary" onclick="switchSwingChartMode('kline')">日K</button>
+          <button id="swing-chart-mode-tick" class="btn btn-sm" onclick="switchSwingChartMode('tick')">分笔</button>
+        </div>
+        <select id="swing-chart-period" onchange="loadSwingChart(window._swingChartSymbol)" style="margin-right:12px;padding:4px 8px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px">
+          <option value="30">30天</option>
+          <option value="60" selected>60天</option>
+          <option value="120">120天</option>
+          <option value="250">一年</option>
+        </select>
+        <button onclick="closeSwingChart()" style="background:none;border:none;color:var(--text-dim);font-size:24px;cursor:pointer;padding:0 8px">✕</button>
+      </div>
+      <div id="swing-chart-container" style="width:100%;height:420px;background:#161b22;border-radius:8px"></div>
+      <div id="swing-chart-legend" style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--text-dim)">
+        <span>🟢 买入点</span><span>🔴 卖出点</span><span style="color:#f39c12">━ 网格线</span><span style="color:#58a6ff">━ MA中心</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ Signals Tab ═══ -->

@@ -27,6 +27,7 @@ export function getInvestmentPlannerPageHtml(baseUrl: string): string {
 <style>
 ${PLANNER_CSS}
 </style>
+<script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 ${getPlannerBodyHtml(b)}

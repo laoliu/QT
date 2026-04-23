@@ -594,8 +594,8 @@ const B = '${b}';
 function updateClock(){
   const d = new Date();
   document.getElementById('clock').textContent =
-    d.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit',weekday:'short'}) + ' ' +
-    d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    d.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit',weekday:'short',timeZone:'Asia/Shanghai'}) + ' ' +
+    d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Shanghai'});
 }
 updateClock(); setInterval(updateClock, 1000);
 

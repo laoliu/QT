@@ -272,7 +272,7 @@ function refreshSwingDashboard() {
         '<td>' + (o.active_grid_orders || 0) + '个</td>' +
         '<td>' + (o.round_trips || 0) + '次</td>' +
         '<td style="color:' + pnlColor + '">' + ((o.swing_pnl || 0) >= 0 ? '+' : '') + (o.swing_pnl || 0).toFixed(2) + '%</td>' +
-        '<td><button class="btn btn-sm btn-danger" onclick="deactivateSwingOverlay(\\'' + esc(o.symbol) + '\\')">⏹ 停止</button></td>' +
+        '<td><button class="btn btn-sm" onclick="openSwingChart(\\'' + esc(o.symbol) + '\\',\\'' + esc(o.name || '') + '\\')">📈</button> <button class="btn btn-sm btn-danger" onclick="deactivateSwingOverlay(\\'' + esc(o.symbol) + '\\')">⏹ 停止</button></td>' +
         '</tr>';
 
       // Grid visualization
@@ -346,5 +346,392 @@ if (typeof window._onTabActivated === 'function') {
     if (name === 'swing-overlay') refreshSwingDashboard();
   };
 }
+
+/* ═══ Swing Chart (K线 + 网格线 + 买卖标记) ═══ */
+
+var _swingChart = null;
+var _swingCandleSeries = null;
+var _swingVolumeSeries = null;
+var _swingGridLines = [];
+
+function openSwingChart(symbol, name) {
+  window._swingChartSymbol = symbol;
+  window._swingChartName = name || '';
+  _swingChartMode = 'kline';
+  var btnK = document.getElementById('swing-chart-mode-kline');
+  var btnT = document.getElementById('swing-chart-mode-tick');
+  var periodSel = document.getElementById('swing-chart-period');
+  if (btnK) btnK.className = 'btn btn-sm btn-primary';
+  if (btnT) btnT.className = 'btn btn-sm';
+  if (periodSel) periodSel.style.display = '';
+  var modal = document.getElementById('swing-chart-modal');
+  if (modal) modal.style.display = 'flex';
+  var title = document.getElementById('swing-chart-title');
+  if (title) title.textContent = '📈 ' + symbol + ' ' + (name || '') + ' — 波段K线';
+  var legend = document.getElementById('swing-chart-legend');
+  if (legend) legend.innerHTML = '<span>🟢 买入点</span><span>🔴 卖出点</span><span style="color:#f39c12">━ 网格线</span><span style="color:#58a6ff">━ MA中心</span>';
+  stopTickRefresh();
+  loadSwingChart(symbol);
+}
+
+function closeSwingChart() {
+  var modal = document.getElementById('swing-chart-modal');
+  if (modal) modal.style.display = 'none';
+  if (_swingChart) {
+    _swingChart.remove();
+    _swingChart = null;
+    _swingCandleSeries = null;
+    _swingVolumeSeries = null;
+    _swingGridLines = [];
+  }
+}
+
+function _createSwingChart() {
+  var container = document.getElementById('swing-chart-container');
+  if (!container) return;
+  container.innerHTML = '';
+  _swingGridLines = [];
+  _swingChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 420,
+    layout: { background: { type: 'solid', color: '#161b22' }, textColor: '#c9d1d9' },
+    grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+    timeScale: { borderColor: '#30363d', timeVisible: false },
+    rightPriceScale: { borderColor: '#30363d' },
+    crosshair: { mode: 0 },
+  });
+  _swingCandleSeries = _swingChart.addCandlestickSeries({
+    upColor: '#3fb950', downColor: '#f85149',
+    borderUpColor: '#3fb950', borderDownColor: '#f85149',
+    wickUpColor: '#3fb950', wickDownColor: '#f85149',
+  });
+  _swingVolumeSeries = _swingChart.addHistogramSeries({
+    color: 'rgba(88,166,255,0.3)',
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+  _swingChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
+  var _resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(function() {
+      if (_swingChart && container.clientWidth > 0) {
+        _swingChart.applyOptions({ width: container.clientWidth });
+      }
+    }, 100);
+  });
+}
+
+function loadSwingChart(symbol) {
+  if (!symbol) return;
+  var container = document.getElementById('swing-chart-container');
+  if (!container) return;
+  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)"><div class="spinner"></div>&nbsp; 加载K线数据…</div>';
+
+  var days = parseInt((document.getElementById('swing-chart-period') || {}).value || '60');
+  api('/quant/admin/api/swing-overlay/chart-data?symbol=' + encodeURIComponent(symbol) + '&days=' + days, { _timeout: 30000 }).then(function(d) {
+    if (!d || !d.ok || !d.klines || !d.klines.length) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)">无K线数据</div>';
+      return;
+    }
+
+    // Create chart if not exists
+    _createSwingChart();
+
+    // Set candle data
+    var candles = d.klines.map(function(b) {
+      var t = b.date || b.timestamp;
+      var timeStr = typeof t === 'number' ? new Date(t).toISOString().slice(0, 10) : String(t).slice(0, 10);
+      return { time: timeStr, open: b.open, high: b.high, low: b.low, close: b.close };
+    }).filter(function(c) { return c.time && c.open > 0; });
+    candles.sort(function(a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    _swingCandleSeries.setData(candles);
+
+    // Set volume data
+    var volumes = d.klines.map(function(b) {
+      var t = b.date || b.timestamp;
+      var timeStr = typeof t === 'number' ? new Date(t).toISOString().slice(0, 10) : String(t).slice(0, 10);
+      return { time: timeStr, value: b.volume || 0, color: b.close >= b.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)' };
+    }).filter(function(v) { return !!v.time; });
+    volumes.sort(function(a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+    _swingVolumeSeries.setData(volumes);
+
+    // Remove old grid lines
+    _swingGridLines.forEach(function(line) {
+      _swingCandleSeries.removePriceLine(line);
+    });
+    _swingGridLines = [];
+
+    // Add grid level lines
+    if (d.gridLevels && d.gridLevels.length) {
+      var centerPrice = d.maCenter || d.gridLevels[Math.floor(d.gridLevels.length / 2)];
+      d.gridLevels.forEach(function(level) {
+        var isCenter = Math.abs(level - centerPrice) < 0.01;
+        var line = _swingCandleSeries.createPriceLine({
+          price: level,
+          color: isCenter ? '#58a6ff' : '#f39c12',
+          lineWidth: isCenter ? 2 : 1,
+          lineStyle: isCenter ? 0 : 2,
+          axisLabelVisible: true,
+          title: isCenter ? 'MA' : '',
+        });
+        _swingGridLines.push(line);
+      });
+    }
+
+    // Add MA center line if different from grid levels
+    if (d.maCenter && (!d.gridLevels || !d.gridLevels.some(function(l) { return Math.abs(l - d.maCenter) < 0.01; }))) {
+      var maLine = _swingCandleSeries.createPriceLine({
+        price: d.maCenter,
+        color: '#58a6ff',
+        lineWidth: 2,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: 'MA',
+      });
+      _swingGridLines.push(maLine);
+    }
+
+    // Add buy/sell markers
+    var markers = [];
+    if (d.trades && d.trades.length) {
+      d.trades.forEach(function(t) {
+        if (!t.date) return;
+        var isBuy = t.direction === 'buy';
+        markers.push({
+          time: t.date,
+          position: isBuy ? 'belowBar' : 'aboveBar',
+          color: isBuy ? '#3fb950' : '#f85149',
+          shape: isBuy ? 'arrowUp' : 'arrowDown',
+          text: (isBuy ? '买' : '卖') + ' ¥' + (t.price || 0).toFixed(2) + ' x' + (t.quantity || 0),
+        });
+      });
+      markers.sort(function(a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : 0; });
+      _swingCandleSeries.setMarkers(markers);
+    }
+
+    _swingChart.timeScale().fitContent();
+  }).catch(function(e) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f85149">加载失败: ' + esc(String(e)) + '</div>';
+  });
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeSwingChart();
+});
+
+/* ═══ Tick (分笔) Chart Mode ═══ */
+
+var _swingChartMode = 'kline'; // 'kline' or 'tick'
+var _tickChart = null;
+var _tickLineSeries = null;
+var _tickVolSeries = null;
+var _tickGridLines = [];
+var _tickRefreshTimer = null;
+
+function switchSwingChartMode(mode) {
+  _swingChartMode = mode;
+  var btnK = document.getElementById('swing-chart-mode-kline');
+  var btnT = document.getElementById('swing-chart-mode-tick');
+  var periodSel = document.getElementById('swing-chart-period');
+  var legend = document.getElementById('swing-chart-legend');
+  if (btnK) { btnK.className = mode === 'kline' ? 'btn btn-sm btn-primary' : 'btn btn-sm'; }
+  if (btnT) { btnT.className = mode === 'tick' ? 'btn btn-sm btn-primary' : 'btn btn-sm'; }
+  if (periodSel) periodSel.style.display = mode === 'kline' ? '' : 'none';
+  if (legend) {
+    legend.innerHTML = mode === 'kline'
+      ? '<span>🟢 买入点</span><span>🔴 卖出点</span><span style="color:#f39c12">━ 网格线</span><span style="color:#58a6ff">━ MA中心</span>'
+      : '<span style="color:#58a6ff">━ 实时价格</span><span>🟢 买入点</span><span>🔴 卖出点</span><span style="color:#f39c12">━ 网格线</span><span style="font-size:11px;color:var(--accent)">每3秒自动刷新</span>';
+  }
+  if (mode === 'kline') {
+    stopTickRefresh();
+    loadSwingChart(window._swingChartSymbol);
+  } else {
+    loadTickChart(window._swingChartSymbol);
+  }
+}
+
+function stopTickRefresh() {
+  if (_tickRefreshTimer) { clearInterval(_tickRefreshTimer); _tickRefreshTimer = null; }
+}
+
+function _createTickChart() {
+  var container = document.getElementById('swing-chart-container');
+  if (!container) return;
+  container.innerHTML = '';
+  // Destroy old kline chart if any
+  if (_swingChart) { _swingChart.remove(); _swingChart = null; _swingCandleSeries = null; _swingVolumeSeries = null; _swingGridLines = []; }
+  if (_tickChart) { _tickChart.remove(); _tickChart = null; }
+  _tickGridLines = [];
+
+  _tickChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 420,
+    layout: { background: { type: 'solid', color: '#161b22' }, textColor: '#c9d1d9' },
+    grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+    timeScale: { borderColor: '#30363d', timeVisible: true, secondsVisible: true },
+    rightPriceScale: { borderColor: '#30363d' },
+    crosshair: { mode: 0 },
+  });
+  _tickLineSeries = _tickChart.addLineSeries({
+    color: '#58a6ff',
+    lineWidth: 2,
+    priceLineVisible: true,
+    lastValueVisible: true,
+  });
+  _tickVolSeries = _tickChart.addHistogramSeries({
+    color: 'rgba(88,166,255,0.25)',
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'volume',
+  });
+  _tickChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
+  window.addEventListener('resize', function() {
+    if (_tickChart && container.clientWidth > 0) _tickChart.applyOptions({ width: container.clientWidth });
+  });
+}
+
+function loadTickChart(symbol) {
+  if (!symbol) return;
+  var container = document.getElementById('swing-chart-container');
+  if (!container) return;
+  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)"><div class="spinner"></div>&nbsp; 加载分笔数据…</div>';
+
+  stopTickRefresh();
+
+  _fetchTickData(symbol).then(function(d) {
+    if (!d || !d.ok) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)">' + (d && d.message ? d.message : '无分笔数据，TickIngress 可能未启用') + '</div>';
+      return;
+    }
+    _renderTickData(d, symbol);
+    // Auto-refresh every 3 seconds
+    _tickRefreshTimer = setInterval(function() {
+      if (_swingChartMode !== 'tick' || !document.getElementById('swing-chart-modal') || document.getElementById('swing-chart-modal').style.display === 'none') {
+        stopTickRefresh();
+        return;
+      }
+      _fetchTickData(symbol).then(function(d2) {
+        if (d2 && d2.ok) _updateTickData(d2);
+      }).catch(function() {});
+    }, 3000);
+  }).catch(function(e) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f85149">加载失败: ' + esc(String(e)) + '</div>';
+  });
+}
+
+function _fetchTickData(symbol) {
+  return api('/quant/admin/api/swing-overlay/tick-data?symbol=' + encodeURIComponent(symbol) + '&limit=256', { _timeout: 10000 });
+}
+
+function _renderTickData(d, symbol) {
+  _createTickChart();
+  _updateTickData(d);
+
+  // Also fetch grid levels from status
+  api('/quant/admin/api/swing-overlay/status', { _timeout: 10000 }).then(function(st) {
+    if (!st || !st.overlays) return;
+    var overlay = st.overlays.find(function(o) { return o.symbol === symbol; });
+    if (!overlay || !overlay.grid_levels) return;
+    // Add grid lines
+    overlay.grid_levels.forEach(function(level, i) {
+      var centerIdx = Math.floor(overlay.grid_levels.length / 2);
+      var isCenter = (i === centerIdx);
+      var line = _tickLineSeries.createPriceLine({
+        price: level,
+        color: isCenter ? '#58a6ff' : '#f39c12',
+        lineWidth: isCenter ? 2 : 1,
+        lineStyle: isCenter ? 0 : 2,
+        axisLabelVisible: true,
+        title: isCenter ? 'MA' : '',
+      });
+      _tickGridLines.push(line);
+    });
+  }).catch(function() {});
+}
+
+// Convert epoch ms to lightweight-charts "local" seconds (add CST +8h offset)
+function _tickLocalSec(epochMs) {
+  return Math.floor(epochMs / 1000) + 8 * 3600;
+}
+
+function _updateTickData(d) {
+  if (!_tickLineSeries || !d.ticks || !d.ticks.length) return;
+
+  // Sort ticks by time
+  var ticks = d.ticks.slice().sort(function(a, b) { return a.time - b.time; });
+
+  var lineData = ticks.map(function(t) {
+    return { time: _tickLocalSec(t.time), value: t.price };
+  });
+  // Deduplicate by second (keep last value)
+  var seen = {};
+  for (var i = 0; i < lineData.length; i++) {
+    seen[lineData[i].time] = lineData[i];
+  }
+  var keys = Object.keys(seen).sort(function(a, b) { return a - b; });
+  var deduped = [];
+  for (var j = 0; j < keys.length; j++) {
+    deduped.push(seen[keys[j]]);
+  }
+  _tickLineSeries.setData(deduped);
+
+  // Volume: compute delta between consecutive cumulative volumes
+  var volData = [];
+  for (var k = 0; k < ticks.length; k++) {
+    var ts = _tickLocalSec(ticks[k].time);
+    var vol = (k > 0 && ticks[k].volume > ticks[k - 1].volume)
+      ? ticks[k].volume - ticks[k - 1].volume
+      : 0;
+    volData.push({ time: ts, value: vol, color: ticks[k].price >= (k > 0 ? ticks[k - 1].price : ticks[k].price) ? 'rgba(63,185,80,0.4)' : 'rgba(248,81,73,0.4)' });
+  }
+  var vSeen = {};
+  for (var m = 0; m < volData.length; m++) { vSeen[volData[m].time] = volData[m]; }
+  var vKeys = Object.keys(vSeen).sort(function(a, b) { return a - b; });
+  var vDeduped = [];
+  for (var n = 0; n < vKeys.length; n++) { vDeduped.push(vSeen[vKeys[n]]); }
+  _tickVolSeries.setData(vDeduped);
+
+  // Add buy/sell markers — only those within tick time range (± 2h buffer)
+  var minTime = ticks[0].time - 7200000;
+  var maxTime = ticks[ticks.length - 1].time + 60000;
+  if (d.trades && d.trades.length) {
+    var markers = [];
+    d.trades.forEach(function(t) {
+      if (!t.time || t.time < minTime || t.time > maxTime) return;
+      var isBuy = t.direction === 'buy';
+      markers.push({
+        time: _tickLocalSec(t.time),
+        position: isBuy ? 'belowBar' : 'aboveBar',
+        color: isBuy ? '#3fb950' : '#f85149',
+        shape: isBuy ? 'arrowUp' : 'arrowDown',
+        text: (isBuy ? '买' : '卖') + ' ¥' + (t.price || 0).toFixed(2),
+      });
+    });
+    markers.sort(function(a, b) { return a.time - b.time; });
+    _tickLineSeries.setMarkers(markers);
+  }
+
+  // Update title with tick count and latest price
+  var latest = ticks[ticks.length - 1];
+  var titleEl = document.getElementById('swing-chart-title');
+  if (titleEl && latest) {
+    var sym = window._swingChartSymbol || '';
+    var name = window._swingChartName || '';
+    titleEl.innerHTML = '📈 ' + esc(sym) + ' ' + esc(name) + ' — 分笔 <span style="font-size:13px;color:var(--text-dim)">(' + ticks.length + '笔, 最新 ¥' + latest.price.toFixed(2) + ')</span>';
+  }
+
+  _tickChart.timeScale().scrollToRealTime();
+}
+
+// Override closeSwingChart to also stop tick refresh
+var _origCloseSwingChart = closeSwingChart;
+closeSwingChart = function() {
+  stopTickRefresh();
+  if (_tickChart) { _tickChart.remove(); _tickChart = null; _tickLineSeries = null; _tickVolSeries = null; _tickGridLines = []; }
+  _origCloseSwingChart();
+};
 `;
 }

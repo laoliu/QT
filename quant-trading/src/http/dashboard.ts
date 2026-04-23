@@ -535,7 +535,7 @@ export function getDashboardHtml(baseUrl: string): string {
       for(const o of orders.slice(-20)){
         const side=o.side==='buy'?'<span class="badge badge-buy">买入</span>':'<span class="badge badge-sell">卖出</span>';
         const st=o.status==='filled'?'<span class="badge badge-filled">已成</span>':'<span class="badge badge-pending">'+esc(o.status??'待处理')+'</span>';
-        const t=o.createdAt?new Date(o.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):(o.time??'');
+        const t=o.createdAt?new Date(o.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Shanghai'}):(o.time??'');
         h+='<tr><td>'+esc(t)+'</td><td>'+esc(o.symbol)+'</td><td>'+side+'</td><td>'+(o.quantity??'')+'</td><td>¥'+fmt(o.price??o.avgFillPrice??o.filledPrice)+'</td><td>'+st+'</td></tr>';}
       document.getElementById('ordersTable').innerHTML=h+'</table>';
     }
@@ -745,7 +745,7 @@ export function getDashboardHtml(baseUrl: string): string {
       if (!d) { document.getElementById('dataHealth').innerHTML='<span class="dot dot-red"></span>数据: N/A'; return; }
       const dc = d.overallStatus==='fresh'?'dot-green':d.overallStatus==='warning'?'dot-yellow':d.overallStatus==='critical'?'dot-red':'dot-orange';
       const lb = {fresh:'正常',warning:'延迟',critical:'中断',no_data:'无数据'}[d.overallStatus]??d.overallStatus;
-      document.getElementById('dataHealth').innerHTML='<span class="dot '+dc+'"></span>数据: '+lb+' ('+d.totalSymbols+'ֻ)';
+      document.getElementById('dataHealth').innerHTML='<span class="dot '+dc+'"></span>数据: '+lb+' ('+d.totalSymbols+')';
 
       // Staleness table
       if (!d.symbols || !d.symbols.length) {
@@ -783,7 +783,7 @@ export function getDashboardHtml(baseUrl: string): string {
       let h = '';
       for (const a of alerts) {
         const _d = new Date(a.timestamp);
-        const t = _d.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit'})+' '+_d.toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+        const t = _d.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit',timeZone:'Asia/Shanghai'})+' '+_d.toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',timeZone:'Asia/Shanghai'});
         const sym = a.metadata?.symbol ?? '';
         const price = a.metadata?.price ?? '';
         const changePct = a.metadata?.changePct ?? '';
@@ -905,7 +905,7 @@ export function getDashboardHtml(baseUrl: string): string {
       let h='<table><tr><th>状态</th><th>描述</th><th>计划时间</th></tr>';
       for (const t of tasks.slice(0, 20)) {
         const icon = icons[t.status] ?? '•';
-        const sched = t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '--';
+        const sched = t.scheduledAt ? new Date(t.scheduledAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Shanghai'}) : '--';
         h += '<tr><td>'+icon+'</td><td>'+(t.description??t.id)+'</td><td>'+sched+'</td></tr>';
       }
       document.getElementById('scheduledTasksPanel').innerHTML = h + '</table>';
@@ -920,7 +920,7 @@ export function getDashboardHtml(baseUrl: string): string {
       for (const b of runs) {
         const ret = b.returnPct != null ? (b.returnPct*100).toFixed(1)+'%' : '--';
         const cls = pctClass(b.returnPct??0);
-        const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN') : '--';
+        const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}) : '--';
         h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\\'backtest\\',\\''+esc(b.id)+'\\')">CSV</button></td></tr>';
       }
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';

@@ -49,7 +49,7 @@ function api(path,opts){
     .then(function(r){clearTimeout(tid);if(!r.ok)throw new Error(r.status+' '+r.statusText);return r.json()})
     .catch(function(e){clearTimeout(tid);var msg=e.name==='AbortError'?'请求超时':e.message;toast('❌ '+msg);throw e});
 }
-setInterval(function(){document.getElementById('clock').textContent=new Date().toLocaleString('zh-CN')},1000);
+setInterval(function(){document.getElementById('clock').textContent=new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})},1000);
 // Set default end date for kline query to today
 (function(){var el=document.getElementById('kline-end');if(el)el.value=_localDate()})();
 function loadTab(name){
@@ -69,7 +69,7 @@ function btnGrp(btns){return '<div class="btn-group">'+btns.map(function(b){retu
 function num(v){return v!=null?Number(v).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2}):'-'}
 function kpiHtml(val,label){return '<div class="kpi"><div class="kpi-val">'+val+'</div><div class="kpi-label">'+esc(label)+'</div></div>'}
 function sevBadge(s){return '<span class="badge badge-'+(s==='critical'?'red':s==='warning'?'yellow':'blue')+'">'+esc(s)+'</span>'}
-function fmtTime(ts){return ts?new Date(ts).toLocaleString('zh-CN'):'-'}
+function fmtTime(ts){return ts?new Date(ts).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'-'}
 
 /* ══════ OVERVIEW ══════ */
 function loadOverview(){
@@ -99,7 +99,7 @@ function loadOverview(){
     if(!box)return;
     var events=(ev&&ev.events)||[];
     box.innerHTML=events.slice(0,50).map(function(e){
-      return '<div class="log-'+esc(e.category||'info')+'">['+new Date(e.timestamp).toLocaleTimeString('zh-CN')+'] <b>'+esc(e.category)+'</b> '+esc(typeof e.data==='string'?e.data:JSON.stringify(e.data))+'</div>';
+      return '<div class="log-'+esc(e.category||'info')+'">['+new Date(e.timestamp).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai'})+'] <b>'+esc(e.category)+'</b> '+esc(typeof e.data==='string'?e.data:JSON.stringify(e.data))+'</div>';
     }).join('')||'<div style="color:var(--text-dim)">暂无事件</div>';
   }).catch(function(e){
     console.error('[overview] events load failed:', e);
@@ -491,7 +491,7 @@ function loadLogs(){
       if(e.level==='error'||e.level==='fatal')cls='log-critical';
       else if(e.level==='warn')cls='log-warning';
       else if(e.level==='debug')cls='log-signal';
-      var ts=new Date(e.timestamp).toLocaleString('zh-CN',{hour12:false});
+      var ts=new Date(e.timestamp).toLocaleString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'});
       var badge='<span class="badge badge-'+(e.level==='error'||e.level==='fatal'?'red':e.level==='warn'?'yellow':e.level==='debug'?'purple':'blue')+'">'+esc(e.level)+'</span>';
       return '<div class="'+cls+'" style="padding:2px 0;border-bottom:1px solid var(--border)">'+
         '<span style="color:var(--text-dim);font-size:10px">'+esc(ts)+'</span> '+badge+

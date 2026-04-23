@@ -68,7 +68,7 @@ function summarizeDailyPickResult(d){
 
 function formatDailyPickTime(ts){
   if(!ts)return '-';
-  try{return new Date(ts).toLocaleString('zh-CN');}catch(_e){return String(ts);}
+  try{return new Date(ts).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});}catch(_e){return String(ts);}
 }
 
 function saveDailyPickHistoryEntry(d){

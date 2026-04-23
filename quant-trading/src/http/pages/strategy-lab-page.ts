@@ -262,7 +262,7 @@ document.querySelectorAll('nav button[data-tab]').forEach(function(btn){
 });
 
 function updateClock(){
-  document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN');
+  document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
 }
 setInterval(updateClock,1000);
 updateClock();

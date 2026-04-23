@@ -21,6 +21,7 @@ function dateOffset(daysBack: number): string {
 
 export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
   const { api, config, conditionalOrderService, secure, getEngine } = deps;
+  const tickIngress = deps.tickIngressService;
 
   // ── Scan holdings for swing suitability ─────────────────────────
   api.registerHttpRoute({
@@ -351,6 +352,90 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
       } catch (e) {
         json(res, { error: `查询失败: ${String(e)}` }, 500);
       }
+    }),
+  });
+
+  // ── Chart data (klines + grid levels + trade log) ────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/swing-overlay/chart-data",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") { json(res, { error: "Method not allowed" }, 405); return; }
+      const url = new URL(req.url ?? "", "http://localhost");
+      const symbol = url.searchParams.get("symbol");
+      if (!symbol) { json(res, { error: "缺少 symbol 参数" }, 400); return; }
+      const days = Math.min(Math.max(parseInt(url.searchParams.get("days") ?? "60", 10), 5), 365);
+      const market = detectMarketFromSymbol(symbol);
+      try {
+        const provider = createDataProvider(config);
+        const endDate = dateOffset(0);
+        const startDate = dateOffset(days);
+        const bars = await provider.getKlines(symbol, "1d" as never, startDate, endDate, market as never);
+
+        // Grid levels from active orders
+        const allOrders = conditionalOrderService.listAllSwingGridOrders(symbol);
+        const gridLevels = [...new Set(allOrders.map((o) => o.gridPrice ?? o.triggerValue))].filter((v) => v > 0).sort((a, b) => a - b);
+
+        // Find MA center from grid midpoint
+        let maCenter: number | null = null;
+        if (gridLevels.length > 0) {
+          maCenter = gridLevels[Math.floor(gridLevels.length / 2)] ?? null;
+        }
+
+        // Trade log
+        const trades = conditionalOrderService.getSwingTradeLog(symbol);
+
+        json(res, {
+          ok: true, symbol, bars: bars.length, klines: bars, gridLevels,
+          maCenter: maCenter ?? null,
+          trades: trades.map((t) => ({
+            date: t.timestamp.slice(0, 10),
+            direction: t.direction,
+            price: t.fillPrice,
+            gridPrice: t.gridPrice,
+            quantity: t.quantity,
+          })),
+        });
+      } catch (e) {
+        json(res, { error: `获取图表数据失败: ${String(e)}` }, 500);
+      }
+    }),
+  });
+
+  // ── Real-time tick data for chart ────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/swing-overlay/tick-data",
+    handler: secure(async (req, res) => {
+      if (req.method !== "GET") { json(res, { error: "Method not allowed" }, 405); return; }
+      const url = new URL(req.url ?? "", "http://localhost");
+      const symbol = url.searchParams.get("symbol");
+      if (!symbol) { json(res, { error: "缺少 symbol 参数" }, 400); return; }
+      const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "256", 10), 1), 1000);
+
+      if (!tickIngress) {
+        json(res, { ok: true, symbol, ticks: [], message: "TickIngress 未启用" });
+        return;
+      }
+
+      const ticks = tickIngress.getRecentTicks(symbol, limit);
+      const trades = conditionalOrderService.getSwingTradeLog(symbol);
+
+      json(res, {
+        ok: true,
+        symbol,
+        ticks: ticks.map((t) => ({
+          time: t.timestamp,
+          price: t.price,
+          volume: t.volume,
+        })),
+        trades: trades.map((t) => ({
+          time: new Date(t.timestamp).getTime(),
+          direction: t.direction,
+          price: t.fillPrice,
+          quantity: t.quantity,
+        })),
+      });
     }),
   });
 }

@@ -263,6 +263,17 @@ export class AlertStore {
         const data = JSON.parse(raw) as unknown;
         if (Array.isArray(data)) {
           this.alerts = data as Alert[];
+          // Migrate old timestamps: previous nowCSTISO() used toISOString() which
+          // produced "Z" (UTC) suffix for CST values, causing +8h display errors.
+          // Convert them to the correct "+08:00" offset.
+          let migrated = 0;
+          for (const a of this.alerts) {
+            if (a.timestamp && a.timestamp.endsWith("Z")) {
+              a.timestamp = a.timestamp.slice(0, -1) + "+08:00";
+              migrated++;
+            }
+          }
+          if (migrated > 0) this.dirty = true;
           this.prune();
         }
       }

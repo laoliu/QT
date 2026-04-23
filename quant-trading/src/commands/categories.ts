@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Stock screening categories and formatting helpers.
  *
  * Each category re-weights the 4 investment dimensions (valuation, growth,
@@ -504,7 +504,7 @@ export function formatCategoryOverview(results: StockResult[], totalCount: numbe
 
     const suffix = isFallback ? " ⚠️宽松" : "";
     lines.push(
-      `${cat.emoji} **${cat.name}** (${cat.desc}) [${String(qualifying.length)}ֻ]${suffix}:`,
+      `${cat.emoji} **${cat.name}** (${cat.desc}) [${String(qualifying.length)}只]${suffix}:`,
     );
     for (const { r, cs } of qualifying) {
       const isNew = !seenCodes.has(r.code);

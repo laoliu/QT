@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 波段交易策略回测
  * Usage:
  *   npx tsx quant-trading/src/engine/_run-swing-backtest.ts           # 全部20只代表股
@@ -14,7 +14,7 @@ const dataProvider = process.argv.includes("--demo")
     ? "akshare"
     : undefined;
 
-// 精选20ֻ — 覆盖不同行业和波动特征的代表性个股
+// 精选20只 — 覆盖不同行业和波动特征的代表性个股
 const defaultStocks = [
   // 大消费（低波动，适合均值回归）
   { code: "600519", name: "贵州茅台" },

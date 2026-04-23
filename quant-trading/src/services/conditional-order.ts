@@ -518,6 +518,30 @@ export class ConditionalOrderService {
     return count;
   }
 
+  /** Remove ALL swing_grid orders (active + triggered) and trade log for a symbol. */
+  removeAllSwingData(symbol: string): number {
+    let count = 0;
+    for (const [id, order] of this.orders) {
+      if (order.type === "swing_grid" && order.symbol === symbol) {
+        this.orders.delete(id);
+        count++;
+      }
+    }
+    if (count > 0) this.saveToDisk();
+
+    // Clear trade log for this symbol
+    this.swingTradeMemLog = this.swingTradeMemLog.filter((e) => e.symbol !== symbol);
+    const fp = this.swingTradePath();
+    if (fp && existsSync(fp)) {
+      try {
+        const log = JSON.parse(readFileSync(fp, "utf-8")) as typeof this.swingTradeMemLog;
+        const filtered = log.filter((e) => e.symbol !== symbol);
+        writeFileSync(fp, JSON.stringify(filtered, null, 2));
+      } catch { /* ignore */ }
+    }
+    return count;
+  }
+
   /** List active swing grid orders for a symbol. */
   listSwingGridOrders(symbol?: string): ConditionalOrder[] {
     return [...this.orders.values()].filter(

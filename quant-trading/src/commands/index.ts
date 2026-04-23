@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Chat commands for the quant-trading extension.
  * These bypass the LLM and respond directly.
  */
@@ -170,7 +170,7 @@ export function createQuantCommands(
 
           if (results.length === 0) {
             const codeLines = stocks.map((s, i) => `${String(i + 1).padStart(2, " ")}. ${s}`);
-            return [`选股完成，共 ${String(stocks.length)} ֻ`, "", ...codeLines].join("\n");
+            return [`选股完成，共 ${String(stocks.length)} 只`, "", ...codeLines].join("\n");
           }
 
           // Category-based display: /选股 高成长, /选股 稳健, etc.
@@ -253,7 +253,7 @@ export function createQuantCommands(
           for (const t of d.themes ?? []) {
             const tag = t.is_super_theme ? "🔥超级主线" : "📊主线";
             lines.push(
-              `${tag}【${t.sector}】评分${t.theme_score.toFixed(0)} | 涨停${(t as Record<string, unknown>).today_zt_count ?? "?"}ֻ`,
+              `${tag}【${t.sector}】评分${t.theme_score.toFixed(0)} | 涨停${(t as Record<string, unknown>).today_zt_count ?? "?"}只`,
             );
 
             // Dragons
@@ -450,7 +450,7 @@ export function createQuantCommands(
             return `筛选条件: ${args}\n结果: 0 只符合条件\n${pyResult.error ? `错误: ${pyResult.error}` : ""}`;
           }
 
-          const lines = [`📋 **筛选结果** (${String(pyResult.data.count)} ֻ)`, ""];
+          const lines = [`📋 **筛选结果** (${String(pyResult.data.count)} 只)`, ""];
           for (const [i, s] of pyResult.data.results.slice(0, 20).entries()) {
             lines.push(`${String(i + 1).padStart(2, " ")}. ${s.code} ${s.name}`);
           }
@@ -881,7 +881,7 @@ export function createQuantCommands(
         }
 
         // Try to fetch real-time quotes for watchlist stocks
-        const lines = [`📋 **自选股** (${String(watchlist.length)} ֻ)`];
+        const lines = [`📋 **自选股** (${String(watchlist.length)} 只)`];
         try {
           const { detectMarketFromSymbol } = await import("../data/market-data-provider.js");
           for (const code of watchlist.slice(0, 30)) {
@@ -1180,7 +1180,7 @@ export function createQuantCommands(
               if (s.reason) lines.push(`    ${s.reason}`);
             }
             if (result.stocks.length > 20) {
-              lines.push(`  …共 ${String(result.stocks.length)} ֻ`);
+              lines.push(`  …共 ${String(result.stocks.length)} 只`);
             }
             return lines.join("\n");
           }
@@ -1282,7 +1282,7 @@ export function createQuantCommands(
                   `  • ${st.code} **${st.name}** ${st.industry} ${st.turnover_rate} ${st.amount_yi}`,
                 );
               }
-              if (stocks.length > 8) lines.push(`  ... 等 ${stocks.length} ֻ`);
+              if (stocks.length > 8) lines.push(`  ... 等 ${stocks.length} 只`);
               lines.push("");
             }
 
@@ -1377,7 +1377,7 @@ export function createQuantCommands(
 
           const label = `${minBoards}进${minBoards + 1}`;
           const lines = [
-            `🎯 **${label}候选** — ${r.total_candidates}ֻ`,
+            `🎯 **${label}候选** — ${r.total_candidates}只`,
             `市场情绪: ${env.score}/100 (${env.level}) ${env.suitable ? "✅适合接力" : "⚠️谨慎操作"}`,
             env.detail,
             "",
@@ -1476,7 +1476,7 @@ export function createQuantCommands(
                 const chg = `${st.change_pct >= 0 ? "+" : ""}${st.change_pct.toFixed(1)}%`;
                 lines.push(`  • ${st.code} ${st.name} ${chg} 换手${st.turnover_rate.toFixed(1)}%`);
               }
-              if (s.stocks.length > 5) lines.push(`  …共 ${String(s.stocks.length)} ֻ`);
+              if (s.stocks.length > 5) lines.push(`  …共 ${String(s.stocks.length)} 只`);
               lines.push("");
             }
             return lines.join("\n");
@@ -1865,7 +1865,7 @@ export function createQuantCommands(
             const todayPnl =
               account.todayProfit != null ? `¥${account.todayProfit.toFixed(0)}` : "--";
             lines.push(
-              `资产: ¥${account.totalAssets.toFixed(0)}  今日: ${todayPnl}  持仓: ${String(positions.length)}ֻ`,
+              `资产: ¥${account.totalAssets.toFixed(0)}  今日: ${todayPnl}  持仓: ${String(positions.length)}只`,
             );
           }
         } else {
@@ -1875,7 +1875,7 @@ export function createQuantCommands(
             const raw = await fs.readFile(path.join(dir, "portfolio.json"), "utf-8");
             const pf = JSON.parse(raw) as import("../types.js").Portfolio;
             lines.push(
-              `模拟: ¥${pf.totalValue.toFixed(0)}  持仓: ${String(pf.positions.length)}ֻ`,
+              `模拟: ¥${pf.totalValue.toFixed(0)}  持仓: ${String(pf.positions.length)}只`,
             );
           } catch {
             // No portfolio data
@@ -1888,7 +1888,7 @@ export function createQuantCommands(
           const wl = JSON.parse(
             await fs.readFile(path.join(dir, "watchlist.json"), "utf-8"),
           ) as string[];
-          if (wl.length > 0) lines.push(`自选: ${String(wl.length)}ֻ`);
+          if (wl.length > 0) lines.push(`自选: ${String(wl.length)}只`);
         } catch {
           // No watchlist
         }
@@ -2239,7 +2239,7 @@ export function createQuantCommands(
             (s) =>
               `${String(s.rank).padStart(2, " ")}. ${String(s.symbol)} ${String(s.name)} (热度: ${String(s.hot_score ?? "-")})`,
           );
-        return [`🔥 今日社区热度排名 (共${String(d.count)}ֻ)`, "", ...lines].join("\n");
+        return [`🔥 今日社区热度排名 (共${String(d.count)}只)`, "", ...lines].join("\n");
       },
     },
 
@@ -2610,7 +2610,7 @@ export function createQuantCommands(
         if (positions.length === 0) return "📊 当前空仓，无需诊断。";
 
         const lines: string[] = [
-          `🏥 **持仓诊断** (${positions.length}ֻ)`,
+          `🏥 **持仓诊断** (${positions.length}只)`,
           "",
         ];
 

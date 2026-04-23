@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Portal Page — unified entry point / home page for all quant-trading web features.
  *
  * Served at `/quant/` — provides a card-based navigation hub linking to:
@@ -303,7 +303,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <p>多股涨跌幅叠加对比、基本面指标横向比较、技术指标对照</p>
     <div class="tags">
       <span class="tag">涨跌对比</span><span class="tag">基本面</span><span class="tag">技术指标</span>
-      <span class="tag">最多5ֻ</span>
+      <span class="tag">最多5只</span>
     </div>
   </a>
   <a href="${b}/quant/admin/portfolio-combo" class="nav-card card-combo" style="color:inherit;text-decoration:none">

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Data Bridge API — Mac gateway side of Mac↔Windows QMT K-line bridge.
  *
  * Protocol (轮询模式，无需 Windows 开放端口):
@@ -129,7 +129,7 @@ export function handleDataBridgePostRequest(body: unknown): Record<string, unkno
   if (cached) {
     const requestId = crypto.randomUUID();
     _pendingResponses.set(requestId, { requestId, data: cached, receivedAt: Date.now() });
-    console.log(`[data-bridge] 使用磁盘缓存 (${Object.keys(cached).length} ֻ)，跳过 Windows 请求`);
+    console.log(`[data-bridge] 使用磁盘缓存 (${Object.keys(cached).length} 只)，跳过 Windows 请求`);
     return { status: "ok", requestId, cached: true };
   }
 

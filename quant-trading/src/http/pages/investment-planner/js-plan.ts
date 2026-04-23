@@ -223,7 +223,7 @@ function loadPlanHistory(){
         '<td>'+esc(e.strategy||'-')+'</td>'+
         '<td>¥'+numInt(e.initialCapital)+'</td>'+
         '<td>¥'+numInt(e.targetCapital)+'</td>'+
-        '<td>'+e.stockCount+'ֻ</td>'+
+        '<td>'+e.stockCount+'</td>'+
         '<td><span class="badge '+riskBadge+'">'+esc(String(sm.riskLevel||'-'))+'</span></td>'+
         '<td>'+esc(String(sm.feasibility||'-'))+'</td>'+
         '<td style="font-size:11px;max-width:200px"><div style="display:flex;flex-wrap:wrap;gap:2px">'+

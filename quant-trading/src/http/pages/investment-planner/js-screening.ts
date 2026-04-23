@@ -1,4 +1,4 @@
-/** Investment Planner — stock screening, rebalancing, signals, milestones, and monitoring */
+﻿/** Investment Planner — stock screening, rebalancing, signals, milestones, and monitoring */
 export function getScreeningJs(): string {
   return `
 /* Sync plan portfolio with actual broker positions in live mode */
@@ -1372,7 +1372,7 @@ function renderRebalance(d){
     var items=grouped[key]||[];
     if(!items.length)return;
     html+='<div class="card" style="margin-top:10px;border-left:3px solid '+groupColors[key]+'">';
-    html+='<h3>'+groupLabels[key]+' ('+items.length+'ֻ)</h3>';
+    html+='<h3>'+groupLabels[key]+' ('+items.length+'只)</h3>';
     html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
     items.forEach(function(a){
       html+='<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;min-width:180px">';

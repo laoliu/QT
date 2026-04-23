@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Browser-side JavaScript for the Event Catalyst page.
  */
 export function getEventCatalystMainScript(): string {
@@ -287,7 +287,7 @@ async function loadUS() {
 function renderUS(d) {
   const el = document.getElementById("us-content");
   const movers = d.allMovers || [];
-  let html = completionBanner("美股数据已加载 — " + movers.length + " ֻ");
+  let html = completionBanner("美股数据已加载 — " + movers.length + " 只");
   if (!movers.length) {
     html += '<div class="empty-state" style="border:1px solid var(--border);border-radius:8px;padding:24px"><div class="icon">😴</div><h3>暂无美股行情数据</h3></div>';
     el.innerHTML = html;
@@ -425,7 +425,7 @@ async function loadMapping() {
 function renderMapping(d) {
   const el = document.getElementById("map-content");
 
-  let html = completionBanner("映射完成 — " + esc(d.usSymbol || "") + " → " + (d.candidateCount || 0) + " ֻA股");
+  let html = completionBanner("映射完成 — " + esc(d.usSymbol || "") + " → " + (d.candidateCount || 0) + " 只A股");
   html += '<div class="card"><h3>🔗 ' + esc(d.usSymbol) + ' (' + esc(d.usName) + ') → A股对标</h3>';
   html += '<div style="margin-bottom:12px">';
   html += '<span style="font-size:12px;color:var(--text-dim)">主题: </span>';

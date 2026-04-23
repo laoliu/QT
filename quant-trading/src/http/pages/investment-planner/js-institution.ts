@@ -1,4 +1,4 @@
-/** Investment Planner — institution activity scanning, Top3, manual confirmation, and history */
+﻿/** Investment Planner — institution activity scanning, Top3, manual confirmation, and history */
 export function getInstitutionJs(): string {
   return `
 function parseSymbolList(raw){
@@ -466,7 +466,7 @@ function renderInstitutionTop3(rows,sourceLabel,skipEnrich,onEnriched){
       '<td><button class="btn btn-sm" onclick="selectInstitutionTop3ForManual(\\''+symbolJs+'\\')">确认</button> <button class="btn btn-sm" onclick="loadInstitutionDetail(\\''+symbolJs+'\\')">详情</button> <button class="btn btn-sm" onclick="addInstitutionTop3ToFavorites(\\''+symbolJs+'\\',\\''+nameJs+'\\')">收藏</button></td>'+
     '</tr>';
   }).join('');
-  if(skipEnrich)statusEl.textContent=(sourceLabel||'当前结果')+' · 共 '+rows.length+' ֻ';
+  if(skipEnrich)statusEl.textContent=(sourceLabel||'当前结果')+' · 共 '+rows.length+' 只';
 }
 
 function renderInstitutionTop3History(entries){
@@ -678,7 +678,7 @@ function loadInstitutionHistory(){
       if(params.pre_accum_volume_ratio!=null)filters.push('吸筹放量≥'+num(params.pre_accum_volume_ratio)+'x');
       if(params.rush_change_pct!=null&&params.rush_volume_ratio!=null)filters.push('抢筹:涨≥'+num(params.rush_change_pct)+'% 量≥'+num(params.rush_volume_ratio)+'x');
       if(params.rush_turnover_pct!=null)filters.push('抢筹换手≥'+num(params.rush_turnover_pct)+'%');
-      if(params.symbols&&params.symbols.length)filters.push('自选'+numInt(params.symbols.length)+'ֻ');
+      if(params.symbols&&params.symbols.length)filters.push('自选'+numInt(params.symbols.length)+'只');
       return '<tr>'+
         '<td><span class="badge badge-blue">'+esc(item.version||'-')+'</span></td>'+
         '<td>'+esc(summary.asOfDate||'-')+'</td>'+

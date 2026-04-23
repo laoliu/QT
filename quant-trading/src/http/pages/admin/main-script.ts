@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Management Page — main browser-side JavaScript.
  *
  * Returns the full <script> body as a string. The caller injects the three
@@ -192,7 +192,7 @@ function checkSync(){
     var b=r.bridge||{};
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span> '+esc(b.url||''):'<span class="badge badge-red">离线</span>');
     var html='<div>📊 总品种: <b>'+r.total+'</b>  ✅ 已最新: <b>'+r.fresh+'</b>  ⏳ 过期: <b>'+r.stale+'</b>  🆕 无缓存: <b>'+r.no_cache+'</b></div>';
-    html+='<div>需同步: <b>'+r.need_fetch+'</b> ֻ</div>';
+    html+='<div>需同步: <b>'+r.need_fetch+'</b> 只</div>';
     el.innerHTML=html;
     if(r.need_fetch===0)toast('✅ 所有数据已是最新');
   });
@@ -541,7 +541,7 @@ function viewSectorMembers(sector){
   document.getElementById('sector-members-title').textContent=sector+' 成员列表';
   api('/quant/admin/api/sector-index?action=sector_members&sector='+encodeURIComponent(sector)).then(function(d){
     var members=d.members||[];
-    document.getElementById('sector-members-title').textContent=sector+' ('+members.length+' ֻ)';
+    document.getElementById('sector-members-title').textContent=sector+' ('+members.length+' 只)';
     var tb=document.querySelector('#sector-members-table tbody');
     tb.innerHTML=members.map(function(m){
       var mv=(m.free_float_mv/1e8).toFixed(2);

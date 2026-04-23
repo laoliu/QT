@@ -1,4 +1,4 @@
-import {
+﻿import {
   getLatestInstitutionTopLeaders,
   handleGetInstitutionActivityHistoryApi,
 } from "../http/institution-history.js";
@@ -112,7 +112,7 @@ async function generateMorningBrief(
       sections.push("**持仓概览**");
       if (totalValue != null) {
         sections.push(
-          `  总资产: ¥${Number(totalValue).toFixed(2)}  现金: ¥${Number(cash ?? 0).toFixed(2)}  持仓${String(portfolio.positions.length)}ֻ`,
+          `  总资产: ¥${Number(totalValue).toFixed(2)}  现金: ¥${Number(cash ?? 0).toFixed(2)}  持仓${String(portfolio.positions.length)}只`,
         );
       }
       for (const p of portfolio.positions.slice(0, 8)) {
@@ -336,7 +336,7 @@ async function generateWeeklyReview(
       const symbols = new Set(
         weekSignals.map((s: Record<string, unknown>) => String(s.symbol ?? "")),
       );
-      sections.push(`  涉及标的: ${String(symbols.size)} ֻ`);
+      sections.push(`  涉及标的: ${String(symbols.size)} 只`);
       sections.push("");
     }
   } catch {
@@ -440,7 +440,7 @@ async function generateDailyScan(
       const scanData = JSON.parse(scanRaw);
       const results = scanData.results ?? [];
       if (results.length > 0) {
-        sections.push(`  筛选结果 (${String(results.length)} ֻ):`);
+        sections.push(`  筛选结果 (${String(results.length)} 只):`);
         for (const r of results.slice(0, 10)) {
           const score = r.score != null ? ` 评分${String(r.score)}` : "";
           sections.push(
@@ -462,7 +462,7 @@ async function generateDailyScan(
         if (cmpData.summary) {
           const { overlapCount, addedCount, removedCount } = cmpData.summary;
           sections.push(
-            `  📊 与上次对比: 保持${String(overlapCount)}ֻ | 新增${String(addedCount)}ֻ | 消失${String(removedCount)}ֻ`,
+            `  📊 与上次对比: 保持${String(overlapCount)}只 | 新增${String(addedCount)}只 | 消失${String(removedCount)}只`,
           );
           if (cmpData.added?.length > 0) {
             sections.push("  新增:");
@@ -1144,7 +1144,7 @@ async function generateMonthlyReport(
       sections.push("**账户快照**");
       sections.push(`  总资产: ¥${Number(pData.totalValue).toFixed(2)}`);
       if (pData.cash != null) sections.push(`  现金: ¥${Number(pData.cash).toFixed(2)}`);
-      if (pData.positionCount != null) sections.push(`  持仓: ${String(pData.positionCount)}ֻ`);
+      if (pData.positionCount != null) sections.push(`  持仓: ${String(pData.positionCount)}只`);
       sections.push("");
     }
   } catch {
@@ -1276,7 +1276,7 @@ async function generateAfterMarketReview(
       const cash = portfolio.cash ?? portfolio.available_cash;
       if (totalValue != null) {
         sections.push(
-          `总资产: ¥${Number(totalValue).toFixed(2)}  现金: ¥${Number(cash ?? 0).toFixed(2)}  持仓${String(portfolio.positions.length)}ֻ`,
+          `总资产: ¥${Number(totalValue).toFixed(2)}  现金: ¥${Number(cash ?? 0).toFixed(2)}  持仓${String(portfolio.positions.length)}只`,
         );
       }
       sections.push("");

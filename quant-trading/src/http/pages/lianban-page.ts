@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Lianban Page — self-contained SPA for consecutive limit-up board analysis.
  *
  * Tabs: 梯队总览 (ladder scan), 二进三候选 (relay candidates), 个股轨迹 (stock detail)
@@ -629,10 +629,10 @@ async function loadZhaban() {
       kpiHtml("涨停总数", d.total_zt || 0, ""),
       kpiHtml("已炸板", d.total_zbgc || 0, "", "var(--red)"),
       kpiHtml("炸板率", ((d.env_failure_rate || 0) * 100).toFixed(1) + "%", "", d.env_failure_rate < 0.3 ? "var(--green)" : "var(--red)"),
-      kpiHtml("极高风险", rs["极高"] || 0, "ֻ", "var(--red)"),
-      kpiHtml("高风险", rs["高"] || 0, "ֻ", "var(--orange)"),
-      kpiHtml("中风险", rs["中"] || 0, "ֻ", "var(--yellow)"),
-      kpiHtml("低风险", rs["低"] || 0, "ֻ", "var(--green)"),
+      kpiHtml("极高风险", rs["极高"] || 0, "只", "var(--red)"),
+      kpiHtml("高风险", rs["高"] || 0, "只", "var(--orange)"),
+      kpiHtml("中风险", rs["中"] || 0, "只", "var(--yellow)"),
+      kpiHtml("低风险", rs["低"] || 0, "只", "var(--green)"),
     ].join("");
 
     // Pattern Insights

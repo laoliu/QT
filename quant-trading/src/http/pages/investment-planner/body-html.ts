@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Investment Planner — HTML body template.
  * Contains the page skeleton: header, tabs, tab content panels, forms, etc.
  * Uses \`\${b}\` for base URL interpolation (3 occurrences).
@@ -311,7 +311,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="screen-results" style="display:none">
     <div class="kpi-row" id="screen-enrichment-kpis" style="margin-top:12px"></div>
     <div class="card" style="margin-top:12px">
-      <h3>📋 筛选结果 (<span id="screen-count">0</span> ֻ)</h3>
+      <h3>📋 筛选结果 (<span id="screen-count">0</span> 只)</h3>
       <div style="overflow-x:auto"><table id="screen-table">
         <thead><tr><th>#</th><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>PE</th><th>PB</th><th>市值(亿)</th><th>换手率</th><th>量比</th><th>评分</th><th>标签</th><th>理由</th><th>操作</th></tr></thead>
         <tbody></tbody>
@@ -542,7 +542,7 @@ export function getPlannerBodyHtml(b: string): string {
     </div>
 
     <div class="card" style="margin-top:12px">
-      <h3>🏆 今日可观察候选 (<span id="inst-candidate-count">0</span> ֻ)</h3>
+      <h3>🏆 今日可观察候选 (<span id="inst-candidate-count">0</span> 只)</h3>
       <div style="overflow-x:auto"><table id="inst-table">
         <thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>建仓分</th><th>钓鱼分</th><th>派发分</th><th>置信度</th><th>净判断</th><th>跟随窗口</th><th>动作</th><th style="min-width:260px">正证据</th><th style="min-width:220px">反证据</th><th>操作</th></tr></thead>
         <tbody></tbody>
@@ -927,7 +927,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="acc-scan-results" style="display:none;margin-top:12px">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <h3 style="margin:0">🧲 吸筹候选 (<span id="acc-scan-count">0</span> ֻ)</h3>
+        <h3 style="margin:0">🧲 吸筹候选 (<span id="acc-scan-count">0</span> 只)</h3>
         <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap">
           <label style="min-width:auto">总分≥</label>
           <input type="number" id="acc-scan-filter-total" value="0" min="0" max="100" step="5" style="width:58px" onchange="onAccumulationScanFilterChange()">
@@ -949,7 +949,7 @@ export function getPlannerBodyHtml(b: string): string {
   <div id="acc-top3-results" style="display:none;margin-top:12px">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <h3 style="margin:0">🏆 复合条件前三 (<span id="acc-top3-count">0</span> ֻ)</h3>
+        <h3 style="margin:0">🏆 复合条件前三 (<span id="acc-top3-count">0</span> 只)</h3>
         <div style="display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap">
           <label style="min-width:auto">入选主因</label>
           <select id="acc-top3-reason-filter" onchange="onAccumulationTop3ReasonFilterChange()" style="width:170px">
@@ -1133,7 +1133,7 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="margin-left:18px">
           <input type="checkbox" id="opt-auto-screen" checked style="vertical-align:middle;margin-right:4px">
           <strong>🌐 全市场自动筛选</strong>
-          <span style="font-size:11px;color:var(--text-dim)">(从~2000+ֻ A股中自动构建股票池)</span>
+          <span style="font-size:11px;color:var(--text-dim)">(从~2000+只 A股中自动构建股票池)</span>
         </label>
       </div>
       <div id="opt-screen-hint" style="font-size:11px;color:var(--accent);margin:4px 0 8px 0">
@@ -1750,7 +1750,7 @@ export function getPlannerBodyHtml(b: string): string {
 
     <!-- All stocks in pool -->
     <div class="card" style="margin-top:14px">
-      <h3>📊 股池实时行情 (<span id="rec-pool-count">0</span> ֻ)</h3>
+      <h3>📊 股池实时行情 (<span id="rec-pool-count">0</span> 只)</h3>
       <div style="overflow-x:auto">
         <table id="rec-pool-table">
           <thead><tr><th>代码</th><th>名称</th><th>现价</th><th>涨跌%</th><th>PE</th><th>PB</th><th>市值(亿)</th><th>换手率%</th><th>评分</th><th>技术面</th><th>回测持仓</th></tr></thead>

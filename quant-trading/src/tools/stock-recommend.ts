@@ -1,4 +1,4 @@
-/**
+﻿/**
  * stock_recommend tool — compound "screen → route → backtest → recommend" pipeline.
  *
  * This tool forces the full workflow in a single call so the AI cannot
@@ -141,7 +141,7 @@ export function createStockRecommendTool(
           type: "string",
           enum: ["all", "hs300", "zz500", "zz1000", "sz50", "cyb", "kc50"],
           description:
-            "选股范围。用户未指定时必须使用 all(全市场扫描约5000ֻ)，不要自行缩小范围。超时会自动降级到较小范围，无需担心性能。",
+            "选股范围。用户未指定时必须使用 all(全市场扫描约5000只)，不要自行缩小范围。超时会自动降级到较小范围，无需担心性能。",
         },
         market: {
           type: "string",
@@ -639,8 +639,8 @@ async function runPredictiveRecommend(
       fallbackNote: screenResult.fallbackNote,
     },
     enrichment: {
-      chipAccumulation: chipResult.ok ? `已分析${chipMap.size}ֻ` : "引擎不可用",
-      institutionalFlow: `已分析${instMap.size}ֻ`,
+      chipAccumulation: chipResult.ok ? `已分析${chipMap.size}只` : "引擎不可用",
+      institutionalFlow: `已分析${instMap.size}只`,
       sectorRanking: sectorResult.ok
         ? `热门板块: ${topSectorNames.slice(0, 5).join("、")}`
         : "引擎不可用",

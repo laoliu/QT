@@ -225,7 +225,7 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        const removedCount = conditionalOrderService.removeSwingGridOrders(symbol);
+        const removedCount = conditionalOrderService.removeAllSwingData(symbol);
         json(res, { ok: true, symbol, removed_count: removedCount });
       } catch (e) {
         json(res, { error: `停止失败: ${String(e)}` }, 500);

@@ -1978,6 +1978,30 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Auto-Trade Scheduler Page ───────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/auto-trade",
+    handler: securePublic(async (_req, res) => {
+      const { getAutoTradePageHtml } = await import("./pages/auto-trade-page.js");
+      const html = getAutoTradePageHtml();
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
+  // ── Conditional Orders Page ─────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/conditional-orders",
+    handler: securePublic(async (_req, res) => {
+      const { getConditionalOrdersPageHtml } = await import("./pages/conditional-orders-page.js");
+      const html = getConditionalOrdersPageHtml();
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
   // ── Conditional Orders Management API ───────────────────────
   api.registerHttpRoute({
     auth: "plugin",

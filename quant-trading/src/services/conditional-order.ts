@@ -1450,75 +1450,105 @@ export class ConditionalOrderService {
       ids.push(id);
     }
 
-    // 3. Buy zone alerts — notify when price drops into buy zone
+    // 3. Buy zone alerts — auto-buy when price drops into buy zone
+    //    Quantity scales with zone strength: stronger support → more shares
+    //    Total buy budget across all zones ≈ 1× initial quantity (spread across zones)
     if (plan.buyZones?.length) {
-      for (const zone of plan.buyZones) {
-        if (zone.priceLevel > 0 && zone.priceLevel < entryPrice) {
-          const id = this.addStopLoss({
-            symbol: sym,
-            entryPrice,
-            stopPrice: zone.priceLevel,
-            quantity: 0, // Alert only — zero quantity means notify but don't auto-sell
-            strategyId: tag,
-            description: `[组合优化] 📗买入提醒: ${sym} 跌到 ¥${zone.priceLevel.toFixed(2)} (${zone.description ?? zone.type ?? "买入区"})`,
-          });
-          ids.push(id);
-        }
+      // Sort by strength descending; allocate fractions of quantity
+      const sortedBuy = [...plan.buyZones]
+        .filter((z) => z.priceLevel > 0 && z.priceLevel < entryPrice)
+        .sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5));
+      const totalStrength = sortedBuy.reduce((s, z) => s + (z.strength ?? 0.5), 0) || 1;
+
+      for (const zone of sortedBuy) {
+        const strength = zone.strength ?? 0.5;
+        // Allocate shares proportional to strength, total ≈ 1× quantity across all zones
+        const rawQty = quantity * (strength / totalStrength);
+        const buyQty = Math.max(100, Math.floor(rawQty / 100) * 100); // A-share 100-lot rounding
+        const id = this.addStopLoss({
+          symbol: sym,
+          entryPrice,
+          stopPrice: zone.priceLevel,
+          quantity: buyQty,
+          strategyId: tag,
+          description: `[组合优化] 📗买入: ${sym} 跌到 ¥${zone.priceLevel.toFixed(2)} → 买入 ${buyQty}股 (${zone.description ?? zone.type ?? "买入区"})`,
+        });
+        ids.push(id);
       }
     }
 
-    // 4. Sell zone alerts — notify when price rises into sell zone
+    // 4. Sell zone alerts — auto-sell when price rises into sell zone
+    //    Spread total quantity across sell zones by strength
     if (plan.sellZones?.length) {
-      for (const zone of plan.sellZones) {
-        if (zone.priceLevel > 0 && zone.priceLevel > entryPrice) {
+      const sortedSell = [...plan.sellZones]
+        .filter((z) => z.priceLevel > 0 && z.priceLevel > entryPrice)
+        .sort((a, b) => (a.priceLevel) - (b.priceLevel)); // lowest price first
+      const totalStrength = sortedSell.reduce((s, z) => s + (z.strength ?? 0.5), 0) || 1;
+      let remainQty = quantity;
+
+      for (let i = 0; i < sortedSell.length; i++) {
+        const zone = sortedSell[i];
+        const strength = zone.strength ?? 0.5;
+        let sellQty: number;
+        if (i === sortedSell.length - 1) {
+          // Last zone: sell all remaining
+          sellQty = remainQty;
+        } else {
+          const rawQty = quantity * (strength / totalStrength);
+          sellQty = Math.max(100, Math.floor(rawQty / 100) * 100);
+          sellQty = Math.min(sellQty, remainQty - 100); // keep at least 100 for next zone
+          if (sellQty <= 0) sellQty = 100;
+        }
+        remainQty -= sellQty;
+
+        if (sellQty > 0) {
           const id = this.addTakeProfit({
             symbol: sym,
             entryPrice,
             targetPrice: zone.priceLevel,
-            quantity: 0, // Alert only
+            quantity: sellQty,
             strategyId: tag,
-            description: `[组合优化] 📕卖出提醒: ${sym} 涨到 ¥${zone.priceLevel.toFixed(2)} (${zone.description ?? zone.type ?? "卖出区"})`,
+            description: `[组合优化] 📕卖出: ${sym} 涨到 ¥${zone.priceLevel.toFixed(2)} → 卖出 ${sellQty}股 (${zone.description ?? zone.type ?? "卖出区"})`,
           });
           ids.push(id);
         }
       }
     }
 
-    // 5. Add position triggers — price drops to add level
+    // 5. Add position triggers — auto-buy when price drops
     if (plan.addPositionRules?.length && entryPrice > 0) {
       for (const rule of plan.addPositionRules) {
-        // Parse pct from trigger name or use rule.pct as drop %
-        const dropPct = rule.pct > 1 ? rule.pct / 100 : rule.pct; // normalize
-        const triggerPrice = entryPrice * (1 - dropPct * 0.5); // trigger at half the stated drop for safety
+        const dropPct = rule.pct > 1 ? rule.pct / 100 : rule.pct;
+        const triggerPrice = entryPrice * (1 - dropPct * 0.5);
         if (triggerPrice > 0 && triggerPrice < entryPrice) {
-          const addQty = Math.floor(quantity * dropPct) || 0;
+          const addQty = Math.max(100, Math.floor((quantity * dropPct) / 100) * 100);
           const id = this.addStopLoss({
             symbol: sym,
             entryPrice,
             stopPrice: triggerPrice,
-            quantity: 0, // Alert only — user decides actual add
+            quantity: addQty,
             strategyId: tag,
-            description: `[组合优化] ➕加仓提醒: ${sym} 跌到 ¥${triggerPrice.toFixed(2)} — ${rule.description ?? rule.trigger} (建议加 ${addQty > 0 ? addQty + "股" : rule.pct + "% 仓位"})`,
+            description: `[组合优化] ➕加仓: ${sym} 跌到 ¥${triggerPrice.toFixed(2)} → 买入 ${addQty}股 (${rule.description ?? rule.trigger})`,
           });
           ids.push(id);
         }
       }
     }
 
-    // 6. Reduce position triggers — price rises to reduce level
+    // 6. Reduce position triggers — auto-sell when price rises
     if (plan.reducePositionRules?.length && entryPrice > 0) {
       for (const rule of plan.reducePositionRules) {
         const risePct = rule.pct > 1 ? rule.pct / 100 : rule.pct;
         const triggerPrice = entryPrice * (1 + risePct * 0.5);
         if (triggerPrice > entryPrice) {
-          const reduceQty = Math.floor(quantity * risePct) || 0;
+          const reduceQty = Math.max(100, Math.floor((quantity * risePct) / 100) * 100);
           const id = this.addTakeProfit({
             symbol: sym,
             entryPrice,
             targetPrice: triggerPrice,
-            quantity: 0, // Alert only
+            quantity: reduceQty,
             strategyId: tag,
-            description: `[组合优化] ➖减仓提醒: ${sym} 涨到 ¥${triggerPrice.toFixed(2)} — ${rule.description ?? rule.trigger} (建议减 ${reduceQty > 0 ? reduceQty + "股" : rule.pct + "% 仓位"})`,
+            description: `[组合优化] ➖减仓: ${sym} 涨到 ¥${triggerPrice.toFixed(2)} → 卖出 ${reduceQty}股 (${rule.description ?? rule.trigger})`,
           });
           ids.push(id);
         }

@@ -399,7 +399,7 @@ function renderStockList(stocks, runId) {
   html += '<table><thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"></th><th>股票代码</th><th>名称</th><th>现价</th><th>评分</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>组合数</th><th>操作</th></tr></thead><tbody>';
   for (const s of stocks) {
     html += '<tr>'
-      + '<td><input type="checkbox" class="stock-check" data-code="' + s.symbol + '" data-name="' + (s.stock_name||'') + '" data-score="' + (s.best_score||0).toFixed(1) + '" data-price="' + (s.current_price||0) + '" onchange="updateBatchCount()"></td>'
+      + '<td><input type="checkbox" class="stock-check" data-code="' + s.symbol + '" data-name="' + (s.stock_name||'') + '" data-score="' + (s.best_score||0).toFixed(1) + '" data-price="' + (s.current_price||0) + '" data-sharpe="' + (s.best_sharpe||0) + '" data-winrate="' + (s.best_win_rate||0) + '" onchange="updateBatchCount()"></td>'
       + '<td style="font-family:monospace"><a href="/quant/admin/stock?symbol=' + s.symbol + '" target="_blank" style="color:var(--accent);text-decoration:none">' + s.symbol + '</a></td>'
       + '<td>' + (s.stock_name||'-') + '</td>'
       + '<td style="font-family:monospace">' + (s.current_price ? '¥' + s.current_price.toFixed(2) : '-') + '</td>'
@@ -499,7 +499,7 @@ function showBatchMonitorDialog() {
       + '<td style="font-family:monospace">' + cb.dataset.code + '</td>'
       + '<td>' + (cb.dataset.name || '-') + '</td>'
       + '<td style="font-family:monospace">' + (price > 0 ? '¥' + price.toFixed(2) : '-') + '</td>'
-      + '<td><input type="number" class="bm-qty" data-code="' + cb.dataset.code + '" data-price="' + price + '" data-score="' + (cb.dataset.score || '50') + '" step="100" value="1000" style="width:80px;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px"></td>'
+      + '<td><input type="number" class="bm-qty" data-code="' + cb.dataset.code + '" data-price="' + price + '" data-score="' + (cb.dataset.score || '50') + '" data-sharpe="' + (cb.dataset.sharpe || '0') + '" data-winrate="' + (cb.dataset.winrate || '0') + '" step="100" value="0" style="width:80px;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px"></td>'
       + '<td class="bm-amount" data-code="' + cb.dataset.code + '" style="font-size:11px;color:var(--text-dim)">-</td>'
       + '</tr>';
   });
@@ -512,10 +512,10 @@ function showBatchMonitorDialog() {
     + '<p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">将为每只股票自动创建条件单：止损、分批止盈、买卖区间提醒。</p>'
     + '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:end;flex-wrap:wrap;padding:12px;background:var(--bg3);border-radius:8px">'
     + '<div><label style="font-size:12px;display:block;margin-bottom:4px">💰 总投入金额 (¥)</label>'
-    + '<input type="number" id="bm-total-amount" step="10000" placeholder="如 500000" style="width:140px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:13px"></div>'
+    + '<input type="number" id="bm-total-amount" value="1000000" step="10000" placeholder="如 500000" style="width:140px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:13px"></div>'
     + '<div><label style="font-size:12px;display:block;margin-bottom:4px">分配方式</label>'
     + '<select id="bm-alloc-method" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px">'
-    + '<option value="score">按评分加权</option><option value="equal">等额分配</option></select></div>'
+    + '<option value="smart">智能推荐</option><option value="score">按评分加权</option><option value="equal">等额分配</option></select></div>'
     + '<button class="btn btn-sm btn-primary" onclick="calcBatchShares()" style="white-space:nowrap">📊 自动计算股数</button>'
     + '</div>'
     + '<table style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>持仓股数</th><th>预估金额</th></tr></thead><tbody>' + stockRows + '</tbody></table>'
@@ -532,6 +532,9 @@ function showBatchMonitorDialog() {
   document.querySelectorAll('.bm-qty').forEach(function(inp) {
     inp.addEventListener('input', updateBmSummary);
   });
+
+  // Auto-calculate shares on dialog open
+  calcBatchShares();
 }
 
 function calcBatchShares() {
@@ -546,17 +549,40 @@ function calcBatchShares() {
   inputs.forEach(function(inp) {
     const price = parseFloat(inp.dataset.price) || 0;
     const score = parseFloat(inp.dataset.score) || 50;
-    items.push({ inp: inp, price: price, score: score });
+    const sharpe = parseFloat(inp.dataset.sharpe) || 0;
+    const winrate = parseFloat(inp.dataset.winrate) || 0;
+    items.push({ inp: inp, price: price, score: score, sharpe: sharpe, winrate: winrate });
     totalScore += score;
   });
 
   if (!items.length) return;
 
+  // For "smart" mode, pre-compute total smart weight
+  let totalSmartWeight = 0;
+  if (method === 'smart') {
+    items.forEach(function(item) {
+      // Sharpe-based initial position %: high sharpe → bigger position
+      var initialPct = 5;
+      if (item.sharpe > 1.5) initialPct = 8;
+      else if (item.sharpe < 0.5) initialPct = 3;
+      // Confidence from sharpe (40%) + win rate (30%) + score (30%)
+      var conf = Math.min(item.sharpe * 0.2, 0.4)
+               + Math.min(Math.max(item.winrate - 45, 0) / 55 * 0.3, 0.3)
+               + Math.min(item.score / 100 * 0.3, 0.3);
+      conf = Math.max(0.1, Math.min(conf, 1.0));
+      item._smartWeight = initialPct * conf;
+      totalSmartWeight += item._smartWeight;
+    });
+  }
+
   items.forEach(function(item) {
     if (item.price <= 0) { item.inp.value = 0; return; }
 
     let allocAmount;
-    if (method === 'score') {
+    if (method === 'smart') {
+      // Smart: Sharpe-driven position sizing × confidence
+      allocAmount = totalAmount * (item._smartWeight / totalSmartWeight);
+    } else if (method === 'score') {
       // Score-weighted: higher score gets more capital
       allocAmount = totalAmount * (item.score / totalScore);
     } else {
@@ -567,7 +593,7 @@ function calcBatchShares() {
     // A-share lot size is 100 shares, round down to nearest 100
     const rawShares = allocAmount / item.price;
     const lots = Math.floor(rawShares / 100);
-    item.inp.value = lots * 100;
+    item.inp.value = Math.max(lots * 100, 100); // minimum 1 lot
   });
 
   updateBmSummary();

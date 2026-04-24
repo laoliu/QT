@@ -254,11 +254,11 @@ function syncLocalData(){
   toast('📥 正在补全离线数据… (可能需要较长时间)');
   var el=document.getElementById('local-data-result');
   el.innerHTML='<div style="color:var(--text-dim)">⏳ 同步进行中，请耐心等待…</div>';
-  api('/quant/admin/api/local-data/sync',{method:'POST',body:JSON.stringify({})}).then(function(r){
+  api('/quant/admin/api/local-data/sync',{method:'POST',body:JSON.stringify({}),timeout:3600000}).then(function(r){
     if(r.status==='error'||r.ok===false){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||r.error||'同步失败')+'</span>';toast('❌ 同步失败');return}
     var html='<div>✅ 同步完成 (耗时 '+r.elapsed_seconds+'s)</div>';
     html+='<div>日线: <b>'+r.daily_months_synced+'</b> 月  复权因子: <b>'+r.adj_factor_months_synced+'</b> 月</div>';
-    if(r.stock_basic)html+='<div>股票列表: '+esc(r.stock_basic.status)+(r.stock_basic.stocks?' ('+r.stock_basic.stocks+'只)':'')+'</div>';
+    if(r.stock_basic)html+='<div>股票列表: '+esc(r.stock_basic.status)+(r.stock_basic.stocks?' ('+r.stock_basic.stocks+'只)':'')+(r.stock_basic.error?' <span style="color:var(--red)">'+esc(r.stock_basic.error)+'</span>':'')+'</div>';
     el.innerHTML=html;
     toast('✅ 离线数据同步完成');
   }).catch(function(err){

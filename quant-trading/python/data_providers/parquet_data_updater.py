@@ -78,10 +78,12 @@ def _is_rate_limited(exc: Exception) -> bool:
 
 def _retry_call(api_func, max_retries=MAX_RETRIES, **kwargs):
     """Call tushare API with retry + rate-limit back-off."""
+    last_exc = None
     for attempt in range(max_retries):
         try:
             return api_func(**kwargs)
         except Exception as exc:
+            last_exc = exc
             if _is_rate_limited(exc):
                 wait = THROTTLE_WAIT * (1 + attempt * 0.3)
                 print(
@@ -92,10 +94,17 @@ def _retry_call(api_func, max_retries=MAX_RETRIES, **kwargs):
                 time.sleep(wait)
                 continue
             if attempt < max_retries - 1:
+                print(
+                    f"[updater] Attempt {attempt + 1}/{max_retries} failed: {exc}",
+                    file=sys.stderr,
+                )
                 time.sleep(1.0)
                 continue
             raise
-    raise RuntimeError(f"Max retries ({max_retries}) exceeded for tushare call")
+    raise RuntimeError(
+        f"Max retries ({max_retries}) exceeded for tushare call. "
+        f"Last error: {last_exc}"
+    )
 
 
 # ── Parquet I/O ───────────────────────────────────────────────────
@@ -367,17 +376,25 @@ def _sync_stock_basic(api, cache_dir: Path, force=False) -> dict:
 
     # Fetch active + delisted stocks
     dfs = []
+    errors = []
     for status in ("L", "D"):
         try:
-            df = _retry_call(api.stock_basic, list_status=status)
+            df = _retry_call(
+                api.stock_basic,
+                list_status=status,
+                fields="ts_code,symbol,name,area,industry,market,list_date,list_status,delist_date,is_hs",
+            )
             if df is not None and not df.empty:
                 dfs.append(df)
+            else:
+                errors.append(f"stock_basic({status}): empty result")
         except Exception as exc:
+            errors.append(f"stock_basic({status}): {exc}")
             print(f"[updater] stock_basic({status}) failed: {exc}", file=sys.stderr)
         time.sleep(CALL_INTERVAL)
 
     if not dfs:
-        return {"status": "failed", "error": "No data returned"}
+        return {"status": "failed", "error": "; ".join(errors) or "No data returned"}
 
     merged = pd.concat(dfs, ignore_index=True)
     merged = merged.drop_duplicates(subset=["ts_code"], keep="last")

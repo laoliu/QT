@@ -452,6 +452,17 @@ export function registerStockOptimizationRoutes(deps: AdminRouteDeps): void {
               continue;
             }
 
+            // Auto-calculate quantity from positionSizing if not provided
+            let finalQty = quantity;
+            if (finalQty <= 0 && finalEntry > 0) {
+              const ps = plan.positionSizing as { initialPct?: number } | undefined;
+              const conf = Number(plan.confidence ?? best.confidence ?? 0.5);
+              const initialPct = ps?.initialPct ?? 5;
+              const defaultCapital = 1_000_000;
+              const budget = defaultCapital * (initialPct / 100) * Math.max(0.1, Math.min(conf, 1.0));
+              finalQty = Math.max(100, Math.floor(budget / finalEntry / 100) * 100);
+            }
+
             const ids = conditionalOrderService.applyTradingPlan(
               {
                 symbol,
@@ -462,7 +473,7 @@ export function registerStockOptimizationRoutes(deps: AdminRouteDeps): void {
                 comboMethod: (best.combo_method as string) ?? "optimization",
               },
               finalEntry,
-              quantity,
+              finalQty,
             );
             results.push({ symbol, ok: true, order_count: ids.length, order_ids: ids });
           } catch (err: unknown) {

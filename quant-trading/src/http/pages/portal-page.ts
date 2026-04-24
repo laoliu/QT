@@ -334,6 +334,24 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">交互模拟</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/conditional-orders" class="nav-card" style="color:inherit;text-decoration:none;border-left:3px solid #60a5fa">
+    <div class="icon">📡</div>
+    <h3>条件单监控</h3>
+    <p>查看所有条件单状态，按股票分组展示止损、止盈、买卖区间提醒，支持手动触发检查与批量管理</p>
+    <div class="tags">
+      <span class="tag">条件单</span><span class="tag">止损止盈</span><span class="tag">买卖提醒</span>
+      <span class="tag">波段网格</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/auto-trade" class="nav-card" style="color:inherit;text-decoration:none;border-left:3px solid #fbbf24">
+    <div class="icon">🤖</div>
+    <h3>自动交易调度</h3>
+    <p>每日自动筛选 → 推荐 → 下单全流程，支持试运行/实盘切换、手动触发、紧急停止</p>
+    <div class="tags">
+      <span class="tag">自动筛选</span><span class="tag">智能推荐</span><span class="tag">定时下单</span>
+      <span class="tag">紧急停止</span>
+    </div>
+  </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">
     <div class="icon">📈</div>
     <h3>个股详情</h3>

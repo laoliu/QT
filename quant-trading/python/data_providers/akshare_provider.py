@@ -683,18 +683,34 @@ def get_klines_batch(
     req_start_ts = int(datetime.strptime(start_n, "%Y-%m-%d").timestamp() * 1000)
     req_end_ts = int(datetime.strptime(end_n, "%Y-%m-%d").timestamp() * 1000)
 
-    # Step 1: Check Parquet first (highest priority)
+    # Step 1: Check Parquet first (highest priority) — BULK read
     pq_partial: dict[str, list[dict]] = {}  # symbols with partial parquet data
-    for sym in symbols:
-        pq_bars = _fetch_parquet_klines(sym, start_n, end_n, market)
-        if pq_bars:
+    try:
+        from data_providers.local_parquet_provider import get_klines_batch_parquet
+        pq_all = get_klines_batch_parquet(symbols, start_n, end_n, market)
+        for sym in symbols:
+            pq_bars = pq_all.get(sym)
+            if not pq_bars:
+                need_fetch.append(sym)
+                continue
             pq_dates = sorted(b["timestamp"] for b in pq_bars)
             if pq_dates[0] <= req_start_ts and pq_dates[-1] >= req_end_ts:
                 result[sym] = pq_bars
-                continue
             else:
                 pq_partial[sym] = pq_bars
-        need_fetch.append(sym)
+                need_fetch.append(sym)
+    except Exception as e:
+        print(f"[Parquet批量] 批量读取失败, 回退逐只: {e}", file=sys.stderr)
+        for sym in symbols:
+            pq_bars = _fetch_parquet_klines(sym, start_n, end_n, market)
+            if pq_bars:
+                pq_dates = sorted(b["timestamp"] for b in pq_bars)
+                if pq_dates[0] <= req_start_ts and pq_dates[-1] >= req_end_ts:
+                    result[sym] = pq_bars
+                    continue
+                else:
+                    pq_partial[sym] = pq_bars
+            need_fetch.append(sym)
     if result:
         print(f"[Parquet批量] {len(result)} 只全命中", file=sys.stderr)
 
@@ -753,16 +769,27 @@ def get_klines_batch(
     still_missing = [s for s in need_fetch if s not in result]
     if still_missing:
         print(f"[批量回退] {len(still_missing)} 只股票走逐只拉取 ...", file=sys.stderr)
+        import threading
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        _fetch_lock = threading.Lock()
+        _last_fetch_time = [0.0]  # mutable container for closure
 
         def _fallback_one(sym: str):
             try:
+                # Rate limit: at most 1 remote API call per 0.35s across all threads
+                with _fetch_lock:
+                    import time as _t
+                    elapsed = _t.time() - _last_fetch_time[0]
+                    if elapsed < 0.35:
+                        _t.sleep(0.35 - elapsed)
+                    _last_fetch_time[0] = _t.time()
                 bars = get_klines(sym, "1d", start_n, end_n, market)
                 return sym, bars
             except Exception:
                 return sym, None
 
-        workers = min(8, len(still_missing))
+        workers = min(3, len(still_missing))
         fallback_fetched: dict[str, list] = {}
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futs = {pool.submit(_fallback_one, s): s for s in still_missing}
@@ -1057,18 +1084,28 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                 except Exception as e_tdx:
                     print(f"[通达信] {symbol} 获取失败: {e_tdx}", file=sys.stderr)
 
-                # Priority 3: eastmoney via stock_zh_a_hist
+                # Priority 3: eastmoney via stock_zh_a_hist (with retry)
                 df = None
-                try:
-                    df = ak.stock_zh_a_hist(
-                        symbol=symbol,
-                        period=period,
-                        start_date=gap_start.replace("-", ""),
-                        end_date=gap_end.replace("-", ""),
-                        adjust="qfq",
-                    )
-                except Exception as e_primary:
-                    print(f"[东财接口] {symbol} 获取失败: {e_primary}", file=sys.stderr)
+                for _attempt in range(3):
+                    try:
+                        df = ak.stock_zh_a_hist(
+                            symbol=symbol,
+                            period=period,
+                            start_date=gap_start.replace("-", ""),
+                            end_date=gap_end.replace("-", ""),
+                            adjust="qfq",
+                        )
+                        break
+                    except Exception as e_primary:
+                        if _attempt < 2 and ("限" in str(e_primary) or "429" in str(e_primary)
+                                              or "Timeout" in str(e_primary) or "timed out" in str(e_primary)):
+                            import time as _tm
+                            wait = 2 ** (_attempt + 1)
+                            print(f"[东财接口] {symbol} 限流重试 {_attempt+1}/3, 等待{wait}s: {e_primary}", file=sys.stderr)
+                            _tm.sleep(wait)
+                        else:
+                            print(f"[东财接口] {symbol} 获取失败: {e_primary}", file=sys.stderr)
+                            break
 
                 if df is None or df.empty:
                     # Priority 4: Baidu Finance via stock_zh_a_daily

@@ -268,6 +268,130 @@ def _resample_monthly(bars: list[dict]) -> list[dict]:
     return monthly.to_dict("records")
 
 
+# ── Batch parquet loading (for optimizer / fitness) ───────────────
+
+
+def get_klines_batch_parquet(
+    symbols: list[str],
+    start: str,
+    end: str,
+    market: str = "cn_stock",
+    data_dir: str = "",
+) -> dict[str, list[dict]]:
+    """Load daily klines for MANY symbols from local parquet, in bulk.
+
+    Instead of reading each parquet file N times (once per symbol), this reads
+    each monthly file ONCE and extracts all requested symbols in a single pass.
+
+    Returns {symbol: [bar_dicts]} for symbols found. Missing symbols are omitted.
+    """
+    import pandas as pd
+
+    if not data_dir:
+        data_dir = os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
+
+    cache_dir = Path(data_dir) / "cache" / "equity_tushare"
+    if not cache_dir.exists():
+        return {}
+
+    start_dt = start.replace("-", "")[:8]
+    end_dt = end.replace("-", "")[:8]
+    months = _months_between(start_dt, end_dt)
+
+    # Build ts_code → symbol mapping
+    ts_map: dict[str, str] = {}
+    for sym in symbols:
+        ts_map[_to_ts_code(sym, market)] = sym
+    ts_codes = set(ts_map.keys())
+
+    # ── Load all daily data in one pass per month ──
+    daily_dfs: list[pd.DataFrame] = []
+    for month in months:
+        path = cache_dir / f"daily_{month}.parquet"
+        if not path.exists():
+            continue
+        df = _safe_read_parquet(path)
+        if df is None or df.empty:
+            continue
+        df = df[df["ts_code"].isin(ts_codes)]
+        if not df.empty:
+            daily_dfs.append(df)
+
+    if not daily_dfs:
+        return {}
+
+    merged = pd.concat(daily_dfs, ignore_index=True)
+    merged = merged[
+        (merged["trade_date"] >= start_dt) & (merged["trade_date"] <= end_dt)
+    ]
+    merged = merged.drop_duplicates(subset=["ts_code", "trade_date"])
+
+    # ── Load adj_factor in bulk ──
+    adj_dfs: list[pd.DataFrame] = []
+    for month in months:
+        path = cache_dir / f"adj_factor_{month}.parquet"
+        if not path.exists():
+            continue
+        adf = _safe_read_parquet(path)
+        if adf is None or adf.empty:
+            continue
+        adf = adf[adf["ts_code"].isin(ts_codes)]
+        if not adf.empty:
+            adj_dfs.append(adf)
+
+    adj_all = pd.concat(adj_dfs, ignore_index=True) if adj_dfs else pd.DataFrame()
+    if not adj_all.empty:
+        adj_all = adj_all.drop_duplicates(subset=["ts_code", "trade_date"])
+
+    # ── Apply QFQ per stock and build result dict ──
+    result: dict[str, list[dict]] = {}
+    for ts_code, group in merged.groupby("ts_code"):
+        sym = ts_map.get(str(ts_code))
+        if not sym:
+            continue
+
+        group = group.sort_values("trade_date")
+
+        # QFQ adjustment
+        if not adj_all.empty:
+            stock_adj = adj_all[adj_all["ts_code"] == ts_code].sort_values("trade_date")
+            if not stock_adj.empty:
+                latest_adj = float(stock_adj["adj_factor"].iloc[-1])
+                if latest_adj > 0:
+                    adj_merged = group.merge(
+                        stock_adj[["trade_date", "adj_factor"]],
+                        on="trade_date",
+                        how="left",
+                    )
+                    adj_merged["adj_factor"] = adj_merged["adj_factor"].ffill().bfill()
+                    ratio = adj_merged["adj_factor"] / latest_adj
+                    for col in ("open", "high", "low", "close"):
+                        if col in group.columns:
+                            group[col] = group[col].values * ratio.values
+
+        bars: list[dict] = []
+        for _, row in group.iterrows():
+            td = str(row["trade_date"])
+            dt = datetime(int(td[:4]), int(td[4:6]), int(td[6:8]))
+            ts_ms = int(dt.timestamp() * 1000)
+            bars.append({
+                "timestamp": ts_ms,
+                "date": f"{td[:4]}-{td[4:6]}-{td[6:8]}",
+                "open": round(float(row["open"]), 4),
+                "high": round(float(row["high"]), 4),
+                "low": round(float(row["low"]), 4),
+                "close": round(float(row["close"]), 4),
+                "volume": int(float(row["vol"])),
+                "amount": round(float(row.get("amount", 0) or 0), 4),
+            })
+        if bars:
+            result[sym] = bars
+
+    print(f"[Parquet\u6279\u91cf] \u8bf7\u6c42 {len(symbols)} \u53ea, \u547d\u4e2d {len(result)} \u53ea, "
+          f"\u8bfb\u53d6 {len(months)} \u4e2a\u6708\u5206\u533a", file=sys.stderr)
+    return result
+
+
 # ── Public API (called via Python bridge) ─────────────────────────
 
 

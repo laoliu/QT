@@ -56,6 +56,10 @@ export interface AutoTradeConfig {
   useFitnessStrategies: boolean;
   /** Number of top fitness strategies to use (3-15, default 6). */
   fitnessTopN: number;
+  /** Enable weekly combo re-optimization (runs every Sunday at 18:00). */
+  comboReoptEnabled: boolean;
+  /** Cron expression for combo re-optimization (default: "0 18 * * 0" = Sundays 18:00). */
+  comboReoptCron: string;
 }
 
 export interface AutoTradeStatus {
@@ -96,6 +100,8 @@ const DEFAULT_CONFIG: AutoTradeConfig = {
   recommendStrategy: "mixed",
   useFitnessStrategies: true,
   fitnessTopN: 6,
+  comboReoptEnabled: false,
+  comboReoptCron: "0 18 * * 0",
 };
 
 // ── Service ──────────────────────────────────────────────────────
@@ -107,6 +113,7 @@ export class AutoTradeScheduler {
   private notifyFn?: NotifyFn;
   private screenTimerId: ReturnType<typeof setInterval> | null = null;
   private executeTimerId: ReturnType<typeof setInterval> | null = null;
+  private comboReoptTimerId: ReturnType<typeof setInterval> | null = null;
   private baseUrl: string;
   private authToken: string;
   private running = false;
@@ -222,6 +229,14 @@ export class AutoTradeScheduler {
       }, 30_000);
     }
     console.log("[AutoTrade] timers started — screen:", this.config.screenCron, "| execute:", this.config.executeCron);
+
+    // Combo re-optimization timer (weekly)
+    if (this.config.comboReoptEnabled && !this.comboReoptTimerId) {
+      this.comboReoptTimerId = setInterval(() => {
+        void this.checkAndRunComboReopt();
+      }, 60_000); // Check every minute (weekly task, less urgent)
+      console.log("[AutoTrade] combo re-optimization timer started:", this.config.comboReoptCron);
+    }
   }
 
   private stopTimers(): void {
@@ -232,6 +247,10 @@ export class AutoTradeScheduler {
     if (this.executeTimerId) {
       clearInterval(this.executeTimerId);
       this.executeTimerId = null;
+    }
+    if (this.comboReoptTimerId) {
+      clearInterval(this.comboReoptTimerId);
+      this.comboReoptTimerId = null;
     }
   }
 
@@ -366,6 +385,46 @@ export class AutoTradeScheduler {
 
     console.log("[AutoTrade] execute phase triggered at", now.toISOString());
     await this.runExecutePhase();
+  }
+
+  private lastComboReoptMinute = "";
+  private async checkAndRunComboReopt(): Promise<void> {
+    if (this.running) return;
+    if (!this.config.comboReoptEnabled) return;
+    const now = new Date();
+    const minuteKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+    if (this.lastComboReoptMinute === minuteKey) return;
+
+    if (!this.matchesCron(this.config.comboReoptCron, now)) return;
+    this.lastComboReoptMinute = minuteKey;
+
+    console.log("[AutoTrade] combo re-optimization triggered at", now.toISOString());
+    await this.runComboReopt();
+  }
+
+  private async runComboReopt(): Promise<void> {
+    this.running = true;
+    this.notify("🎯 个股组合优化：开始定期重新优化…");
+    try {
+      const data = await this.callApi("/quant/admin/api/stock-optimization/run", {
+        backtest_years: 5,
+        top_k_strategies: 5,
+        max_combo_size: 3,
+        combo_methods: ["voting", "weighted", "gated"],
+      });
+      if (data.ok) {
+        this.notify(
+          `✅ 组合优化完成: ${String(data.optimized_count ?? 0)} 只股票, 耗时 ${String(data.elapsed_seconds ?? 0)}s`,
+        );
+      } else {
+        this.notify(`❌ 组合优化失败: ${String(data.error ?? "未知错误")}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.notify(`❌ 组合优化异常: ${msg}`);
+    } finally {
+      this.running = false;
+    }
   }
 
   // ── Internal: Phases ───────────────────────────────────────

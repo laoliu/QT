@@ -1107,3 +1107,108 @@ export type FuturesConfig = {
   /** Maintenance margin ratio as fraction of initial margin (default: 0.8 = 80%) */
   maintenanceMarginRatio?: number;
 };
+
+// ── Stock Trading Plan (个股交易计划) ────────────────────────
+
+export interface BuyZone {
+  priceLevel: number;
+  type: "support" | "pullback" | "breakout" | "oversold";
+  strength: number; // 0-1
+  description?: string;
+}
+
+export interface SellZone {
+  priceLevel: number;
+  type: "resistance" | "target" | "overbought" | "trailing";
+  strength: number; // 0-1
+  description?: string;
+}
+
+export interface PositionRule {
+  condition: string;
+  pct: number;       // percentage of position
+  trigger: string;   // e.g. "price_drop_3pct", "rsi_below_30"
+  description?: string;
+}
+
+export interface TakeProfitTier {
+  targetPct: number;   // e.g. 10 = +10%
+  sellPortion: number; // e.g. 0.3 = sell 30%
+}
+
+export interface StockTradingPlan {
+  symbol: string;
+  stockName?: string;
+
+  /** Strategy combination */
+  comboStrategies: Array<{
+    strategyId: string;
+    strategyName?: string;
+    weight: number;
+    role: "primary" | "filter" | "equal";
+  }>;
+  comboMethod: "voting" | "weighted" | "gated";
+
+  /** Buy zones — price levels favorable for entry */
+  buyZones: BuyZone[];
+
+  /** Sell zones — price levels favorable for exit */
+  sellZones: SellZone[];
+
+  /** When to add to position */
+  addPositionRules: PositionRule[];
+
+  /** When to reduce position */
+  reducePositionRules: PositionRule[];
+
+  /** Stop loss configuration */
+  stopLoss: {
+    price: number;
+    type: "fixed" | "atr" | "trailing";
+    atrMultiple?: number;
+    pctFromEntry?: number;
+  };
+
+  /** Staged take-profit tiers */
+  takeProfitTiers: TakeProfitTier[];
+
+  /** Position sizing rules */
+  positionSizing: {
+    method: "fixed_pct" | "risk_pct" | "kelly" | "atr_vol";
+    maxPct: number;        // max position as % of portfolio
+    initialPct: number;    // initial position %
+    maxScaleCount: number; // max times to add position
+  };
+
+  /** Optimal holding period from backtest analysis */
+  holdingPeriod: {
+    optimalDays: number;
+    minDays: number;
+    maxDays: number;
+  };
+
+  /** Timing hints from historical pattern analysis */
+  timingHints?: {
+    bestEntryDays?: number[];     // 0=Mon, 4=Fri
+    avoidDays?: number[];
+    bestEntryHours?: string[];    // "09:30-10:00"
+  };
+
+  /** Confidence score 0-1 based on backtest robustness */
+  confidence: number;
+
+  /** Backtest performance metrics for this combo */
+  backtestMetrics: {
+    totalReturn: number;
+    annualizedReturn: number;
+    sharpeRatio: number;
+    maxDrawdown: number;
+    winRate: number;
+    profitFactor: number;
+    totalTrades: number;
+  };
+
+  /** When this plan was generated */
+  updatedAt: string;
+  runId: string;
+}

@@ -1389,4 +1389,142 @@ export class ConditionalOrderService {
       // Ignore corrupt data
     }
   }
+
+  /**
+   * Apply a StockTradingPlan to create monitoring orders for a stock.
+   *
+   * Creates:
+   *  - Stop loss order from plan.stopLoss
+   *  - Staged take-profit from plan.takeProfitTiers
+   *  - Buy zone price alerts (stop_loss type with exitSide "buy" — triggers when price drops to zone)
+   *  - Sell zone price alerts (take_profit type — triggers when price rises to zone)
+   *  - Add position triggers (stop_loss type — price drops to add level)
+   *  - Reduce position triggers (take_profit type — price rises to reduce level)
+   *
+   * @param plan - Trading plan object with buy/sell zones, stop loss, take profit tiers
+   * @param entryPrice - Current or planned entry price
+   * @param quantity - Total shares to monitor
+   * @returns Array of created order IDs
+   */
+  applyTradingPlan(plan: {
+    symbol: string;
+    stopLoss?: { price: number; pctFromEntry?: number; type?: string; atrMultiple?: number };
+    takeProfitTiers?: Array<{ targetPct: number; sellPortion: number }>;
+    buyZones?: Array<{ priceLevel: number; type?: string; description?: string; strength?: number }>;
+    sellZones?: Array<{ priceLevel: number; type?: string; description?: string; strength?: number }>;
+    addPositionRules?: Array<{ pct: number; trigger: string; description?: string }>;
+    reducePositionRules?: Array<{ pct: number; trigger: string; description?: string }>;
+    comboMethod?: string;
+  }, entryPrice: number, quantity: number): string[] {
+    const ids: string[] = [];
+    const sym = plan.symbol;
+    const tag = `combo-${plan.comboMethod ?? "optimization"}`;
+
+    // 1. Stop loss
+    if (plan.stopLoss?.price && plan.stopLoss.price > 0) {
+      const id = this.addStopLoss({
+        symbol: sym,
+        entryPrice,
+        stopPrice: plan.stopLoss.price,
+        quantity,
+        strategyId: tag,
+        description: `[组合优化] 止损: ${sym} 跌破 ¥${plan.stopLoss.price.toFixed(2)} 卖出 (距入场 -${plan.stopLoss.pctFromEntry?.toFixed(1) ?? "?"}%)`,
+      });
+      ids.push(id);
+    }
+
+    // 2. Staged take-profit
+    if (plan.takeProfitTiers?.length && entryPrice > 0 && quantity > 0) {
+      const tiers = plan.takeProfitTiers.map((t) => ({
+        gainPct: t.targetPct / 100, // convert from % to 0-1
+        sellRatio: t.sellPortion,
+      }));
+      const id = this.addStagedTakeProfit({
+        symbol: sym,
+        entryPrice,
+        totalQuantity: quantity,
+        tiers,
+        strategyId: tag,
+        description: `[组合优化] 分批止盈: ${sym} ${tiers.map((t) => `+${(t.gainPct * 100).toFixed(0)}%`).join("/")}`,
+      });
+      ids.push(id);
+    }
+
+    // 3. Buy zone alerts — notify when price drops into buy zone
+    if (plan.buyZones?.length) {
+      for (const zone of plan.buyZones) {
+        if (zone.priceLevel > 0 && zone.priceLevel < entryPrice) {
+          const id = this.addStopLoss({
+            symbol: sym,
+            entryPrice,
+            stopPrice: zone.priceLevel,
+            quantity: 0, // Alert only — zero quantity means notify but don't auto-sell
+            strategyId: tag,
+            description: `[组合优化] 📗买入提醒: ${sym} 跌到 ¥${zone.priceLevel.toFixed(2)} (${zone.description ?? zone.type ?? "买入区"})`,
+          });
+          ids.push(id);
+        }
+      }
+    }
+
+    // 4. Sell zone alerts — notify when price rises into sell zone
+    if (plan.sellZones?.length) {
+      for (const zone of plan.sellZones) {
+        if (zone.priceLevel > 0 && zone.priceLevel > entryPrice) {
+          const id = this.addTakeProfit({
+            symbol: sym,
+            entryPrice,
+            targetPrice: zone.priceLevel,
+            quantity: 0, // Alert only
+            strategyId: tag,
+            description: `[组合优化] 📕卖出提醒: ${sym} 涨到 ¥${zone.priceLevel.toFixed(2)} (${zone.description ?? zone.type ?? "卖出区"})`,
+          });
+          ids.push(id);
+        }
+      }
+    }
+
+    // 5. Add position triggers — price drops to add level
+    if (plan.addPositionRules?.length && entryPrice > 0) {
+      for (const rule of plan.addPositionRules) {
+        // Parse pct from trigger name or use rule.pct as drop %
+        const dropPct = rule.pct > 1 ? rule.pct / 100 : rule.pct; // normalize
+        const triggerPrice = entryPrice * (1 - dropPct * 0.5); // trigger at half the stated drop for safety
+        if (triggerPrice > 0 && triggerPrice < entryPrice) {
+          const addQty = Math.floor(quantity * dropPct) || 0;
+          const id = this.addStopLoss({
+            symbol: sym,
+            entryPrice,
+            stopPrice: triggerPrice,
+            quantity: 0, // Alert only — user decides actual add
+            strategyId: tag,
+            description: `[组合优化] ➕加仓提醒: ${sym} 跌到 ¥${triggerPrice.toFixed(2)} — ${rule.description ?? rule.trigger} (建议加 ${addQty > 0 ? addQty + "股" : rule.pct + "% 仓位"})`,
+          });
+          ids.push(id);
+        }
+      }
+    }
+
+    // 6. Reduce position triggers — price rises to reduce level
+    if (plan.reducePositionRules?.length && entryPrice > 0) {
+      for (const rule of plan.reducePositionRules) {
+        const risePct = rule.pct > 1 ? rule.pct / 100 : rule.pct;
+        const triggerPrice = entryPrice * (1 + risePct * 0.5);
+        if (triggerPrice > entryPrice) {
+          const reduceQty = Math.floor(quantity * risePct) || 0;
+          const id = this.addTakeProfit({
+            symbol: sym,
+            entryPrice,
+            targetPrice: triggerPrice,
+            quantity: 0, // Alert only
+            strategyId: tag,
+            description: `[组合优化] ➖减仓提醒: ${sym} 涨到 ¥${triggerPrice.toFixed(2)} — ${rule.description ?? rule.trigger} (建议减 ${reduceQty > 0 ? reduceQty + "股" : rule.pct + "% 仓位"})`,
+          });
+          ids.push(id);
+        }
+      }
+    }
+
+    return ids;
+  }
 }

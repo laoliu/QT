@@ -57,6 +57,7 @@ import { registerStrategyLabRoutes } from "./routes/strategy-lab.js";
 import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
 import { registerStrategyRoutingRoutes } from "./routes/strategy-routing.js";
 import { registerSwingOverlayRoutes } from "./routes/swing-overlay.js";
+import { registerStockOptimizationRoutes } from "./routes/stock-optimization.js";
 import { todayCST, formatDateCST, nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -3991,6 +3992,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
 
   // Swing Overlay (持仓波段套利 extracted to routes/swing-overlay.ts)
   registerSwingOverlayRoutes(deps);
+
+  // Stock Combo Optimization (个股组合优化 extracted to routes/stock-optimization.ts)
+  registerStockOptimizationRoutes(deps);
 
   // ── Quote Push (QMT 实时行情推送 → 即时触发条件单) ──────────────
   api.registerHttpRoute({

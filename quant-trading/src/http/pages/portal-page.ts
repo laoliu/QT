@@ -62,6 +62,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-compare::before{background:linear-gradient(90deg,var(--purple),var(--green))}
 .nav-card.card-strestructure::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
 .nav-card.card-combo::before{background:linear-gradient(90deg,var(--accent),var(--purple))}
+.nav-card.card-stockopt::before{background:linear-gradient(90deg,var(--green),var(--purple))}
 .nav-card.card-risksim::before{background:linear-gradient(90deg,var(--red),var(--orange))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
@@ -313,6 +314,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">组合构建</span><span class="tag">风险平价</span><span class="tag">统计检验</span>
       <span class="tag">权重扰动</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/stock-optimization" class="nav-card card-stockopt" style="color:inherit;text-decoration:none">
+    <div class="icon">🎯</div>
+    <h3>个股组合优化</h3>
+    <p>每只股票找最佳策略组合，参数网格搜索，输出交易计划（买卖区间 / 止损止盈 / 仓位管理），一键应用条件单监控</p>
+    <div class="tags">
+      <span class="tag">多策略组合</span><span class="tag">参数优化</span><span class="tag">交易计划</span>
+      <span class="tag">条件单</span><span class="tag">绩效跟踪</span>
     </div>
   </a>
   <a href="${b}/quant/admin/risk-simulator" class="nav-card card-risksim" style="color:inherit;text-decoration:none">

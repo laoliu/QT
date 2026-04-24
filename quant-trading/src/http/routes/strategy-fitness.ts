@@ -847,6 +847,18 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           }
 
           const pyData = pyResult.data as Record<string, unknown>;
+
+          // Python may return { error, batch_id } with exit code 0 — detect & propagate
+          if (pyData.error) {
+            await writeProgress(config, {
+              batch_id: (pyData.batch_id as string) ?? "",
+              status: "error",
+              error: pyData.error,
+            });
+            json(res, { ok: false, error: pyData.error as string });
+            return;
+          }
+
           batchId = (pyData.batch_id as string) ?? "";
           alphaStrategyCount = (pyData.total_strategies as number) ?? 0;
           totalElapsed = (pyData.elapsed_seconds as number) ?? 0;
@@ -944,14 +956,13 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             global_top_strategies: globalRanking,
           });
         } else if (hasBuiltin && validSymbols.length === 0) {
+          await writeProgress(config, { batch_id: batchId, status: "error", error: "无有效股票，无法运行Builtin策略" });
           json(res, { ok: false, error: "无有效股票，无法运行Builtin策略" });
         }
       } catch (err) {
-        json(
-          res,
-          { ok: false, error: `适配分析失败: ${err instanceof Error ? err.message : String(err)}` },
-          500,
-        );
+        const errMsg = `适配分析失败: ${err instanceof Error ? err.message : String(err)}`;
+        await writeProgress(config, { status: "error", error: errMsg }).catch(() => {});
+        json(res, { ok: false, error: errMsg }, 500);
       }
     }),
   });

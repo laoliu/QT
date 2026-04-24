@@ -700,7 +700,7 @@ function startAnalysis(){
     if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null}
     btn.disabled=false;
     btn.textContent='🚀 开始分析';
-    if(data.ok||data.batch_id){
+    if((data.ok||data.batch_id)&&!data.error){
       toast('✅ 分析完成');
       showResult(data);
       updateProgress(100,'done');

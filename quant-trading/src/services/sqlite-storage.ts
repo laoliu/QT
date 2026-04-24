@@ -204,6 +204,40 @@ CREATE TABLE IF NOT EXISTS global_strategy_ranking (
 CREATE INDEX IF NOT EXISTS idx_gsr_strategy ON global_strategy_ranking(strategy_id);
 CREATE INDEX IF NOT EXISTS idx_gsr_batch ON global_strategy_ranking(batch_id);
 CREATE INDEX IF NOT EXISTS idx_gsr_rank ON global_strategy_ranking(rank);
+
+-- Per-stock multi-strategy combo optimization results
+CREATE TABLE IF NOT EXISTS stock_combo_optimization (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol            TEXT NOT NULL,
+  stock_name        TEXT,
+  combo_id          TEXT NOT NULL,
+  strategy_ids      TEXT NOT NULL,
+  strategy_names    TEXT,
+  combo_method      TEXT NOT NULL DEFAULT 'voting',
+  optimized_params  TEXT,
+  composite_score   REAL NOT NULL,
+  total_return      REAL,
+  annualized_return REAL,
+  sharpe_ratio      REAL,
+  sortino_ratio     REAL,
+  max_drawdown      REAL,
+  win_rate          REAL,
+  profit_factor     REAL,
+  calmar_ratio      REAL,
+  total_trades      INTEGER,
+  signal_consistency REAL,
+  backtest_start    TEXT,
+  backtest_end      TEXT,
+  trading_plan      TEXT,
+  confidence        REAL DEFAULT 0,
+  run_id            TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (symbol, combo_id, run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sco_symbol ON stock_combo_optimization(symbol);
+CREATE INDEX IF NOT EXISTS idx_sco_run ON stock_combo_optimization(run_id);
+CREATE INDEX IF NOT EXISTS idx_sco_score ON stock_combo_optimization(composite_score DESC);
+CREATE INDEX IF NOT EXISTS idx_sco_confidence ON stock_combo_optimization(confidence DESC);
 `;
 
 // ── Types ────────────────────────────────────────────────────
@@ -335,6 +369,34 @@ export interface GlobalStrategyRankingRow {
   createdAt?: string;
 }
 
+export interface StockComboOptimizationRow {
+  id?: number;
+  symbol: string;
+  stockName?: string;
+  comboId: string;
+  strategyIds: string[];    // JSON-serialized in DB
+  strategyNames?: string[]; // JSON-serialized in DB
+  comboMethod: string;      // "voting" | "weighted" | "gated"
+  optimizedParams?: Record<string, unknown>; // JSON-serialized in DB
+  compositeScore: number;
+  totalReturn?: number;
+  annualizedReturn?: number;
+  sharpeRatio?: number;
+  sortinoRatio?: number;
+  maxDrawdown?: number;
+  winRate?: number;
+  profitFactor?: number;
+  calmarRatio?: number;
+  totalTrades?: number;
+  signalConsistency?: number;
+  backtestStart?: string;
+  backtestEnd?: string;
+  tradingPlan?: Record<string, unknown>; // JSON-serialized in DB
+  confidence?: number;
+  runId: string;
+  createdAt?: string;
+}
+
 // ── Storage interface ────────────────────────────────────────
 
 export interface QuantStorage {
@@ -396,6 +458,14 @@ export interface QuantStorage {
   listFitnessBatches(limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>>;
   cleanOldFitnessBatches(keepN?: number): Promise<number>;
   clearFitnessBatch(batchId: string): Promise<void>;
+
+  // ── Stock Combo Optimization ──────────────
+  saveStockComboOptimization(rows: StockComboOptimizationRow[]): Promise<void>;
+  getStockComboOptimization(symbol: string, runId?: string): Promise<StockComboOptimizationRow[]>;
+  listComboOptimizationRuns(limit?: number): Promise<Array<{ runId: string; createdAt: string; stockCount: number; comboCount: number }>>;
+  getLatestComboRunId(): Promise<string | null>;
+  getAllOptimizedStocks(runId?: string, limit?: number, offset?: number): Promise<{ rows: StockComboOptimizationRow[]; total: number }>;
+  deleteComboRun(runId: string): Promise<void>;
 
   // ── Lifecycle ────────────────────────────
   close(): Promise<void>;
@@ -732,6 +802,15 @@ export class InMemoryStorage implements QuantStorage {
   async listFitnessBatches(_limit?: number): Promise<Array<{ batchId: string; createdAt: string; stockCount: number; strategyCount: number }>> { return []; }
   async cleanOldFitnessBatches(_keepN?: number): Promise<number> { return 0; }
   async clearFitnessBatch(_batchId: string): Promise<void> {}
+
+  // ── Stock Combo Optimization (no-op in memory mode) ───────
+
+  async saveStockComboOptimization(_rows: StockComboOptimizationRow[]): Promise<void> {}
+  async getStockComboOptimization(_symbol: string, _runId?: string): Promise<StockComboOptimizationRow[]> { return []; }
+  async listComboOptimizationRuns(_limit?: number): Promise<Array<{ runId: string; createdAt: string; stockCount: number; comboCount: number }>> { return []; }
+  async getLatestComboRunId(): Promise<string | null> { return null; }
+  async getAllOptimizedStocks(_runId?: string, _limit?: number, _offset?: number): Promise<{ rows: StockComboOptimizationRow[]; total: number }> { return { rows: [], total: 0 }; }
+  async deleteComboRun(_runId: string): Promise<void> {}
 
   // ── Lifecycle ─────────────────────────────────────────────
 
@@ -1446,6 +1525,139 @@ export class SqliteStorage implements QuantStorage {
       backtestStart: (r.backtest_start as string) ?? undefined,
       backtestEnd: (r.backtest_end as string) ?? undefined,
       batchId: r.batch_id as string,
+      createdAt: (r.created_at as string) ?? undefined,
+    };
+  }
+
+  // ── Stock Combo Optimization ───────────────────────────────
+
+  async saveStockComboOptimization(rows: StockComboOptimizationRow[]): Promise<void> {
+    const stmt = (this.db as Record<string, Function>).prepare(`
+      INSERT OR REPLACE INTO stock_combo_optimization
+        (symbol, stock_name, combo_id, strategy_ids, strategy_names, combo_method,
+         optimized_params, composite_score, total_return, annualized_return,
+         sharpe_ratio, sortino_ratio, max_drawdown, win_rate, profit_factor,
+         calmar_ratio, total_trades, signal_consistency,
+         backtest_start, backtest_end, trading_plan, confidence, run_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const txn = (this.db as Record<string, Function>).transaction((items: StockComboOptimizationRow[]) => {
+      for (const r of items) {
+        stmt.run(
+          r.symbol, r.stockName ?? null, r.comboId,
+          JSON.stringify(r.strategyIds), r.strategyNames ? JSON.stringify(r.strategyNames) : null,
+          r.comboMethod, r.optimizedParams ? JSON.stringify(r.optimizedParams) : null,
+          r.compositeScore,
+          r.totalReturn ?? null, r.annualizedReturn ?? null,
+          r.sharpeRatio ?? null, r.sortinoRatio ?? null, r.maxDrawdown ?? null,
+          r.winRate ?? null, r.profitFactor ?? null,
+          r.calmarRatio ?? null, r.totalTrades ?? null, r.signalConsistency ?? null,
+          r.backtestStart ?? null, r.backtestEnd ?? null,
+          r.tradingPlan ? JSON.stringify(r.tradingPlan) : null,
+          r.confidence ?? 0, r.runId,
+        );
+      }
+    });
+    txn(rows);
+  }
+
+  async getStockComboOptimization(symbol: string, runId?: string): Promise<StockComboOptimizationRow[]> {
+    const rid = runId ?? await this.getLatestComboRunId();
+    if (!rid) return [];
+    const rows = (this.db as Record<string, Function>)
+      .prepare(
+        "SELECT * FROM stock_combo_optimization WHERE symbol = ? AND run_id = ? ORDER BY composite_score DESC",
+      )
+      .all(symbol, rid) as Array<Record<string, unknown>>;
+    return rows.map((r) => this.mapComboRow(r));
+  }
+
+  async getLatestComboRunId(): Promise<string | null> {
+    const row = (this.db as Record<string, Function>)
+      .prepare("SELECT run_id FROM stock_combo_optimization ORDER BY created_at DESC LIMIT 1")
+      .get() as Record<string, unknown> | undefined;
+    return row ? (row.run_id as string) : null;
+  }
+
+  async listComboOptimizationRuns(limit = 20): Promise<Array<{ runId: string; createdAt: string; stockCount: number; comboCount: number }>> {
+    const rows = (this.db as Record<string, Function>)
+      .prepare(`
+        SELECT run_id, MIN(created_at) as created_at,
+               COUNT(DISTINCT symbol) as stock_count,
+               COUNT(*) as combo_count
+        FROM stock_combo_optimization
+        GROUP BY run_id
+        ORDER BY created_at DESC
+        LIMIT ?
+      `)
+      .all(limit) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      runId: r.run_id as string,
+      createdAt: r.created_at as string,
+      stockCount: r.stock_count as number,
+      comboCount: r.combo_count as number,
+    }));
+  }
+
+  async getAllOptimizedStocks(runId?: string, limit = 100, offset = 0): Promise<{ rows: StockComboOptimizationRow[]; total: number }> {
+    const rid = runId ?? await this.getLatestComboRunId();
+    if (!rid) return { rows: [], total: 0 };
+    const countRow = (this.db as Record<string, Function>)
+      .prepare("SELECT COUNT(DISTINCT symbol) as cnt FROM stock_combo_optimization WHERE run_id = ?")
+      .get(rid) as Record<string, unknown>;
+    const total = (countRow?.cnt as number) ?? 0;
+    // Get the best combo per stock (rank 1)
+    const rows = (this.db as Record<string, Function>)
+      .prepare(`
+        SELECT * FROM stock_combo_optimization
+        WHERE run_id = ? AND id IN (
+          SELECT id FROM stock_combo_optimization AS sub
+          WHERE sub.run_id = ? AND sub.symbol = stock_combo_optimization.symbol
+          ORDER BY sub.composite_score DESC LIMIT 1
+        )
+        ORDER BY composite_score DESC
+        LIMIT ? OFFSET ?
+      `)
+      .all(rid, rid, limit, offset) as Array<Record<string, unknown>>;
+    return { rows: rows.map((r) => this.mapComboRow(r)), total };
+  }
+
+  async deleteComboRun(runId: string): Promise<void> {
+    (this.db as Record<string, Function>)
+      .prepare("DELETE FROM stock_combo_optimization WHERE run_id = ?")
+      .run(runId);
+  }
+
+  private mapComboRow(r: Record<string, unknown>): StockComboOptimizationRow {
+    const parseJson = (v: unknown) => {
+      if (!v || typeof v !== "string") return undefined;
+      try { return JSON.parse(v); } catch { return undefined; }
+    };
+    return {
+      id: r.id as number,
+      symbol: r.symbol as string,
+      stockName: (r.stock_name as string) ?? undefined,
+      comboId: r.combo_id as string,
+      strategyIds: parseJson(r.strategy_ids) ?? [],
+      strategyNames: parseJson(r.strategy_names),
+      comboMethod: r.combo_method as string,
+      optimizedParams: parseJson(r.optimized_params),
+      compositeScore: r.composite_score as number,
+      totalReturn: (r.total_return as number) ?? undefined,
+      annualizedReturn: (r.annualized_return as number) ?? undefined,
+      sharpeRatio: (r.sharpe_ratio as number) ?? undefined,
+      sortinoRatio: (r.sortino_ratio as number) ?? undefined,
+      maxDrawdown: (r.max_drawdown as number) ?? undefined,
+      winRate: (r.win_rate as number) ?? undefined,
+      profitFactor: (r.profit_factor as number) ?? undefined,
+      calmarRatio: (r.calmar_ratio as number) ?? undefined,
+      totalTrades: (r.total_trades as number) ?? undefined,
+      signalConsistency: (r.signal_consistency as number) ?? undefined,
+      backtestStart: (r.backtest_start as string) ?? undefined,
+      backtestEnd: (r.backtest_end as string) ?? undefined,
+      tradingPlan: parseJson(r.trading_plan),
+      confidence: (r.confidence as number) ?? undefined,
+      runId: r.run_id as string,
       createdAt: (r.created_at as string) ?? undefined,
     };
   }

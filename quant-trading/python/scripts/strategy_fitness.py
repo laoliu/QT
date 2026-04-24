@@ -145,16 +145,24 @@ def _fetch_universe(universe: str, custom_symbols: list[str] | None = None) -> l
 
     symbols: list[str] = []
 
-    # 方法1: akshare
+    # 方法1: akshare (with retry)
     try:
         import akshare as ak
-        df = ak.index_stock_cons(symbol=index_code)
-        if df is not None and not df.empty:
-            col = "品种代码" if "品种代码" in df.columns else df.columns[0]
-            symbols = df[col].astype(str).str.strip().tolist()
-            # 规范化为6位
-            symbols = [s.zfill(6) for s in symbols if s.strip()]
-            print(f"[Universe] akshare获取 {universe} 成分股: {len(symbols)} 只", file=sys.stderr)
+        for _attempt in range(3):
+            try:
+                df = ak.index_stock_cons(symbol=index_code)
+                if df is not None and not df.empty:
+                    col = "品种代码" if "品种代码" in df.columns else df.columns[0]
+                    symbols = df[col].astype(str).str.strip().tolist()
+                    # 规范化为6位
+                    symbols = [s.zfill(6) for s in symbols if s.strip()]
+                    print(f"[Universe] akshare获取 {universe} 成分股: {len(symbols)} 只", file=sys.stderr)
+                    break
+            except Exception:
+                if _attempt < 2:
+                    time.sleep(2)
+                    continue
+                raise
     except Exception as e:
         print(f"[Universe] akshare获取失败: {e}", file=sys.stderr)
 
@@ -201,15 +209,23 @@ def _fetch_all_a_stocks() -> list[str]:
     """获取全部A股代码列表。"""
     symbols: list[str] = []
 
-    # 方法1: akshare
+    # 方法1: akshare (with retry)
     try:
         import akshare as ak
-        df = ak.stock_zh_a_spot_em()
-        if df is not None and not df.empty:
-            col = "代码" if "代码" in df.columns else df.columns[0]
-            symbols = df[col].astype(str).str.strip().tolist()
-            symbols = [s.zfill(6) for s in symbols if s.strip()]
-            print(f"[Universe] akshare全部A股: {len(symbols)} 只", file=sys.stderr)
+        for _attempt in range(3):
+            try:
+                df = ak.stock_zh_a_spot_em()
+                if df is not None and not df.empty:
+                    col = "代码" if "代码" in df.columns else df.columns[0]
+                    symbols = df[col].astype(str).str.strip().tolist()
+                    symbols = [s.zfill(6) for s in symbols if s.strip()]
+                    print(f"[Universe] akshare全部A股: {len(symbols)} 只", file=sys.stderr)
+                    break
+            except Exception:
+                if _attempt < 2:
+                    time.sleep(2)
+                    continue
+                raise
     except Exception as e:
         print(f"[Universe] akshare全A获取失败: {e}", file=sys.stderr)
 
@@ -238,6 +254,25 @@ def _fetch_all_a_stocks() -> list[str]:
                 print(f"[Universe] tushare全A: {len(symbols)} 只", file=sys.stderr)
         except Exception as e3:
             print(f"[Universe] tushare全A失败: {e3}", file=sys.stderr)
+
+    # 方法4: 降级到指数成分股合集 (CSI1000+500+300)
+    if not symbols:
+        try:
+            import akshare as ak
+            combined: set[str] = set()
+            for idx_code in ("000852", "000905", "000300"):
+                try:
+                    df = ak.index_stock_cons(symbol=idx_code)
+                    if df is not None and not df.empty:
+                        col = "品种代码" if "品种代码" in df.columns else df.columns[0]
+                        combined.update(df[col].astype(str).str.strip().tolist())
+                except Exception:
+                    pass
+            if combined:
+                symbols = [s.zfill(6) for s in combined if s.strip()]
+                print(f"[Universe] 降级使用指数成分股合集: {len(symbols)} 只", file=sys.stderr)
+        except Exception as e4:
+            print(f"[Universe] 指数合集fallback失败: {e4}", file=sys.stderr)
 
     # 过滤: 只保留主板+创业板+科创板, 去除ST标记
     symbols = [s for s in symbols if s and len(s) == 6 and s[0] in ("0", "3", "6")]

@@ -73,6 +73,14 @@ export function getAdminBodyHtml(b: string): string {
         <button class="btn btn-primary" onclick="window.open(B+'/quant/admin/portfolio-backtest','_blank')">📊 打开持仓回测</button>
       </div>
     </div>
+    <div class="card">      <h3>🎯 个股组合优化</h3>
+      <div class="form-row">
+        <span style="font-size:12px;color:var(--text-dim)">每只股票找最佳策略组合，参数网格搜索，输出交易计划并应用条件单监控</span>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-primary" onclick="window.open(B+'/quant/admin/stock-optimization','_blank')">🎯 打开组合优化</button>
+      </div>
+    </div>
     <div class="card">      <h3>📡 数据同步</h3>
       <div id="sync-bridge-status" style="font-size:12px;margin-bottom:8px"></div>
       <div class="form-row">

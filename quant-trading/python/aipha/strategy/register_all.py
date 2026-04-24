@@ -235,3 +235,7 @@ _reg.register_class("ytm_plus", YTMPlusStrategy)
 
 # ── 迁移批次: RL / ML ────────────────────────────────────────
 # rl_portfolio is a training framework, not a Strategy subclass — skip registration
+
+# ── Tick 级别策略 ─────────────────────────────────────────────
+# 导入即自动注册到 TickStrategyRegistry
+import aipha.strategy.tick_strategies  # noqa: F401

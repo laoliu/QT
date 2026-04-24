@@ -603,6 +603,124 @@ def _fetch_quotes_xtdata(codes):
     return result
 
 
+def _fetch_tick_data_xtdata(codes, trade_date):
+    """
+    通过 xtdata 下载指定日期的历史 tick 数据。
+
+    Args:
+        codes: QMT 格式代码列表，如 ["600519.SH"]
+        trade_date: 交易日期字符串，如 "20260424"
+
+    Returns:
+        dict: {"600519.SH": [{timestamp, price, volume, amount, ...}, ...]}
+    """
+    try:
+        import xtquant.xtdata as xtdata
+    except ImportError:
+        _log("xtquant 未安装，无法获取 tick 数据")
+        return {}
+
+    ok, err = _xtdata_connect(xtdata)
+    if not ok:
+        _log("xtdata connect failed, cannot fetch ticks: %s" % err)
+        return {}
+
+    result = {}
+    for qmt_code in codes:
+        try:
+            # 确保本地有 tick 数据缓存
+            if hasattr(xtdata, "download_history_data"):
+                try:
+                    xtdata.download_history_data(
+                        qmt_code, "tick",
+                        start_time=trade_date,
+                        end_time=trade_date,
+                    )
+                except TypeError:
+                    # QMT 内置版参数格式可能不同
+                    try:
+                        xtdata.download_history_data(qmt_code, "tick", trade_date, trade_date)
+                    except Exception as e2:
+                        _log("download tick %s warning: %s" % (qmt_code, e2))
+                except Exception as e:
+                    _log("download tick %s warning: %s" % (qmt_code, e))
+
+            # 获取 tick 数据
+            raw = xtdata.get_market_data_ex(
+                field_list=[],  # 空列表 = 所有字段
+                stock_list=[qmt_code],
+                period="tick",
+                start_time=trade_date,
+                end_time=trade_date,
+                fill_data=False,
+            )
+
+            if raw is None:
+                continue
+
+            df = raw.get(qmt_code)
+            if df is None or (hasattr(df, "empty") and df.empty):
+                continue
+
+            ticks = []
+            for ts, row in df.iterrows():
+                try:
+                    # 优先使用 time 列（毫秒时间戳），回退到索引
+                    time_val = row.get("time")
+                    if time_val is not None and int(time_val) > 0:
+                        timestamp = int(time_val)
+                    elif isinstance(ts, (int, float)):
+                        timestamp = int(ts)
+                    else:
+                        timestamp = str(ts)
+
+                    price = float(row.get("lastPrice", 0) or 0)
+
+                    tick = {
+                        "timestamp": timestamp,
+                        "price": price,
+                        "volume": int(row.get("volume", 0) or 0),
+                        "amount": float(row.get("amount", 0) or 0),
+                        "open": float(row.get("open", 0) or 0),
+                        "high": float(row.get("high", 0) or 0),
+                        "low": float(row.get("low", 0) or 0),
+                        "lastClose": float(row.get("lastClose", 0) or 0),
+                        "tickvol": int(row.get("tickvol", 0) or 0),
+                        "transactionNum": int(row.get("transactionNum", 0) or 0),
+                    }
+
+                    # 五档盘口（xtdata 返回的已经是 list）
+                    for key in ("bidPrice", "askPrice"):
+                        arr = row.get(key)
+                        if arr is not None:
+                            if hasattr(arr, "tolist"):
+                                tick[key] = [float(x) for x in arr.tolist()]
+                            elif isinstance(arr, (list, tuple)):
+                                tick[key] = [float(x) for x in arr]
+                    for key in ("bidVol", "askVol"):
+                        arr = row.get(key)
+                        if arr is not None:
+                            if hasattr(arr, "tolist"):
+                                tick[key] = [int(x) for x in arr.tolist()]
+                            elif isinstance(arr, (list, tuple)):
+                                tick[key] = [int(x) for x in arr]
+
+                    # 保留所有 tick（含集合竞价 price=0 的记录，有盘口数据）
+                    ticks.append(tick)
+                except Exception:
+                    continue
+
+            if ticks:
+                result[qmt_code] = ticks
+                _log("got %d ticks for %s on %s" % (len(ticks), qmt_code, trade_date))
+        except Exception as e:
+            _log("fetch tick %s failed: %s" % (qmt_code, e))
+            continue
+
+    _log("tick_download: got data for %d/%d stocks" % (len(result), len(codes)))
+    return result
+
+
 # ========== 交易桥 (XtQuantTrader, from BRIDGE_MINI) ==========
 
 _trading_trader = None
@@ -1252,7 +1370,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
 
         def do_POST(self):
             path = urlparse(self.path).path
-            if path not in ("/klines", "/quote", "/trading", "/sector_list", "/sector_members"):
+            if path not in ("/klines", "/quote", "/trading", "/sector_list", "/sector_members", "/tick_download"):
                 self.send_error(404)
                 return
 
@@ -1326,6 +1444,19 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
                 self._json_response(400, {"error": "codes must not be empty"})
                 return
 
+            # --- Tick download endpoint ---
+            if path == "/tick_download":
+                _bump_stat("tick_download")
+                trade_date = req_body.get("date", "")
+                if not trade_date:
+                    self._json_response(400, {"error": "date required (YYYYMMDD)"})
+                    return
+                _log("[serve] tick_download: %d stocks, date=%s" % (len(codes), trade_date))
+                tick_data = _fetch_tick_data_xtdata(codes, trade_date)
+                self._json_response(200, {"status": "ok", "data": tick_data, "count": len(tick_data)})
+                _log("[serve] returned tick data for %d stocks" % len(tick_data))
+                return
+
             if path == "/quote":
                 _bump_stat("quote")
                 quotes = _fetch_quotes_xtdata(codes)
@@ -1365,7 +1496,7 @@ def run_serve_mode(host=SERVE_HOST, port=SERVE_PORT):
     server = ThreadingHTTPServer((host, port), BridgeHandler)
     _req_stats["last_report"] = time.time()
     _log("HTTP serve mode started -- http://%s:%d (threaded)" % (host, port))
-    _log("Endpoints: GET /health /trading/events, POST /klines /quote /trading")
+    _log("Endpoints: GET /health /trading/events, POST /klines /quote /trading /tick_download")
     _trading_label = "connected" if _trading_connected else (
         "connecting (background)" if _trading_bg_retry_running else "disabled"
     )

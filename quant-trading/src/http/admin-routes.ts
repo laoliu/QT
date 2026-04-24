@@ -3415,9 +3415,10 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const body = await parseObjectBody(req);
       const force = !!(body.force as boolean);
       const startFrom = (body.start_from as string) ?? "";
+      const skipStockBasic = !!(body.skip_stock_basic as boolean);
       const result = await runPythonScript<Record<string, unknown>>(
         "data_providers/parquet_data_updater.py",
-        { action: "sync", force, start_from: startFrom },
+        { action: "sync", force, start_from: startFrom, skip_stock_basic: skipStockBasic },
         config,
         { maxRetries: 0, timeoutMs: 30 * 60_000 },
       );
@@ -3449,6 +3450,55 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         { action: "status" },
         config,
         { maxRetries: 0, timeoutMs: 3 * 60_000 },
+      );
+      json(res, result.ok ? result.data : { status: "error", message: result.error });
+    }),
+  });
+
+  // ── Tick Data Download (via xtdata Python script) ──────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/tick-download",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "POST only" }, 405);
+        return;
+      }
+      const body = await parseObjectBody(req);
+      const codes: string[] = body.codes || [];
+      const date: string = body.date || "";
+      if (!codes.length || !date) {
+        json(res, { error: "codes 和 date 必填" }, 400);
+        return;
+      }
+      const result = await runPythonScript<Record<string, unknown>>(
+        "scripts/tick_download.py",
+        { codes, date },
+        config,
+        { maxRetries: 0, timeoutMs: 120_000 },
+      );
+      json(res, result.ok ? result.data : { status: "error", message: result.error });
+    }),
+  });
+
+  // ── Tick Data Query (check cached Parquet files) ──────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/tick-query",
+    handler: secure(async (req, res) => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const symbol = url.searchParams.get("symbol") || "";
+      const date = url.searchParams.get("date") || "";
+      if (!symbol || !date) {
+        json(res, { error: "symbol 和 date 必填" }, 400);
+        return;
+      }
+      // Use Python to load cached tick data
+      const result = await runPythonScript<Record<string, unknown>>(
+        "scripts/tick_query.py",
+        { symbol, date },
+        config,
+        { maxRetries: 0, timeoutMs: 30_000 },
       );
       json(res, result.ok ? result.data : { status: "error", message: result.error });
     }),

@@ -26,6 +26,7 @@ from aipha.config.config_models import (
     PortfolioConfig,
     RiskConfig,
     StrategyConfig,
+    TickBacktestConfig,
     UniverseConfig,
 )
 
@@ -37,5 +38,6 @@ __all__ = [
     "FillModelConfig",
     "RiskConfig",
     "PortfolioConfig",
+    "TickBacktestConfig",
     "BacktestRunConfig",
 ]

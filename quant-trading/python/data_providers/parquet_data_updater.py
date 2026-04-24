@@ -363,24 +363,33 @@ def _sync_adj_factor_month(api, month: str, cache_dir: Path, force=False) -> dic
 # ── Sync logic: stock_basic ───────────────────────────────────────
 
 
-def _sync_stock_basic(api, cache_dir: Path, force=False) -> dict:
-    """Refresh stock_basic.parquet if older than 7 days."""
+def _sync_stock_basic(api, cache_dir: Path, force=False, max_retries=3) -> dict:
+    """Refresh stock_basic.parquet if older than 7 days.
+
+    stock_basic API has strict rate limits (L: 1/hour, D: 1/min),
+    so we use short retries with longer waits and fall back to
+    existing cache on failure.
+    """
     import pandas as pd
 
     path = cache_dir / "stock_basic.parquet"
+    has_existing = path.exists()
 
-    if path.exists() and not force:
+    if has_existing and not force:
         mtime = datetime.fromtimestamp(path.stat().st_mtime)
-        if (datetime.now() - mtime).days < 7:
-            return {"status": "fresh", "age_days": (datetime.now() - mtime).days}
+        age_days = (datetime.now() - mtime).days
+        if age_days < 7:
+            return {"status": "fresh", "age_days": age_days}
 
     # Fetch active + delisted stocks
+    # Use fewer retries + longer wait since stock_basic is heavily rate-limited
     dfs = []
     errors = []
     for status in ("L", "D"):
         try:
             df = _retry_call(
                 api.stock_basic,
+                max_retries=max_retries,
                 list_status=status,
                 fields="ts_code,symbol,name,area,industry,market,list_date,list_status,delist_date,is_hs",
             )
@@ -394,6 +403,21 @@ def _sync_stock_basic(api, cache_dir: Path, force=False) -> dict:
         time.sleep(CALL_INTERVAL)
 
     if not dfs:
+        # Fall back to existing cache if available
+        if has_existing:
+            mtime = datetime.fromtimestamp(path.stat().st_mtime)
+            age_days = (datetime.now() - mtime).days
+            print(
+                f"[updater] stock_basic API failed, keeping existing cache "
+                f"({age_days} days old)",
+                file=sys.stderr,
+            )
+            return {
+                "status": "fallback",
+                "age_days": age_days,
+                "errors": errors,
+                "message": f"API rate-limited, using existing cache ({age_days}d old)",
+            }
         return {"status": "failed", "error": "; ".join(errors) or "No data returned"}
 
     merged = pd.concat(dfs, ignore_index=True)
@@ -484,11 +508,14 @@ def do_sync(cfg: dict) -> dict:
 
     results = {"stock_basic": None, "daily": [], "adj_factor": []}
 
-    # 1. Sync stock_basic
-    try:
-        results["stock_basic"] = _sync_stock_basic(api, cache_dir, force=force)
-    except Exception as exc:
-        results["stock_basic"] = {"status": "error", "error": str(exc)}
+    # 1. Sync stock_basic (skip if requested — useful when rate-limited)
+    if cfg.get("skip_stock_basic", False):
+        results["stock_basic"] = {"status": "skipped"}
+    else:
+        try:
+            results["stock_basic"] = _sync_stock_basic(api, cache_dir, force=force)
+        except Exception as exc:
+            results["stock_basic"] = {"status": "error", "error": str(exc)}
 
     # 2. Determine sync range
     if start_from:

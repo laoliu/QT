@@ -122,6 +122,18 @@ export function getAdminBodyHtml(b: string): string {
         <button class="btn btn-primary" onclick="queryKlines()">查询</button></div>
       <div id="kline-result" style="margin-top:8px;overflow-x:auto"></div>
     </div>
+    <div class="card" style="grid-column:1/-1">
+      <h3>🔬 Tick 数据下载</h3>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">通过 QMT 迅投桥接下载逐笔 tick 数据，支持缓存到本地 Parquet 文件用于 tick 级回测</div>
+      <div class="form-row">
+        <label>代码</label><input type="text" id="tick-symbol" placeholder="600519" style="width:120px">
+        <label>日期</label><input type="text" id="tick-date" placeholder="20260424" style="width:120px">
+        <button class="btn btn-primary" onclick="downloadTickData()">📥 下载</button>
+        <button class="btn btn-sm" onclick="queryTickData()">🔍 查询已缓存</button>
+      </div>
+      <div id="tick-bridge-status" style="font-size:11px;margin-top:4px"></div>
+      <div id="tick-result" style="margin-top:8px;overflow-x:auto"></div>
+    </div>
   </div>
   <div class="card" style="margin-top:4px"><h3>📊 缓存数据明细</h3>
     <div style="overflow-x:auto"><table id="cache-table"><thead><tr><th>代码</th><th>周期</th><th>K线数</th><th>日期范围</th><th>操作</th></tr></thead><tbody></tbody></table></div>

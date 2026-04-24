@@ -1,12 +1,12 @@
 """核心领域模型定义。
 
-包含交易系统的基础数据结构：Bar（K线）、Order（订单）、Fill（成交）、
-Side（交易方向）、OrderType（订单类型）等。这些模型贯穿数据层、策略层、
-执行层和回测引擎，是整个系统的统一语言。
+包含交易系统的基础数据结构：Bar（K线）、Tick（逐笔/快照）、Order（订单）、
+Fill（成交）、Side（交易方向）、OrderType（订单类型）等。这些模型贯穿数据层、
+策略层、执行层和回测引擎，是整个系统的统一语言。
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
@@ -73,6 +73,37 @@ class Bar:
     is_limit_up: bool | None = None
     is_limit_down: bool | None = None
     metadata: dict | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DepthLevel:
+    """盘口档位（买/卖单一档）。"""
+
+    price: float
+    volume: int
+
+
+@dataclass(frozen=True, slots=True)
+class Tick:
+    """逐笔/快照 tick 数据。
+
+    用于 tick 级别回测和实时交易。
+    ``bid_levels`` / ``ask_levels`` 为五档盘口。
+    """
+
+    symbol: str
+    timestamp: datetime
+    price: float
+    volume: int
+    amount: float
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    prev_close: float = 0.0
+    bid_levels: list[DepthLevel] = field(default_factory=list)
+    ask_levels: list[DepthLevel] = field(default_factory=list)
+    direction: str = ""  # "buy" | "sell" | "neutral"
+    trade_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)

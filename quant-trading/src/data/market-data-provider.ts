@@ -677,6 +677,7 @@ export function detectMarketFromSymbol(symbol: string): MarketType {
  *
  * - STAR Market (科创板, 688xxx): 200 shares minimum, then 1-share increments
  * - Other CN stocks / funds: 100 shares (standard lot)
+ * - HK stocks: 100 shares (most common board lot; actual lot size varies per stock)
  * - Everything else: 1 share
  */
 export function getLotSize(symbol: string, market?: MarketType): number {
@@ -687,6 +688,7 @@ export function getLotSize(symbol: string, market?: MarketType): number {
     if (/^688\d{3}$/.test(bare)) return 200;
     return 100;
   }
+  if (m === "hk_stock") return 100;
   return 1;
 }
 
@@ -723,8 +725,9 @@ class SmartProvider implements MarketDataProvider {
   }
 
   private pick(market?: MarketType): MarketDataProvider {
-    if (market === "us_stock") return this.yfinance;
-    // hk_stock + cn_stock + futures + fund → akshare (Xueqiu API, no rate limit)
+    if (market === "us_stock" || market === "hk_stock") return this.yfinance;
+    // cn_stock + futures + fund → akshare (Xueqiu API, no rate limit)
+    // hk_stock → yfinance (akshare has no HK kline support)
     return this.akshare;
   }
 
@@ -750,12 +753,21 @@ class SmartProvider implements MarketDataProvider {
       if (qmtQuote) return qmtQuote;
     }
 
-    // Priority 2: AKShare (Sina/Xueqiu)
+    // Priority 2: HK quotes — try AKShare first (Xueqiu, no rate limit), then YFinance
+    if (m === "hk_stock") {
+      const akQuote = await this.akshare.getQuote(symbol, m);
+      if (akQuote) return akQuote;
+      const yfQuote = await this.yfinance.getQuote(symbol, m);
+      if (yfQuote) return yfQuote;
+      return null;
+    }
+
+    // Priority 2: AKShare (Sina/Xueqiu) for CN / YFinance for US
     const quote = await this.pick(m).getQuote(symbol, m);
     if (quote) return quote;
 
     // Fallback chain for CN markets
-    if (m === "cn_stock" || m === "hk_stock" || m === "fund") {
+    if (m === "cn_stock" || m === "fund") {
       for (const provider of this.cnFallbacks()) {
         const fallbackQuote = await provider.getQuote(symbol, m);
         if (fallbackQuote) return fallbackQuote;
@@ -785,9 +797,15 @@ class SmartProvider implements MarketDataProvider {
       if (qmtBars.length > 0) return qmtBars;
     }
 
-    // Priority 3: AKShare (remote API)
+    // Priority 3: primary provider (AKShare for CN, YFinance for HK/US)
     const bars = await this.pick(m).getKlines(symbol, interval, start, end, m);
     if (bars.length > 0) return bars;
+
+    // Fallback: HK — try AKShare (akshare may add HK kline support in the future)
+    if (m === "hk_stock") {
+      const akBars = await this.akshare.getKlines(symbol, interval, start, end, m);
+      if (akBars.length > 0) return akBars;
+    }
 
     // Fallback chain for CN markets
     if (m === "cn_stock" || m === "fund") {

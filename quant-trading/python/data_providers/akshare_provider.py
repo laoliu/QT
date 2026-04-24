@@ -1170,6 +1170,20 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                     end_date=gap_end.replace("-", ""),
                     adjust="qfq",
                 )
+            elif market == "hk_stock":
+                # 港股K线 via akshare stock_hk_hist (东财数据源)
+                hk_code = symbol.replace(".HK", "").strip().zfill(5)
+                try:
+                    df = ak.stock_hk_hist(
+                        symbol=hk_code,
+                        period=period,
+                        start_date=gap_start.replace("-", ""),
+                        end_date=gap_end.replace("-", ""),
+                        adjust="qfq",
+                    )
+                except Exception as e_hk:
+                    print(f"[港股K线] {symbol} akshare获取失败: {e_hk}", file=sys.stderr)
+                    continue
             else:
                 continue
 

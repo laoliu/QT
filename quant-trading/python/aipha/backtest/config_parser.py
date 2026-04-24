@@ -25,6 +25,7 @@ from aipha.backtest.config_models import (
     PortfolioConfig,
     RiskConfig,
     StrategyConfig,
+    TickBacktestConfig,
     UniverseConfig,
 )
 from aipha.backtest.engine import BacktestConfig
@@ -473,6 +474,19 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         risk.extra["valuation_sizing"] = val_sizing_raw
         logger.debug("valuation_sizing 配置已注入 risk.extra")
 
+    # --- tick 回测配置 ---
+    tick_raw = raw.get("tick", {})
+    is_tick_mode = data.frequency == "tick"
+    tick_config = TickBacktestConfig(
+        enabled=tick_raw.get("enabled", is_tick_mode),
+        tick_source=tick_raw.get("tick_source", tick_raw.get("source", "auto")),
+        tick_cache_dir=tick_raw.get("tick_cache_dir", tick_raw.get("cache_dir")),
+        bridge_url=tick_raw.get("bridge_url", "http://127.0.0.1:58088"),
+        fill_mode=tick_raw.get("fill_mode", "bbo"),
+        aggregate_interval=tick_raw.get("aggregate_interval", 60),
+        feature_buffer_size=tick_raw.get("feature_buffer_size", 256),
+    )
+
     return BacktestRunConfig(
         name=raw.get("name", "unnamed_backtest"),
         description=raw.get("description", ""),
@@ -483,6 +497,7 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         fill_model=fill_model,
         risk=risk,
         portfolio=_parse_portfolio(raw),
+        tick=tick_config,
         initial_capital=raw.get("initial_capital", 1_000_000.0),
         lot_size=raw.get("lot_size", _defaults["lot_size"]),
         t_plus_n=raw.get("t_plus_n", _defaults["t_plus_n"]),

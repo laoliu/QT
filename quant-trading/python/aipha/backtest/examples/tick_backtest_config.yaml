@@ -1,0 +1,52 @@
+# Tick 级别回测配置示例
+# 使用 QMT 下载的逐笔数据进行回测
+
+name: tick_momentum_backtest
+description: "Tick 动量+盘口不平衡策略回测"
+
+data:
+  source: akshare
+  start_date: "2026-01-02"
+  end_date: "2026-01-31"
+  symbols:
+    - "600519.SH"    # 贵州茅台
+    - "000001.SZ"    # 平安银行
+  frequency: "tick"  # ← 关键：设为 "tick" 启用 tick 回测
+  adjust: qfq
+
+# tick 回测专用配置
+tick:
+  enabled: true
+  tick_source: auto        # "parquet" | "bridge" | "auto"
+  # tick_cache_dir: "G:/qtdata/cache/tick"   # 可选，默认从环境变量读取
+  bridge_url: "http://127.0.0.1:58088"
+  fill_mode: bbo           # "immediate" | "bbo" | "next_tick"
+  aggregate_interval: 60   # tick 聚合间隔（秒）
+  feature_buffer_size: 256
+
+strategy:
+  name: tick_momentum_imbalance
+  params:
+    momentum_threshold: 0.05
+    imbalance_threshold: 0.2
+    max_spread_bps: 30.0
+    position_size: 1000
+    max_positions: 5
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 5.0         # tick 级别默认更小的滑点
+  slippage_model: fixed
+
+risk:
+  enabled: true
+  max_position_weight: 0.25
+  max_drawdown: 0.15
+
+initial_capital: 1000000
+lot_size: 100
+t_plus_n: 1
+output_dir: output/tick_backtest

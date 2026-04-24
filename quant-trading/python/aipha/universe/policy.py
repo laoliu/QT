@@ -19,6 +19,10 @@ class UniverseType(str, Enum):
     CSI500 = "CSI500"
     CSI1000 = "CSI1000"
     ALL_A = "ALL_A"
+    HSI = "HSI"
+    HSCEI = "HSCEI"
+    HSTECH = "HSTECH"
+    ALL_HK = "ALL_HK"
     CUSTOM = "CUSTOM"
 
 

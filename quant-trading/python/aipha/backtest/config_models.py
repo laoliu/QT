@@ -221,6 +221,22 @@ class PortfolioConfig:
 
 
 @dataclass
+class TickBacktestConfig:
+    """Tick 回测专用配置
+
+    当 data.frequency = "tick" 时使用。
+    """
+
+    enabled: bool = False
+    tick_source: str = "auto"
+    tick_cache_dir: str | None = None
+    bridge_url: str = "http://127.0.0.1:58088"
+    fill_mode: str = "bbo"
+    aggregate_interval: int = 60
+    feature_buffer_size: int = 256
+
+
+@dataclass
 class BacktestRunConfig:
     """完整回测配置
 
@@ -247,6 +263,7 @@ class BacktestRunConfig:
     fill_model: FillModelConfig = field(default_factory=FillModelConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
+    tick: TickBacktestConfig = field(default_factory=TickBacktestConfig)
     description: str = ""
     initial_capital: float = 1_000_000.0
     lot_size: int = 100  # §13.1 → MarketRulesCNEquity

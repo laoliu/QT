@@ -258,7 +258,7 @@ function syncLocalData(){
     if(r.status==='error'||r.ok===false){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||r.error||'同步失败')+'</span>';toast('❌ 同步失败');return}
     var html='<div>✅ 同步完成 (耗时 '+r.elapsed_seconds+'s)</div>';
     html+='<div>日线: <b>'+r.daily_months_synced+'</b> 月  复权因子: <b>'+r.adj_factor_months_synced+'</b> 月</div>';
-    if(r.stock_basic)html+='<div>股票列表: '+esc(r.stock_basic.status)+(r.stock_basic.stocks?' ('+r.stock_basic.stocks+'只)':'')+(r.stock_basic.error?' <span style="color:var(--red)">'+esc(r.stock_basic.error)+'</span>':'')+'</div>';
+    if(r.stock_basic)html+='<div>股票列表: '+esc(r.stock_basic.status)+(r.stock_basic.stocks?' ('+r.stock_basic.stocks+'只)':'')+(r.stock_basic.message?' <span style="color:var(--yellow)">'+esc(r.stock_basic.message)+'</span>':'')+(r.stock_basic.error&&!r.stock_basic.message?' <span style="color:var(--red)">'+esc(r.stock_basic.error)+'</span>':'')+'</div>';
     el.innerHTML=html;
     toast('✅ 离线数据同步完成');
   }).catch(function(err){
@@ -288,6 +288,86 @@ function queryKlines(){
     if(bars.length>50)h+='<div style="font-size:11px;color:var(--text-dim);margin-top:4px">显示最近50条 / 共'+bars.length+'条</div>';
     document.getElementById('kline-result').innerHTML=h;toast('✅ '+src+' 查到 '+bars.length+' 条');
   });
+}
+
+/* ── Tick Data Download / Query ── */
+function downloadTickData(){
+  var sym=(document.getElementById('tick-symbol').value||'').trim();
+  var dt=(document.getElementById('tick-date').value||'').trim();
+  if(!sym){toast('请输入股票代码');return}
+  if(!dt){dt=_localDate().replace(/-/g,'')}
+  // Normalize symbol → add suffix if needed
+  if(!/\\.(SH|SZ|BJ)$/i.test(sym)){
+    var c=sym.replace(/\\D/g,'');
+    if(c.length===6){sym=c+(c[0]==='6'?'.SH':c.startsWith('0')||c.startsWith('3')?'.SZ':'.BJ')}
+  }
+  var el=document.getElementById('tick-result');
+  var stEl=document.getElementById('tick-bridge-status');
+  el.innerHTML='<div style="color:var(--text-dim)">⏳ 正在从 QMT 下载 tick 数据…</div>';
+  stEl.innerHTML='';
+  toast('📥 下载 tick 数据: '+sym+' '+dt);
+  api('/quant/admin/api/tick-download',{method:'POST',body:JSON.stringify({codes:[sym],date:dt}),timeout:120000}).then(function(r){
+    if(r.error){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.error)+'</span>';return}
+    // Response: {"status":"ok", "600519.SH": {"count":N, "valid":M, "ticks":[...], "message":"..."}}
+    var symData=r[sym]||{};
+    var ticks=symData.ticks||r.ticks||[];
+    if(!ticks.length){
+      // Show info from symData if available
+      var msg=symData.message||symData.error||r.message||'无数据';
+      el.innerHTML='<span style="color:var(--text-dim)">'+esc(msg)+'</span>';
+      return;
+    }
+    // Show summary info
+    var info=symData.count?('总 '+symData.count+' 条, 有效 '+symData.valid+' 条'):'';
+    if(symData.cache)info+=(info?' | ':'')+esc(symData.cache);
+    if(info)stEl.innerHTML='<span style="color:var(--green)">'+info+'</span>';
+    _renderTickTable(el,ticks,sym,dt);
+    toast('✅ 下载 '+ticks.length+' 条 tick');
+  }).catch(function(err){
+    el.innerHTML='<span style="color:var(--red)">❌ '+esc(String(err.message||err))+'</span>';
+  });
+}
+function queryTickData(){
+  var sym=(document.getElementById('tick-symbol').value||'').trim();
+  var dt=(document.getElementById('tick-date').value||'').trim();
+  if(!sym){toast('请输入股票代码');return}
+  if(!dt){dt=_localDate().replace(/-/g,'')}
+  if(!/\\.(SH|SZ|BJ)$/i.test(sym)){
+    var c=sym.replace(/\\D/g,'');
+    if(c.length===6){sym=c+(c[0]==='6'?'.SH':c.startsWith('0')||c.startsWith('3')?'.SZ':'.BJ')}
+  }
+  var el=document.getElementById('tick-result');
+  el.innerHTML='<div style="color:var(--text-dim)">⏳ 查询缓存…</div>';
+  toast('🔍 查询已缓存 tick: '+sym+' '+dt);
+  api('/quant/admin/api/tick-query?symbol='+encodeURIComponent(sym)+'&date='+encodeURIComponent(dt)).then(function(r){
+    if(r.error||r.status==='error'){el.innerHTML='<span style="color:var(--text-dim)">'+(r.message||r.error||'无缓存数据')+'</span>';return}
+    var ticks=r.ticks||[];
+    if(!ticks.length){el.innerHTML='<span style="color:var(--text-dim)">无缓存 ('+(r.message||'文件不存在')+')</span>';return}
+    _renderTickTable(el,ticks,sym,dt);
+    toast('✅ 缓存中有 '+ticks.length+' 条 tick');
+  }).catch(function(err){
+    el.innerHTML='<span style="color:var(--red)">❌ '+esc(String(err.message||err))+'</span>';
+  });
+}
+function _renderTickTable(el,ticks,sym,dt){
+  var valid=ticks.filter(function(t){return t.price>0||t.lastPrice>0});
+  var h='<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">'+esc(sym)+' '+esc(dt)+' | 总 tick: '+ticks.length+', 有效(price>0): '+valid.length+'</div>';
+  h+='<table><thead><tr><th>时间</th><th>价格</th><th>量</th><th>额</th><th>买1价</th><th>买1量</th><th>卖1价</th><th>卖1量</th></tr></thead><tbody>';
+  var show=valid.length>100?valid.slice(-100):valid;
+  show.forEach(function(t){
+    var p=t.price||t.lastPrice||0;
+    var ts=t.timestamp||t.time||'';
+    if(typeof ts==='number'&&ts>1e12){var d=new Date(ts);ts=d.toLocaleTimeString('zh-CN',{hour12:false})}
+    else if(typeof ts==='string'&&ts.length>10){ts=ts.substring(11,19)}
+    var bid1=(t.bid_levels&&t.bid_levels[0])?t.bid_levels[0].price:(Array.isArray(t.bidPrice)?t.bidPrice[0]:'-');
+    var bid1v=(t.bid_levels&&t.bid_levels[0])?t.bid_levels[0].volume:(Array.isArray(t.bidVol)?t.bidVol[0]:'-');
+    var ask1=(t.ask_levels&&t.ask_levels[0])?t.ask_levels[0].price:(Array.isArray(t.askPrice)?t.askPrice[0]:'-');
+    var ask1v=(t.ask_levels&&t.ask_levels[0])?t.ask_levels[0].volume:(Array.isArray(t.askVol)?t.askVol[0]:'-');
+    h+='<tr><td style="white-space:nowrap">'+esc(ts)+'</td><td>'+num(p)+'</td><td>'+(t.volume||0).toLocaleString()+'</td><td>'+num(t.amount||0)+'</td><td>'+num(bid1)+'</td><td>'+(bid1v||0).toLocaleString()+'</td><td>'+num(ask1)+'</td><td>'+(ask1v||0).toLocaleString()+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  if(valid.length>100)h+='<div style="font-size:11px;color:var(--text-dim);margin-top:4px">显示最近100条 / 共'+valid.length+'条有效tick</div>';
+  el.innerHTML=h;
 }
 
 /* ══════ ALERTS ══════ */

@@ -13,7 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from aipha.domain.models import Bar, Side
+    from aipha.domain.models import Bar, Side, Tick
 
 
 class IntentType(str, Enum):
@@ -70,6 +70,72 @@ class Strategy(ABC):
         context: StrategyContext,
     ) -> list[OrderIntent]:
         """Process new bar data and generate order intents."""
+        raise NotImplementedError
+
+    def on_start(self) -> None:
+        pass
+
+    def on_fill(self, symbol: str, side: "Side", qty: int, price: float) -> None:
+        pass
+
+    def on_end(self) -> None:
+        pass
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(name={self.name!r})"
+
+
+# ============================================================================
+# Tick Features — Python 侧计算的 tick 特征
+# ============================================================================
+
+
+@dataclass
+class TickFeatures:
+    """Tick 特征（对应 TS 侧 TickFeatures）。"""
+
+    symbol: str
+    timestamp: datetime
+    last_price: float
+    micro_vwap: float = 0.0
+    short_momentum_pct: float = 0.0   # 5 tick 动量
+    medium_momentum_pct: float = 0.0  # 20 tick 动量
+    spread_bps: float = 0.0
+    order_book_imbalance: float = 0.0
+    realized_vol_bps: float = 0.0
+    volume_delta: int = 0
+    amount_delta: float = 0.0
+
+
+@dataclass
+class TickContext:
+    """Context passed to tick strategy on each tick."""
+
+    current_time: datetime
+    positions: dict[str, int]
+    cash: float
+    nav: float
+    tick: "Tick"
+    features: TickFeatures
+    recent_ticks: list["Tick"] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+    def get_position(self, symbol: str) -> int:
+        return self.positions.get(symbol, 0)
+
+
+class TickStrategy(ABC):
+    """Tick 级别策略基类。
+
+    同时支持实时交易和 tick 回测。策略通过 ``on_tick()`` 接收
+    逐笔数据和计算好的特征，返回 ``OrderIntent`` 列表。
+    """
+
+    name: str = "BaseTickStrategy"
+
+    @abstractmethod
+    def on_tick(self, context: TickContext) -> list[OrderIntent]:
+        """处理新 tick 数据，返回交易意图列表。"""
         raise NotImplementedError
 
     def on_start(self) -> None:

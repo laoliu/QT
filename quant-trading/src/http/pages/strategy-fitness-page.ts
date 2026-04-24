@@ -121,6 +121,10 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
           <option value="csi500">中证500 (~500只)</option>
           <option value="csi1000" selected>中证1000 (~1000只)</option>
           <option value="all_a">全部A股 (~5000只)</option>
+          <option value="hsi">恒生指数 (~80只)</option>
+          <option value="hscei">国企指数 (~50只)</option>
+          <option value="hstech">恒生科技 (~30只)</option>
+          <option value="all_hk">全部港股</option>
         </select>
       </div>
       <div>

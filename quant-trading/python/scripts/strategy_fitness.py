@@ -135,6 +135,10 @@ def _fetch_universe(universe: str, custom_symbols: list[str] | None = None) -> l
     if universe == "all_a":
         return _fetch_all_a_stocks()
 
+    # 港股宇宙
+    if universe in ("hsi", "hscei", "hstech", "all_hk"):
+        return _fetch_hk_universe(universe)
+
     # 尝试 akshare 获取指数成分股
     index_map = {
         "csi300": "000300",
@@ -202,6 +206,80 @@ def _fetch_universe(universe: str, custom_symbols: list[str] | None = None) -> l
 
     # 过滤 ST、退市
     symbols = [s for s in symbols if s and len(s) == 6 and s[0] in ("0", "3", "6")]
+    return symbols
+
+
+def _fetch_hk_universe(universe: str) -> list[str]:
+    """获取港股宇宙 (恒生指数/国企指数/恒生科技/全部港股)。"""
+    symbols: list[str] = []
+
+    if universe == "all_hk":
+        # 全部港股
+        try:
+            import akshare as ak
+            df = ak.stock_hk_spot_em()
+            if df is not None and not df.empty:
+                col = "代码" if "代码" in df.columns else df.columns[0]
+                symbols = df[col].astype(str).str.strip().tolist()
+                symbols = [s.zfill(5) for s in symbols if s.strip()]
+                print(f"[Universe] 全部港股: {len(symbols)} 只", file=sys.stderr)
+        except Exception as e:
+            print(f"[Universe] 全部港股获取失败: {e}", file=sys.stderr)
+        return symbols
+
+    # 港股指数成分股
+    hk_index_map = {
+        "hsi": "恒生指数",
+        "hscei": "国企指数",
+        "hstech": "恒生科技指数",
+    }
+    index_name = hk_index_map.get(universe, "恒生指数")
+
+    try:
+        import akshare as ak
+        # 方法1: akshare 港股指数成分
+        df = ak.index_stock_cons_csindex(symbol="HSI") if universe == "hsi" else None
+        # 通用方法: 通过东财获取港股实时行情，再按市值筛选
+        if df is None or df.empty:
+            df = ak.stock_hk_spot_em()
+            if df is not None and not df.empty:
+                # 按总市值排序取头部
+                if "总市值" in df.columns:
+                    df = df.sort_values("总市值", ascending=False)
+                col = "代码" if "代码" in df.columns else df.columns[0]
+                all_codes = df[col].astype(str).str.strip().tolist()
+                all_codes = [s.zfill(5) for s in all_codes if s.strip()]
+                # 按宇宙大小截取
+                size_map = {"hsi": 80, "hscei": 50, "hstech": 30}
+                limit = size_map.get(universe, 80)
+                symbols = all_codes[:limit]
+                print(f"[Universe] {index_name} (市值Top{limit}): {len(symbols)} 只", file=sys.stderr)
+            else:
+                print(f"[Universe] {index_name} 东财数据为空", file=sys.stderr)
+        else:
+            col = "品种代码" if "品种代码" in df.columns else df.columns[0]
+            symbols = df[col].astype(str).str.strip().tolist()
+            symbols = [s.zfill(5) for s in symbols if s.strip()]
+            print(f"[Universe] {index_name}: {len(symbols)} 只", file=sys.stderr)
+    except Exception as e:
+        print(f"[Universe] {index_name} 获取失败: {e}", file=sys.stderr)
+
+    # Fallback: 常用港股蓝筹列表
+    if not symbols:
+        symbols = [
+            "00700", "09988", "09618", "03690", "01810", "00005", "01299",
+            "02318", "00941", "00388", "02020", "00027", "01211", "00175",
+            "02382", "00992", "00981", "09999", "03968", "01024", "00669",
+            "02269", "00241", "00883", "01038", "02628", "00016", "00006",
+            "01109", "02313", "01177", "00002", "00003", "00011", "00012",
+            "00017", "00066", "00101", "00267", "00288", "00386", "00688",
+            "00762", "00823", "00857", "00939", "00960", "01044", "01093",
+            "01113", "01398", "01928", "01997", "02007", "02018", "02196",
+            "02319", "02331", "02388", "02601", "02688", "06098", "06862",
+            "09626", "09698", "09888", "09961", "09999",
+        ]
+        print(f"[Universe] {index_name} 使用fallback蓝筹列表: {len(symbols)} 只", file=sys.stderr)
+
     return symbols
 
 

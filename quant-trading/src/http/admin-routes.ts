@@ -511,6 +511,47 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Favorites Batch API ───────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/favorites/batch",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      const body = await parseObjectBody(req);
+      const stocks = Array.isArray(body.stocks) ? body.stocks : [];
+      if (!stocks.length) {
+        json(res, { error: "缺少 stocks 数组" }, 400);
+        return;
+      }
+      const category = typeof body.category === "string" ? body.category.trim() || "watchlist" : "watchlist";
+      const tags = Array.isArray(body.tags)
+        ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+        : [];
+      const results: Array<{ code: string; ok: boolean; error?: string }> = [];
+      for (const s of stocks) {
+        const code = String(s.code ?? s.symbol ?? "").trim();
+        if (!code) { results.push({ code: "", ok: false, error: "缺少code" }); continue; }
+        try {
+          await favoritesStore.addFavorite(code, {
+            name: typeof s.name === "string" ? s.name.trim() || undefined : undefined,
+            category,
+            tags: tags.length ? tags : undefined,
+            priority: Number.isFinite(Number(s.priority)) ? Number(s.priority) : undefined,
+            notes: typeof s.notes === "string" ? s.notes.trim() || undefined : undefined,
+          });
+          results.push({ code, ok: true });
+        } catch (err: any) {
+          results.push({ code, ok: false, error: err?.message ?? "未知错误" });
+        }
+      }
+      const succeeded = results.filter((r) => r.ok).length;
+      json(res, { ok: true, total: stocks.length, succeeded, failed: stocks.length - succeeded, results });
+    }),
+  });
+
   // ── Lianban (连板分析) Page ────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

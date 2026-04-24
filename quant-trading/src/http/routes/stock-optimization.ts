@@ -15,6 +15,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 import { getPythonDir } from "../../bridge/python-dir.js";
+import { fetchStockNames } from "./daily-pick.js";
+import { createDataProvider, detectMarketFromSymbol } from "../../data/market-data-provider.js";
 
 // ── Progress file helpers ────────────────────────────────────────
 
@@ -180,6 +182,45 @@ export function registerStockOptimizationRoutes(deps: AdminRouteDeps): void {
           { timeoutMs: 30_000 },
         );
 
+        // Back-fill missing stock names via Tencent API
+        if (pyResult.ok && pyResult.data) {
+          const data = pyResult.data as { stocks?: { symbol: string; stock_name?: string }[] };
+          if (Array.isArray(data.stocks)) {
+            const missing = data.stocks
+              .filter((s) => !s.stock_name)
+              .map((s) => s.symbol);
+            if (missing.length > 0) {
+              try {
+                const nameMap = await fetchStockNames(missing);
+                for (const s of data.stocks) {
+                  if (!s.stock_name) {
+                    s.stock_name = nameMap.get(s.symbol) ?? undefined;
+                  }
+                }
+              } catch { /* best-effort */ }
+            }
+          }
+        }
+
+        // Back-fill current prices via market data provider
+        if (pyResult.ok && pyResult.data) {
+          const data = pyResult.data as { stocks?: { symbol: string; stock_name?: string; current_price?: number }[] };
+          if (Array.isArray(data.stocks) && data.stocks.length > 0) {
+            try {
+              const mdp = createDataProvider(config);
+              await Promise.all(
+                data.stocks.map(async (s) => {
+                  try {
+                    const market = detectMarketFromSymbol(s.symbol);
+                    const quote = await mdp.getQuote(s.symbol, market);
+                    if (quote?.price) s.current_price = quote.price;
+                  } catch { /* best-effort */ }
+                }),
+              );
+            } catch { /* best-effort */ }
+          }
+        }
+
         json(res, pyResult.ok ? pyResult.data : { ok: false, error: pyResult.error });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -334,6 +375,112 @@ export function registerStockOptimizationRoutes(deps: AdminRouteDeps): void {
           quantity,
           order_ids: ids,
           message: `已为 ${symbol} 创建 ${ids.length} 个条件单`,
+        });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        json(res, { ok: false, error: msg }, 500);
+      }
+    }),
+  });
+
+  // ── Batch apply trading plans to conditional orders ─────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/stock-optimization/apply-batch",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const stocks = Array.isArray(body.stocks) ? (body.stocks as Array<Record<string, unknown>>) : [];
+        const defaultQuantity = Number(body.quantity) || 1000;
+
+        if (!stocks.length) {
+          json(res, { ok: false, error: "缺少 stocks 数组" }, 400);
+          return;
+        }
+
+        const { conditionalOrderService } = deps;
+        const results: Array<{ symbol: string; ok: boolean; order_count?: number; order_ids?: string[]; error?: string }> = [];
+
+        for (const s of stocks) {
+          const symbol = String(s.symbol ?? s.code ?? "").trim();
+          const entryPrice = Number(s.entry_price) || Number(s.currentPrice) || 0;
+          const quantity = Number(s.quantity) || defaultQuantity;
+
+          if (!symbol) {
+            results.push({ symbol: "", ok: false, error: "缺少代码" });
+            continue;
+          }
+
+          try {
+            // Fetch trading plan from optimizer
+            const pyResult = await runPythonScript<Record<string, unknown>>(
+              "aipha/optimizer/stock_combo_optimizer.py",
+              { action: "query_stock", symbol },
+              config,
+              { timeoutMs: 30_000 },
+            );
+
+            if (!pyResult.ok || !pyResult.data) {
+              results.push({ symbol, ok: false, error: "未找到优化数据" });
+              continue;
+            }
+
+            const data = pyResult.data as { results?: Array<Record<string, unknown>> };
+            const combos = data.results ?? [];
+            if (!combos.length) {
+              results.push({ symbol, ok: false, error: "无优化结果" });
+              continue;
+            }
+
+            const best = combos[0] as Record<string, unknown>;
+            const plan = (best.trading_plan ?? {}) as Record<string, unknown>;
+
+            // Auto-derive entry price from stop loss if not provided
+            let finalEntry = entryPrice;
+            if (finalEntry <= 0 && plan.stopLoss) {
+              const sl = plan.stopLoss as { price?: number; pctFromEntry?: number };
+              if (sl.price && sl.pctFromEntry && sl.pctFromEntry > 0) {
+                finalEntry = Math.round(sl.price / (1 - sl.pctFromEntry / 100) * 100) / 100;
+              }
+            }
+            if (finalEntry <= 0) {
+              results.push({ symbol, ok: false, error: "无法确定入场价" });
+              continue;
+            }
+
+            const ids = conditionalOrderService.applyTradingPlan(
+              {
+                symbol,
+                stopLoss: plan.stopLoss as any,
+                takeProfitTiers: plan.takeProfitTiers as any,
+                buyZones: plan.buyZones as any,
+                sellZones: plan.sellZones as any,
+                comboMethod: (best.combo_method as string) ?? "optimization",
+              },
+              finalEntry,
+              quantity,
+            );
+            results.push({ symbol, ok: true, order_count: ids.length, order_ids: ids });
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            results.push({ symbol, ok: false, error: msg });
+          }
+        }
+
+        const succeeded = results.filter((r) => r.ok);
+        const totalOrders = succeeded.reduce((sum, r) => sum + (r.order_count ?? 0), 0);
+        json(res, {
+          ok: true,
+          total: stocks.length,
+          succeeded: succeeded.length,
+          failed: stocks.length - succeeded.length,
+          total_orders: totalOrders,
+          results,
+          message: `已为 ${succeeded.length} 只股票创建 ${totalOrders} 个条件单`,
         });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

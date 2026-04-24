@@ -387,12 +387,22 @@ async function loadAllResults() {
 
 function renderStockList(stocks, runId) {
   const area = document.getElementById('results-area');
-  let html = '<div class="card"><h3>📊 优化结果 — ' + stocks.length + ' 只股票 <span style="font-size:11px;color:var(--text-dim);font-weight:normal">(' + runId + ')</span></h3>';
-  html += '<table><thead><tr><th>股票代码</th><th>名称</th><th>评分</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>组合数</th><th>操作</th></tr></thead><tbody>';
+  let html = '<div class="card"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">';
+  html += '<h3 style="margin:0">📊 优化结果 — ' + stocks.length + ' 只股票 <span style="font-size:11px;color:var(--text-dim);font-weight:normal">(' + runId + ')</span></h3>';
+  html += '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">';
+  html += '<select id="batch-category" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px">';
+  html += '<option value="watchlist">观察池</option><option value="shortlist">精选池</option><option value="portfolio">持仓池</option><option value="ideas">灵感池</option>';
+  html += '</select>';
+  html += '<button class="btn btn-primary btn-sm" id="batch-add-btn" onclick="batchAddToPool()" disabled style="white-space:nowrap">⭐ 批量加入股票池 (0)</button>';
+  html += '<button class="btn btn-sm" id="batch-monitor-btn" onclick="showBatchMonitorDialog()" disabled style="white-space:nowrap;background:#1e3a5f;color:#60a5fa">📡 批量监控 (0)</button>';
+  html += '</div></div>';
+  html += '<table><thead><tr><th style="width:32px"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this.checked)"></th><th>股票代码</th><th>名称</th><th>现价</th><th>评分</th><th>收益</th><th>夏普</th><th>回撤</th><th>胜率</th><th>组合数</th><th>操作</th></tr></thead><tbody>';
   for (const s of stocks) {
     html += '<tr>'
-      + '<td style="font-family:monospace">' + s.symbol + '</td>'
+      + '<td><input type="checkbox" class="stock-check" data-code="' + s.symbol + '" data-name="' + (s.stock_name||'') + '" data-score="' + (s.best_score||0).toFixed(1) + '" data-price="' + (s.current_price||0) + '" onchange="updateBatchCount()"></td>'
+      + '<td style="font-family:monospace"><a href="/quant/admin/stock?symbol=' + s.symbol + '" target="_blank" style="color:var(--accent);text-decoration:none">' + s.symbol + '</a></td>'
       + '<td>' + (s.stock_name||'-') + '</td>'
+      + '<td style="font-family:monospace">' + (s.current_price ? '¥' + s.current_price.toFixed(2) : '-') + '</td>'
       + '<td style="font-weight:600">' + (s.best_score||0).toFixed(1) + '</td>'
       + '<td class="' + ((s.best_return||0)>=0?'metric-good':'metric-bad') + '">' + (s.best_return||0).toFixed(1) + '%</td>'
       + '<td>' + (s.best_sharpe||0).toFixed(2) + '</td>'
@@ -404,6 +414,227 @@ function renderStockList(stocks, runId) {
   }
   html += '</tbody></table></div>';
   area.innerHTML = html;
+}
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.stock-check').forEach(function(cb) { cb.checked = checked; });
+  updateBatchCount();
+}
+
+function updateBatchCount() {
+  const checked = document.querySelectorAll('.stock-check:checked');
+  const btn = document.getElementById('batch-add-btn');
+  if (btn) {
+    btn.disabled = checked.length === 0;
+    btn.textContent = '⭐ 批量加入股票池 (' + checked.length + ')';
+  }
+  const monBtn = document.getElementById('batch-monitor-btn');
+  if (monBtn) {
+    monBtn.disabled = checked.length === 0;
+    monBtn.textContent = '📡 批量监控 (' + checked.length + ')';
+  }
+  // Sync select-all checkbox state
+  const all = document.querySelectorAll('.stock-check');
+  const selectAll = document.getElementById('select-all');
+  if (selectAll) {
+    selectAll.checked = all.length > 0 && checked.length === all.length;
+    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+  }
+}
+
+async function batchAddToPool() {
+  const checked = document.querySelectorAll('.stock-check:checked');
+  if (!checked.length) return;
+  const category = document.getElementById('batch-category')?.value || 'watchlist';
+  const stocks = [];
+  checked.forEach(function(cb) {
+    stocks.push({
+      code: cb.dataset.code,
+      name: cb.dataset.name || undefined,
+      priority: Math.round(parseFloat(cb.dataset.score || '0') / 20), // 0-100 score -> 1-5 priority
+    });
+  });
+
+  const btn = document.getElementById('batch-add-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 添加中...'; }
+
+  try {
+    const resp = await fetch(API_BASE.replace('/stock-optimization', '') + '/favorites/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stocks: stocks,
+        category: category,
+        tags: ['combo-optimization'],
+      }),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast('已添加 ' + data.succeeded + '/' + data.total + ' 只股票到' + (category === 'watchlist' ? '观察池' : category === 'shortlist' ? '精选池' : category === 'portfolio' ? '持仓池' : '灵感池'), 'ok');
+      // Uncheck all
+      document.querySelectorAll('.stock-check').forEach(function(cb) { cb.checked = false; });
+      const selectAll = document.getElementById('select-all');
+      if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+      updateBatchCount();
+    } else {
+      showToast('添加失败: ' + (data.error || ''), 'error');
+    }
+  } catch (err) {
+    showToast('添加失败: ' + err.message, 'error');
+  }
+  if (btn) { btn.disabled = false; updateBatchCount(); }
+}
+
+function showBatchMonitorDialog() {
+  const checked = document.querySelectorAll('.stock-check:checked');
+  if (!checked.length) return;
+
+  const existing = document.getElementById('batch-monitor-dialog');
+  if (existing) existing.remove();
+
+  let stockRows = '';
+  checked.forEach(function(cb) {
+    const price = parseFloat(cb.dataset.price) || 0;
+    stockRows += '<tr>'
+      + '<td style="font-family:monospace">' + cb.dataset.code + '</td>'
+      + '<td>' + (cb.dataset.name || '-') + '</td>'
+      + '<td style="font-family:monospace">' + (price > 0 ? '¥' + price.toFixed(2) : '-') + '</td>'
+      + '<td><input type="number" class="bm-qty" data-code="' + cb.dataset.code + '" data-price="' + price + '" data-score="' + (cb.dataset.score || '50') + '" step="100" value="1000" style="width:80px;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px"></td>'
+      + '<td class="bm-amount" data-code="' + cb.dataset.code + '" style="font-size:11px;color:var(--text-dim)">-</td>'
+      + '</tr>';
+  });
+
+  const dialog = document.createElement('div');
+  dialog.id = 'batch-monitor-dialog';
+  dialog.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000';
+  dialog.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;width:600px;max-width:90vw;max-height:80vh;overflow-y:auto">'
+    + '<h3 style="margin-bottom:8px">📡 批量应用监控 — ' + checked.length + ' 只股票</h3>'
+    + '<p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">将为每只股票自动创建条件单：止损、分批止盈、买卖区间提醒。</p>'
+    + '<div style="display:flex;gap:12px;margin-bottom:12px;align-items:end;flex-wrap:wrap;padding:12px;background:var(--bg3);border-radius:8px">'
+    + '<div><label style="font-size:12px;display:block;margin-bottom:4px">💰 总投入金额 (¥)</label>'
+    + '<input type="number" id="bm-total-amount" step="10000" placeholder="如 500000" style="width:140px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:13px"></div>'
+    + '<div><label style="font-size:12px;display:block;margin-bottom:4px">分配方式</label>'
+    + '<select id="bm-alloc-method" style="padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:12px">'
+    + '<option value="score">按评分加权</option><option value="equal">等额分配</option></select></div>'
+    + '<button class="btn btn-sm btn-primary" onclick="calcBatchShares()" style="white-space:nowrap">📊 自动计算股数</button>'
+    + '</div>'
+    + '<table style="width:100%;font-size:12px;margin-bottom:12px"><thead><tr><th>代码</th><th>名称</th><th>现价</th><th>持仓股数</th><th>预估金额</th></tr></thead><tbody>' + stockRows + '</tbody></table>'
+    + '<div id="bm-summary" style="font-size:12px;color:var(--text-dim);margin-bottom:12px"></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    + '<button class="btn" onclick="document.getElementById(\\\'batch-monitor-dialog\\\').remove()">取消</button>'
+    + '<button class="btn btn-primary" id="bm-confirm-btn">确认创建条件单</button>'
+    + '</div></div>';
+  document.body.appendChild(dialog);
+  document.getElementById('bm-confirm-btn').addEventListener('click', doBatchMonitor);
+  dialog.addEventListener('click', function(e) { if (e.target === dialog) dialog.remove(); });
+
+  // Auto-update amounts when qty changes
+  document.querySelectorAll('.bm-qty').forEach(function(inp) {
+    inp.addEventListener('input', updateBmSummary);
+  });
+}
+
+function calcBatchShares() {
+  const totalAmount = parseFloat(document.getElementById('bm-total-amount').value) || 0;
+  if (totalAmount <= 0) { showToast('请输入总投入金额', 'warn'); return; }
+
+  const method = document.getElementById('bm-alloc-method').value;
+  const inputs = document.querySelectorAll('.bm-qty');
+  const items = [];
+  let totalScore = 0;
+
+  inputs.forEach(function(inp) {
+    const price = parseFloat(inp.dataset.price) || 0;
+    const score = parseFloat(inp.dataset.score) || 50;
+    items.push({ inp: inp, price: price, score: score });
+    totalScore += score;
+  });
+
+  if (!items.length) return;
+
+  items.forEach(function(item) {
+    if (item.price <= 0) { item.inp.value = 0; return; }
+
+    let allocAmount;
+    if (method === 'score') {
+      // Score-weighted: higher score gets more capital
+      allocAmount = totalAmount * (item.score / totalScore);
+    } else {
+      // Equal allocation
+      allocAmount = totalAmount / items.length;
+    }
+
+    // A-share lot size is 100 shares, round down to nearest 100
+    const rawShares = allocAmount / item.price;
+    const lots = Math.floor(rawShares / 100);
+    item.inp.value = lots * 100;
+  });
+
+  updateBmSummary();
+}
+
+function updateBmSummary() {
+  const inputs = document.querySelectorAll('.bm-qty');
+  let totalUsed = 0;
+  inputs.forEach(function(inp) {
+    const qty = parseInt(inp.value) || 0;
+    const price = parseFloat(inp.dataset.price) || 0;
+    const amount = qty * price;
+    totalUsed += amount;
+    // Update per-row amount display
+    const amountCell = document.querySelector('.bm-amount[data-code="' + inp.dataset.code + '"]');
+    if (amountCell) {
+      amountCell.textContent = amount > 0 ? '¥' + amount.toLocaleString('zh-CN', {maximumFractionDigits: 0}) : '-';
+    }
+  });
+
+  const summary = document.getElementById('bm-summary');
+  if (summary) {
+    const totalTarget = parseFloat((document.getElementById('bm-total-amount') || {}).value) || 0;
+    let text = '预估总投入: ¥' + totalUsed.toLocaleString('zh-CN', {maximumFractionDigits: 0});
+    if (totalTarget > 0) {
+      const usage = (totalUsed / totalTarget * 100).toFixed(1);
+      text += ' / ¥' + totalTarget.toLocaleString('zh-CN', {maximumFractionDigits: 0}) + ' (使用 ' + usage + '%)';
+    }
+    summary.textContent = text;
+  }
+}
+
+async function doBatchMonitor() {
+  const qtyInputs = document.querySelectorAll('.bm-qty');
+  const stocks = [];
+  qtyInputs.forEach(function(inp) {
+    stocks.push({ symbol: inp.dataset.code, quantity: parseInt(inp.value) || 1000 });
+  });
+
+  if (!stocks.length) return;
+
+  const btn = document.getElementById('bm-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 创建中...'; }
+
+  try {
+    const resp = await fetch(API_BASE + '/apply-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stocks: stocks }),
+    });
+    const data = await resp.json();
+    const dialog = document.getElementById('batch-monitor-dialog');
+    if (dialog) dialog.remove();
+
+    if (data.ok) {
+      showToast(data.message || ('已创建 ' + data.total_orders + ' 个条件单'), 'ok');
+      if (data.failed > 0) {
+        const failedList = data.results.filter(function(r) { return !r.ok; }).map(function(r) { return r.symbol + ': ' + r.error; }).join(', ');
+        showToast('部分失败: ' + failedList, 'warn');
+      }
+    } else {
+      showToast('创建失败: ' + (data.error || ''), 'error');
+    }
+  } catch (err) {
+    showToast('请求失败: ' + err.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '确认创建条件单'; }
+  }
 }
 
 function viewStock(symbol) {
@@ -724,60 +955,85 @@ function drawZoneChart(buyZones, sellZones, stopLoss) {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Collect all prices
-  const prices = [];
-  for (const z of buyZones) prices.push(z.priceLevel);
-  for (const z of sellZones) prices.push(z.priceLevel);
-  if (stopLoss && stopLoss.price) prices.push(stopLoss.price);
-  if (!prices.length) return;
+  // Collect all zone items with their category for unified layout
+  const items = [];
+  for (const z of buyZones) items.push({ price: z.priceLevel, type: z.type || 'buy', cat: 'buy' });
+  for (const z of sellZones) items.push({ price: z.priceLevel, type: z.type || 'sell', cat: 'sell' });
+  if (stopLoss && stopLoss.price) items.push({ price: stopLoss.price, type: '止损', cat: 'stop' });
+  if (!items.length) return;
 
-  const minP = Math.min(...prices) * 0.95;
-  const maxP = Math.max(...prices) * 1.05;
+  // Sort by price descending (highest at top)
+  items.sort((a, b) => b.price - a.price);
+
+  const minP = Math.min(...items.map(i => i.price)) * 0.95;
+  const maxP = Math.max(...items.map(i => i.price)) * 1.05;
   const range = maxP - minP || 1;
-  const pad = 60; // left padding for labels
+  const pad = 80; // left padding for price labels
+  const rowH = 18; // minimum row height in pixels
 
   function yForPrice(p) { return H - ((p - minP) / range) * (H - 20) - 10; }
 
-  // Draw horizontal lines for each zone
+  // Compute raw Y positions then push apart overlapping labels
+  const slots = items.map(item => ({ ...item, rawY: yForPrice(item.price), y: yForPrice(item.price) }));
+  // Push apart: iterate top-to-bottom, ensure minimum gap
+  for (let i = 1; i < slots.length; i++) {
+    const gap = slots[i].y - slots[i - 1].y;
+    if (gap < rowH) {
+      slots[i].y = slots[i - 1].y + rowH;
+    }
+  }
+  // If bottom overflows, shift everything up proportionally
+  const maxY = H - 10;
+  if (slots.length && slots[slots.length - 1].y > maxY) {
+    const overflow = slots[slots.length - 1].y - maxY;
+    for (const s of slots) s.y -= overflow * 0.5;
+  }
+
   ctx.font = '11px sans-serif';
 
-  // Buy zones (green)
-  for (const z of buyZones) {
-    const y = yForPrice(z.priceLevel);
-    ctx.strokeStyle = 'rgba(34,197,94,0.5)';
-    ctx.fillStyle = 'rgba(34,197,94,0.08)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.fillRect(pad, y - 2, W - pad, 14);
-    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W, y); ctx.stroke();
-    ctx.fillStyle = '#22c55e';
-    ctx.fillText('¥' + z.priceLevel.toFixed(2), 2, y + 4);
-    ctx.fillText(z.type || 'buy', pad + 8, y + 10);
-  }
+  for (const s of slots) {
+    const y = s.y;
+    const lineY = s.rawY; // horizontal line at true price position
 
-  // Sell zones (red)
-  for (const z of sellZones) {
-    const y = yForPrice(z.priceLevel);
-    ctx.strokeStyle = 'rgba(239,68,68,0.5)';
-    ctx.fillStyle = 'rgba(239,68,68,0.08)';
-    ctx.lineWidth = 1;
-    ctx.fillRect(pad, y - 2, W - pad, 14);
-    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W, y); ctx.stroke();
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText('¥' + z.priceLevel.toFixed(2), 2, y + 4);
-    ctx.fillText(z.type || 'sell', pad + 8, y + 10);
-  }
+    if (s.cat === 'buy') {
+      ctx.strokeStyle = 'rgba(34,197,94,0.5)';
+      ctx.fillStyle = 'rgba(34,197,94,0.08)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.fillRect(pad, lineY - 1, W - pad, 4);
+      ctx.beginPath(); ctx.moveTo(pad, lineY); ctx.lineTo(W, lineY); ctx.stroke();
+      ctx.fillStyle = '#22c55e';
+      ctx.fillText('¥' + s.price.toFixed(2), 2, y + 4);
+      ctx.fillText(s.type, pad + 8, y + 4);
+    } else if (s.cat === 'sell') {
+      ctx.strokeStyle = 'rgba(239,68,68,0.5)';
+      ctx.fillStyle = 'rgba(239,68,68,0.08)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.fillRect(pad, lineY - 1, W - pad, 4);
+      ctx.beginPath(); ctx.moveTo(pad, lineY); ctx.lineTo(W, lineY); ctx.stroke();
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText('¥' + s.price.toFixed(2), 2, y + 4);
+      ctx.fillText(s.type, pad + 8, y + 4);
+    } else {
+      // stop loss — dashed
+      ctx.strokeStyle = '#ef4444';
+      ctx.setLineDash([6, 3]);
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(pad, lineY); ctx.lineTo(W, lineY); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText('止损 ¥' + s.price.toFixed(2), 2, y + 4);
+    }
 
-  // Stop loss (dashed red)
-  if (stopLoss && stopLoss.price) {
-    const y = yForPrice(stopLoss.price);
-    ctx.strokeStyle = '#ef4444';
-    ctx.setLineDash([6, 3]);
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W, y); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#ef4444';
-    ctx.fillText('止损 ¥' + stopLoss.price.toFixed(2), 2, y + 4);
+    // Draw thin connector from label to actual price line when displaced
+    if (Math.abs(y - lineY) > 4) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(pad - 4, y + 1); ctx.lineTo(pad - 4, lineY); ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 }
 

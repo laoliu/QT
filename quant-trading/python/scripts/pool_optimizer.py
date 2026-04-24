@@ -248,14 +248,14 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
 
     # ── Mega-cap blue chips (top 30 by market cap, PE < 40) ──
     mega_candidates = [s for s in by_cap[:60] if 0 < s["pe"] < 40 and s["turnover"] > 0.1]
-    mega_pool = [s["code"] for s in mega_candidates[:12]]
+    mega_pool = [s["code"] for s in mega_candidates[:50]]
 
     # ── Large-cap value (PE < 20, market cap > 200亿, PB < 3) ──
     value_candidates = sorted(
         [s for s in stocks if 0 < s["pe"] < 20 and s["mktCap"] > 200e8 and 0 < s["pb"] < 3],
         key=lambda x: x["pe"]
     )
-    value_pool = [s["code"] for s in value_candidates[:12]]
+    value_pool = [s["code"] for s in value_candidates[:50]]
 
     # ── Growth (PE 20-60, high turnover, positive change) ──
     growth_candidates = sorted(
@@ -263,7 +263,7 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
          and s["mktCap"] > 100e8 and s["changePct"] > 0],
         key=lambda x: x["turnover"], reverse=True
     )
-    growth_pool = [s["code"] for s in growth_candidates[:12]]
+    growth_pool = [s["code"] for s in growth_candidates[:50]]
 
     # ── Momentum (today's top gainers with good liquidity) ──
     momentum_candidates = sorted(
@@ -271,7 +271,7 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
          and s["amount"] > 3e8 and s["turnover"] > 1],
         key=lambda x: x["changePct"], reverse=True
     )
-    momentum_pool = [s["code"] for s in momentum_candidates[:12]]
+    momentum_pool = [s["code"] for s in momentum_candidates[:50]]
 
     # ── Tech/创业板/科创板 (code starts with 300/688) ──
     tech_candidates = sorted(
@@ -279,7 +279,7 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
          and s["mktCap"] > 200e8 and s["turnover"] > 0.5 and s["amount"] > 1e8],
         key=lambda x: x["mktCap"], reverse=True
     )
-    tech_pool = [s["code"] for s in tech_candidates[:12]]
+    tech_pool = [s["code"] for s in tech_candidates[:50]]
 
     # ── Dip-buy (today's dippers with big cap — contrarian) ──
     dip_candidates = sorted(
@@ -287,7 +287,7 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
          and s["amount"] > 2e8 and 0 < s["pe"] < 40],
         key=lambda x: x["changePct"]
     )
-    dip_pool = [s["code"] for s in dip_candidates[:12]]
+    dip_pool = [s["code"] for s in dip_candidates[:50]]
 
     # ── Mixed-best (top scorers across dimensions) ──
     for s in stocks:
@@ -298,13 +298,13 @@ def _build_auto_pools(stocks: list[dict]) -> dict[str, dict]:
         s["_optScore"] = cap_score + pe_score + liq_score + mom_score
 
     best_mixed = sorted(stocks, key=lambda x: x.get("_optScore", 0), reverse=True)
-    mixed_pool = [s["code"] for s in best_mixed[:15]]
+    mixed_pool = [s["code"] for s in best_mixed[:50]]
 
     # ── Blue+Tech hybrid (top 6 mega + top 6 tech) ──
     hybrid_pool = list(dict.fromkeys(
-        [s["code"] for s in mega_candidates[:6]] +
-        [s["code"] for s in tech_candidates[:8]]
-    ))[:14]
+        [s["code"] for s in mega_candidates[:25]] +
+        [s["code"] for s in tech_candidates[:25]]
+    ))[:50]
 
     pools = {}
     _add = lambda key, label, desc, syms: pools.update(

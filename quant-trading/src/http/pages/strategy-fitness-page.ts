@@ -1108,7 +1108,8 @@ async function runPoolBacktest(){
         period_years:periodYears,
         rebalance_days:rebalanceDays,
         initial_capital:1000000
-      })
+      }),
+      _timeout:30*60*1000
     });
     _poolRunning=false;
     document.getElementById('poolRunBtn').disabled=false;

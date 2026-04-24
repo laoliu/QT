@@ -145,6 +145,86 @@ interface GlobalRankRow {
   min_score?: number;
 }
 
+// ── Pool-backtest boost: load latest pool results → per-symbol boost map ──
+interface PoolBoostEntry {
+  poolScore: number;     // pool composite score
+  poolLabel: string;
+  strategyType: string;
+  poolKey: string;
+}
+
+/**
+ * Load latest pool_strategy_backtest results from SQLite.
+ * Returns Map<symbol, PoolBoostEntry> — for each symbol the best pool combo it appears in.
+ * Pool composite score = annualized×0.3 + sharpe×20 + (100-drawdown)×0.2 + winRate×0.1 + pf×5
+ */
+function loadPoolBoostMap(): Map<string, PoolBoostEntry> {
+  const boostMap = new Map<string, PoolBoostEntry>();
+  try {
+    const dbPath = getDbPath();
+    const fsSync = require("node:fs") as typeof import("node:fs");
+    if (!fsSync.existsSync(dbPath)) return boostMap;
+    const sqlite3Mod = require("better-sqlite3") as typeof import("better-sqlite3");
+    const Database = (sqlite3Mod as unknown as { default?: unknown }).default ?? sqlite3Mod;
+    const db = new (Database as unknown as new (p: string) => Record<string, Function>)(dbPath);
+    try {
+      db.pragma("busy_timeout = 10000");
+      // Check table existence
+      const tbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pool_strategy_backtest'").get();
+      if (!tbl) return boostMap;
+      // Load latest run_id
+      const latestRun = db.prepare(
+        "SELECT run_id FROM pool_strategy_backtest ORDER BY created_at DESC LIMIT 1",
+      ).get() as { run_id: string } | undefined;
+      if (!latestRun) return boostMap;
+      // Load all combos from latest run
+      const rows = db.prepare(
+        "SELECT * FROM pool_strategy_backtest WHERE run_id = ?",
+      ).all(latestRun.run_id) as Array<Record<string, unknown>>;
+      for (const r of rows) {
+        // Compute composite score (same formula as Python)
+        const ann = (r.annualized_return_pct as number) ?? 0;
+        const sharpe = (r.sharpe as number) ?? 0;
+        const dd = (r.max_drawdown_pct as number) ?? 0;
+        const wr = (r.win_rate_pct as number) ?? 0;
+        const pf = (r.profit_factor as number) ?? 0;
+        const poolScore = Math.round(
+          (ann * 0.3 + sharpe * 20 + (100 - dd) * 0.2 + wr * 0.1 + pf * 5) * 100,
+        ) / 100;
+        // Parse symbols
+        let symbols: string[] = [];
+        try {
+          const raw = r.symbols as string;
+          symbols = raw ? JSON.parse(raw) : [];
+        } catch { symbols = []; }
+        const entry: PoolBoostEntry = {
+          poolScore,
+          poolLabel: (r.pool_label as string) ?? "",
+          strategyType: (r.strategy_type as string) ?? "",
+          poolKey: (r.pool_key as string) ?? "",
+        };
+        // Assign to each symbol — keep best pool score
+        for (const sym of symbols) {
+          const existing = boostMap.get(sym);
+          if (!existing || existing.poolScore < poolScore) {
+            boostMap.set(sym, entry);
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch { /* pool boost unavailable, continue without */ }
+  return boostMap;
+}
+
+/** Apply pool boost to a fitness score. boost_weight controls max boost (0.2 = 20%). */
+function applyPoolBoost(fitnessScore: number, poolScore: number, maxPoolScore: number, boostWeight = 0.2): number {
+  if (maxPoolScore <= 0) return fitnessScore;
+  const normalizedPool = Math.max(0, poolScore) / maxPoolScore; // 0..1
+  return fitnessScore * (1 + boostWeight * normalizedPool);
+}
+
 // ── Abort controller for fitness run ─────────────────────────────
 let fitnessAbort: AbortController | null = null;
 
@@ -1433,6 +1513,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         const capitalBudgetPerStrategy = body.capital_budget_per_strategy != null
           ? Number(body.capital_budget_per_strategy) : undefined;
         const replaceExisting = body.replace_existing !== false; // default true
+        const topN = Math.max(1, Math.min(100, Number(body.top_n) || 10));
 
         // 1. Load all rank=1 fitness records (per-stock best strategy)
         const storage = deps.dataWarehouse?.storage;
@@ -1456,7 +1537,11 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        // 2. Group stocks by their best strategy
+        // 2. Load pool boost and group stocks by their best strategy
+        const poolBoost = loadPoolBoostMap();
+        const maxPoolScore = poolBoost.size > 0
+          ? Math.max(...Array.from(poolBoost.values()).map((e) => e.poolScore))
+          : 0;
         const strategyGroups = new Map<string, { symbols: string[]; avgScore: number; scores: number[] }>();
         for (const row of rows) {
           const sid = row.strategyId;
@@ -1465,12 +1550,23 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           }
           const g = strategyGroups.get(sid)!;
           g.symbols.push(row.symbol);
-          g.scores.push(row.compositeScore);
+          // Apply pool boost to score
+          const pb = poolBoost.get(row.symbol);
+          const adjusted = (pb && maxPoolScore > 0)
+            ? applyPoolBoost(row.compositeScore, pb.poolScore, maxPoolScore)
+            : row.compositeScore;
+          g.scores.push(adjusted);
         }
         // Compute avg score
         for (const g of strategyGroups.values()) {
           g.avgScore = g.scores.reduce((a, b) => a + b, 0) / g.scores.length;
         }
+
+        // 2b. Sort strategy groups by avg score DESC, take top N only
+        const sortedGroups = Array.from(strategyGroups.entries())
+          .map(([sid, g]) => ({ sid, ...g }))
+          .sort((a, b) => b.avgScore - a.avgScore)
+          .slice(0, topN);
 
         // 3. If replaceExisting, remove old auto-assigned strategies
         const engine = getEngine();
@@ -1485,9 +1581,11 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           }
         }
 
-        // 4. Create one live strategy per strategy group
+        // 4. Create one live strategy per top-N strategy group
         const created: Array<{ id: string; strategyId: string; symbols: string[]; avgScore: number }> = [];
-        for (const [strategyId, group] of strategyGroups.entries()) {
+        const selectedStockCount = sortedGroups.reduce((acc, g) => acc + g.symbols.length, 0);
+        for (const group of sortedGroups) {
+          const strategyId = group.sid;
           const entry = await engine.addStrategy(strategyId, group.symbols, {
             source: "fitness-auto-assign",
             batch_id: usedBatchId,
@@ -1509,7 +1607,8 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         json(res, {
           ok: true,
           batch_id: usedBatchId,
-          total_stocks: rows.length,
+          top_n: topN,
+          total_stocks: selectedStockCount,
           total_strategies: created.length,
           removed_count: removed.length,
           strategies: created.map((c) => ({
@@ -1520,7 +1619,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             symbols: c.symbols.slice(0, 10), // preview first 10
           })),
           brokerType,
-          message: `已按适配分析自动分配 ${created.length} 个策略，覆盖 ${rows.length} 只股票`,
+          message: `已按适配分析自动分配 Top ${topN} 策略（共 ${created.length} 个），覆盖 ${selectedStockCount} 只股票`,
         });
       } catch (err) {
         json(res, { ok: false, error: String(err) }, 500);
@@ -1536,6 +1635,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
       try {
         const url = new URL(req.url ?? "", `http://${req.headers.host}`);
         const batchId = url.searchParams.get("batch_id") || undefined;
+        const topN = Math.max(1, Math.min(100, Number(url.searchParams.get("top_n")) || 10));
 
         // Try TS storage first
         let usedBatchId = batchId;
@@ -1612,14 +1712,39 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           return;
         }
 
-        // Group by strategy
-        const groups = new Map<string, { symbols: Array<{ symbol: string; name?: string; score: number }>; totalScore: number }>();
+        // Load pool backtest boost map
+        const poolBoost = loadPoolBoostMap();
+        const maxPoolScore = poolBoost.size > 0
+          ? Math.max(...Array.from(poolBoost.values()).map((e) => e.poolScore))
+          : 0;
+        let boostedCount = 0;
+
+        // Group by strategy (with pool boost applied)
+        const groups = new Map<string, {
+          symbols: Array<{ symbol: string; name?: string; score: number; originalScore: number; poolBoost?: { poolLabel: string; poolScore: number } }>;
+          totalScore: number;
+        }>();
         for (const row of rows) {
           const sid = row.strategyId;
           if (!groups.has(sid)) groups.set(sid, { symbols: [], totalScore: 0 });
           const g = groups.get(sid)!;
-          g.symbols.push({ symbol: row.symbol, name: row.stockName, score: Math.round(row.compositeScore * 100) / 100 });
-          g.totalScore += row.compositeScore;
+          const originalScore = row.compositeScore;
+          const pb = poolBoost.get(row.symbol);
+          let adjustedScore = originalScore;
+          let boostInfo: { poolLabel: string; poolScore: number } | undefined;
+          if (pb && maxPoolScore > 0) {
+            adjustedScore = applyPoolBoost(originalScore, pb.poolScore, maxPoolScore);
+            boostInfo = { poolLabel: pb.poolLabel, poolScore: pb.poolScore };
+            boostedCount++;
+          }
+          g.symbols.push({
+            symbol: row.symbol,
+            name: row.stockName,
+            score: Math.round(adjustedScore * 100) / 100,
+            originalScore: Math.round(originalScore * 100) / 100,
+            poolBoost: boostInfo,
+          });
+          g.totalScore += adjustedScore;
         }
 
         // Check existing auto-assigned
@@ -1628,7 +1753,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           (s) => (s.parameters as Record<string, unknown> | undefined)?.source === "fitness-auto-assign",
         );
 
-        const strategies = Array.from(groups.entries())
+        const allStrategies = Array.from(groups.entries())
           .map(([sid, g]) => ({
             strategyId: sid,
             stockCount: g.symbols.length,
@@ -1638,12 +1763,31 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           }))
           .sort((a, b) => b.totalScore - a.totalScore);
 
+        // Mark which strategies are within top_n
+        const strategies = allStrategies.map((s, idx) => ({
+          ...s,
+          selected: idx < topN,
+        }));
+        const selectedStrategies = strategies.filter((s) => s.selected);
+        const selectedStockCount = selectedStrategies.reduce((acc, s) => acc + s.stockCount, 0);
+
         json(res, {
           ok: true,
           batch_id: usedBatchId,
+          top_n: topN,
           total_stocks: rows.length,
-          total_strategies: strategies.length,
+          selected_stocks: selectedStockCount,
+          total_strategies: allStrategies.length,
+          selected_strategies: selectedStrategies.length,
           existing_auto_assign_count: existingAutoAssign.length,
+          pool_boost_info: {
+            enabled: poolBoost.size > 0,
+            boosted_stocks: boostedCount,
+            max_pool_score: maxPoolScore,
+            pool_combos: poolBoost.size > 0
+              ? [...new Set(Array.from(poolBoost.values()).map((e) => `${e.poolLabel}×${e.strategyType}`))].slice(0, 10)
+              : [],
+          },
           strategies,
         });
       } catch (err) {

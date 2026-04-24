@@ -450,10 +450,14 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   <div class="card">
     <h3>🎯 智能策略分配 <span style="font-size:12px;font-weight:400;color:var(--text-dim)">基于适配分析，为每只股票分配最优策略</span></h3>
     <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px">
-      根据 fitness 分析结果，每只股票选择 composite_score 最高的策略（rank=1），然后按策略分组创建活跃策略。
-      相同最优策略的股票会合并到同一个活跃策略下，确保每只股票使用最适合它的策略。
+      根据 fitness 分析结果，每只股票选择 composite_score 最高的策略（rank=1），并结合策略池回测表现进行组合加权。
+      出现在高表现池组合中的股票会获得分数加成，确保个股适配与组合验证双重保障。
     </p>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <div style="flex:0 0 auto">
+        <label style="margin-bottom:0;font-size:12px">使用前 N 个策略</label>
+        <input type="number" id="autoAssignTopN" value="10" min="1" max="100" style="width:70px;margin-top:2px" onchange="loadAutoAssignPreview()">
+      </div>
       <button class="btn btn-primary" id="btnAutoAssignPreview" onclick="loadAutoAssignPreview()">🔍 预览分配方案</button>
       <button class="btn" onclick="loadAutoAssignPreview()" style="font-size:12px">🔄 刷新</button>
       <span id="autoAssignStatus" style="font-size:13px;color:var(--text-dim)"></span>
@@ -1330,7 +1334,8 @@ async function loadAutoAssignPreview(){
   document.getElementById('autoAssignPreviewSection').style.display='none';
   document.getElementById('autoAssignResultSection').style.display='none';
   try{
-    var data=await api('/quant/admin/api/strategy-fitness/auto-assign/preview',{_timeout:30000});
+    var topN=parseInt(document.getElementById('autoAssignTopN').value)||10;
+    var data=await api('/quant/admin/api/strategy-fitness/auto-assign/preview?top_n='+topN,{_timeout:30000});
     if(!data||!data.ok){
       document.getElementById('autoAssignStatus').textContent='❌ '+(data&&data.error||'加载失败');
       return;
@@ -1341,10 +1346,21 @@ async function loadAutoAssignPreview(){
 
     // KPIs
     var kpiHtml='';
-    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+data.total_stocks+'</div><div class="kpi-label">覆盖股票数</div></div>';
-    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+data.total_strategies+'</div><div class="kpi-label">分配策略数</div></div>';
+    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+(data.selected_stocks||data.total_stocks)+'<span style="font-size:12px;color:var(--text-dim)"> / '+data.total_stocks+'</span></div><div class="kpi-label">选中 / 全部股票</div></div>';
+    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+(data.selected_strategies||data.total_strategies)+'<span style="font-size:12px;color:var(--text-dim)"> / '+data.total_strategies+'</span></div><div class="kpi-label">选中 / 全部策略 (Top '+topN+')</div></div>';
     kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+(data.existing_auto_assign_count||0)+'</div><div class="kpi-label">已有自动分配 (将被替换)</div></div>';
+    var pb=data.pool_boost_info;
+    if(pb&&pb.enabled){
+      kpiHtml+='<div class="kpi-card" style="border-color:var(--accent)"><div class="kpi-value" style="color:var(--accent)">'+pb.boosted_stocks+'</div><div class="kpi-label">🚀 池回测加权股票</div></div>';
+    }else{
+      kpiHtml+='<div class="kpi-card"><div class="kpi-value" style="color:var(--text-dim)">-</div><div class="kpi-label">池回测加权 (无数据)</div></div>';
+    }
     document.getElementById('autoAssignKpis').innerHTML=kpiHtml;
+    // Pool boost combos tip
+    if(pb&&pb.enabled&&pb.pool_combos&&pb.pool_combos.length){
+      document.getElementById('autoAssignKpis').insertAdjacentHTML('afterend',
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">📊 组合加权来源: '+pb.pool_combos.map(function(c){return esc(c)}).join(', ')+'</div>');
+    }
 
     // Strategy table
     var strats=data.strategies||[];
@@ -1353,18 +1369,34 @@ async function loadAutoAssignPreview(){
       return;
     }
     var maxScore=Math.max.apply(null,strats.map(function(s){return Math.abs(s.totalScore)||0}))||1;
-    var html='<table><thead><tr><th>策略</th><th>股票数</th><th>平均分</th><th>总分</th><th>分布</th><th>股票列表</th></tr></thead><tbody>';
+    var hasBoosted=data.pool_boost_info&&data.pool_boost_info.enabled;
+    var html='<table><thead><tr><th>#</th><th>策略</th><th>股票数</th><th>平均分</th><th>总分</th><th>分布</th>'+(hasBoosted?'<th>🚀 加权</th>':'')+'<th>股票列表</th></tr></thead><tbody>';
     strats.forEach(function(s,idx){
+      var isSelected=s.selected!==false;
+      var rowStyle=isSelected?'':'opacity:0.4;text-decoration:line-through';
       var barW=Math.max(4,Math.round((Math.abs(s.totalScore)/maxScore)*120));
       var barColor=s.avgScore>=30?'var(--green)':s.avgScore>=15?'var(--yellow)':'var(--red)';
-      html+='<tr>';
-      html+='<td><strong>'+esc(s.strategyId)+'</strong></td>';
+      // Count boosted stocks in this group
+      var boostedInGroup=s.stocks.filter(function(st){return st.poolBoost}).length;
+      html+='<tr style="'+rowStyle+'">';
+      html+='<td style="font-size:11px;color:var(--text-dim)">'+(idx+1)+'</td>';
+      html+='<td><strong>'+esc(s.strategyId)+'</strong>'+(isSelected?'':' <span style="font-size:10px;color:var(--red)">跳过</span>')+'</td>';
       html+='<td style="font-weight:600">'+s.stockCount+'</td>';
       html+='<td class="'+(s.avgScore>=30?'metric-good':s.avgScore>=15?'metric-ok':'metric-bad')+'">'+s.avgScore.toFixed(2)+'</td>';
       html+='<td style="font-weight:600">'+s.totalScore.toFixed(1)+'</td>';
       html+='<td><span class="score-bar" style="width:'+barW+'px;background:'+barColor+'"></span></td>';
-      // Stock list (show first 8, then "...")
-      var stocksStr=s.stocks.slice(0,8).map(function(st){return st.symbol+(st.name?' '+st.name:'')}).join(', ');
+      if(hasBoosted){
+        html+='<td style="font-size:12px">';
+        if(boostedInGroup>0) html+='<span style="color:var(--accent)">'+boostedInGroup+'/'+s.stockCount+'</span>';
+        else html+='<span style="color:var(--text-dim)">-</span>';
+        html+='</td>';
+      }
+      // Stock list (show first 8, with boost indicator)
+      var stocksStr=s.stocks.slice(0,8).map(function(st){
+        var label=st.symbol+(st.name?' '+st.name:'');
+        if(st.poolBoost) label+=' 🚀';
+        return label;
+      }).join(', ');
       if(s.stocks.length>8)stocksStr+=' ... 等 '+s.stocks.length+' 只';
       html+='<td style="font-size:11px;color:var(--text-dim);max-width:400px;white-space:normal;word-break:break-all">'+esc(stocksStr)+'</td>';
       html+='</tr>';
@@ -1391,16 +1423,20 @@ async function applyAutoAssign(){
   var budgetInput=document.getElementById('autoAssignBudget').value;
   var budgetWan=budgetInput?parseFloat(budgetInput):0;
   var budgetDesc=budgetWan>0?budgetWan+' 万元/策略':'不限制';
+  var data_topN=parseInt(document.getElementById('autoAssignTopN').value)||10;
 
   var msg='确认执行智能分配？\\n\\n'+
     '🔧 交易模式：'+brokerLabel+'\\n'+
-    '📊 将创建 '+_autoAssignPreview.total_strategies+' 个活跃策略\\n'+
-    '📈 覆盖 '+_autoAssignPreview.total_stocks+' 只股票\\n'+
+    '📊 将创建 Top '+(data_topN||10)+' 策略（共 '+(_autoAssignPreview.selected_strategies||_autoAssignPreview.total_strategies)+' 个）\\n'+
+    '📈 覆盖 '+(_autoAssignPreview.selected_stocks||_autoAssignPreview.total_stocks)+' 只股票\\n'+
     '💰 每策略资金池：'+budgetDesc+'\\n';
+  if(_autoAssignPreview.pool_boost_info&&_autoAssignPreview.pool_boost_info.enabled){
+    msg+='🚀 策略池加权: '+_autoAssignPreview.pool_boost_info.boosted_stocks+' 只股票已加权\\n';
+  }
   if(_autoAssignPreview.existing_auto_assign_count>0){
     msg+='\\n⚠️ 将替换 '+_autoAssignPreview.existing_auto_assign_count+' 个已有的自动分配策略';
   }
-  msg+='\\n\\n每只股票使用 fitness 分析中得分最高的策略。';
+  msg+='\\n\\n综合 fitness 个股分析 + 策略池回测组合加权。';
 
   if(!confirm(msg))return;
 
@@ -1410,7 +1446,8 @@ async function applyAutoAssign(){
   try{
     var body={
       batch_id:_autoAssignPreview.batch_id,
-      replace_existing:true
+      replace_existing:true,
+      top_n:data_topN
     };
     if(budgetWan>0)body.capital_budget_per_strategy=budgetWan*10000;
 

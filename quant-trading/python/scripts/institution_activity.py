@@ -392,7 +392,7 @@ def _fetch_northbound_context(warnings: list[str]) -> dict[str, Any]:
         warnings.append(f"北向资金: {result['error']}")
         return {
             "northboundNetIn": None,
-            "marketTone": "δ֪",
+            "marketTone": "未知",
             "summary": "北向资金数据暂不可用",
             "score": 0.0,
         }

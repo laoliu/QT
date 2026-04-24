@@ -188,7 +188,7 @@ def run_chip_accumulation(config: dict) -> dict:
         symbols = [s.strip() for s in symbols_str.split(",") if s.strip()] if symbols_str else []
         return _scan_ambush_accumulation(symbols, lookback, min_confidence, config, as_of_date)
     else:
-        return {"error": f"δ֪ action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 # ── Single stock accumulation detection ───────────────────────────

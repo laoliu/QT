@@ -440,7 +440,7 @@ def profile_stock(symbol: str, end_date: str, lookback_days: int = 365) -> dict:
     liq_cls, liq_val = _classify_liquidity(fundamentals, klines)
     mom_cls, mom_val = _classify_momentum(klines)
     voltrend_cls, voltrend_val = _classify_volume_trend(klines)
-    sector = (fundamentals.get("industry") or "δ֪") if fundamentals else "δ֪"
+    sector = (fundamentals.get("industry") or "未知") if fundamentals else "未知"
 
     return {
         "symbol": symbol,

@@ -360,6 +360,7 @@ export class LiveEngine implements OpenClawPluginService {
       interval?: string;
       confirmationBars?: number;
       regimes?: string[];
+      capitalBudget?: number;
     },
   ): Promise<ActiveLiveStrategy> {
     const entry = await this.registry.add(strategyId, symbols, {
@@ -368,6 +369,7 @@ export class LiveEngine implements OpenClawPluginService {
       interval: extras?.interval as import("../types.js").KlineInterval | undefined,
       confirmationBars: extras?.confirmationBars,
       regimes: extras?.regimes,
+      capitalBudget: extras?.capitalBudget,
     });
     this.emitWatchedSymbols();
 
@@ -497,8 +499,8 @@ export class LiveEngine implements OpenClawPluginService {
 
       // Per-strategy risk overrides
       const riskOverrides =
-        ls?.maxPositionPct != null || ls?.maxOrderValue != null
-          ? { maxPositionPct: ls?.maxPositionPct, maxOrderValue: ls?.maxOrderValue }
+        ls?.maxPositionPct != null || ls?.maxOrderValue != null || ls?.capitalBudget != null
+          ? { maxPositionPct: ls?.maxPositionPct, maxOrderValue: ls?.maxOrderValue, capitalBudget: ls?.capitalBudget }
           : undefined;
 
       const result = await this.orderMgr.submitFromSignal(signal, riskOverrides);

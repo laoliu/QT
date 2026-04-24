@@ -626,6 +626,13 @@ export type ActiveLiveStrategy = {
   enabled: boolean;
   maxPositionPct?: number; // max % of total assets per position
   maxOrderValue?: number; // override global limit for this strategy
+  /**
+   * Per-strategy capital budget (CNY). When set, position sizing and
+   * risk-gate position-pct checks use this budget instead of the full
+   * account equity. This isolates the strategy's capital from other
+   * strategies and manual positions. Undefined = use full account.
+   */
+  capitalBudget?: number;
   addedAt: string;
   /**
    * Optional time windows restricting when the strategy generates signals.

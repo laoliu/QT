@@ -26,6 +26,7 @@ import type { HttpHandler } from "./auth-middleware.js";
 import { timingSafeCompareStr } from "./auth-middleware.js";
 import { parseJsonBody } from "./parse-body.js";
 import { todayCST } from "../utils/cst-time.js";
+import { fetchStockNames } from "./routes/daily-pick.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -477,6 +478,28 @@ export function registerQuantRoutes(deps: RouteDeps): void {
     path: "/quant/api/staleness",
     handler: secure((_req, res) => {
       json(res, { status: "ok", data: getEngine().getDataStalenessReport() });
+    }),
+  });
+
+  // ── Stock Names (batch resolve) ────────────────────────────────
+  const _stockNameCache = new Map<string, string>();
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/stock-names",
+    handler: secure(async (req, res) => {
+      const symbols = urlParams(req).get("symbols")?.split(",").filter(Boolean) ?? [];
+      if (!symbols.length) { json(res, { status: "ok", data: {} }); return; }
+      const missing = symbols.filter((s) => !_stockNameCache.has(s));
+      if (missing.length) {
+        const names = await fetchStockNames(missing);
+        for (const [k, v] of names) _stockNameCache.set(k, v);
+      }
+      const result: Record<string, string> = {};
+      for (const s of symbols) {
+        const n = _stockNameCache.get(s);
+        if (n) result[s] = n;
+      }
+      json(res, { status: "ok", data: result });
     }),
   });
 
@@ -1014,6 +1037,38 @@ function registerStrategyRoutes({ api, getEngine, secure }: RouteDeps): void {
         }
         return;
       }
+
+      // DELETE — remove a live strategy by id
+      if (req.method === "DELETE") {
+        const id = urlParams(req).get("id") ?? "";
+        if (!id) { json(res, { status: "error", message: "id 参数必填" }, 400); return; }
+        try {
+          const removed = await engine.removeStrategy(id);
+          json(res, { status: removed ? "ok" : "error", message: removed ? "已删除" : "未找到该策略" });
+        } catch (e) {
+          json(res, { status: "error", message: (e as Error).message }, 500);
+        }
+        return;
+      }
+
+      // PATCH — enable / disable a live strategy
+      if (req.method === "PATCH") {
+        const body = await parseJsonBody<Record<string, unknown>>(req);
+        const id = String(body.id ?? "");
+        const enabled = body.enabled as boolean | undefined;
+        if (!id || typeof enabled !== "boolean") {
+          json(res, { status: "error", message: "id 和 enabled (boolean) 必填" }, 400);
+          return;
+        }
+        try {
+          const ok = await engine.strategyRegistry.setEnabled(id, enabled);
+          json(res, { status: ok ? "ok" : "error", message: ok ? (enabled ? "已启用" : "已禁用") : "未找到该策略" });
+        } catch (e) {
+          json(res, { status: "error", message: (e as Error).message }, 500);
+        }
+        return;
+      }
+
       // GET — list all
       json(res, { status: "ok", data: engine.strategyRegistry.list() });
     }),

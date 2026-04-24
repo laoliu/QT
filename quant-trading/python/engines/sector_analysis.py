@@ -223,7 +223,7 @@ def run_sector_analysis(config: dict) -> dict:
         from .sector_rotation import run_sector_rotation
         return run_sector_rotation(config)
     else:
-        return {"error": f"δ֪action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 def _sector_ranking(limit: int, errors: list[str]) -> dict:

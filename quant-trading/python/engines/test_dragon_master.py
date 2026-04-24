@@ -194,8 +194,8 @@ class TestCheckVolumeSignal:
         assert _check_volume_signal(klines) == "平量"
 
     def test_insufficient_data(self):
-        assert _check_volume_signal([{"volume": 100}]) == "δ֪"
-        assert _check_volume_signal(None) == "δ֪"
+        assert _check_volume_signal([{"volume": 100}]) == "未知"
+        assert _check_volume_signal(None) == "未知"
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

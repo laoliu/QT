@@ -346,7 +346,7 @@ export class OrderManager {
    */
   async submitFromSignal(
     signal: TradingSignal,
-    riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number },
+    riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; capitalBudget?: number },
   ): Promise<SubmitResult> {
     // Compute quantity via position sizing (unless signal has explicit quantity)
     let quantity = signal.quantity ?? 100;
@@ -354,7 +354,11 @@ export class OrderManager {
     if (!signal.quantity && sizingCfg && signal.price > 0) {
       try {
         const [account] = await Promise.all([this.broker.queryAccount()]);
-        const equity = account.totalAssets || account.cash || 100_000;
+        // Use per-strategy capital budget when set, otherwise full account equity
+        const fullEquity = account.totalAssets || account.cash || 100_000;
+        const equity = riskOverrides?.capitalBudget != null && riskOverrides.capitalBudget > 0
+          ? Math.min(riskOverrides.capitalBudget, fullEquity)
+          : fullEquity;
         const result = computePositionSize({
           method: sizingCfg.method,
           equity,
@@ -396,7 +400,7 @@ export class OrderManager {
    */
   async submit(
     req: OrderRequest,
-    riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; skipMarketHours?: boolean },
+    riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; capitalBudget?: number; skipMarketHours?: boolean },
   ): Promise<SubmitResult> {
     // Get current account state for risk checks
     let account: BrokerAccount;
@@ -414,6 +418,16 @@ export class OrderManager {
     const reserved = this.totalReservedCash;
     if (reserved > 0) {
       account = { ...account, cash: Math.max(0, account.cash - reserved) };
+    }
+
+    // Per-strategy capital budget: clamp totalAssets for risk-gate position-pct checks
+    if (riskOverrides?.capitalBudget != null && riskOverrides.capitalBudget > 0) {
+      const budget = riskOverrides.capitalBudget;
+      account = {
+        ...account,
+        totalAssets: Math.min(account.totalAssets, budget),
+        cash: Math.min(account.cash, budget),
+      };
     }
 
     const dailyLoss = await this.getDailyPnl().then(

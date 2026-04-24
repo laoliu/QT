@@ -193,22 +193,116 @@ class DualMaLive(LiveStrategy):
 
 
 class MomentumLive(LiveStrategy):
-    """N-day high breakout momentum — live version."""
+    """N-day momentum rebalancing — live version.
+
+    Every ``rebalanceDays`` trading days, ranks all watched symbols by a
+    composite momentum score (70 % 20-day return + 30 % 5-day return) and
+    emits sell signals for demoted stocks / buy signals for promoted ones.
+
+    Between rebalance days, N-day high/low breakout signals are still
+    generated so sudden breakdowns can be captured intraday.
+    """
     strategy_id = "momentum-breakout"
     name = "动量突破（实盘）"
 
+    def __init__(self, symbols, parameters):
+        super().__init__(symbols, parameters)
+        self._bar_day_count: int = 0          # trading days since last rebalance
+        self._last_rebalance_date: str = ""   # YYYY-MM-DD of last rebalance
+        self._holdings: List[str] = []        # symbols currently "selected"
+        self._buy_date: Dict[str, str] = {}   # symbol → YYYY-MM-DD of last buy (T+1)
+
+    # ── helpers ─────────────────────────────────────────────────
+
+    def _is_t1_locked(self, symbol: str, today: str) -> bool:
+        """Return True if *symbol* was bought today (T+1: cannot sell same day)."""
+        return self._buy_date.get(symbol) == today
+
+    def _returns(self, symbol: str, n: int) -> Optional[float]:
+        """N-day return for *symbol*. None if insufficient data."""
+        closes = self.closes(symbol, n + 1)
+        if len(closes) < n + 1 or closes[0] == 0:
+            return None
+        return (closes[-1] - closes[0]) / closes[0]
+
+    def _rank_symbols(self) -> List[str]:
+        """Rank all watched symbols by composite momentum; return top-N."""
+        scores: Dict[str, float] = {}
+        for sym in self.symbols:
+            r20 = self._returns(sym, 20)
+            r5 = self._returns(sym, 5)
+            if r20 is None or r5 is None:
+                continue
+            # Same filter as backtest: 20d > 2% and 5d > 0
+            if r20 > 0.02 and r5 > 0:
+                scores[sym] = r20 * 0.7 + r5 * 0.3
+        top_n = max(3, min(len(scores), len(self.symbols) // 2))
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        return [code for code, _ in ranked]
+
+    # ── main logic ──────────────────────────────────────────────
+
     def on_bar(self, bar: Bar) -> None:
         period = self.parameters.get("period", 20)
+        rebalance_days = self.parameters.get("rebalanceDays", 5)
+        if isinstance(rebalance_days, str):
+            rebalance_days = int(rebalance_days)
+
+        # Detect new trading day (avoid counting intraday bars twice)
+        bar_date = time.strftime("%Y-%m-%d", time.localtime(bar.timestamp / 1000))
+        new_day = bar_date != self._last_rebalance_date
+
+        # ── Rebalance check ─────────────────────────────────────
+        if new_day:
+            self._bar_day_count += 1
+            self._last_rebalance_date = bar_date
+
+            if self._bar_day_count >= rebalance_days or not self._holdings:
+                self._bar_day_count = 0
+                new_holdings = self._rank_symbols()
+                if new_holdings:
+                    old_set = set(self._holdings)
+                    new_set = set(new_holdings)
+
+                    # Sell demoted stocks (skip T+1 locked)
+                    for sym in old_set - new_set:
+                        if self._is_t1_locked(sym, bar_date):
+                            log.info("T+1: skip sell %s (bought today)", sym)
+                            continue
+                        last_closes = self.closes(sym, 1)
+                        px = last_closes[-1] if last_closes else bar.close
+                        self.emit(sym, "sell", px,
+                                  f"再平衡卖出: 动量排名下降 (每{rebalance_days}日)")
+
+                    # Buy promoted stocks
+                    for sym in new_set - old_set:
+                        last_closes = self.closes(sym, 1)
+                        px = last_closes[-1] if last_closes else bar.close
+                        self.emit(sym, "buy", px,
+                                  f"再平衡买入: 动量排名前列 (每{rebalance_days}日)")
+                        self._buy_date[sym] = bar_date  # T+1 tracking
+
+                    self._holdings = new_holdings
+                    log.info("Rebalanced: holdings=%s", self._holdings)
+
+        # ── Breakout signal (between rebalances) ────────────────
         closes = self.closes(bar.symbol, period)
         if len(closes) < period:
             return
-        highest = max(closes[:-1])  # previous N-1 bars' highest
-        if bar.close > highest:
-            self.emit(bar.symbol, "buy", bar.close, f"{period}日高点突破")
-
+        highest = max(closes[:-1])
         lowest = min(closes[:-1])
-        if bar.close < lowest:
-            self.emit(bar.symbol, "sell", bar.close, f"{period}日低点跌破")
+
+        if bar.close > highest and bar.symbol in self._holdings:
+            self.emit(bar.symbol, "buy", bar.close, f"{period}日高点突破（加仓）",
+                      confidence=0.8)
+            self._buy_date[bar.symbol] = bar_date  # T+1 tracking
+
+        if bar.close < lowest and bar.symbol in self._holdings:
+            if self._is_t1_locked(bar.symbol, bar_date):
+                log.info("T+1: skip breakout sell %s (bought today)", bar.symbol)
+                return
+            self.emit(bar.symbol, "sell", bar.close, f"{period}日低点跌破（减仓）",
+                      confidence=0.8)
 
 
 class RSILive(LiveStrategy):

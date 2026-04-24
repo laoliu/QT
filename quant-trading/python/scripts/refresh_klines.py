@@ -105,7 +105,7 @@ def _fetch_via_bridge(codes: list[str]) -> dict[str, list[dict]]:
             with urllib.request.urlopen(req, timeout=TIMEOUT + 10) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 if resp_data.get("status") != "ok":
-                    print(f"  ✗ 批次 {batch_num}/{total_batches} 错误: {resp_data.get('error', 'δ֪')}")
+                    print(f"  ✗ 批次 {batch_num}/{total_batches} 错误: {resp_data.get('error', '未知')}")
                     failed_batches += 1
                     continue
                 data = resp_data.get("data", {})

@@ -426,6 +426,12 @@ def compose_backtest(config: dict) -> dict:
         sub_results.append(result)
         sub_configs.append(strat_cfg)
 
+    # If ALL sub-strategies failed, report the error instead of returning silent zeros
+    failed = [r for r in sub_results if not r.get("ok") and r.get("error")]
+    if len(failed) == len(sub_results):
+        errors = list({r["error"] for r in failed})
+        return {"ok": False, "error": f"所有子策略回测失败: {'; '.join(errors)}"}
+
     # Get full trading date index from price data
     full_dates = _get_full_date_index(symbols, start_date, end_date)
 

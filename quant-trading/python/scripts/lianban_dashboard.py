@@ -413,7 +413,7 @@ def main():
         elif action == "zhaban":
             result = action_zhaban(min_risk, date)
         else:
-            result = {"error": f"δ֪ action: {action}"}
+            result = {"error": f"未知 action: {action}"}
 
         _output(result)
     except Exception as e:

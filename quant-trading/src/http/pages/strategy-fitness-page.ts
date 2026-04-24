@@ -105,6 +105,7 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   <button onclick="switchTab('history')">📋 历史记录</button>
   <button onclick="switchTab('aggregate')">🌐 全局汇总</button>
   <button onclick="switchTab('pool')">📊 策略池回测</button>
+  <button onclick="switchTab('autoassign')">🎯 智能分配</button>
 </nav>
 <div class="container">
 
@@ -444,6 +445,43 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   </div>
 </div>
 
+<!-- Tab 5: Auto-Assign (fitness-based per-stock strategy assignment) -->
+<div id="tab-autoassign" class="tab-content">
+  <div class="card">
+    <h3>🎯 智能策略分配 <span style="font-size:12px;font-weight:400;color:var(--text-dim)">基于适配分析，为每只股票分配最优策略</span></h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px">
+      根据 fitness 分析结果，每只股票选择 composite_score 最高的策略（rank=1），然后按策略分组创建活跃策略。
+      相同最优策略的股票会合并到同一个活跃策略下，确保每只股票使用最适合它的策略。
+    </p>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnAutoAssignPreview" onclick="loadAutoAssignPreview()">🔍 预览分配方案</button>
+      <button class="btn" onclick="loadAutoAssignPreview()" style="font-size:12px">🔄 刷新</button>
+      <span id="autoAssignStatus" style="font-size:13px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+  <div id="autoAssignPreviewSection" style="display:none">
+    <div class="card">
+      <h3>📋 分配方案预览</h3>
+      <div class="grid grid-3" id="autoAssignKpis" style="margin-bottom:16px"></div>
+      <div id="autoAssignTable"></div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div style="flex:0 0 auto">
+          <label style="margin-bottom:0">每策略资金池（万元，留空不限制）</label>
+          <input type="number" id="autoAssignBudget" placeholder="如 10" min="1" style="width:120px;margin-top:4px">
+        </div>
+        <button class="btn btn-primary" id="btnAutoAssignApply" onclick="applyAutoAssign()" style="margin-top:18px">🚀 确认分配</button>
+        <span id="autoAssignApplyStatus" style="font-size:13px;color:var(--text-dim);margin-top:18px"></span>
+      </div>
+    </div>
+  </div>
+  <div id="autoAssignResultSection" style="display:none">
+    <div class="card">
+      <h3>✅ 分配结果</h3>
+      <div id="autoAssignResult"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Tab 4: Pool Strategy Backtest -->
 <div id="tab-pool" class="tab-content">
   <div class="card">
@@ -555,11 +593,12 @@ function switchTab(id){
   var tab=document.getElementById('tab-'+id);
   if(tab)tab.classList.add('active');
   var btns=document.querySelectorAll('nav button');
-  var map={run:0,history:1,aggregate:2,pool:3};
+  var map={run:0,history:1,aggregate:2,pool:3,autoassign:4};
   if(map[id]!==undefined&&btns[map[id]])btns[map[id]].classList.add('active');
   if(id==='history')loadHistory();
   if(id==='aggregate')loadAggregateGlobal();
   if(id==='pool')loadPoolHistory();
+  if(id==='autoassign')loadAutoAssignPreview();
 }
 
 // ── Batch sub-tab switching ──────────────────────────
@@ -1247,26 +1286,173 @@ async function applyPoolCombo(runId,poolKey,strategyType,comboLabel,symbolCount,
     var bt=st&&st.brokerType||'paper';
     brokerLabel=bt==='paper'?'🟡 虚拟盘 (Paper)':'🔴 实盘 ('+bt+')';
   }catch(e){brokerLabel='⚠️ 无法获取';}
-  var msg='确认将以下策略应用到引擎？\\n\\n'+
-    '🔧 当前交易模式：'+brokerLabel+'\\n\\n'+
+  var budgetStr=prompt(
+    '请设置该策略的独立资金池（万元）\\n\\n'+
+    '🔧 当前交易模式：'+brokerLabel+'\\n'+
     '组合：'+comboLabel+'\\n'+
     '股票数：'+symbolCount+'\\n'+
     '回测年化：'+(annReturn>=0?'+':'')+annReturn+'%\\n'+
     '夏普比率：'+sharpe+'\\n\\n'+
-    '⚠️ 策略将注册到 Live Engine，请确认信号质量';
+    '策略将仅使用该预算进行交易，与其他持仓隔离：',
+    '10'
+  );
+  if(budgetStr===null)return;
+  var budgetWan=parseFloat(budgetStr);
+  if(isNaN(budgetWan)||budgetWan<=0){toast('❌ 请输入有效的资金预算（万元）','error');return;}
+  var capitalBudget=budgetWan*10000;
+  var msg='确认应用策略？\\n\\n'+
+    '🔧 交易模式：'+brokerLabel+'\\n'+
+    '💰 资金池：'+budgetWan+' 万元（¥'+capitalBudget.toLocaleString()+'）\\n'+
+    '组合：'+comboLabel+'\\n'+
+    '股票数：'+symbolCount+'\\n\\n'+
+    '⚠️ 该策略独立使用 '+budgetWan+' 万资金池，不影响其他持仓';
   if(!confirm(msg))return;
   try{
     var res=await api('/quant/admin/api/strategy-fitness/pool-backtest/apply',{
-      method:'POST',body:JSON.stringify({run_id:runId,pool_key:poolKey,strategy_type:strategyType})
+      method:'POST',body:JSON.stringify({run_id:runId,pool_key:poolKey,strategy_type:strategyType,capital_budget:capitalBudget})
     });
     if(res&&res.ok){
       var modeTag=res.brokerType==='paper'?'[虚拟盘]':'[实盘]';
-      toast('✅ '+modeTag+' '+res.message+' (ID: '+(res.strategy&&res.strategy.id||'')+')', 'success');
+      toast('✅ '+modeTag+' '+res.message+' 资金池:'+budgetWan+'万 (ID: '+(res.strategy&&res.strategy.id||'')+')', 'success');
       loadPoolHistory();
     }else{
       toast('❌ '+(res&&res.error||'应用失败'),'error');
     }
   }catch(e){toast('❌ 应用失败: '+e,'error');}
+}
+
+// ── Auto-Assign (fitness-based per-stock strategy) ────
+var _autoAssignPreview=null;
+
+async function loadAutoAssignPreview(){
+  document.getElementById('autoAssignStatus').textContent='加载中...';
+  document.getElementById('autoAssignPreviewSection').style.display='none';
+  document.getElementById('autoAssignResultSection').style.display='none';
+  try{
+    var data=await api('/quant/admin/api/strategy-fitness/auto-assign/preview',{_timeout:30000});
+    if(!data||!data.ok){
+      document.getElementById('autoAssignStatus').textContent='❌ '+(data&&data.error||'加载失败');
+      return;
+    }
+    _autoAssignPreview=data;
+    document.getElementById('autoAssignStatus').textContent='批次: '+data.batch_id;
+    document.getElementById('autoAssignPreviewSection').style.display='block';
+
+    // KPIs
+    var kpiHtml='';
+    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+data.total_stocks+'</div><div class="kpi-label">覆盖股票数</div></div>';
+    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+data.total_strategies+'</div><div class="kpi-label">分配策略数</div></div>';
+    kpiHtml+='<div class="kpi-card"><div class="kpi-value">'+(data.existing_auto_assign_count||0)+'</div><div class="kpi-label">已有自动分配 (将被替换)</div></div>';
+    document.getElementById('autoAssignKpis').innerHTML=kpiHtml;
+
+    // Strategy table
+    var strats=data.strategies||[];
+    if(!strats.length){
+      document.getElementById('autoAssignTable').innerHTML='<div class="empty">无数据</div>';
+      return;
+    }
+    var maxScore=Math.max.apply(null,strats.map(function(s){return Math.abs(s.totalScore)||0}))||1;
+    var html='<table><thead><tr><th>策略</th><th>股票数</th><th>平均分</th><th>总分</th><th>分布</th><th>股票列表</th></tr></thead><tbody>';
+    strats.forEach(function(s,idx){
+      var barW=Math.max(4,Math.round((Math.abs(s.totalScore)/maxScore)*120));
+      var barColor=s.avgScore>=30?'var(--green)':s.avgScore>=15?'var(--yellow)':'var(--red)';
+      html+='<tr>';
+      html+='<td><strong>'+esc(s.strategyId)+'</strong></td>';
+      html+='<td style="font-weight:600">'+s.stockCount+'</td>';
+      html+='<td class="'+(s.avgScore>=30?'metric-good':s.avgScore>=15?'metric-ok':'metric-bad')+'">'+s.avgScore.toFixed(2)+'</td>';
+      html+='<td style="font-weight:600">'+s.totalScore.toFixed(1)+'</td>';
+      html+='<td><span class="score-bar" style="width:'+barW+'px;background:'+barColor+'"></span></td>';
+      // Stock list (show first 8, then "...")
+      var stocksStr=s.stocks.slice(0,8).map(function(st){return st.symbol+(st.name?' '+st.name:'')}).join(', ');
+      if(s.stocks.length>8)stocksStr+=' ... 等 '+s.stocks.length+' 只';
+      html+='<td style="font-size:11px;color:var(--text-dim);max-width:400px;white-space:normal;word-break:break-all">'+esc(stocksStr)+'</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('autoAssignTable').innerHTML=html;
+  }catch(e){
+    document.getElementById('autoAssignStatus').textContent='❌ 加载失败: '+e;
+  }
+}
+
+async function applyAutoAssign(){
+  if(!_autoAssignPreview||!_autoAssignPreview.ok){
+    toast('请先加载预览','warn');return;
+  }
+  // Get broker type for user confirmation
+  var brokerLabel='未知';
+  try{
+    var st=await api('/quant/admin/api/engine-status');
+    var bt=st&&st.brokerType||'paper';
+    brokerLabel=bt==='paper'?'🟡 虚拟盘 (Paper)':'🔴 实盘 ('+bt+')';
+  }catch(e){brokerLabel='⚠️ 无法获取';}
+
+  var budgetInput=document.getElementById('autoAssignBudget').value;
+  var budgetWan=budgetInput?parseFloat(budgetInput):0;
+  var budgetDesc=budgetWan>0?budgetWan+' 万元/策略':'不限制';
+
+  var msg='确认执行智能分配？\\n\\n'+
+    '🔧 交易模式：'+brokerLabel+'\\n'+
+    '📊 将创建 '+_autoAssignPreview.total_strategies+' 个活跃策略\\n'+
+    '📈 覆盖 '+_autoAssignPreview.total_stocks+' 只股票\\n'+
+    '💰 每策略资金池：'+budgetDesc+'\\n';
+  if(_autoAssignPreview.existing_auto_assign_count>0){
+    msg+='\\n⚠️ 将替换 '+_autoAssignPreview.existing_auto_assign_count+' 个已有的自动分配策略';
+  }
+  msg+='\\n\\n每只股票使用 fitness 分析中得分最高的策略。';
+
+  if(!confirm(msg))return;
+
+  document.getElementById('btnAutoAssignApply').disabled=true;
+  document.getElementById('autoAssignApplyStatus').textContent='分配中...';
+
+  try{
+    var body={
+      batch_id:_autoAssignPreview.batch_id,
+      replace_existing:true
+    };
+    if(budgetWan>0)body.capital_budget_per_strategy=budgetWan*10000;
+
+    var res=await api('/quant/admin/api/strategy-fitness/auto-assign',{
+      method:'POST',body:JSON.stringify(body)
+    });
+
+    document.getElementById('btnAutoAssignApply').disabled=false;
+    if(res&&res.ok){
+      document.getElementById('autoAssignApplyStatus').textContent='';
+      var modeTag=res.brokerType==='paper'?'[虚拟盘]':'[实盘]';
+      toast('✅ '+modeTag+' '+res.message,'success');
+
+      // Show result
+      document.getElementById('autoAssignResultSection').style.display='block';
+      var rhtml='<div style="margin-bottom:12px;font-size:14px;font-weight:600;color:var(--green)">'+esc(res.message)+'</div>';
+      if(res.removed_count>0){
+        rhtml+='<div style="margin-bottom:8px;font-size:12px;color:var(--text-dim)">已替换 '+res.removed_count+' 个旧策略</div>';
+      }
+      rhtml+='<table><thead><tr><th>策略ID</th><th>活跃策略ID</th><th>股票数</th><th>平均分</th><th>股票预览</th></tr></thead><tbody>';
+      (res.strategies||[]).forEach(function(s){
+        rhtml+='<tr>';
+        rhtml+='<td><strong>'+esc(s.strategyId)+'</strong></td>';
+        rhtml+='<td style="font-family:monospace;font-size:11px">'+esc(s.id)+'</td>';
+        rhtml+='<td style="font-weight:600">'+s.stockCount+'</td>';
+        rhtml+='<td class="'+(s.avgScore>=30?'metric-good':'metric-ok')+'">'+s.avgScore+'</td>';
+        rhtml+='<td style="font-size:11px;color:var(--text-dim)">'+esc((s.symbols||[]).join(', '))+(s.stockCount>10?' ...':'')+'</td>';
+        rhtml+='</tr>';
+      });
+      rhtml+='</tbody></table>';
+      document.getElementById('autoAssignResult').innerHTML=rhtml;
+
+      // Reload preview to update existing count
+      loadAutoAssignPreview();
+    }else{
+      document.getElementById('autoAssignApplyStatus').textContent='';
+      toast('❌ '+(res&&res.error||'分配失败'),'error');
+    }
+  }catch(e){
+    document.getElementById('btnAutoAssignApply').disabled=false;
+    document.getElementById('autoAssignApplyStatus').textContent='';
+    toast('❌ 分配失败: '+e,'error');
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────

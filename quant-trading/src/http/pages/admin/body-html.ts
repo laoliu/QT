@@ -150,6 +150,15 @@ export function getAdminBodyHtml(b: string): string {
 <!-- ═══ Strategies ═══ -->
 <div class="tab-content" id="tab-strategies">
   <input type="text" class="search-box" placeholder="🔍 搜索策略…" id="strat-search">
+
+  <h3 style="margin-bottom:10px;font-size:14px">🤖 活跃策略 (<span id="live-count">0</span>) <button class="btn btn-sm" onclick="loadLiveStrategies()" style="margin-left:8px">🔄 刷新</button></h3>
+  <div style="overflow-x:auto;margin-bottom:16px">
+    <table id="live-strategies-table">
+      <thead><tr><th>ID</th><th>策略</th><th>股票数</th><th>来源</th><th>资金池</th><th>状态</th><th>添加时间</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <h3 style="margin-bottom:10px;font-size:14px">📈 内置策略 (<span id="builtin-count">0</span>)</h3>
   <div class="cards" id="builtin-cards"></div>
   <h3 style="margin:16px 0 10px;font-size:14px">📁 用户策略 (<span id="user-count">0</span>)</h3>

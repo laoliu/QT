@@ -64,7 +64,7 @@ def run_social_sentiment(config: dict) -> dict:
     elif action == "retail_flow":
         return _retail_flow(market, limit)
     else:
-        return {"error": f"δ֪ action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 # ── Hot stocks ────────────────────────────────────────────────────────────────

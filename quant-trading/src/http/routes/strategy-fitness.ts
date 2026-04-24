@@ -1339,6 +1339,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         const runId = String(body.run_id ?? "");
         const poolKey = String(body.pool_key ?? "");
         const strategyType = String(body.strategy_type ?? "");
+        const capitalBudget = body.capital_budget != null ? Number(body.capital_budget) : undefined;
 
         if (!runId || !poolKey || !strategyType) {
           json(res, { ok: false, error: "run_id, pool_key, strategy_type 必填" }, 400);
@@ -1403,6 +1404,8 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           rebalanceDays: 5,
           annualized_return_pct: combo.annualized_return_pct ?? 0,
           sharpe: combo.sharpe ?? 0,
+        }, {
+          capitalBudget: capitalBudget && capitalBudget > 0 ? capitalBudget : undefined,
         });
 
         const brokerType = engine.broker?.brokerType ?? "paper";
@@ -1411,6 +1414,237 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           strategy: entry,
           brokerType,
           message: `已应用「${combo.pool_label ?? poolKey} × ${strategyType}」，共 ${symbols.length} 只股票`,
+        });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Fitness auto-assign: per-stock best strategy → live strategies ──
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/auto-assign",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const batchId = body.batch_id ? String(body.batch_id) : undefined;
+        const capitalBudgetPerStrategy = body.capital_budget_per_strategy != null
+          ? Number(body.capital_budget_per_strategy) : undefined;
+        const replaceExisting = body.replace_existing !== false; // default true
+
+        // 1. Load all rank=1 fitness records (per-stock best strategy)
+        const storage = deps.dataWarehouse?.storage;
+        if (!storage || !("getAllStocksTopStrategy" in storage)) {
+          json(res, { ok: false, error: "存储层不可用，无法读取 fitness 数据" }, 500);
+          return;
+        }
+        const typed = storage as {
+          getAllStocksTopStrategy(b?: string, l?: number, o?: number): Promise<{ rows: StockStrategyFitnessRow[]; total: number }>;
+          getLatestFitnessBatchId(): Promise<string | null>;
+        };
+        const usedBatchId = batchId ?? await typed.getLatestFitnessBatchId();
+        if (!usedBatchId) {
+          json(res, { ok: false, error: "无 fitness 分析数据，请先运行策略适配分析" });
+          return;
+        }
+        // Fetch all rank=1 rows (up to 5000 stocks)
+        const { rows, total } = await typed.getAllStocksTopStrategy(usedBatchId, 5000, 0);
+        if (!rows.length) {
+          json(res, { ok: false, error: "该批次无 fitness 数据" });
+          return;
+        }
+
+        // 2. Group stocks by their best strategy
+        const strategyGroups = new Map<string, { symbols: string[]; avgScore: number; scores: number[] }>();
+        for (const row of rows) {
+          const sid = row.strategyId;
+          if (!strategyGroups.has(sid)) {
+            strategyGroups.set(sid, { symbols: [], avgScore: 0, scores: [] });
+          }
+          const g = strategyGroups.get(sid)!;
+          g.symbols.push(row.symbol);
+          g.scores.push(row.compositeScore);
+        }
+        // Compute avg score
+        for (const g of strategyGroups.values()) {
+          g.avgScore = g.scores.reduce((a, b) => a + b, 0) / g.scores.length;
+        }
+
+        // 3. If replaceExisting, remove old auto-assigned strategies
+        const engine = getEngine();
+        const removed: string[] = [];
+        if (replaceExisting) {
+          const existing = engine.strategyRegistry.list().filter(
+            (s) => (s.parameters as Record<string, unknown> | undefined)?.source === "fitness-auto-assign",
+          );
+          for (const old of existing) {
+            await engine.removeStrategy(old.id);
+            removed.push(old.id);
+          }
+        }
+
+        // 4. Create one live strategy per strategy group
+        const created: Array<{ id: string; strategyId: string; symbols: string[]; avgScore: number }> = [];
+        for (const [strategyId, group] of strategyGroups.entries()) {
+          const entry = await engine.addStrategy(strategyId, group.symbols, {
+            source: "fitness-auto-assign",
+            batch_id: usedBatchId,
+            avg_composite_score: Math.round(group.avgScore * 100) / 100,
+            stock_count: group.symbols.length,
+          }, {
+            capitalBudget: capitalBudgetPerStrategy && capitalBudgetPerStrategy > 0
+              ? capitalBudgetPerStrategy : undefined,
+          });
+          created.push({
+            id: entry.id,
+            strategyId,
+            symbols: group.symbols,
+            avgScore: Math.round(group.avgScore * 100) / 100,
+          });
+        }
+
+        const brokerType = engine.broker?.brokerType ?? "paper";
+        json(res, {
+          ok: true,
+          batch_id: usedBatchId,
+          total_stocks: rows.length,
+          total_strategies: created.length,
+          removed_count: removed.length,
+          strategies: created.map((c) => ({
+            id: c.id,
+            strategyId: c.strategyId,
+            stockCount: c.symbols.length,
+            avgScore: c.avgScore,
+            symbols: c.symbols.slice(0, 10), // preview first 10
+          })),
+          brokerType,
+          message: `已按适配分析自动分配 ${created.length} 个策略，覆盖 ${rows.length} 只股票`,
+        });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Fitness auto-assign preview (dry-run, no side effects) ──
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/auto-assign/preview",
+    handler: secure(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+        const batchId = url.searchParams.get("batch_id") || undefined;
+
+        // Try TS storage first
+        let usedBatchId = batchId;
+        let rows: StockStrategyFitnessRow[] = [];
+
+        const storage = deps.dataWarehouse?.storage;
+        if (storage && "getAllStocksTopStrategy" in storage) {
+          const typed = storage as {
+            getAllStocksTopStrategy(b?: string, l?: number, o?: number): Promise<{ rows: StockStrategyFitnessRow[]; total: number }>;
+            getLatestFitnessBatchId(): Promise<string | null>;
+          };
+          if (!usedBatchId) usedBatchId = await typed.getLatestFitnessBatchId() ?? undefined;
+          if (usedBatchId) {
+            const result = await typed.getAllStocksTopStrategy(usedBatchId, 5000, 0);
+            rows = result.rows;
+          }
+        }
+
+        // Fallback: open SQLite directly (InMemoryStorage returns empty)
+        if (!rows.length) {
+          try {
+            const dbPath = getDbPath();
+            const fsSync = await import("node:fs");
+            if (fsSync.existsSync(dbPath)) {
+              const sqlite3Mod = await import("better-sqlite3");
+              const Database = sqlite3Mod.default ?? sqlite3Mod;
+              const db = new (Database as unknown as new (p: string) => Record<string, Function>)(dbPath);
+              try {
+                db.pragma("busy_timeout = 10000");
+                if (!usedBatchId) {
+                  const batchRow = db.prepare("SELECT batch_id FROM stock_strategy_fitness ORDER BY created_at DESC LIMIT 1").get() as { batch_id: string } | undefined;
+                  usedBatchId = batchRow?.batch_id;
+                }
+                if (usedBatchId) {
+                  const dbRows = db.prepare(
+                    "SELECT * FROM stock_strategy_fitness WHERE batch_id = ? AND rank = 1 ORDER BY composite_score DESC LIMIT 5000",
+                  ).all(usedBatchId) as Array<Record<string, unknown>>;
+                  rows = dbRows.map((r) => ({
+                    id: r.id as number,
+                    symbol: r.symbol as string,
+                    stockName: (r.stock_name as string) ?? "",
+                    strategyId: r.strategy_id as string,
+                    strategyName: (r.strategy_name as string) ?? "",
+                    rank: r.rank as number,
+                    compositeScore: r.composite_score as number,
+                    totalReturn: (r.total_return as number) ?? 0,
+                    annualizedReturn: (r.annualized_return as number) ?? 0,
+                    sharpeRatio: (r.sharpe_ratio as number) ?? 0,
+                    sortinoRatio: (r.sortino_ratio as number) ?? 0,
+                    maxDrawdown: (r.max_drawdown as number) ?? 0,
+                    winRate: (r.win_rate as number) ?? 0,
+                    profitLossRatio: (r.profit_loss_ratio as number) ?? 0,
+                    calmarRatio: (r.calmar_ratio as number) ?? 0,
+                    totalTrades: (r.total_trades as number) ?? 0,
+                    backtestStart: (r.backtest_start as string) ?? "",
+                    backtestEnd: (r.backtest_end as string) ?? "",
+                    batchId: r.batch_id as string,
+                    createdAt: (r.created_at as string) ?? "",
+                  }));
+                }
+              } finally {
+                db.close();
+              }
+            }
+          } catch { /* SQLite fallback failed, continue with empty */ }
+        }
+
+        if (!usedBatchId) {
+          json(res, { ok: false, error: "无 fitness 分析数据" });
+          return;
+        }
+        if (!rows.length) {
+          json(res, { ok: false, error: "该批次无 fitness 数据" });
+          return;
+        }
+
+        // Group by strategy
+        const groups = new Map<string, { symbols: Array<{ symbol: string; name?: string; score: number }>; totalScore: number }>();
+        for (const row of rows) {
+          const sid = row.strategyId;
+          if (!groups.has(sid)) groups.set(sid, { symbols: [], totalScore: 0 });
+          const g = groups.get(sid)!;
+          g.symbols.push({ symbol: row.symbol, name: row.stockName, score: Math.round(row.compositeScore * 100) / 100 });
+          g.totalScore += row.compositeScore;
+        }
+
+        // Check existing auto-assigned
+        const engine = getEngine();
+        const existingAutoAssign = engine.strategyRegistry.list().filter(
+          (s) => (s.parameters as Record<string, unknown> | undefined)?.source === "fitness-auto-assign",
+        );
+
+        const strategies = Array.from(groups.entries())
+          .map(([sid, g]) => ({
+            strategyId: sid,
+            stockCount: g.symbols.length,
+            avgScore: Math.round((g.totalScore / g.symbols.length) * 100) / 100,
+            totalScore: Math.round(g.totalScore * 100) / 100,
+            stocks: g.symbols.sort((a, b) => b.score - a.score),
+          }))
+          .sort((a, b) => b.totalScore - a.totalScore);
+
+        json(res, {
+          ok: true,
+          batch_id: usedBatchId,
+          total_stocks: rows.length,
+          total_strategies: strategies.length,
+          existing_auto_assign_count: existingAutoAssign.length,
+          strategies,
         });
       } catch (err) {
         json(res, { ok: false, error: String(err) }, 500);

@@ -57,7 +57,7 @@ def run_institutional_flow(config: dict) -> dict:
             return {"error": "symbol is required for smart_money_signal"}
         return _smart_money_signal(symbol)
     else:
-        return {"error": f"δ֪ action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 # ── Fund holdings ─────────────────────────────────────────────────────────────

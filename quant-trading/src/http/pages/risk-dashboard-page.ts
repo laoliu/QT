@@ -102,19 +102,27 @@ Promise.all([
   var totalMV=positions.reduce(function(s,p){
     return s+(p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0));
   },0);
-  var html='<table><thead><tr><th>标的</th><th>市值</th><th>占比</th></tr></thead><tbody>';
   positions.sort(function(a,b){
     var mvA=a.marketValue||a.market_value||(a.currentPrice||a.lastPrice||0)*(a.quantity||a.shares||0);
     var mvB=b.marketValue||b.market_value||(b.currentPrice||b.lastPrice||0)*(b.quantity||b.shares||0);
     return mvB-mvA;
   });
-  positions.forEach(function(p){
-    var mv=p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0);
-    var pct=totalMV>0?(mv/totalMV*100):0;
-    html+='<tr><td>'+(p.symbol||p.code)+'</td><td>¥'+Number(mv).toLocaleString()+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
+  // Resolve stock names then render
+  var syms=positions.map(function(p){return p.symbol||p.code}).filter(Boolean);
+  fetch(B+"/quant/api/stock-names?symbols="+syms.join(",")).then(function(r){return r.json()}).catch(function(){return {}}).then(function(nr){
+    var nameMap=(nr&&nr.data)||{};
+    var html='<table><thead><tr><th>标的</th><th>市值</th><th>占比</th></tr></thead><tbody>';
+    positions.forEach(function(p){
+      var code=p.symbol||p.code;
+      var label=code;
+      if(nameMap[code]){label=code+' <span style="color:var(--text-dim)">'+nameMap[code]+'</span>'}
+      var mv=p.marketValue||p.market_value||(p.currentPrice||p.lastPrice||0)*(p.quantity||p.shares||0);
+      var pct=totalMV>0?(mv/totalMV*100):0;
+      html+='<tr><td>'+label+'</td><td>¥'+Number(mv).toLocaleString()+'</td><td>'+pct.toFixed(1)+'%</td></tr>';
+    });
+    html+='</tbody></table>';
+    concEl.innerHTML=html;
   });
-  html+='</tbody></table>';
-  concEl.innerHTML=html;
 
   // Drawdown analysis from equity history
   var ddEl=document.getElementById("drawdown");

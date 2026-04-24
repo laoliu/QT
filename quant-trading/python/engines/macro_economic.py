@@ -79,7 +79,7 @@ def run_macro_economic(config: dict) -> dict:
     elif action == "regime":
         return _analyze_macro_regime(market)
     else:
-        return {"error": f"δ֪ action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 def _list_indicators(market: str) -> dict:

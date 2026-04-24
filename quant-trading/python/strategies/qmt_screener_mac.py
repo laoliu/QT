@@ -311,7 +311,7 @@ def _fetch_klines_direct(codes_qmt: list[str], count_override: int | None = None
             with urllib.request.urlopen(req, timeout=DIRECT_PULL_TIMEOUT + 10) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
                 if result.get("status") != "ok":
-                    err_msg = result.get('error', 'δ֪')
+                    err_msg = result.get('error', '未知')
                     print(f"[direct] 批次 {batch_num}/{total_batches} 错误: {err_msg}")
                     # Windows bridge 超时/断连 → 中止后续批次
                     if "timeout" in err_msg.lower():

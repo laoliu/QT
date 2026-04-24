@@ -49,7 +49,7 @@ def run_dragon_tiger(config: dict) -> dict:
     elif action == "hot_money":
         return _hot_money_ranking(limit, errors)
     else:
-        return {"error": f"δ֪action: {action}"}
+        return {"error": f"未知 action: {action}"}
 
 
 def _daily_list(date_str: str, limit: int, errors: list[str]) -> dict:

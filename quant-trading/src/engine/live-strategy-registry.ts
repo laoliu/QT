@@ -55,6 +55,7 @@ export class LiveStrategyRegistry {
       interval?: KlineInterval;
       maxPositionPct?: number;
       maxOrderValue?: number;
+      capitalBudget?: number;
       timeWindows?: string[];
       confirmationBars?: number;
       regimes?: string[];
@@ -69,6 +70,7 @@ export class LiveStrategyRegistry {
       enabled: true,
       maxPositionPct: options?.maxPositionPct,
       maxOrderValue: options?.maxOrderValue,
+      capitalBudget: options?.capitalBudget,
       addedAt: nowCSTISO(),
       timeWindows: options?.timeWindows,
       confirmationBars: options?.confirmationBars,

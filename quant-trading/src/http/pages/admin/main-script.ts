@@ -379,8 +379,62 @@ function loadTrading(){
 }
 function cancelOrder(id){api('/quant/api/orders?id='+encodeURIComponent(id),{method:'DELETE'}).then(function(){toast('✅ 已撤单');loadTrading()})}
 
+/* ══════ LIVE STRATEGIES (活跃策略管理) ══════ */
+function loadLiveStrategies(){
+  api('/quant/api/strategies').then(function(d){
+    if(!d||d.status!=='ok')return;
+    var list=d.data||[];
+    document.getElementById('live-count').textContent=list.length;
+    var tbody=document.querySelector('#live-strategies-table tbody');
+    if(!list.length){
+      tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">暂无活跃策略</td></tr>';
+      return;
+    }
+    tbody.innerHTML=list.map(function(s){
+      var params=s.parameters||{};
+      var source=params.source||'-';
+      var sourceLabel=source==='pool-backtest'?'<span class="badge badge-blue">池回测</span>':
+        source==='fitness'?'<span class="badge badge-green">适配</span>':
+        '<span class="badge badge-yellow">'+esc(source)+'</span>';
+      var symbols=s.symbols||[];
+      var symText=symbols.length<=3?symbols.join(', '):(symbols.slice(0,3).join(', ')+' +'+( symbols.length-3));
+      var enableBadge=s.enabled?'<span class="badge badge-green">运行中</span>':'<span class="badge badge-red">已禁用</span>';
+      if(s.regimePaused)enableBadge='<span class="badge badge-yellow">体制暂停</span>';
+      var budgetText=s.capitalBudget?'¥'+(s.capitalBudget/10000).toFixed(1)+'万':'<span style="color:var(--text-dim)">全账户</span>';
+      var addedAt=s.addedAt?s.addedAt.replace('T',' ').slice(0,16):'';
+      var toggleBtn=s.enabled
+        ?'<button class="btn btn-sm btn-warning" onclick="toggleLiveStrategy(\\''+esc(s.id)+'\\',false)" title="禁用">⏸</button>'
+        :'<button class="btn btn-sm btn-primary" onclick="toggleLiveStrategy(\\''+esc(s.id)+'\\',true)" title="启用">▶</button>';
+      var removeBtn='<button class="btn btn-sm btn-danger" onclick="removeLiveStrategy(\\''+esc(s.id)+'\\',\\''+esc(s.strategyId)+'\\','+symbols.length+')" title="删除" style="margin-left:4px">🗑️</button>';
+      return '<tr>'+
+        '<td style="font-size:11px;font-family:monospace">'+esc(s.id)+'</td>'+
+        '<td>'+esc(s.strategyId)+'</td>'+
+        '<td title="'+esc(symbols.join(', '))+'">'+symbols.length+' <span style="font-size:10px;color:var(--text-dim)">('+esc(symText)+')</span></td>'+
+        '<td>'+sourceLabel+'</td>'+
+        '<td>'+budgetText+'</td>'+
+        '<td>'+enableBadge+'</td>'+
+        '<td style="font-size:11px;white-space:nowrap">'+esc(addedAt)+'</td>'+
+        '<td style="white-space:nowrap">'+toggleBtn+removeBtn+'</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function toggleLiveStrategy(id,enabled){
+  api('/quant/api/strategies',{method:'PATCH',body:JSON.stringify({id:id,enabled:enabled})}).then(function(d){
+    toast(d&&d.status==='ok'?'✅ '+(enabled?'已启用':'已禁用'):'❌ 操作失败');
+    loadLiveStrategies();
+  }).catch(function(e){toast('❌ '+e)});
+}
+function removeLiveStrategy(id,strategyId,symbolCount){
+  if(!confirm('确认删除策略？\\n\\nID: '+id+'\\n策略: '+strategyId+'\\n股票数: '+symbolCount+'\\n\\n⚠️ 删除后将停止该策略的信号生成'))return;
+  api('/quant/api/strategies?id='+encodeURIComponent(id),{method:'DELETE'}).then(function(d){
+    toast(d&&d.status==='ok'?'✅ 已删除':'❌ '+(d&&d.message||'删除失败'));
+    loadLiveStrategies();
+  }).catch(function(e){toast('❌ '+e)});
+}
+
 /* ══════ STRATEGIES ══════ */
 function loadStrategies(){
+  loadLiveStrategies();
   api('/quant/admin/api/strategies').then(function(d){
     if(!d){return;}
     var filter=(document.getElementById('strat-search').value||'').toLowerCase();

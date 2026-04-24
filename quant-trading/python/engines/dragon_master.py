@@ -108,11 +108,11 @@ def identify_major_theme(
     yesterday_sectors: dict[str, list[dict]] = {}
 
     for s in today_stocks:
-        ind = s.get("industry", "") or "δ֪"
+        ind = s.get("industry", "") or "未知"
         today_sectors.setdefault(ind, []).append(s)
 
     for s in yesterday_stocks:
-        ind = s.get("industry", "") or "δ֪"
+        ind = s.get("industry", "") or "未知"
         yesterday_sectors.setdefault(ind, []).append(s)
 
     # Evaluate each sector
@@ -548,7 +548,7 @@ def evaluate_buy_timing(
             "confidence": float,     # 0-100
             "board_number": int,     # 当前第几板
             "is_best_timing": bool,  # 是否3板最佳时机
-            "volume_signal": str,    # "放量" | "缩量" | "平量" | "δ֪"
+            "volume_signal": str,    # "放量" | "缩量" | "平量" | "未知"
             "buy_method": str,       # 打板方法说明
             "risk_level": str,       # "low" | "medium" | "high"
         }
@@ -562,7 +562,7 @@ def evaluate_buy_timing(
     result: dict[str, Any] = {
         "board_number": lian_ban,
         "is_best_timing": False,
-        "volume_signal": "δ֪",
+        "volume_signal": "未知",
         "buy_method": "",
         "risk_level": "high",
     }
@@ -598,7 +598,7 @@ def evaluate_buy_timing(
 
     # ── 3板: 最佳买入时机! ──
     if lian_ban == 3:
-        vol_signal = _check_volume_signal(klines) if klines else "δ֪"
+        vol_signal = _check_volume_signal(klines) if klines else "未知"
         result["volume_signal"] = vol_signal
 
         if vol_signal == "放量":
@@ -661,18 +661,18 @@ def _check_volume_signal(klines: list[dict[str, Any]]) -> str:
     平量: otherwise
     """
     if not klines or len(klines) < 3:
-        return "δ֪"
+        return "未知"
 
     volumes = [_safe_float(k.get("volume")) for k in klines[-4:]]
     volumes = [v for v in volumes if v > 0]
     if len(volumes) < 3:
-        return "δ֪"
+        return "未知"
 
     latest = volumes[-1]
     prev_avg = sum(volumes[:-1]) / len(volumes[:-1])
 
     if prev_avg <= 0:
-        return "δ֪"
+        return "未知"
 
     ratio = latest / prev_avg
     if ratio >= 1.5:

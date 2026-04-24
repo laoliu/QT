@@ -390,6 +390,24 @@ export function getDashboardHtml(baseUrl: string): string {
     }
     function toast(msg,ms){ms=ms||2500;var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(function(){el.classList.remove('show')},ms)}
 
+    // ── Stock name resolution cache ─────────────────────────
+    const _nameCache = {};
+    async function resolveStockNames(symbols) {
+      const missing = symbols.filter(s => s && !_nameCache[s]);
+      if (missing.length) {
+        try {
+          const r = await api('/quant/api/stock-names?symbols=' + missing.join(','));
+          const data = r?.data ?? {};
+          for (const [k,v] of Object.entries(data)) _nameCache[k] = v;
+        } catch(e) { console.warn('stock-names error', e); }
+      }
+    }
+    function nameLabel(symbol) {
+      if (!symbol) return '';
+      const n = _nameCache[symbol];
+      return n ? esc(symbol) + ' <span style="color:var(--text-dim)">' + esc(n) + '</span>' : esc(symbol);
+    }
+
     // ── SSE Manager — real-time event subscription ──────────
     const SSE = {
       source: null,
@@ -544,11 +562,13 @@ export function getDashboardHtml(baseUrl: string): string {
     async function loadSignals() {
       const r = await api('/quant/api/signals?limit=20' + modeParam(true)); const sigs=r?.data??[];
       if(!sigs.length){document.getElementById('signalsTable').innerHTML='<div class="empty">暂无信号</div>';return;}
+      const slice = sigs.slice(-15);
+      await resolveStockNames(slice.map(s => s.symbol).filter(Boolean));
       let h='<table><tr><th>日期</th><th>策略</th><th>代码</th><th>方向</th><th>价格</th></tr>';
-      for(const s of sigs.slice(-15)){
+      for(const s of slice){
         const dir=s.direction==='buy'?'<span class="badge badge-buy">买</span>':'<span class="badge badge-sell">卖</span>';
         const dt=s.date??(s.timestamp?new Date(s.timestamp).toLocaleDateString():'');
-        h+='<tr><td>'+esc(dt)+'</td><td>'+esc(s.strategyId)+'</td><td>'+esc(s.symbol)+'</td><td>'+dir+'</td><td>¥'+fmt(s.price)+'</td></tr>';}
+        h+='<tr><td>'+esc(dt)+'</td><td>'+esc(s.strategyId)+'</td><td>'+nameLabel(s.symbol)+'</td><td>'+dir+'</td><td>¥'+fmt(s.price)+'</td></tr>';}
       document.getElementById('signalsTable').innerHTML=h+'</table>';
     }
 
@@ -752,12 +772,13 @@ export function getDashboardHtml(baseUrl: string): string {
         document.getElementById('stalenessTable').innerHTML='<div class="empty">暂无订阅</div>';
         return;
       }
+      await resolveStockNames(d.symbols.map(s => s.symbol).filter(Boolean));
       let h='<table><tr><th>标的</th><th>状态</th><th>延迟</th></tr>';
       for (const s of d.symbols) {
         const cls = 'badge-'+s.status;
         const lb2 = {fresh:'正常',warning:'延迟',critical:'中断'}[s.status]??s.status;
         const age = s.ageMs > 0 ? (s.ageMs/1000).toFixed(0)+'s' : 'N/A';
-        h += '<tr><td>'+s.symbol+'</td><td><span class="badge '+cls+'">'+lb2+'</span></td><td>'+age+'</td></tr>';
+        h += '<tr><td>'+nameLabel(s.symbol)+'</td><td><span class="badge '+cls+'">'+lb2+'</span></td><td>'+age+'</td></tr>';
       }
       document.getElementById('stalenessTable').innerHTML=h+'</table>';
     }
@@ -886,10 +907,12 @@ export function getDashboardHtml(baseUrl: string): string {
       const alerts = r?.data ?? [];
       if (!alerts.length) { document.getElementById('priceAlertsPanel').innerHTML='<div class="empty">暂无预警</div>'; return; }
       const active = alerts.filter(a => !a.triggered || a.repeating);
+      const slice = alerts.slice(0, 20);
+      await resolveStockNames(slice.map(a => a.symbol).filter(Boolean));
       let h='<table><tr><th>标的</th><th>条件</th><th>状态</th></tr>';
-      for (const a of alerts.slice(0, 20)) {
+      for (const a of slice) {
         const st = a.triggered && !a.repeating ? '<span class="badge badge-filled">已触发</span>' : '<span class="badge badge-pending">监控中</span>';
-        h += '<tr><td>'+(a.symbol??'')+'</td><td>'+(a.description??a.type+' '+a.threshold)+'</td><td>'+st+'</td></tr>';
+        h += '<tr><td>'+nameLabel(a.symbol)+'</td><td>'+(a.description??a.type+' '+a.threshold)+'</td><td>'+st+'</td></tr>';
       }
       h += '</table>';
       if (active.length > 0) h = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">活跃: '+active.length+' / '+alerts.length+'</div>' + h;

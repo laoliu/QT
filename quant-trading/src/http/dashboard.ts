@@ -521,9 +521,9 @@ export function getDashboardHtml(baseUrl: string): string {
         '<div class="stat"><span class="value '+pctClass(pct)+'">'+fmt(pct)+'%</span><span class="label">收益率</span></div>';
       const positions = d.positions??[];
       if (!positions.length) { document.getElementById('positionsTable').innerHTML='<div class="empty">暂无持仓</div>'; return; }
-      let h='<table><tr><th>代码</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th></tr>';
+      let h='<table><tr><th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th></tr>';
       for(const p of positions){const hasPrice=p.currentPrice!=null&&p.avgCost!=null;const u=hasPrice?(p.currentPrice-p.avgCost)*(p.quantity??0):null;
-        h+='<tr><td>'+esc(p.symbol)+'</td><td>'+(p.quantity??0)+'</td><td>¥'+fmt(p.avgCost)+'</td><td>'+(p.currentPrice!=null?'¥'+fmt(p.currentPrice):'¥--')+'</td><td class="'+(u!=null?pctClass(u):'')+'">'+( u!=null?'¥'+fmt(u):'¥--')+'</td></tr>';}
+        h+='<tr><td>'+esc(p.symbol)+'</td><td>'+esc(p.name||'')+'</td><td>'+(p.quantity??0)+'</td><td>¥'+fmt(p.avgCost)+'</td><td>'+(p.currentPrice!=null?'¥'+fmt(p.currentPrice):'¥--')+'</td><td class="'+(u!=null?pctClass(u):'')+'">'+( u!=null?'¥'+fmt(u):'¥--')+'</td></tr>';}
       document.getElementById('positionsTable').innerHTML=h+'</table>';
     }
 

@@ -393,13 +393,14 @@ export function isKnownIndexCode(symbol: string): boolean {
 }
 
 function toQmtSymbol(symbol: string): string {
-  const code = symbol.replace(/\.(SH|SZ|BJ|SS|HK)$/i, "").replace(/[^0-9A-Za-z]/g, "");
+  if (symbol.includes(".")) return symbol;
+  const code = symbol.replace(/[^0-9A-Za-z]/g, "");
   if (/^\d{6}$/.test(code)) {
-    // Shanghai-listed indices starting with 000xxx
     if (_SH_INDEX_CODES.has(code)) return `${code}.SH`;
-    if (code.startsWith("6")) return `${code}.SH`;
-    if (code.startsWith("0") || code.startsWith("3")) return `${code}.SZ`;
-    if (code.startsWith("4") || code.startsWith("8") || code.startsWith("9")) return `${code}.BJ`;
+    const n = parseInt(code, 10);
+    if (code.startsWith("8") || code.startsWith("43")) return `${code}.BJ`;
+    if (n >= 500_000) return `${code}.SH`;
+    return `${code}.SZ`;
   }
   return symbol;
 }

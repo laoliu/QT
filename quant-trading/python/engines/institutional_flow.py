@@ -170,31 +170,55 @@ def _block_trades(symbol: str, limit: int) -> dict:
     except ImportError:
         return {"error": "akshare not installed"}
 
+    from datetime import datetime, timedelta
+
     trades: list[dict] = []
 
     try:
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d")
+
         if symbol:
-            # Individual stock block trades
-            df = ak.stock_dzjy_mrmx(symbol=symbol)
+            # Individual stock block trades — fetch A股 market then filter
+            df = ak.stock_dzjy_mrmx(symbol="A股", start_date=start_date, end_date=end_date)
+            if df is not None and not df.empty:
+                df = df[df["证券代码"].astype(str).str.strip() == symbol]
         else:
             # Market-wide block trade summary
-            df = ak.stock_dzjy_mrtj()
+            df = ak.stock_dzjy_mrtj(start_date=start_date, end_date=end_date)
 
         if df is not None and not df.empty:
+            # stock_dzjy_mrtj returns 成交总量(万股)/成交总额(万元),
+            # stock_dzjy_mrmx returns 成交量(股)/成交额(元) — need conversion
+            is_mrtj = "成交总量" in df.columns
+
             for _, row in df.head(limit).iterrows():
+                vol = _safe_float(row.get("成交量", row.get("成交总量", row.get("成交量(万股)", None))))
+                amt = _safe_float(row.get("成交额", row.get("成交总额", row.get("成交额(万元)", None))))
+                # Convert raw units to 万 for mrmx data
+                if not is_mrtj:
+                    if vol is not None:
+                        vol = round(vol / 10000, 2)
+                    if amt is not None:
+                        amt = round(amt / 10000, 2)
+
                 trade = {
                     "date": str(row.get("交易日期", row.get("日期", "")))[:10],
                     "symbol": str(row.get("证券代码", row.get("代码", symbol))),
                     "name": str(row.get("证券简称", row.get("名称", ""))),
                     "price": _safe_float(row.get("成交价", row.get("成交价格", None))),
-                    "volume": _safe_float(row.get("成交量", row.get("成交量(万股)", None))),
-                    "amount": _safe_float(row.get("成交额", row.get("成交额(万元)", None))),
+                    "volume": vol,
+                    "amount": amt,
                 }
-                # Premium/discount vs closing price
-                close = _safe_float(row.get("收盘价", None))
-                trade_price = trade.get("price")
-                if close and trade_price:
-                    trade["premium_pct"] = round((trade_price - close) / close * 100, 2)
+                # Premium/discount — prefer 折溢率 column directly
+                prem = _safe_float(row.get("折溢率", None))
+                if prem is not None:
+                    trade["premium_pct"] = round(prem, 2)
+                else:
+                    close = _safe_float(row.get("收盘价", None))
+                    trade_price = trade.get("price")
+                    if close and trade_price:
+                        trade["premium_pct"] = round((trade_price - close) / close * 100, 2)
 
                 buyer = str(row.get("买方营业部", ""))
                 seller = str(row.get("卖方营业部", ""))

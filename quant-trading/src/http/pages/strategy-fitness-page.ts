@@ -104,6 +104,7 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   <button class="active" onclick="switchTab('run')">🚀 运行分析</button>
   <button onclick="switchTab('history')">📋 历史记录</button>
   <button onclick="switchTab('aggregate')">🌐 全局汇总</button>
+  <button onclick="switchTab('pool')">📊 策略池回测</button>
 </nav>
 <div class="container">
 
@@ -443,6 +444,102 @@ nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
   </div>
 </div>
 
+<!-- Tab 4: Pool Strategy Backtest -->
+<div id="tab-pool" class="tab-content">
+  <div class="card">
+    <h3>📊 策略池回测</h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+      选择股票池和策略类型，进行 N 年组合回测。对比不同池×策略组合的收益、回撤、夏普等指标。
+    </p>
+    <div class="form-row">
+      <div style="min-width:350px">
+        <label>选择股票池（可多选）</label>
+        <div id="poolCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_momentum" checked> 强势动量</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_tech" checked> 科创精选</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_mixed" checked> 综合最优</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_hybrid" checked> 蓝筹科技混合</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_mega"> 超大盘蓝筹</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_value"> 深度价值</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_growth"> 高成长</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="auto_dip"> 超跌反弹</label>
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>策略类型（可多选）</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="mixed" id="stMixed" checked> 混合策略 (MA+动量)</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="checkbox" value="momentum" id="stMomentum" checked> 趋势动量</label>
+        </div>
+      </div>
+      <div>
+        <label>回测年限</label>
+        <select id="poolPeriodYears">
+          <option value="1">1年</option>
+          <option value="2">2年</option>
+          <option value="3">3年</option>
+          <option value="5" selected>5年</option>
+        </select>
+      </div>
+      <div>
+        <label>调仓频率（天）</label>
+        <select id="poolRebalanceDays">
+          <option value="3">3天</option>
+          <option value="5" selected>5天</option>
+          <option value="10">10天</option>
+          <option value="20">20天</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" id="poolRunBtn" onclick="runPoolBacktest()">▶ 开始回测</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="card" id="poolProgressCard" style="display:none">
+    <h3>⏳ 回测进度</h3>
+    <div class="progress-bar">
+      <div class="fill" id="poolProgressFill" style="width:0%"></div>
+      <div class="label" id="poolProgressLabel">0%</div>
+    </div>
+    <p id="poolProgressPhase" style="font-size:12px;color:var(--text-dim)"></p>
+  </div>
+
+  <!-- Results -->
+  <div class="card" id="poolResultCard" style="display:none">
+    <h3>📈 回测结果</h3>
+    <div id="poolResultSummary" style="margin-bottom:12px"></div>
+    <div style="overflow-x:auto">
+      <table id="poolResultTable">
+        <thead><tr>
+          <th>排名</th><th>股票池</th><th>策略</th><th>股票数</th>
+          <th>总收益</th><th>年化收益</th><th>最大回撤</th>
+          <th>夏普</th><th>胜率</th><th>利润因子</th>
+          <th>卡尔马</th><th>累计倍数</th><th>综合分</th>
+          <th>操作</th>
+        </tr></thead>
+        <tbody id="poolResultBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Equity Curve -->
+  <div class="card" id="poolEquityCard" style="display:none">
+    <h3>📉 净值曲线</h3>
+    <canvas id="poolEquityCanvas" width="1200" height="300" style="width:100%;max-height:300px"></canvas>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <h3>📋 历史回测记录</h3>
+    <button class="btn btn-sm" onclick="loadPoolHistory()" style="margin-bottom:12px">🔄 刷新</button>
+    <div id="poolHistoryTable"><div class="empty">点击刷新或运行回测后查看</div></div>
+  </div>
+</div>
+
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -458,10 +555,11 @@ function switchTab(id){
   var tab=document.getElementById('tab-'+id);
   if(tab)tab.classList.add('active');
   var btns=document.querySelectorAll('nav button');
-  var map={run:0,history:1,aggregate:2};
+  var map={run:0,history:1,aggregate:2,pool:3};
   if(map[id]!==undefined&&btns[map[id]])btns[map[id]].classList.add('active');
   if(id==='history')loadHistory();
   if(id==='aggregate')loadAggregateGlobal();
+  if(id==='pool')loadPoolHistory();
 }
 
 // ── Batch sub-tab switching ──────────────────────────
@@ -893,6 +991,282 @@ function loadAggregateGlobal(){
   }).catch(function(){
     document.getElementById('aggregateGlobalTable').innerHTML='<div class="empty">加载失败</div>';
   });
+}
+
+// ── Pool Backtest ──────────────────────────────────────
+var _poolRunning=false;
+var _poolTimer=null;
+var _poolLastResult=null;
+
+// 策略池 label 映射
+var POOL_LABELS={
+  auto_momentum:'强势动量',auto_tech:'科创精选',auto_mixed:'综合最优',
+  auto_hybrid:'蓝筹科技混合',auto_mega:'超大盘蓝筹',auto_value:'深度价值',
+  auto_growth:'高成长',auto_dip:'超跌反弹'
+};
+var STRATEGY_LABELS={mixed:'混合策略',momentum:'趋势动量'};
+
+async function runPoolBacktest(){
+  if(_poolRunning){toast('回测正在运行中...','warn');return;}
+  // 收集选中的池
+  var poolChecked=[];
+  document.querySelectorAll('#poolCheckboxes input:checked').forEach(function(el){poolChecked.push(el.value)});
+  if(!poolChecked.length){toast('请至少选择一个股票池','warn');return;}
+  // 收集策略
+  var strategies=[];
+  if(document.getElementById('stMixed').checked)strategies.push('mixed');
+  if(document.getElementById('stMomentum').checked)strategies.push('momentum');
+  if(!strategies.length){toast('请至少选择一种策略','warn');return;}
+
+  var periodYears=parseInt(document.getElementById('poolPeriodYears').value)||5;
+  var rebalanceDays=parseInt(document.getElementById('poolRebalanceDays').value)||5;
+
+  // 先获取股票池的股票列表 — 通过 pool_optimizer
+  toast('正在获取股票池列表...','info');
+  var poolSymbols={};
+  try{
+    var poolRes=await api('/quant/admin/api/strategy-fitness/pools');
+    if(poolRes&&poolRes.pools){
+      poolRes.pools.forEach(function(p){
+        if(poolChecked.indexOf(p.key)>=0){
+          poolSymbols[p.key]={label:p.label||POOL_LABELS[p.key]||p.key,symbols:p.symbols||[]};
+        }
+      });
+    }
+  }catch(e){
+    toast('获取股票池失败: '+e,'error');return;
+  }
+
+  // 构建 pool_configs: 每个 pool×strategy 一个条目
+  var poolConfigs=[];
+  poolChecked.forEach(function(poolKey){
+    var info=poolSymbols[poolKey];
+    if(!info||!info.symbols||!info.symbols.length){return;}
+    strategies.forEach(function(st){
+      poolConfigs.push({
+        pool_key:poolKey,pool_label:info.label,
+        strategy_type:st,symbols:info.symbols
+      });
+    });
+  });
+
+  if(!poolConfigs.length){toast('选中的股票池无可用股票数据','warn');return;}
+
+  _poolRunning=true;
+  document.getElementById('poolRunBtn').disabled=true;
+  document.getElementById('poolProgressCard').style.display='block';
+  document.getElementById('poolResultCard').style.display='none';
+  document.getElementById('poolEquityCard').style.display='none';
+
+  // Start progress polling
+  _poolTimer=setInterval(checkPoolProgress,2000);
+
+  try{
+    var result=await api('/quant/admin/api/strategy-fitness/pool-backtest',{
+      method:'POST',
+      body:JSON.stringify({
+        pool_configs:poolConfigs,
+        period_years:periodYears,
+        rebalance_days:rebalanceDays,
+        initial_capital:1000000
+      })
+    });
+    _poolRunning=false;
+    document.getElementById('poolRunBtn').disabled=false;
+    if(_poolTimer){clearInterval(_poolTimer);_poolTimer=null;}
+    document.getElementById('poolProgressCard').style.display='none';
+
+    if(result&&result.ok){
+      _poolLastResult=result;
+      renderPoolResults(result);
+      toast('回测完成: '+result.completed+' 组合, 耗时 '+result.elapsed_seconds+'s','success');
+      loadPoolHistory();
+    }else{
+      toast('回测失败: '+(result&&result.error||'未知错误'),'error');
+    }
+  }catch(e){
+    _poolRunning=false;
+    document.getElementById('poolRunBtn').disabled=false;
+    if(_poolTimer){clearInterval(_poolTimer);_poolTimer=null;}
+    document.getElementById('poolProgressCard').style.display='none';
+    toast('回测请求失败: '+e,'error');
+  }
+}
+
+async function checkPoolProgress(){
+  try{
+    var p=await api('/quant/admin/api/strategy-fitness/pool-backtest/status');
+    if(!p||p.status==='idle')return;
+    var pct=p.total>0?Math.round(p.completed/p.total*100):0;
+    document.getElementById('poolProgressFill').style.width=pct+'%';
+    document.getElementById('poolProgressLabel').textContent=pct+'%';
+    document.getElementById('poolProgressPhase').textContent=(p.phase||'')+
+      (p.elapsed_seconds?' ('+p.elapsed_seconds+'s)':'');
+  }catch(e){}
+}
+
+function renderPoolResults(result){
+  document.getElementById('poolResultCard').style.display='block';
+  var summary='共 <b>'+result.total_tasks+'</b> 组合, 成功 <b>'+result.completed+
+    '</b>, 失败 <b>'+result.failed+'</b>, 耗时 <b>'+result.elapsed_seconds+'</b>s';
+  document.getElementById('poolResultSummary').innerHTML=summary;
+
+  var rows=result.results||[];
+  var tbody=document.getElementById('poolResultBody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="14" class="empty">无结果</td></tr>';return;}
+
+  var html='';
+  rows.forEach(function(r){
+    var stLabel=STRATEGY_LABELS[r.strategy_type]||r.strategy_type;
+    html+='<tr>';
+    html+='<td>'+rankBadge(r.rank)+'</td>';
+    html+='<td>'+esc(r.pool_label)+'</td>';
+    html+='<td>'+esc(stLabel)+'</td>';
+    html+='<td>'+r.symbol_count+'</td>';
+    html+='<td class="'+(r.total_return_pct>=0?'metric-good':'metric-bad')+'">'+(r.total_return_pct>=0?'+':'')+r.total_return_pct+'%</td>';
+    html+='<td class="'+(r.annualized_return_pct>=0?'metric-good':'metric-bad')+'">'+(r.annualized_return_pct>=0?'+':'')+r.annualized_return_pct+'%</td>';
+    html+='<td class="'+(r.max_drawdown_pct<=20?'metric-good':r.max_drawdown_pct<=40?'metric-ok':'metric-bad')+'">'+r.max_drawdown_pct+'%</td>';
+    html+='<td class="'+(r.sharpe>=1?'metric-good':r.sharpe>=0.5?'metric-ok':'metric-bad')+'">'+r.sharpe+'</td>';
+    html+='<td class="'+(r.win_rate_pct>=50?'metric-good':'metric-bad')+'">'+r.win_rate_pct+'%</td>';
+    html+='<td class="'+(r.profit_factor>=1.5?'metric-good':r.profit_factor>=1?'metric-ok':'metric-bad')+'">'+r.profit_factor+'</td>';
+    html+='<td>'+r.calmar+'</td>';
+    html+='<td>'+(r.cum_multiple||'-')+'x</td>';
+    html+='<td><span class="score-bar" style="width:'+Math.min(100,Math.max(5,r.composite_score))+'px;background:'+(r.composite_score>=50?'var(--green)':r.composite_score>=30?'var(--yellow)':'var(--red)')+'"></span> '+r.composite_score+'</td>';
+    html+='<td><button class="btn btn-sm" onclick="showPoolEquity('+rows.indexOf(r)+')">📈</button></td>';
+    html+='</tr>';
+  });
+  tbody.innerHTML=html;
+}
+
+function showPoolEquity(idx){
+  if(!_poolLastResult||!_poolLastResult.results||!_poolLastResult.results[idx])return;
+  var r=_poolLastResult.results[idx];
+  var curve=r.equity_curve;
+  if(!curve||!curve.length){toast('无净值数据','warn');return;}
+
+  document.getElementById('poolEquityCard').style.display='block';
+  var canvas=document.getElementById('poolEquityCanvas');
+  var ctx=canvas.getContext('2d');
+  var W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  var vals=curve.map(function(p){return p.value});
+  var minV=Math.min.apply(null,vals)*0.98;
+  var maxV=Math.max.apply(null,vals)*1.02;
+  var range=maxV-minV||1;
+
+  // Background
+  ctx.fillStyle='#1a1a2e';ctx.fillRect(0,0,W,H);
+
+  // Grid lines
+  ctx.strokeStyle='#333';ctx.lineWidth=0.5;
+  for(var g=0;g<5;g++){
+    var gy=H*0.1+g*(H*0.8/4);
+    ctx.beginPath();ctx.moveTo(40,gy);ctx.lineTo(W-10,gy);ctx.stroke();
+    var gv=maxV-(g/(4))*(range);
+    ctx.fillStyle='#888';ctx.font='10px monospace';ctx.fillText(Math.round(gv).toLocaleString(),0,gy+3);
+  }
+
+  // Line
+  ctx.beginPath();ctx.strokeStyle='#4fc3f7';ctx.lineWidth=1.5;
+  for(var i=0;i<curve.length;i++){
+    var x=40+(W-50)*i/(curve.length-1);
+    var y=H*0.1+(maxV-vals[i])/range*(H*0.8);
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Title
+  var stLabel=STRATEGY_LABELS[r.strategy_type]||r.strategy_type;
+  ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';
+  ctx.fillText(r.pool_label+' × '+stLabel+'  |  '+r.period_years+'年  |  年化 '+(r.annualized_return_pct>=0?'+':'')+r.annualized_return_pct+'%  夏普 '+r.sharpe,50,20);
+
+  // Dates
+  ctx.fillStyle='#888';ctx.font='10px monospace';
+  if(curve.length>0)ctx.fillText(curve[0].date,40,H-5);
+  if(curve.length>1)ctx.fillText(curve[curve.length-1].date,W-90,H-5);
+}
+
+async function loadPoolHistory(){
+  try{
+    var data=await api('/quant/admin/api/strategy-fitness/pool-backtest/history');
+    if(!data||!data.records){document.getElementById('poolHistoryTable').innerHTML='<div class="empty">暂无历史记录</div>';return;}
+    var records=data.records;
+    if(!records.length){document.getElementById('poolHistoryTable').innerHTML='<div class="empty">暂无历史记录</div>';return;}
+    // Group by run_id
+    var runs={};var runOrder=[];
+    records.forEach(function(r){
+      if(!runs[r.run_id]){runs[r.run_id]=[];runOrder.push(r.run_id)}
+      runs[r.run_id].push(r);
+    });
+
+    var html='<table><thead><tr><th>批次</th><th>时间</th><th>组合数</th><th>最佳组合</th><th>最佳年化</th><th>最佳夏普</th><th>操作</th></tr></thead><tbody>';
+    runOrder.forEach(function(runId){
+      var items=runs[runId];
+      var best=items[0];
+      items.forEach(function(it){
+        if((it.annualized_return_pct||0)>(best.annualized_return_pct||0))best=it;
+      });
+      html+='<tr>';
+      html+='<td style="font-family:monospace;font-size:12px">'+esc(runId)+'</td>';
+      html+='<td>'+esc(items[0].created_at||'')+'</td>';
+      html+='<td>'+items.length+'</td>';
+      html+='<td>'+esc(best.pool_label)+' × '+esc(STRATEGY_LABELS[best.strategy_type]||best.strategy_type)+'</td>';
+      html+='<td class="'+(best.annualized_return_pct>=0?'metric-good':'metric-bad')+'">'+(best.annualized_return_pct>=0?'+':'')+
+        (best.annualized_return_pct||0).toFixed(2)+'%</td>';
+      html+='<td class="'+(best.sharpe>=1?'metric-good':'metric-bad')+'">'+(best.sharpe||0).toFixed(2)+'</td>';
+      html+='<td>';
+      html+='<button class="btn btn-sm btn-primary" style="margin-right:4px" onclick="applyPoolCombo(\\''+esc(runId)+'\\',\\''+esc(best.pool_key)+'\\',\\''+esc(best.strategy_type)+'\\',\\''+esc(best.pool_label)+' × '+esc(STRATEGY_LABELS[best.strategy_type]||best.strategy_type)+'\\','+best.symbol_count+','+(best.annualized_return_pct||0).toFixed(2)+','+(best.sharpe||0).toFixed(2)+')">📋 应用</button>';
+      html+='<button class="btn btn-sm btn-danger" onclick="deletePoolRun(\\''+esc(runId)+'\\')">🗑️</button>';
+      html+='</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('poolHistoryTable').innerHTML=html;
+  }catch(e){
+    document.getElementById('poolHistoryTable').innerHTML='<div class="empty">加载失败: '+e+'</div>';
+  }
+}
+
+async function deletePoolRun(runId){
+  if(!confirm('确认删除批次 '+runId+' 的所有回测记录？'))return;
+  try{
+    var res=await api('/quant/admin/api/strategy-fitness/pool-backtest/delete',{
+      method:'POST',body:JSON.stringify({run_id:runId})
+    });
+    if(res&&res.ok){toast('已删除','success');loadPoolHistory();}
+    else{toast('删除失败','error');}
+  }catch(e){toast('删除失败: '+e,'error');}
+}
+
+async function applyPoolCombo(runId,poolKey,strategyType,comboLabel,symbolCount,annReturn,sharpe){
+  // 先获取当前 broker 类型，让用户明确知道应用到什么环境
+  var brokerLabel='未知';
+  try{
+    var st=await api('/quant/admin/api/engine-status');
+    var bt=st&&st.brokerType||'paper';
+    brokerLabel=bt==='paper'?'🟡 虚拟盘 (Paper)':'🔴 实盘 ('+bt+')';
+  }catch(e){brokerLabel='⚠️ 无法获取';}
+  var msg='确认将以下策略应用到引擎？\\n\\n'+
+    '🔧 当前交易模式：'+brokerLabel+'\\n\\n'+
+    '组合：'+comboLabel+'\\n'+
+    '股票数：'+symbolCount+'\\n'+
+    '回测年化：'+(annReturn>=0?'+':'')+annReturn+'%\\n'+
+    '夏普比率：'+sharpe+'\\n\\n'+
+    '⚠️ 策略将注册到 Live Engine，请确认信号质量';
+  if(!confirm(msg))return;
+  try{
+    var res=await api('/quant/admin/api/strategy-fitness/pool-backtest/apply',{
+      method:'POST',body:JSON.stringify({run_id:runId,pool_key:poolKey,strategy_type:strategyType})
+    });
+    if(res&&res.ok){
+      var modeTag=res.brokerType==='paper'?'[虚拟盘]':'[实盘]';
+      toast('✅ '+modeTag+' '+res.message+' (ID: '+(res.strategy&&res.strategy.id||'')+')', 'success');
+      loadPoolHistory();
+    }else{
+      toast('❌ '+(res&&res.error||'应用失败'),'error');
+    }
+  }catch(e){toast('❌ 应用失败: '+e,'error');}
 }
 
 // ── Helpers ────────────────────────────────────────────

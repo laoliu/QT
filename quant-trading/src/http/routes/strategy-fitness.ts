@@ -695,7 +695,7 @@ async function saveFitnessStandalone(
 }
 
 export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
-  const { api, config, secure } = deps;
+  const { api, config, secure, getEngine } = deps;
 
   // ── Run fitness analysis ───────────────────────────────────
   api.registerHttpRoute({
@@ -1213,6 +1213,205 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           { timeoutMs: 30 * 60_000 },
         );
         json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── List stock pools (for pool backtest UI) ─────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pools",
+    handler: secure(async (_req, res) => {
+      try {
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/pool_optimizer.py",
+          { action: "list_pools" },
+          config,
+          { timeoutMs: 60_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Pool × Strategy Backtest (run) ─────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pool-backtest",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const result = await runPythonScript<Record<string, unknown>>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          {
+            action: "run_pool_backtest",
+            pool_configs: body.pool_configs ?? [],
+            period_years: Number(body.period_years) || 5,
+            rebalance_days: Number(body.rebalance_days) || 5,
+            initial_capital: Number(body.initial_capital) || 1_000_000,
+          },
+          config,
+          { timeoutMs: 30 * 60_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Pool backtest progress ─────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pool-backtest/status",
+    handler: secure(async (_req, res) => {
+      try {
+        const pythonDir = getPythonDir();
+        const logsDir = path.join(path.dirname(pythonDir), "logs");
+        const progressPath = path.join(logsDir, "pool-backtest-progress.json");
+        const raw = await fs.readFile(progressPath, "utf-8").catch(() => "");
+        if (!raw) { json(res, { status: "idle" }); return; }
+        json(res, JSON.parse(raw));
+      } catch (err) {
+        json(res, { status: "error", error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Pool backtest history ──────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pool-backtest/history",
+    handler: secure(async (_req, res) => {
+      try {
+        const result = await runPythonScript<Record<string, unknown>>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          { action: "pool_backtest_history", limit: 100 },
+          config,
+          { timeoutMs: 15_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Pool backtest delete ───────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pool-backtest/delete",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const result = await runPythonScript<Record<string, unknown>>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          { action: "pool_backtest_delete", run_id: body.run_id ?? "" },
+          config,
+          { timeoutMs: 15_000 },
+        );
+        json(res, result.ok ? result.data : { ok: false, error: result.error });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Pool backtest apply → register as live strategy ────────
+  const POOL_STRATEGY_MAP: Record<string, string> = {
+    momentum: "momentum-breakout",
+    mixed: "dual-ma-crossover",
+  };
+
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/pool-backtest/apply",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const runId = String(body.run_id ?? "");
+        const poolKey = String(body.pool_key ?? "");
+        const strategyType = String(body.strategy_type ?? "");
+
+        if (!runId || !poolKey || !strategyType) {
+          json(res, { ok: false, error: "run_id, pool_key, strategy_type 必填" }, 400);
+          return;
+        }
+
+        // 1. Query combo details from DB via Python
+        const pyResult = await runPythonScript<{
+          combo?: {
+            symbols_list?: string[];
+            pool_label?: string;
+            strategy_type?: string;
+            annualized_return_pct?: number;
+            sharpe?: number;
+            symbol_count?: number;
+          };
+        }>(
+          "aipha/backtest/multi_strategy_backtest.py",
+          { action: "pool_backtest_get_combo", run_id: runId, pool_key: poolKey, strategy_type: strategyType },
+          config,
+          { timeoutMs: 15_000 },
+        );
+
+        if (!pyResult.ok || !pyResult.data?.combo) {
+          json(res, { ok: false, error: pyResult.error ?? "未找到该回测记录" });
+          return;
+        }
+
+        const combo = pyResult.data.combo;
+        const symbols = combo.symbols_list ?? [];
+        if (symbols.length === 0) {
+          json(res, { ok: false, error: "该组合无有效股票" });
+          return;
+        }
+
+        // 2. Map strategy_type to live strategy ID
+        const liveStrategyId = POOL_STRATEGY_MAP[strategyType];
+        if (!liveStrategyId) {
+          json(res, { ok: false, error: `不支持的策略类型: ${strategyType}` });
+          return;
+        }
+
+        // 3. Duplicate check
+        const engine = getEngine();
+        const existing = engine.strategyRegistry.list().find(
+          (s) => (s.parameters as Record<string, unknown> | undefined)?.source === "pool-backtest"
+            && (s.parameters as Record<string, unknown> | undefined)?.run_id === runId
+            && (s.parameters as Record<string, unknown> | undefined)?.pool_key === poolKey,
+        );
+        if (existing) {
+          json(res, { ok: false, error: `该组合已应用，策略 ID: ${existing.id}` });
+          return;
+        }
+
+        // 4. Register as live strategy (auto-persists + hot-reloads)
+        const entry = await engine.addStrategy(liveStrategyId, symbols, {
+          source: "pool-backtest",
+          run_id: runId,
+          pool_key: poolKey,
+          pool_label: combo.pool_label ?? "",
+          strategy_type: strategyType,
+          rebalanceDays: 5,
+          annualized_return_pct: combo.annualized_return_pct ?? 0,
+          sharpe: combo.sharpe ?? 0,
+        });
+
+        const brokerType = engine.broker?.brokerType ?? "paper";
+        json(res, {
+          ok: true,
+          strategy: entry,
+          brokerType,
+          message: `已应用「${combo.pool_label ?? poolKey} × ${strategyType}」，共 ${symbols.length} 只股票`,
+        });
       } catch (err) {
         json(res, { ok: false, error: String(err) }, 500);
       }

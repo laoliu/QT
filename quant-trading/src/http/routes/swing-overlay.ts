@@ -191,6 +191,11 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           gridOrders.push(orderId);
         }
 
+        // Subscribe the new symbol for real-time tick data
+        if (tickIngress) {
+          void tickIngress.subscribe([symbol]).catch(() => {});
+        }
+
         json(res, {
           ok: true,
           symbol,
@@ -284,19 +289,27 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           posMap.set(p.symbol, { quantity: p.quantity, name: p.name ?? p.symbol });
         }
 
+        // Fetch all K-line data in parallel to avoid sequential timeout
+        const symbols = [...allBySymbol.keys()];
+        const priceMap = new Map<string, number>();
+        await Promise.all(
+          symbols.map(async (symbol) => {
+            try {
+              const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(symbol));
+              if (klines?.length) {
+                priceMap.set(symbol, klines[klines.length - 1]!.close);
+              }
+            } catch {
+              // best-effort
+            }
+          }),
+        );
+
         for (const [symbol, orders] of allBySymbol) {
           // Get active (non-triggered) orders for this symbol
           const activeOrders = orders.filter((o) => !o.triggered);
 
-          let currentPrice = 0;
-          try {
-            const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(symbol));
-            if (klines?.length) {
-              currentPrice = klines[klines.length - 1]!.close;
-            }
-          } catch {
-            // best-effort
-          }
+          const currentPrice = priceMap.get(symbol) ?? 0;
 
           const gridLevels = activeOrders
             .map((o) => o.gridPrice ?? o.triggerValue)
@@ -419,6 +432,12 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
       }
 
       const ticks = tickIngress.getRecentTicks(symbol, limit);
+
+      // If no ticks yet, ensure the symbol is subscribed for tick data
+      if (ticks.length === 0) {
+        void tickIngress.subscribe([symbol]).catch(() => {});
+      }
+
       const trades = conditionalOrderService.getSwingTradeLog(symbol);
 
       json(res, {

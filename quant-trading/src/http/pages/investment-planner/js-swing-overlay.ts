@@ -237,7 +237,7 @@ function refreshSwingDashboard() {
   if (!el) return;
 
   var mode = window._currentViewMode || 'paper';
-  api('/quant/admin/api/swing-overlay/status?mode=' + mode, { _timeout: 10000 }).then(function(d) {
+  api('/quant/admin/api/swing-overlay/status?mode=' + mode, { _timeout: 20000 }).then(function(d) {
     if (!d || !d.overlays || !d.overlays.length) {
       el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-dim)">暂无激活的波段监控</div>';
       return;
@@ -604,6 +604,32 @@ function loadTickChart(symbol) {
   _fetchTickData(symbol).then(function(d) {
     if (!d || !d.ok) {
       container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)">' + (d && d.message ? d.message : '无分笔数据，TickIngress 可能未启用') + '</div>';
+      return;
+    }
+    if (!d.ticks || !d.ticks.length) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)">暂无分笔数据，等待行情推送…<br><span style="font-size:12px">将每3秒自动刷新</span></div>';
+      // Still start auto-refresh so data appears once ticks arrive
+      _tickRefreshTimer = setInterval(function() {
+        if (_swingChartMode !== 'tick' || !document.getElementById('swing-chart-modal') || document.getElementById('swing-chart-modal').style.display === 'none') {
+          stopTickRefresh();
+          return;
+        }
+        _fetchTickData(symbol).then(function(d2) {
+          if (d2 && d2.ok && d2.ticks && d2.ticks.length) {
+            stopTickRefresh();
+            _renderTickData(d2, symbol);
+            _tickRefreshTimer = setInterval(function() {
+              if (_swingChartMode !== 'tick' || !document.getElementById('swing-chart-modal') || document.getElementById('swing-chart-modal').style.display === 'none') {
+                stopTickRefresh();
+                return;
+              }
+              _fetchTickData(symbol).then(function(d3) {
+                if (d3 && d3.ok) _updateTickData(d3);
+              }).catch(function() {});
+            }, 3000);
+          }
+        }).catch(function() {});
+      }, 3000);
       return;
     }
     _renderTickData(d, symbol);

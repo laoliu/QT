@@ -143,6 +143,7 @@ export class STRestructuringMonitor {
       "engines/st_restructuring.py",
       { action: "scan_all", days: scanDays },
       this.tradingConfig,
+      { timeoutMs: 600_000 },
     );
 
     if (!result.ok) {

@@ -87,13 +87,15 @@ def _normalize_to_qmt(code):
     code = str(code).strip()
     if "." in code:
         return code
-    if code.startswith("6"):
-        return code + ".SH"
-    if code.startswith(("0", "3")):
-        return code + ".SZ"
-    if code.startswith(("4", "8", "9")):
+    if code.startswith(("8", "43")):
         return code + ".BJ"
-    return code + ".SH"
+    try:
+        n = int(code)
+    except ValueError:
+        return code + ".SH"
+    if n >= 500_000:
+        return code + ".SH"
+    return code + ".SZ"
 
 # QMT ContextInfo object (set in init when running as strategy)
 _qmt_context = None

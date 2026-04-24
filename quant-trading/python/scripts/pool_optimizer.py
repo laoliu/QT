@@ -622,14 +622,35 @@ def optimize(
 if __name__ == "__main__":
     _raw = os.environ.get("QUANT_CONFIG") or sys.stdin.read()
     config = json.loads(_raw)
+    _action = config.get("action", "optimize")
     try:
-        result = optimize(
-            capital=config.get("capital", 500000),
-            start_date=config.get("start_date", "2025-06-01"),
-            end_date=config.get("end_date"),
-            max_rounds=config.get("max_rounds", 12),
-            auto_screen=config.get("auto_screen", False),
-        )
+        if _action == "list_pools":
+            # 只返回股票池列表（含股票代码），不跑回测
+            parsed = _optimizer_cache_get()
+            if parsed is None:
+                raw, _ = _fetch_all_sina(max_pages=30, per_page=80)
+                parsed = _parse_sina_stocks(raw)
+                if parsed:
+                    _optimizer_cache_save(parsed)
+            pools_out = dict(POOLS)
+            if parsed and len(parsed) >= 30:
+                auto_p = _build_auto_pools(parsed)
+                pools_out.update(auto_p)
+            result = {
+                "pools": [
+                    {"key": k, "label": v["label"], "symbols": v["symbols"],
+                     "count": len(v["symbols"]), "auto": v.get("auto", False)}
+                    for k, v in pools_out.items()
+                ]
+            }
+        else:
+            result = optimize(
+                capital=config.get("capital", 500000),
+                start_date=config.get("start_date", "2025-06-01"),
+                end_date=config.get("end_date"),
+                max_rounds=config.get("max_rounds", 12),
+                auto_screen=config.get("auto_screen", False),
+            )
     except Exception as e:
         import traceback
         result = {"error": str(e), "traceback": traceback.format_exc()}

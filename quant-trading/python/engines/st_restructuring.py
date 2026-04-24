@@ -159,8 +159,9 @@ def _fetch_announcements(days: int = 90, categories: Optional[list[str]] = None)
     import akshare as ak
     import pandas as pd
 
+    # "全部" already includes all other categories — no need to query each one
     if categories is None:
-        categories = ["全部", "资产重组", "风险提示", "重大事项"]
+        categories = ["全部"]
 
     today = datetime.now()
     all_announcements: list[dict] = []
@@ -168,7 +169,7 @@ def _fetch_announcements(days: int = 90, categories: Optional[list[str]] = None)
 
     # Sample dates across the time window (API returns one page per date)
     sample_dates: list[str] = []
-    for i in range(0, days, 3):  # every 3 days
+    for i in range(0, days, 7):  # every 7 days (restructuring events are rare)
         d = today - timedelta(days=i)
         sample_dates.append(d.strftime("%Y%m%d"))
 
@@ -200,7 +201,7 @@ def _fetch_announcements(days: int = 90, categories: Optional[list[str]] = None)
                             "date": str(row.get("公告日期", "")),
                             "url": url,
                         })
-            except Exception:
+            except (Exception, KeyboardInterrupt):
                 continue
 
     # Sort by date descending

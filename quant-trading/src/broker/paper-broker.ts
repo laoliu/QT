@@ -429,6 +429,14 @@ export class PaperBroker implements IBrokerAdapter {
       }
       return s + pos.quantity * (pos.currentPrice ?? pos.avgCost);
     }, 0);
+    // Calculate frozen cash from pending buy orders
+    const frozen = this.pendingLimitOrders
+      .filter(
+        (o) =>
+          (o.side === "buy" || o.side === "buy_open") &&
+          (o.status === "submitted" || o.status === "partial"),
+      )
+      .reduce((s, o) => s + (o.price ?? 0) * (o.quantity - (o.filledQty ?? 0)), 0);
     const totalAssets = p.cash + mv;
     // Use initial cash from portfolio creation (new portfolios default to 100k)
     const initCash = p.initialCash ?? 100_000;
@@ -436,8 +444,8 @@ export class PaperBroker implements IBrokerAdapter {
     return {
       accountId: "paper",
       brokerType: "paper",
-      cash: p.cash,
-      frozenCash: 0,
+      cash: p.cash - frozen,
+      frozenCash: frozen,
       totalAssets,
       marketValue: mv,
       profit,
@@ -548,6 +556,26 @@ export class PaperBroker implements IBrokerAdapter {
   private async executeFill(order: Order, fillPrice: number, qty: number): Promise<void> {
     const commission = calcCommission(order.side, fillPrice, qty, order.market);
     const now = nowCSTISO();
+
+    /** Mark order as rejected and notify status callbacks. */
+    const rejectOrder = async (reason: string): Promise<void> => {
+      console.warn(`[PaperBroker] ${reason}`);
+      const releaseOrd = await ordersMutex.acquire();
+      try {
+        const orders = await loadOrders(this.cfg);
+        const idx = orders.findIndex((o) => o.orderId === order.orderId);
+        if (idx >= 0) {
+          orders[idx].status = "rejected";
+          orders[idx].updatedAt = now;
+          orders[idx].errorMsg = reason;
+          await saveOrders(orders, this.cfg);
+        }
+      } finally {
+        releaseOrd();
+      }
+      for (const cb of this.statusCbs) cb(order.orderId, "rejected", { ...order, status: "rejected" });
+    };
+
     const fill: Fill = {
       fillId: randomUUID(),
       orderId: order.orderId,
@@ -588,10 +616,8 @@ export class PaperBroker implements IBrokerAdapter {
         if (order.side === "buy_close" || order.side === "cover") {
           // Closing short position — guard: must have a short position to close
           if (!pos || pos.quantity >= 0) {
-            // No short position to close — reject silently (risk gate should have caught this)
-            console.warn(
-              `[PaperBroker] ${order.side} rejected: no short position for ${order.symbol}`,
-            );
+            // No short position to close — reject with proper status
+            await rejectOrder(`${order.side} rejected: no short position for ${order.symbol}`);
             return;
           }
           // Clamp qty to available short quantity to prevent over-cover
@@ -622,9 +648,7 @@ export class PaperBroker implements IBrokerAdapter {
           // buy / buy_open: open or add to long position
           // Guard: if a short position already exists, reject (use cover/buy_close instead)
           if (pos && pos.quantity < 0) {
-            console.warn(
-              `[PaperBroker] buy rejected: short position exists for ${order.symbol}. Use cover/buy_close to close short first.`,
-            );
+            await rejectOrder(`buy rejected: short position exists for ${order.symbol}. Use cover/buy_close to close short first.`);
             return;
           }
           if (isFutures) {
@@ -636,9 +660,7 @@ export class PaperBroker implements IBrokerAdapter {
           }
           // Reject if insufficient funds
           if (portfolio.cash + cashDelta < 0) {
-            console.warn(
-              `[PaperBroker] buy rejected: insufficient funds for ${order.symbol}. Need ¥${(-cashDelta).toFixed(2)}, available ¥${portfolio.cash.toFixed(2)}`,
-            );
+            await rejectOrder(`buy rejected: insufficient funds for ${order.symbol}. Need ¥${(-cashDelta).toFixed(2)}, available ¥${portfolio.cash.toFixed(2)}`);
             return;
           }
           if (pos) {
@@ -683,9 +705,7 @@ export class PaperBroker implements IBrokerAdapter {
       } else if (order.side === "sell_open") {
         // Guard: reject sell_open when a long position exists (use sell/sell_close first)
         if (pos && pos.quantity > 0) {
-          console.warn(
-            `[PaperBroker] sell_open rejected: long position exists for ${order.symbol}. Use sell/sell_close to close long first.`,
-          );
+          await rejectOrder(`sell_open rejected: long position exists for ${order.symbol}. Use sell/sell_close to close long first.`);
           return;
         }
         if (isFutures) {
@@ -699,9 +719,7 @@ export class PaperBroker implements IBrokerAdapter {
         }
         // Reject if insufficient funds for margin/commission
         if (cashDelta < 0 && portfolio.cash + cashDelta < 0) {
-          console.warn(
-            `[PaperBroker] sell_open rejected: insufficient funds for ${order.symbol}. Need ¥${(-cashDelta).toFixed(2)}, available ¥${portfolio.cash.toFixed(2)}`,
-          );
+          await rejectOrder(`sell_open rejected: insufficient funds for ${order.symbol}. Need ¥${(-cashDelta).toFixed(2)}, available ¥${portfolio.cash.toFixed(2)}`);
           return;
         }
         if (pos) {
@@ -736,18 +754,13 @@ export class PaperBroker implements IBrokerAdapter {
       } else {
         // sell / sell_close: receive cash, reduce long position
         if (!pos || pos.quantity <= 0) {
-          // No long position to sell — reject silently
-          console.warn(
-            `[PaperBroker] ${order.side} rejected: no long position for ${order.symbol}`,
-          );
+          await rejectOrder(`${order.side} rejected: no long position for ${order.symbol}`);
           return;
         }
         // T+1 enforcement for A-share: clamp to available (non-frozen) shares
         const availableForSell = computeAvailableQty(pos);
         if (availableForSell <= 0 && order.market === "cn_stock") {
-          console.warn(
-            `[PaperBroker] ${order.side} rejected: T+1 rule — all ${pos.quantity} shares of ${order.symbol} were bought today and cannot be sold until next trading day`,
-          );
+          await rejectOrder(`${order.side} rejected: T+1 rule — all ${pos.quantity} shares of ${order.symbol} were bought today and cannot be sold until next trading day`);
           return;
         }
         // Clamp qty to available position (respecting T+1 for A-share)

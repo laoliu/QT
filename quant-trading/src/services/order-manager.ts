@@ -203,6 +203,14 @@ export class OrderManager {
   private readonly initialized: Promise<void>;
 
   /**
+   * In-memory cash reservation ledger: orderId → reserved amount.
+   * Prevents concurrent signals from double-spending the same cash.
+   * Cash is reserved when a buy order is placed, and released when
+   * the order is filled, cancelled, or rejected.
+   */
+  private reservedCash: Map<string, number> = new Map();
+
+  /**
    * Cache of position cost prices — populated from broker positions at startup
    * and on every sync. Persists even after positions are fully sold so that
    * sell fills can still find the correct entry price.
@@ -316,6 +324,22 @@ export class OrderManager {
     return this.confirmMgr;
   }
 
+  /** Total cash currently reserved by pending buy orders (not yet filled/cancelled). */
+  get totalReservedCash(): number {
+    let total = 0;
+    for (const amount of this.reservedCash.values()) total += amount;
+    return total;
+  }
+
+  /** Release reserved cash for an order (on fill, cancel, or reject). */
+  private releaseReservedCash(orderId: string): void {
+    const amount = this.reservedCash.get(orderId);
+    if (amount !== undefined) {
+      this.reservedCash.delete(orderId);
+      this.log(`释放资金预留: ¥${amount.toFixed(2)} [${orderId.slice(0, 8)}]`);
+    }
+  }
+
   /**
    * Submit an order from a trading signal.
    * Runs position sizing → risk check → optional human confirmation → broker submission.
@@ -386,6 +410,12 @@ export class OrderManager {
       return { ok: false, reason: `无法获取账户信息: ${(err as Error).message}` };
     }
 
+    // Deduct reserved cash from available cash so concurrent signals see accurate balances
+    const reserved = this.totalReservedCash;
+    if (reserved > 0) {
+      account = { ...account, cash: Math.max(0, account.cash - reserved) };
+    }
+
     const dailyLoss = await this.getDailyPnl().then(
       (p) => (p < 0 ? -p : 0),
       () => 0, // If PnL lookup fails, assume zero daily loss
@@ -443,6 +473,17 @@ export class OrderManager {
 
     // Persist
     await appendOrder(order, this.cfg);
+
+    // Reserve cash for buy orders to prevent concurrent signals from double-spending
+    const isBuyOrder =
+      order.side === "buy" || order.side === "buy_open" || order.side === "sell_open";
+    if (isBuyOrder) {
+      const reserveAmount = (order.price ?? 0) * order.quantity;
+      if (reserveAmount > 0) {
+        this.reservedCash.set(order.orderId, reserveAmount);
+        this.log(`资金预留: ¥${reserveAmount.toFixed(2)} [${order.orderId.slice(0, 8)}]`);
+      }
+    }
 
     // Track open buys/sell_open for PnL matching
     if (
@@ -666,6 +707,9 @@ export class OrderManager {
 
   /** Cancel an open order. */
   async cancel(orderId: string): Promise<void> {
+    // Release reserved cash immediately on cancel
+    this.releaseReservedCash(orderId);
+
     // Load from disk to validate status before calling broker
     const orders = await loadOrders(this.cfg);
     const diskOrder = orders.find((o) => o.orderId === orderId);
@@ -767,6 +811,9 @@ export class OrderManager {
   private async handleFill(fill: Fill): Promise<void> {
     // Wait for openBuys rebuild to finish before matching fills
     await this.initialized;
+
+    // Release reserved cash for this order (it has been filled)
+    this.releaseReservedCash(fill.orderId);
 
     const now = new Date().toISOString();
 
@@ -883,6 +930,10 @@ export class OrderManager {
     status: OrderStatus,
     _order: Order,
   ): Promise<void> {
+    // Release reserved cash when order is cancelled, rejected, or expired
+    if (status === "cancelled" || status === "rejected" || status === "expired") {
+      this.releaseReservedCash(orderId);
+    }
     await updateOrder(orderId, { status }, this.cfg);
     if (status === "rejected") {
       this.log(`订单被拒绝: ${orderId.slice(0, 8)}`);

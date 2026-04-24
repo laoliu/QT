@@ -4150,6 +4150,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             "engines/st_restructuring.py",
             { action: "scan_all", days, force_refresh: force },
             config,
+            { timeoutMs: 600_000 },
           );
           json(res, result.ok ? result.data : { error: result.error ?? "扫描失败" });
         } else if (action === "track") {

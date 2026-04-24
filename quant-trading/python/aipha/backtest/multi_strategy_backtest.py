@@ -704,6 +704,480 @@ def run_top10_portfolio_backtest(
     return result_dict
 
 
+# ── Pool × Strategy 5-year backtest ──────────────────────────────
+
+
+def _get_pool_backtest_progress_path() -> str:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    python_root = os.path.dirname(os.path.dirname(script_dir))
+    logs_dir = os.path.join(os.path.dirname(python_root), "logs")
+    return os.path.join(logs_dir, "pool-backtest-progress.json")
+
+
+def _write_pool_progress(data: dict) -> None:
+    p = _get_pool_backtest_progress_path()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    try:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _read_pool_progress() -> dict:
+    try:
+        with open(_get_pool_backtest_progress_path(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"status": "idle"}
+
+
+def _save_pool_backtest_result(result: dict) -> None:
+    """保存池回测结果到 DB。"""
+    db_path = _get_db_path()
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pool_strategy_backtest (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                pool_key TEXT NOT NULL,
+                pool_label TEXT NOT NULL,
+                strategy_type TEXT NOT NULL,
+                symbol_count INTEGER,
+                symbols TEXT,
+                period_years INTEGER,
+                total_return_pct REAL,
+                annualized_return_pct REAL,
+                max_drawdown_pct REAL,
+                sharpe REAL,
+                win_rate_pct REAL,
+                profit_factor REAL,
+                calmar REAL,
+                cum_multiple REAL,
+                initial_capital REAL,
+                total_days INTEGER,
+                nav_start REAL,
+                nav_end REAL,
+                equity_curve TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            )
+        """)
+        conn.commit()
+        run_id = result.get("run_id", "")
+        for r in result.get("results", []):
+            conn.execute("""
+                INSERT INTO pool_strategy_backtest
+                (run_id, pool_key, pool_label, strategy_type, symbol_count, symbols,
+                 period_years, total_return_pct, annualized_return_pct, max_drawdown_pct,
+                 sharpe, win_rate_pct, profit_factor, calmar, cum_multiple,
+                 initial_capital, total_days, nav_start, nav_end, equity_curve)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                run_id, r["pool_key"], r["pool_label"], r["strategy_type"],
+                r.get("symbol_count", 0), json.dumps(r.get("symbols", []), ensure_ascii=False),
+                r.get("period_years", 5),
+                r.get("total_return_pct", 0), r.get("annualized_return_pct", 0),
+                r.get("max_drawdown_pct", 0), r.get("sharpe", 0),
+                r.get("win_rate_pct", 0), r.get("profit_factor", 0),
+                r.get("calmar", 0), r.get("cum_multiple", 0),
+                r.get("initial_capital", 1_000_000), r.get("total_days", 0),
+                r.get("nav_start", 0), r.get("nav_end", 0),
+                json.dumps(r.get("equity_curve", []), ensure_ascii=False),
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _load_pool_backtest_history(limit: int = 20) -> list[dict]:
+    """加载历史池回测记录。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # 先检查表是否存在
+        tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='pool_strategy_backtest'"
+        ).fetchone()
+        if not tbl:
+            return []
+        rows = conn.execute(
+            "SELECT * FROM pool_strategy_backtest ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _delete_pool_backtest_run(run_id: str) -> bool:
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return False
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("DELETE FROM pool_strategy_backtest WHERE run_id = ?", (run_id,))
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def _get_pool_backtest_combo(run_id: str, pool_key: str, strategy_type: str) -> dict | None:
+    """查询指定池回测组合的详情（含 symbols 列表）。"""
+    db_path = _get_db_path()
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM pool_strategy_backtest WHERE run_id = ? AND pool_key = ? AND strategy_type = ? LIMIT 1",
+            (run_id, pool_key, strategy_type),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        # symbols 存储为 JSON 字符串，解析为 list
+        sym_raw = d.get("symbols", "[]")
+        try:
+            d["symbols_list"] = json.loads(sym_raw) if isinstance(sym_raw, str) else sym_raw
+        except Exception:
+            d["symbols_list"] = []
+        return d
+    finally:
+        conn.close()
+
+
+def run_pool_strategy_backtest(
+    pool_configs: list[dict],
+    period_years: int = 5,
+    rebalance_days: int = 5,
+    initial_capital: float = 1_000_000,
+) -> dict:
+    """对多个 (股票池 × 策略) 组合做 N 年回测。
+
+    pool_configs: [{"pool_key": "...", "pool_label": "...", "strategy_type": "mixed"|"momentum",
+                    "symbols": ["600519", ...]}]
+    """
+    from aipha.backtest.data_loader import load_bars_by_date
+
+    total = len(pool_configs)
+    if total == 0:
+        return {"ok": False, "error": "无回测任务"}
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    end_date = date.today()
+    start_date = end_date - timedelta(days=period_years * 365)
+
+    _write_pool_progress({
+        "status": "running", "phase": "收集股票列表...",
+        "completed": 0, "total": total, "run_id": run_id,
+    })
+
+    # 收集所有需要的股票
+    all_symbols = list(set(s for cfg in pool_configs for s in cfg.get("symbols", [])))
+    if not all_symbols:
+        _write_pool_progress({"status": "error", "phase": "无股票数据"})
+        return {"ok": False, "error": "无股票数据"}
+
+    _write_pool_progress({
+        "status": "running",
+        "phase": f"加载K线数据 ({len(all_symbols)} 只股票)...",
+        "completed": 0, "total": total, "run_id": run_id,
+    })
+
+    # 加载K线
+    bars_by_date = load_bars_by_date(symbols=all_symbols, start=start_date, end=end_date)
+    if not bars_by_date:
+        _write_pool_progress({"status": "error", "phase": "无K线数据"})
+        return {"ok": False, "error": "无K线数据"}
+
+    sorted_dates = sorted(bars_by_date.keys())
+    logger.info("K线加载完成: %d 交易日, %d 只股票", len(sorted_dates), len(all_symbols))
+
+    # 为每个组合运行回测
+    results = []
+    t0 = datetime.now()
+
+    for idx, cfg in enumerate(pool_configs):
+        pool_key = cfg["pool_key"]
+        pool_label = cfg["pool_label"]
+        strategy_type = cfg["strategy_type"]
+        symbols = cfg.get("symbols", [])
+        label = f"{pool_label} × {'混合策略' if strategy_type == 'mixed' else '趋势动量'}"
+
+        elapsed = (datetime.now() - t0).total_seconds()
+        _write_pool_progress({
+            "status": "running",
+            "phase": f"回测 {idx + 1}/{total}: {label}",
+            "completed": idx, "total": total,
+            "run_id": run_id, "elapsed_seconds": round(elapsed),
+        })
+        logger.info("回测 [%d/%d]: %s (%d 只股票)", idx + 1, total, label, len(symbols))
+
+        try:
+            # 构建该池的收盘价 DataFrame
+            close_data: dict[str, list[tuple[date, float]]] = {s: [] for s in symbols}
+            for d in sorted_dates:
+                day_bars = bars_by_date.get(d, {})
+                for s in symbols:
+                    if s in day_bars and day_bars[s].close > 0:
+                        close_data[s].append((d, day_bars[s].close))
+
+            # 转为 DataFrame
+            close_dict = {}
+            for s, pairs in close_data.items():
+                if pairs:
+                    idx_dates = [p[0] for p in pairs]
+                    vals = [p[1] for p in pairs]
+                    close_dict[s] = pd.Series(vals, index=pd.DatetimeIndex(idx_dates))
+
+            if not close_dict:
+                results.append({
+                    "pool_key": pool_key, "pool_label": pool_label,
+                    "strategy_type": strategy_type, "error": "无K线数据",
+                })
+                continue
+
+            close_df = pd.DataFrame(close_dict).sort_index().ffill()
+
+            if strategy_type == "momentum":
+                nav = _run_momentum_backtest(close_df, rebalance_days, initial_capital)
+            else:
+                nav = _run_mixed_backtest(close_df, rebalance_days, initial_capital)
+
+            if nav is None or len(nav) < 2:
+                results.append({
+                    "pool_key": pool_key, "pool_label": pool_label,
+                    "strategy_type": strategy_type, "error": "净值数据不足",
+                })
+                continue
+
+            metrics = _compute_portfolio_metrics(nav)
+            win_rate = _compute_win_rate(nav)
+            calmar = _compute_calmar(nav)
+
+            # 利润因子
+            daily_ret = nav.pct_change().dropna()
+            gains = daily_ret[daily_ret > 0].sum()
+            losses = abs(daily_ret[daily_ret < 0].sum())
+            profit_factor = float(gains / losses) if losses > 0 else 0.0
+
+            # 采样 equity curve
+            step = max(1, len(nav) // 300)
+            equity_curve = [
+                {"date": d.strftime("%Y-%m-%d"), "value": round(float(v), 2)}
+                for d, v in nav.iloc[::step].items()
+            ]
+
+            r = {
+                "pool_key": pool_key,
+                "pool_label": pool_label,
+                "strategy_type": strategy_type,
+                "symbol_count": len(symbols),
+                "symbols": symbols,
+                "period_years": period_years,
+                "total_return_pct": round(float(nav.iloc[-1] / nav.iloc[0] - 1) * 100, 2),
+                "annualized_return_pct": round(metrics["annual_return"] * 100, 2),
+                "max_drawdown_pct": round(metrics["max_drawdown"] * 100, 2),
+                "sharpe": round(metrics["sharpe"], 2),
+                "win_rate_pct": round(win_rate * 100, 1),
+                "profit_factor": round(profit_factor, 2),
+                "calmar": round(calmar, 2),
+                "cum_multiple": round(float(nav.iloc[-1] / nav.iloc[0]), 2),
+                "initial_capital": initial_capital,
+                "total_days": (nav.index[-1] - nav.index[0]).days,
+                "nav_start": round(float(nav.iloc[0]), 2),
+                "nav_end": round(float(nav.iloc[-1]), 2),
+                "equity_curve": equity_curve,
+            }
+            results.append(r)
+            logger.info("  → %s: 总收益 %+.2f%%, 年化 %+.2f%%, 夏普 %.2f",
+                        label, r["total_return_pct"], r["annualized_return_pct"], r["sharpe"])
+
+        except Exception as e:
+            logger.warning("回测 %s 失败: %s", label, e, exc_info=True)
+            results.append({
+                "pool_key": pool_key, "pool_label": pool_label,
+                "strategy_type": strategy_type, "error": str(e),
+            })
+
+    elapsed = round((datetime.now() - t0).total_seconds())
+    ok_results = [r for r in results if "error" not in r]
+
+    # 按综合评分排序 (年化收益×0.3 + 夏普×20 + (100-回撤)×0.2 + 胜率×0.1 + 利润因子×5)
+    for r in ok_results:
+        r["composite_score"] = round(
+            r["annualized_return_pct"] * 0.3
+            + r["sharpe"] * 20
+            + (100 - r["max_drawdown_pct"]) * 0.2
+            + r["win_rate_pct"] * 0.1
+            + r["profit_factor"] * 5,
+            2,
+        )
+    ok_results.sort(key=lambda x: x.get("composite_score", 0), reverse=True)
+    for i, r in enumerate(ok_results):
+        r["rank"] = i + 1
+
+    result_dict = {
+        "ok": True,
+        "run_id": run_id,
+        "total_tasks": total,
+        "completed": len(ok_results),
+        "failed": len(results) - len(ok_results),
+        "elapsed_seconds": elapsed,
+        "results": ok_results,
+        "errors": [r for r in results if "error" in r],
+    }
+
+    # 保存到 DB
+    try:
+        _save_pool_backtest_result(result_dict)
+    except Exception as e:
+        logger.warning("保存回测结果失败: %s", e)
+
+    _write_pool_progress({
+        "status": "done", "phase": "回测完成",
+        "completed": total, "total": total,
+        "run_id": run_id, "elapsed_seconds": elapsed,
+    })
+
+    return result_dict
+
+
+def _run_mixed_backtest(
+    close_df: pd.DataFrame,
+    rebalance_days: int = 5,
+    initial_capital: float = 1_000_000,
+) -> pd.Series | None:
+    """混合策略: MA20>MA60多头 + 20日动量选股，等权持仓。"""
+    if close_df.empty or len(close_df) < 61:
+        return None
+
+    ma20 = close_df.rolling(20).mean()
+    ma60 = close_df.rolling(60).mean()
+    returns_20d = close_df.pct_change(20)
+
+    nav_values = [initial_capital]
+    nav_dates = [close_df.index[60]]
+    holdings: list[str] = []
+    hold_count = 0
+
+    for i in range(60, len(close_df)):
+        dt = close_df.index[i]
+
+        if hold_count % rebalance_days == 0 or not holdings:
+            scores = {}
+            for code in close_df.columns:
+                try:
+                    if pd.isna(close_df[code].iloc[i]) or pd.isna(ma20[code].iloc[i]):
+                        continue
+                    price = close_df[code].iloc[i]
+                    m20 = ma20[code].iloc[i]
+                    m60 = ma60[code].iloc[i]
+                    mom = returns_20d[code].iloc[i] if not pd.isna(returns_20d[code].iloc[i]) else 0
+                    if price > m20 > m60 and mom > 0:
+                        scores[code] = mom
+                except (KeyError, IndexError):
+                    continue
+
+            top_n = max(3, len(scores) // 2)
+            sorted_stocks = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            new_holdings = [code for code, _ in sorted_stocks]
+            if new_holdings:
+                holdings = new_holdings
+
+        hold_count += 1
+
+        if holdings and i > 60:
+            daily_returns = []
+            for code in holdings:
+                try:
+                    prev = close_df[code].iloc[i - 1]
+                    curr = close_df[code].iloc[i]
+                    if not pd.isna(prev) and not pd.isna(curr) and prev > 0:
+                        daily_returns.append((curr - prev) / prev)
+                except (KeyError, IndexError):
+                    continue
+            if daily_returns:
+                avg_ret = sum(daily_returns) / len(daily_returns)
+                nav_values.append(nav_values[-1] * (1 + avg_ret))
+            else:
+                nav_values.append(nav_values[-1])
+            nav_dates.append(dt)
+
+    if len(nav_values) < 2:
+        return None
+    return pd.Series(nav_values, index=pd.DatetimeIndex(nav_dates[:len(nav_values)]))
+
+
+def _run_momentum_backtest(
+    close_df: pd.DataFrame,
+    rebalance_days: int = 5,
+    initial_capital: float = 1_000_000,
+) -> pd.Series | None:
+    """趋势动量策略: 20日+5日动量选股，等权持仓。"""
+    if close_df.empty or len(close_df) < 21:
+        return None
+
+    returns_20d = close_df.pct_change(20)
+    returns_5d = close_df.pct_change(5)
+
+    nav_values = [initial_capital]
+    nav_dates = [close_df.index[20]]
+    holdings: list[str] = []
+    hold_count = 0
+
+    for i in range(20, len(close_df)):
+        dt = close_df.index[i]
+
+        if hold_count % rebalance_days == 0 or not holdings:
+            scores = {}
+            for code in close_df.columns:
+                try:
+                    mom20 = returns_20d[code].iloc[i]
+                    mom5 = returns_5d[code].iloc[i]
+                    if pd.isna(mom20) or pd.isna(mom5):
+                        continue
+                    if mom20 > 0.02 and mom5 > 0:
+                        scores[code] = mom20 * 0.7 + mom5 * 0.3
+                except (KeyError, IndexError):
+                    continue
+
+            top_n = max(3, min(len(scores), len(close_df.columns) // 2))
+            sorted_stocks = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
+            new_holdings = [code for code, _ in sorted_stocks]
+            if new_holdings:
+                holdings = new_holdings
+
+        hold_count += 1
+
+        if holdings and i > 20:
+            daily_returns = []
+            for code in holdings:
+                try:
+                    prev = close_df[code].iloc[i - 1]
+                    curr = close_df[code].iloc[i]
+                    if not pd.isna(prev) and not pd.isna(curr) and prev > 0:
+                        daily_returns.append((curr - prev) / prev)
+                except (KeyError, IndexError):
+                    continue
+            if daily_returns:
+                avg_ret = sum(daily_returns) / len(daily_returns)
+                nav_values.append(nav_values[-1] * (1 + avg_ret))
+            else:
+                nav_values.append(nav_values[-1])
+            nav_dates.append(dt)
+
+    if len(nav_values) < 2:
+        return None
+    return pd.Series(nav_values, index=pd.DatetimeIndex(nav_dates[:len(nav_values)]))
+
+
 # ── CLI entry point for standalone testing ────────────────────────
 
 def _cli_main():
@@ -738,6 +1212,30 @@ def _cli_main():
             result = {"ok": True, "comparisons": results}
         elif action == "read_progress":
             result = _read_combo_progress()
+        elif action == "run_pool_backtest":
+            result = run_pool_strategy_backtest(
+                pool_configs=config.get("pool_configs", []),
+                period_years=config.get("period_years", 5),
+                rebalance_days=config.get("rebalance_days", 5),
+                initial_capital=config.get("initial_capital", 1_000_000),
+            )
+        elif action == "pool_backtest_progress":
+            result = _read_pool_progress()
+        elif action == "pool_backtest_history":
+            result = {"ok": True, "records": _load_pool_backtest_history(config.get("limit", 50))}
+        elif action == "pool_backtest_delete":
+            deleted = _delete_pool_backtest_run(config.get("run_id", ""))
+            result = {"ok": deleted}
+        elif action == "pool_backtest_get_combo":
+            combo = _get_pool_backtest_combo(
+                config.get("run_id", ""),
+                config.get("pool_key", ""),
+                config.get("strategy_type", ""),
+            )
+            if combo:
+                result = {"ok": True, "combo": combo}
+            else:
+                result = {"ok": False, "error": "未找到该回测记录"}
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:

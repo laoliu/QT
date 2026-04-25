@@ -441,7 +441,7 @@ class PortfolioCombiner:
     ) -> dict:
         """Test portfolio stability under ±perturbation weight changes.
 
-        For each strategy, perturb its weight by ±perturbation and measure
+        For each strategy, perturb its normalized weight by ±perturbation and measure
         the impact on portfolio Sharpe ratio.
         """
         # Baseline
@@ -450,28 +450,67 @@ class PortfolioCombiner:
             return baseline
         base_sr = baseline["portfolio_metrics"]["sharpe_ratio"]
 
+        # Build aligned data for direct weight manipulation
+        strats = self.strategies
+        date_sets = []
+        for s in strats:
+            dates = {p["date"] for p in equity_curves[s.name]}
+            date_sets.append(dates)
+        common_dates = sorted(set.intersection(*date_sets)) if date_sets else []
+        if len(common_dates) < 10:
+            return {"ok": False, "error": "Insufficient data for perturbation test"}
+
+        returns_by_strat: dict[str, list[float]] = {}
+        for s in strats:
+            value_map = {p["date"]: p["value"] for p in equity_curves[s.name]}
+            values = [value_map[d] for d in common_dates]
+            returns_by_strat[s.name] = _calc_returns(values)
+
+        # Get baseline normalized weights
+        base_weights = _calc_fixed_weights(strats)
+
+        def _sharpe_with_weights(weights: list[float]) -> float:
+            """Compute Sharpe ratio with given explicit weights."""
+            n_days = len(common_dates)
+            portfolio_values = [self.config.initial_cash]
+            for t in range(1, n_days):
+                port_ret = sum(
+                    weights[i] * returns_by_strat[s.name][t - 1]
+                    for i, s in enumerate(strats)
+                )
+                portfolio_values.append(portfolio_values[-1] * (1 + port_ret))
+            port_returns = _calc_returns(portfolio_values)
+            if len(port_returns) < 2:
+                return 0.0
+            import numpy as np
+            arr = np.array(port_returns)
+            mu = arr.mean()
+            sigma = arr.std(ddof=1)
+            if sigma < 1e-10:
+                return 0.0
+            return float((mu / sigma) * (252 ** 0.5))
+
         results = []
-        for i, s in enumerate(self.strategies):
+        for i, s in enumerate(strats):
             for direction in [+1, -1]:
-                # Save original weight
-                orig_weight = s.weight
-                s.weight = orig_weight * (1 + direction * perturbation)
+                # Perturb the i-th weight and re-normalize
+                perturbed = list(base_weights)
+                perturbed[i] = base_weights[i] * (1 + direction * perturbation)
+                # Re-normalize so weights sum to 1
+                total = sum(perturbed)
+                if total > 0:
+                    perturbed = [w / total for w in perturbed]
 
-                perturbed = self.combine(equity_curves)
-                if perturbed.get("ok"):
-                    new_sr = perturbed["portfolio_metrics"]["sharpe_ratio"]
-                    sr_change = abs(new_sr - base_sr) / abs(base_sr) if base_sr != 0 else 0
-                    results.append({
-                        "strategy": s.name,
-                        "direction": f"+{int(perturbation*100)}%" if direction > 0 else f"-{int(perturbation*100)}%",
-                        "perturbed_weight": round(s.weight, 4),
-                        "sharpe_ratio": round(new_sr, 4),
-                        "sr_change_pct": round(sr_change * 100, 2),
-                        "stable": sr_change <= 0.30,  # R113 uses 30% threshold
-                    })
-
-                # Restore weight
-                s.weight = orig_weight
+                new_sr = _sharpe_with_weights(perturbed)
+                sr_change = abs(new_sr - base_sr) / abs(base_sr) if base_sr != 0 else 0
+                results.append({
+                    "strategy": s.name,
+                    "direction": f"+{int(perturbation*100)}%" if direction > 0 else f"-{int(perturbation*100)}%",
+                    "perturbed_weight": round(perturbed[i] * 100, 1),
+                    "sharpe_ratio": round(new_sr, 4),
+                    "sr_change_pct": round(sr_change * 100, 2),
+                    "stable": sr_change <= 0.30,  # R113 uses 30% threshold
+                })
 
         all_stable = all(r["stable"] for r in results)
         max_change = max(r["sr_change_pct"] for r in results) if results else 0

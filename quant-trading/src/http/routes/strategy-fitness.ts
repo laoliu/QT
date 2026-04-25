@@ -1050,6 +1050,285 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Strategy correlation preview (lightweight, from fitness scores) ──
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/correlation-preview",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const strategyIds = Array.isArray(body.strategy_ids) ? (body.strategy_ids as string[]) : [];
+        const batchId = (body.batch_id as string) ?? "";
+        if (strategyIds.length < 2) { json(res, { error: "至少选择 2 个策略" }); return; }
+
+        const dbPath = getDbPath();
+        const fsSync = await import("node:fs");
+        if (!fsSync.existsSync(dbPath)) { json(res, { error: "数据库不存在" }); return; }
+        const sqlite3Mod = await import("better-sqlite3");
+        const Database = sqlite3Mod.default ?? sqlite3Mod;
+        const db = new (Database as unknown as new (p: string) => Record<string, Function>)(dbPath);
+        try {
+          db.pragma("busy_timeout = 10000");
+          // Resolve batch_id if not provided
+          let bid = batchId;
+          if (!bid) {
+            const row = db.prepare("SELECT batch_id FROM global_strategy_ranking ORDER BY created_at DESC LIMIT 1").get() as { batch_id: string } | undefined;
+            bid = row?.batch_id ?? "";
+          }
+          if (!bid) { json(res, { error: "无批次数据" }); return; }
+
+          // Load composite_score vectors: {strategy_id: {symbol: score}}
+          const placeholders = strategyIds.map(() => "?").join(",");
+          const rows = db.prepare(
+            `SELECT strategy_id, symbol, composite_score FROM stock_strategy_fitness WHERE batch_id = ? AND strategy_id IN (${placeholders})`
+          ).all(bid, ...strategyIds) as { strategy_id: string; symbol: string; composite_score: number }[];
+
+          // Build score vectors per strategy
+          const scoreMap: Record<string, Record<string, number>> = {};
+          const allSymbols = new Set<string>();
+          for (const r of rows) {
+            if (!scoreMap[r.strategy_id]) scoreMap[r.strategy_id] = {};
+            scoreMap[r.strategy_id][r.symbol] = r.composite_score;
+            allSymbols.add(r.symbol);
+          }
+          const symbols = Array.from(allSymbols);
+
+          // Compute Pearson correlation between each pair
+          function pearson(a: number[], b: number[]): number {
+            const n = a.length;
+            if (n < 3) return 0;
+            const ma = a.reduce((s, v) => s + v, 0) / n;
+            const mb = b.reduce((s, v) => s + v, 0) / n;
+            let num = 0, da = 0, db2 = 0;
+            for (let i = 0; i < n; i++) {
+              const da2 = a[i] - ma, db3 = b[i] - mb;
+              num += da2 * db3; da += da2 * da2; db2 += db3 * db3;
+            }
+            const denom = Math.sqrt(da * db2);
+            return denom > 1e-12 ? num / denom : 0;
+          }
+
+          const matrix: Record<string, Record<string, number>> = {};
+          const pairCorrs: { a: string; b: string; corr: number }[] = [];
+          for (const si of strategyIds) {
+            matrix[si] = {};
+            for (const sj of strategyIds) {
+              if (si === sj) { matrix[si][sj] = 1; continue; }
+              // Find common symbols
+              const va: number[] = [], vb: number[] = [];
+              for (const sym of symbols) {
+                const a = scoreMap[si]?.[sym], b = scoreMap[sj]?.[sym];
+                if (a !== undefined && b !== undefined) { va.push(a); vb.push(b); }
+              }
+              const corr = pearson(va, vb);
+              matrix[si][sj] = Math.round(corr * 1000) / 1000;
+              if (si < sj) pairCorrs.push({ a: si, b: sj, corr: Math.round(corr * 1000) / 1000 });
+            }
+          }
+
+          // Statistics
+          const absCorrs = pairCorrs.map(p => Math.abs(p.corr));
+          const avgCorr = absCorrs.length > 0 ? absCorrs.reduce((a, b) => a + b, 0) / absCorrs.length : 0;
+          const maxPair = pairCorrs.reduce((best, p) => Math.abs(p.corr) > Math.abs(best.corr) ? p : best, pairCorrs[0]);
+          const highCorr = pairCorrs.filter(p => Math.abs(p.corr) > 0.5);
+
+          // Recommendation: find low-correlation alternatives from ranking
+          let alternatives: string[] = [];
+          if (highCorr.length > 0) {
+            const allStrats = db.prepare(
+              "SELECT strategy_id FROM global_strategy_ranking WHERE batch_id = ? ORDER BY rank ASC"
+            ).all(bid) as { strategy_id: string }[];
+            const notSelected = allStrats.filter(s => !strategyIds.includes(s.strategy_id)).map(s => s.strategy_id);
+            // For each unselected strategy, compute avg correlation with selected ones
+            const altCorrs: { id: string; avgCorr: number }[] = [];
+            for (const alt of notSelected) {
+              const altScores = scoreMap[alt] || {};
+              // Load if not in scoreMap
+              if (!scoreMap[alt]) {
+                const altRows = db.prepare(
+                  "SELECT symbol, composite_score FROM stock_strategy_fitness WHERE batch_id = ? AND strategy_id = ?"
+                ).all(bid, alt) as { symbol: string; composite_score: number }[];
+                const m: Record<string, number> = {};
+                for (const r of altRows) m[r.symbol] = r.composite_score;
+                scoreMap[alt] = m;
+              }
+              const corrs: number[] = [];
+              for (const si of strategyIds) {
+                const va: number[] = [], vb: number[] = [];
+                for (const sym of symbols) {
+                  const a = scoreMap[si]?.[sym], b = scoreMap[alt]?.[sym];
+                  if (a !== undefined && b !== undefined) { va.push(a); vb.push(b); }
+                }
+                if (va.length >= 3) corrs.push(Math.abs(pearson(va, vb)));
+              }
+              if (corrs.length > 0) {
+                altCorrs.push({ id: alt, avgCorr: corrs.reduce((a, b) => a + b, 0) / corrs.length });
+              }
+            }
+            altCorrs.sort((a, b) => a.avgCorr - b.avgCorr);
+            alternatives = altCorrs.slice(0, 3).map(a => a.id + ' (平均相关: ' + a.avgCorr.toFixed(3) + ')');
+          }
+
+          json(res, {
+            matrix,
+            avg_correlation: Math.round(avgCorr * 1000) / 1000,
+            max_pair: maxPair ? { a: maxPair.a, b: maxPair.b, corr: maxPair.corr } : null,
+            high_correlation_pairs: highCorr,
+            verdict: avgCorr < 0.3 ? 'LOW' : avgCorr < 0.5 ? 'MODERATE' : 'HIGH',
+            alternatives,
+            n_common_symbols: symbols.length,
+          });
+        } finally {
+          (db as unknown as { close(): void }).close();
+        }
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Auto-select low-correlation strategies ─────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/auto-select",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const batchId = (body.batch_id as string) ?? "";
+        const targetCount = Math.min(Math.max(Number(body.count) || 5, 2), 10);
+        const maxAvgCorr = Number(body.max_avg_corr) || 0.4;
+
+        const dbPath = getDbPath();
+        const fsSync = await import("node:fs");
+        if (!fsSync.existsSync(dbPath)) { json(res, { error: "数据库不存在" }); return; }
+        const sqlite3Mod = await import("better-sqlite3");
+        const Database = sqlite3Mod.default ?? sqlite3Mod;
+        const db = new (Database as unknown as new (p: string) => Record<string, Function>)(dbPath);
+        try {
+          db.pragma("busy_timeout = 10000");
+          let bid = batchId;
+          if (!bid) {
+            const row = db.prepare("SELECT batch_id FROM global_strategy_ranking ORDER BY created_at DESC LIMIT 1").get() as { batch_id: string } | undefined;
+            bid = row?.batch_id ?? "";
+          }
+          if (!bid) { json(res, { error: "无批次数据" }); return; }
+
+          // Load all strategies sorted by rank
+          const allStrats = db.prepare(
+            "SELECT strategy_id, rank, total_score FROM global_strategy_ranking WHERE batch_id = ? ORDER BY rank ASC"
+          ).all(bid) as { strategy_id: string; rank: number; total_score: number }[];
+          if (allStrats.length < 2) { json(res, { error: "策略不足" }); return; }
+
+          // Load all fitness scores
+          const rows = db.prepare(
+            "SELECT strategy_id, symbol, composite_score FROM stock_strategy_fitness WHERE batch_id = ?"
+          ).all(bid) as { strategy_id: string; symbol: string; composite_score: number }[];
+          const scoreMap: Record<string, Record<string, number>> = {};
+          const allSymbols = new Set<string>();
+          for (const r of rows) {
+            if (!scoreMap[r.strategy_id]) scoreMap[r.strategy_id] = {};
+            scoreMap[r.strategy_id][r.symbol] = r.composite_score;
+            allSymbols.add(r.symbol);
+          }
+          const symbols = Array.from(allSymbols);
+
+          function pearson(a: number[], b: number[]): number {
+            const n = a.length;
+            if (n < 3) return 0;
+            const ma = a.reduce((s, v) => s + v, 0) / n;
+            const mb = b.reduce((s, v) => s + v, 0) / n;
+            let num = 0, da = 0, db2 = 0;
+            for (let i = 0; i < n; i++) {
+              const x = a[i] - ma, y = b[i] - mb;
+              num += x * y; da += x * x; db2 += y * y;
+            }
+            const denom = Math.sqrt(da * db2);
+            return denom > 1e-12 ? num / denom : 0;
+          }
+
+          function corrBetween(s1: string, s2: string): number {
+            const va: number[] = [], vb: number[] = [];
+            for (const sym of symbols) {
+              const a = scoreMap[s1]?.[sym], b = scoreMap[s2]?.[sym];
+              if (a !== undefined && b !== undefined) { va.push(a); vb.push(b); }
+            }
+            return pearson(va, vb);
+          }
+
+          function avgAbsCorr(selected: string[]): number {
+            if (selected.length < 2) return 0;
+            let sum = 0, count = 0;
+            for (let i = 0; i < selected.length; i++) {
+              for (let j = i + 1; j < selected.length; j++) {
+                sum += Math.abs(corrBetween(selected[i], selected[j]));
+                count++;
+              }
+            }
+            return count > 0 ? sum / count : 0;
+          }
+
+          // Greedy: start with #1 ranked, then add next best that keeps avg corr low
+          const selected: string[] = [allStrats[0].strategy_id];
+          const remaining = allStrats.slice(1);
+
+          while (selected.length < targetCount && remaining.length > 0) {
+            let bestIdx = -1;
+            let bestCorr = Infinity;
+            for (let i = 0; i < remaining.length; i++) {
+              const candidate = [...selected, remaining[i].strategy_id];
+              const ac = avgAbsCorr(candidate);
+              if (ac < bestCorr) {
+                bestCorr = ac;
+                bestIdx = i;
+              }
+            }
+            if (bestIdx < 0) break;
+            // Accept if under threshold, or if we haven't reached minimum 3 strategies
+            if (bestCorr <= maxAvgCorr || selected.length < 3) {
+              selected.push(remaining[bestIdx].strategy_id);
+              remaining.splice(bestIdx, 1);
+            } else {
+              // Try remaining ones — maybe a lower-ranked one has lower corr
+              remaining.splice(bestIdx, 1);
+              if (remaining.length === 0) break;
+            }
+          }
+
+          // Build correlation matrix for selected
+          const matrix: Record<string, Record<string, number>> = {};
+          for (const si of selected) {
+            matrix[si] = {};
+            for (const sj of selected) {
+              matrix[si][sj] = si === sj ? 1 : Math.round(corrBetween(si, sj) * 1000) / 1000;
+            }
+          }
+
+          const finalCorr = avgAbsCorr(selected);
+          const stratInfo = selected.map(id => {
+            const info = allStrats.find(s => s.strategy_id === id);
+            return { strategy_id: id, rank: info?.rank ?? 0, total_score: info?.total_score ?? 0 };
+          });
+
+          json(res, {
+            selected: selected,
+            strategy_info: stratInfo,
+            matrix,
+            avg_correlation: Math.round(finalCorr * 1000) / 1000,
+            verdict: finalCorr < 0.3 ? 'LOW' : finalCorr < 0.5 ? 'MODERATE' : 'HIGH',
+            target_count: targetCount,
+            max_avg_corr: maxAvgCorr,
+          });
+        } finally {
+          (db as unknown as { close(): void }).close();
+        }
+      } catch (err) {
+        json(res, { error: String(err) }, 500);
+      }
+    }),
+  });
+
   // ── All stocks top strategy list ────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -1216,6 +1495,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             period_days: Number(body.period_days) || 252,
             initial_capital: Number(body.initial_capital) || 1_000_000,
             custom_weights: Array.isArray(body.custom_weights) ? body.custom_weights : null,
+            strategy_ids: Array.isArray(body.strategy_ids) ? body.strategy_ids : null,
           },
           config,
           { timeoutMs: 10 * 60_000 },
@@ -1271,7 +1551,36 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
           },
           config,
         );
-        json(res, result);
+
+        // Auto-configure the auto-trade scheduler with combo strategies
+        let autoTradeConfigured = false;
+        console.log(`[apply-paper] result.ok=${result.ok}, hasScheduler=${!!deps.autoTradeScheduler}`);
+        if (deps.autoTradeScheduler) {
+          try {
+            const strategyNames = (allocations as Array<{ strategy_name: string }>)
+              .map((a) => a.strategy_name)
+              .filter(Boolean);
+            console.log(`[apply-paper] strategyNames=${JSON.stringify(strategyNames)}, initial_capital=${body.initial_capital}`);
+            if (strategyNames.length > 0) {
+              // Fitness strategies use "fitness_optimal" as the daily-pick strategy key,
+              // with the actual strategy IDs passed via aipha_strategies.
+              deps.autoTradeScheduler.updateConfig({
+                strategies: ["fitness_optimal"],
+                initialCapital: Number(body.initial_capital) || 10_000_000,
+                dryRun: true, // always start in dry-run mode for safety
+                useFitnessStrategies: false, // use explicit strategies
+              });
+              // Store aipha strategy names for the screen phase to pick up
+              (deps.autoTradeScheduler as unknown as Record<string, unknown>)._aiphaStrategies = strategyNames;
+              autoTradeConfigured = true;
+              console.log(`[apply-paper] autoTradeScheduler configured with fitness_optimal + ${strategyNames.length} aipha strategies`);
+            }
+          } catch (configErr) {
+            console.error(`[apply-paper] autoTradeScheduler config error:`, configErr);
+          }
+        }
+
+        json(res, { ...result, autoTradeConfigured });
       } catch (err) {
         json(res, { ok: false, error: String(err) }, 500);
       }

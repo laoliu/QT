@@ -4102,6 +4102,18 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   // Portfolio Combo & Risk Simulator (extracted to routes/portfolio-combo.ts)
   registerPortfolioComboRoutes(deps);
 
+  // Portfolio Workflow (unified wizard: fitness → select → combine → apply)
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/portfolio-workflow",
+    handler: securePublic(async (_req, res) => {
+      const { getPortfolioWorkflowPageHtml } = await import("./pages/portfolio-workflow-page.js");
+      const html = getPortfolioWorkflowPageHtml("", config.apiToken);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
   // Strategy-Stock Fitness Analysis (extracted to routes/strategy-fitness.ts)
   registerStrategyFitnessRoutes(deps);
 

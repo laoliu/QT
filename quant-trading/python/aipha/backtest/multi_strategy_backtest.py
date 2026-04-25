@@ -457,21 +457,35 @@ def run_top10_portfolio_backtest(
     period_days: int = 252,
     initial_capital: float = 1_000_000,
     custom_weights: list[float] | None = None,
+    strategy_ids: list[str] | None = None,
 ) -> dict:
     """从 fitness top-N 策略出发，跑 1 年综合组合回测。
+
+    Parameters
+    ----------
+    strategy_ids : 如果指定，则只跑这些策略（忽略 top_n 排名）
 
     Returns a JSON-serializable dict with combined equity curve, per-strategy
     sub-results, correlation matrix, contributions, etc.
     """
     logger.info(
-        "run_top10_portfolio_backtest: batch_id=%s top_n=%d mode=%s freq=%s days=%d capital=%.0f",
-        batch_id, top_n, allocation_mode, rebalance_freq, period_days, initial_capital,
+        "run_top10_portfolio_backtest: batch_id=%s top_n=%d mode=%s freq=%s days=%d capital=%.0f strategy_ids=%s",
+        batch_id, top_n, allocation_mode, rebalance_freq, period_days, initial_capital, strategy_ids,
     )
 
     _write_combo_progress({"status": "running", "phase": "加载策略排名...", "completed": 0, "total": top_n})
 
-    # 1) 加载 top-N 策略
-    strategies = _load_global_top_strategies(batch_id, top_n)
+    # 1) 加载策略: 如果指定了 strategy_ids 则按指定的加载，否则按排名取 top_n
+    if strategy_ids:
+        all_strats = _load_global_top_strategies(batch_id, 100)
+        strategies = [s for s in all_strats if s["strategy_id"] in strategy_ids]
+        # 保持 strategy_ids 的顺序
+        id_order = {sid: i for i, sid in enumerate(strategy_ids)}
+        strategies.sort(key=lambda s: id_order.get(s["strategy_id"], 999))
+        if not strategies:
+            strategies = _load_global_top_strategies(batch_id, top_n)
+    else:
+        strategies = _load_global_top_strategies(batch_id, top_n)
     if not strategies:
         _write_combo_progress({"status": "error", "phase": "无策略数据"})
         return {"error": "没有找到全局策略排名数据，请先运行 fitness 分析"}
@@ -1195,6 +1209,7 @@ def _cli_main():
                 period_days=config.get("period_days", 252),
                 initial_capital=config.get("initial_capital", 1_000_000),
                 custom_weights=config.get("custom_weights"),
+                strategy_ids=config.get("strategy_ids"),
             )
         elif action == "compare_allocations":
             modes = config.get("modes", ["equal", "risk_parity", "max_sharpe", "min_variance"])

@@ -485,6 +485,17 @@ export class AutoTradeScheduler {
         start_date: startDate,
       };
 
+      // If using fitness_optimal, pass the specific aipha strategy IDs
+      const aiphaStrategies = (this as unknown as Record<string, unknown>)._aiphaStrategies as string[] | undefined;
+      if (
+        resolvedStrategies &&
+        resolvedStrategies.includes("fitness_optimal") &&
+        Array.isArray(aiphaStrategies) &&
+        aiphaStrategies.length > 0
+      ) {
+        pickBody.aipha_strategies = aiphaStrategies;
+      }
+
       const pickResult = await this.callApi("/quant/admin/api/daily-picks", pickBody);
       if (pickResult.error) {
         const err = `筛选失败: ${pickResult.error}`;
@@ -786,6 +797,11 @@ export class AutoTradeScheduler {
       if (data.lastScreenResult) this.status.lastScreenResult = data.lastScreenResult;
       if (data.lastExecuteAt) this.status.lastExecuteAt = data.lastExecuteAt;
       if (data.lastExecuteResult) this.status.lastExecuteResult = data.lastExecuteResult;
+      // Restore aipha strategies (set by portfolio workflow)
+      const rawAipha = (data as Record<string, unknown>)._aiphaStrategies;
+      if (Array.isArray(rawAipha)) {
+        (this as unknown as Record<string, unknown>)._aiphaStrategies = rawAipha;
+      }
     } catch {
       // Corrupt — use defaults
     }
@@ -797,11 +813,13 @@ export class AutoTradeScheduler {
     try {
       const dir = dirname(p);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const aiphaStrategies = (this as unknown as Record<string, unknown>)._aiphaStrategies;
       writeFileSync(
         p,
         JSON.stringify(
           {
             ...this.config,
+            _aiphaStrategies: Array.isArray(aiphaStrategies) ? aiphaStrategies : undefined,
             pendingSymbols: this.status.pendingSymbols,
             pendingAllocations: this.status.pendingAllocations,
             lastScreenAt: this.status.lastScreenAt,

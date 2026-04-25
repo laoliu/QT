@@ -37,6 +37,7 @@ import type {
   RiskLimitsConfig,
   RiskRuleId,
 } from "../types.js";
+import type { MarketContext } from "./market-context.js";
 import { todayCST } from "../utils/cst-time.js";
 
 // Default limits (conservative)
@@ -168,6 +169,7 @@ export class RiskGate {
     market?: MarketType,
     openOrders?: Order[],
     overrides?: { maxOrderValue?: number; maxPositionPct?: number; skipMarketHours?: boolean },
+    marketContext?: MarketContext,
   ): RiskCheckResult {
     const isBuy =
       order.side === "buy" ||
@@ -545,7 +547,70 @@ export class RiskGate {
       }
     }
 
-    // 17. Soft confirmation threshold
+    // ── Market Context Enrichment Rules (18-22) ─────────────────
+    // These rules use real-time market sentiment, lianban, catalyst, ST, and
+    // macro regime data from MarketContextService. They only fire when context
+    // is provided and only block risk-opening orders.
+    if (marketContext && isRiskOpening) {
+      // 18. Sentiment overheat — extreme greed → restrict new exposure
+      if (marketContext.sentiment && marketContext.sentiment.score >= 80) {
+        return fail(
+          "SENTIMENT_OVERHEAT",
+          `市场情绪过热（${marketContext.sentiment.score.toFixed(0)}分/${marketContext.sentiment.tone}），` +
+            `炸板率 ${((marketContext.sentiment.zbgcRate ?? 0) * 100).toFixed(0)}%，暂停新开仓`,
+        );
+      }
+
+      // 19. Lianban crash risk — stock in limit-up pool with high board failure rate
+      if (marketContext.lianban?.inPool && marketContext.sentiment) {
+        const zbgc = marketContext.sentiment.zbgcRate ?? 0;
+        if (zbgc > 0.3) {
+          return fail(
+            "LIANBAN_CRASH_RISK",
+            `${order.symbol} 在连板池（${marketContext.lianban.level}板），` +
+              `当前炸板率 ${(zbgc * 100).toFixed(0)}% 偏高，限制买入`,
+          );
+        }
+      }
+
+      // 20. ST event proximity — restrict exposure near restructuring events
+      if (marketContext.stStatus) {
+        const riskLevel = marketContext.stStatus.riskLevel;
+        if (riskLevel === "extreme" || riskLevel === "high") {
+          return fail(
+            "ST_EVENT_PROXIMITY",
+            `${order.symbol} 处于ST重整阶段 ${marketContext.stStatus.stage}（${riskLevel}风险），` +
+              `限制新开仓`,
+          );
+        }
+      }
+
+      // 21. Catalyst proximity — restrict new exposure near major events
+      if (marketContext.catalyst) {
+        const days = marketContext.catalyst.daysUntil;
+        if (days >= 0 && days <= 3 && marketContext.catalyst.impact === "high") {
+          return fail(
+            "CATALYST_PROXIMITY",
+            `${order.symbol} 距催化事件仅 ${days} 天（${marketContext.catalyst.description}），` +
+              `高影响事件前限制新仓`,
+          );
+        }
+      }
+
+      // 22. Regime mismatch — restrict aggressive exposure in BEAR/VOLATILE regimes
+      if (
+        marketContext.macroRegime === "BEAR" ||
+        marketContext.volatilityRegime === "EXTREME"
+      ) {
+        return fail(
+          "REGIME_MISMATCH",
+          `当前宏观环境 ${marketContext.macroRegime ?? "unknown"}，` +
+            `波动率 ${marketContext.volatilityRegime ?? "unknown"}，限制新开仓规模`,
+        );
+      }
+    }
+
+    // 23. Soft confirmation threshold
     if (orderValue >= limits.confirmationThreshold) {
       return softConfirm(
         `订单金额 ¥${orderValue.toFixed(2)} 超过确认阈值 ¥${limits.confirmationThreshold.toFixed(2)}，需要人工确认`,

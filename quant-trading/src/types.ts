@@ -759,7 +759,13 @@ export type RiskRuleId =
   | "MAX_FUTURES_LOTS"
   // Frequency / over-trading rules
   | "ORDER_FREQUENCY"
-  | "MAX_DAILY_TRADES";
+  | "MAX_DAILY_TRADES"
+  // Market context enrichment rules
+  | "SENTIMENT_OVERHEAT"
+  | "LIANBAN_CRASH_RISK"
+  | "ST_EVENT_PROXIMITY"
+  | "CATALYST_PROXIMITY"
+  | "REGIME_MISMATCH";
 
 export type RiskCheckResult = {
   passed: boolean;

@@ -14,6 +14,7 @@ import { dirname } from "node:path";
 import http from "node:http";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
+import type { MarketContext } from "./market-context.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -111,6 +112,8 @@ export class AutoTradeScheduler {
   private status: Omit<AutoTradeStatus, "enabled" | "config">;
   private dataDir: string | null;
   private notifyFn?: NotifyFn;
+  /** Optional market context function for pre-execution validation. */
+  private marketContextFn?: (symbol: string) => MarketContext | null;
   private screenTimerId: ReturnType<typeof setInterval> | null = null;
   private executeTimerId: ReturnType<typeof setInterval> | null = null;
   private comboReoptTimerId: ReturnType<typeof setInterval> | null = null;
@@ -135,6 +138,11 @@ export class AutoTradeScheduler {
 
   setNotify(fn: NotifyFn): void {
     this.notifyFn = fn;
+  }
+
+  /** Set market context function for pre-execution enrichment validation. */
+  setMarketContextFn(fn: (symbol: string) => MarketContext | null): void {
+    this.marketContextFn = fn;
   }
 
   // ── Lifecycle ──────────────────────────────────────────────
@@ -591,13 +599,68 @@ export class AutoTradeScheduler {
       const hm = now.getHours() * 100 + now.getMinutes();
       const needsPremarket = this.config.forcePremarket || hm < 930;
 
+      // ── Pre-execution market context validation ──────────────
+      // Re-check enrichment data that may have changed overnight or
+      // during the gap between screening (07:30) and execution (09:31).
+      let validAllocations = this.status.pendingAllocations;
+      if (this.marketContextFn) {
+        const skipped: Array<{ symbol: string; reason: string }> = [];
+        validAllocations = this.status.pendingAllocations.filter((alloc) => {
+          const symbol = (alloc as Record<string, unknown>).symbol as string | undefined;
+          if (!symbol) return true; // No symbol → pass through
+
+          const ctx = this.marketContextFn!(symbol);
+          if (!ctx) return true; // No context available → pass through
+
+          // Check sentiment crash since screening
+          if (ctx.sentiment && ctx.sentiment.score <= 20) {
+            skipped.push({ symbol, reason: `情绪极度恐慌（${ctx.sentiment.score.toFixed(0)}分）` });
+            return false;
+          }
+
+          // Check macro regime deterioration
+          if (ctx.macroRegime === "BEAR" || ctx.volatilityRegime === "EXTREME") {
+            skipped.push({ symbol, reason: `宏观环境恶化（${ctx.macroRegime}/${ctx.volatilityRegime}）` });
+            return false;
+          }
+
+          // Check ST event proximity
+          if (ctx.stStatus && (ctx.stStatus.riskLevel === "extreme" || ctx.stStatus.riskLevel === "high")) {
+            skipped.push({ symbol, reason: `ST重整高风险（${ctx.stStatus.stage}）` });
+            return false;
+          }
+
+          // Check lianban crash risk (stock in pool but high board failure rate)
+          if (ctx.lianban?.inPool && ctx.sentiment && ctx.sentiment.zbgcRate > 0.4) {
+            skipped.push({ symbol, reason: `连板炸板率过高（${(ctx.sentiment.zbgcRate * 100).toFixed(0)}%）` });
+            return false;
+          }
+
+          return true;
+        });
+
+        if (skipped.length > 0) {
+          const skippedMsg = skipped.map((s) => `${s.symbol}: ${s.reason}`).join("\n");
+          this.notify(
+            `⚠️ 执行前校验跳过 ${skipped.length} 只:\n${skippedMsg}`,
+          );
+        }
+
+        if (validAllocations.length === 0) {
+          this.running = false;
+          const err = "所有待执行标的均未通过市场环境校验";
+          this.status.lastExecuteResult = err;
+          return { ok: false, error: err };
+        }
+      }
+
       const execBody = {
         dry_run: this.config.dryRun,
         force_premarket: needsPremarket,
         execute_pct: this.config.executePct,
         create_conditional_orders: this.config.createConditionalOrders,
         trailing_stop_pct: this.config.trailingStopPct,
-        allocations: this.status.pendingAllocations,
+        allocations: validAllocations,
       };
 
       const result = await this.callApi("/quant/admin/api/recommend-execute", execBody);

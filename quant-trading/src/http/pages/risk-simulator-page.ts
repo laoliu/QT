@@ -70,6 +70,19 @@ tr:hover{background:var(--bg3)}
 <div class="breadcrumb"><a href="${b}/quant/">🏠 首页</a> / <a href="${b}/quant/admin/ui">🔧 管理面板</a> / <span>🛡️ 风控模拟器</span></div>
 <h1>🛡️ 风控模拟器 — MDD梯度 + 波动率缩放</h1>
 
+<!-- Live Risk Overlay Status Bar -->
+<div class="card" id="live-overlay-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px">
+  <span style="font-size:13px;font-weight:600">实盘风控覆盖:</span>
+  <span id="overlay-status-badge" style="font-size:12px">加载中…</span>
+  <span id="overlay-state-badge" style="font-size:12px"></span>
+  <span id="overlay-scale-badge" style="font-size:12px"></span>
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn btn-sm" id="overlay-toggle-btn" onclick="toggleOverlay()" style="display:none">▶️ 启用</button>
+    <button class="btn btn-sm btn-primary" id="apply-live-btn" onclick="applyToLive()">📡 应用当前参数到实盘</button>
+    <button class="btn btn-sm" onclick="loadLiveConfig()">📥 从实盘加载参数</button>
+  </div>
+</div>
+
 <div class="two-col">
 <!-- Left: MDD Gradient Config -->
 <div class="card">
@@ -364,7 +377,89 @@ function renderScaleChart(mdd,vol,combined){
   svg+='<line x1="'+pad.l+'" y1="'+refY+'" x2="'+(w-pad.r)+'" y2="'+refY+'" stroke="var(--yellow)" stroke-width="1" stroke-dasharray="5,3"/>';
   svg+='</svg>';container.innerHTML=svg;
 }
-</script>
+// ── Live Risk Overlay Integration ────────────────────────────────
+
+function refreshOverlayStatus(){
+  api('/quant/admin/api/risk-overlay/status').then(function(res){
+    if(!res||!res.ok||!res.data)return;
+    var d=res.data;
+    var stateLabels={normal:'正常',l1_reduced:'L1减仓',l2_liquidated:'L2清仓',recovering:'恢复中'};
+    var stateColors={normal:'var(--green)',l1_reduced:'var(--yellow)',l2_liquidated:'var(--red)',recovering:'var(--accent)'};
+
+    document.getElementById('overlay-status-badge').innerHTML=
+      '<span class="badge '+(d.enabled?'badge-green':'badge-red')+'">'+(d.enabled?'已启用':'未启用')+'</span>';
+
+    if(d.enabled){
+      document.getElementById('overlay-state-badge').innerHTML=
+        '状态: <span style="color:'+(stateColors[d.mddState]||'var(--text)')+';font-weight:600">'+(stateLabels[d.mddState]||d.mddState)+'</span>';
+      document.getElementById('overlay-scale-badge').innerHTML=
+        '缩放: <span style="color:'+(d.combinedScale>=0.9?'var(--green)':d.combinedScale>=0.5?'var(--yellow)':'var(--red)')+';font-weight:600">'+(d.combinedScale*100).toFixed(1)+'%</span>'+
+        ' | 回撤: <span style="color:var(--red)">'+(d.currentDrawdown*100).toFixed(2)+'%</span>';
+    }
+
+    var btn=document.getElementById('overlay-toggle-btn');
+    btn.style.display='inline-flex';
+    btn.textContent=d.enabled?'⏸️ 停用':'▶️ 启用';
+    btn.style.borderColor=d.enabled?'var(--red)':'var(--green)';
+    btn.style.color=d.enabled?'var(--red)':'var(--green)';
+  }).catch(function(){});
+}
+refreshOverlayStatus();
+
+function toggleOverlay(){
+  api('/quant/admin/api/risk-overlay/status').then(function(res){
+    var current=res&&res.data&&res.data.enabled;
+    return api('/quant/admin/api/risk-overlay/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!current})});
+  }).then(function(){toast(arguments[0]&&arguments[0].ok?'✅ 已切换风控覆盖状态':'❌ 切换失败');refreshOverlayStatus()});
+}
+
+function applyToLive(){
+  var payload={
+    enabled:true,
+    mode:document.getElementById('risk-mode').value,
+    mdd:{
+      l1Threshold:parseInt(document.getElementById('l1').value)/100,
+      l2Threshold:parseInt(document.getElementById('l2').value)/100,
+      recoveryThreshold:parseInt(document.getElementById('recovery').value)/100,
+      l1PositionScale:parseInt(document.getElementById('l1-scale').value)/100,
+      recoveryRampDays:parseInt(document.getElementById('ramp-days').value)||5
+    },
+    vol:{
+      targetVol:parseInt(document.getElementById('target-vol').value)/100,
+      lookback:parseInt(document.getElementById('vol-lookback').value)||60,
+      maxLeverage:parseFloat(document.getElementById('max-leverage').value)||1.5,
+      minScale:parseInt(document.getElementById('min-scale').value)/100
+    }
+  };
+  api('/quant/admin/api/risk-overlay/config',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+  }).then(function(r){
+    toast(r&&r.ok?'✅ 已应用到实盘风控覆盖 (已启用)':'❌ 应用失败: '+(r&&r.error||'未知错误'));
+    refreshOverlayStatus();
+  }).catch(function(e){toast('❌ '+e.message)});
+}
+
+function loadLiveConfig(){
+  api('/quant/admin/api/risk-overlay/config').then(function(r){
+    if(!r||!r.ok||!r.config)return;
+    var c=r.config;
+    if(c.mdd){
+      document.getElementById('l1').value=Math.round(c.mdd.l1Threshold*100);updateSlider('l1');
+      document.getElementById('l2').value=Math.round(c.mdd.l2Threshold*100);updateSlider('l2');
+      document.getElementById('recovery').value=Math.round(c.mdd.recoveryThreshold*100);updateSlider('recovery');
+      document.getElementById('l1-scale').value=Math.round(c.mdd.l1PositionScale*100);
+      document.getElementById('ramp-days').value=c.mdd.recoveryRampDays||5;
+    }
+    if(c.vol){
+      document.getElementById('target-vol').value=Math.round(c.vol.targetVol*100);updateSlider('target-vol');
+      document.getElementById('vol-lookback').value=c.vol.lookback||60;
+      document.getElementById('max-leverage').value=c.vol.maxLeverage||1.5;
+      document.getElementById('min-scale').value=Math.round(c.vol.minScale*100);
+    }
+    if(c.mode){document.getElementById('risk-mode').value=c.mode}
+    toast('✅ 已从实盘加载风控参数');
+  }).catch(function(e){toast('❌ '+e.message)});
+}</script>
 </body>
 </html>`;
 }

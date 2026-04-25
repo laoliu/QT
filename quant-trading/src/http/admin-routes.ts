@@ -1790,6 +1790,80 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                   description: `自动跟踪止损(${item.code})`,
                 }),
               );
+
+              // ── Auto-create market context conditional orders ────
+              try {
+                const ctx = getEngine().marketContext.getContext(item.code);
+                if (ctx) {
+                  // Sentiment crash guard
+                  if (ctx.sentiment && ctx.sentiment.score > 0) {
+                    conditionalIds.push(
+                      conditionalOrderService.addSentimentCrash({
+                        symbol: item.code,
+                        entryPrice: item.limitPrice,
+                        quantity: qty,
+                        baselineSentiment: ctx.sentiment.score,
+                        dropThreshold: 20,
+                        strategyId: "recommend-exec",
+                      }),
+                    );
+                  }
+
+                  // Lianban exit guard (only if stock is in the pool)
+                  if (ctx.lianban?.inPool && ctx.lianban.level != null) {
+                    conditionalIds.push(
+                      conditionalOrderService.addLianbanExit({
+                        symbol: item.code,
+                        entryPrice: item.limitPrice,
+                        quantity: qty,
+                        baselineLianbanLevel: ctx.lianban.level,
+                        strategyId: "recommend-exec",
+                      }),
+                    );
+                  }
+
+                  // Regime shift guard
+                  if (ctx.macroRegime && ctx.macroRegime !== "UNKNOWN") {
+                    conditionalIds.push(
+                      conditionalOrderService.addRegimeShift({
+                        symbol: item.code,
+                        entryPrice: item.limitPrice,
+                        quantity: qty,
+                        baselineRegime: ctx.macroRegime,
+                        strategyId: "recommend-exec",
+                      }),
+                    );
+                  }
+
+                  // ST event guard (only if stock has ST status)
+                  if (ctx.stStatus) {
+                    conditionalIds.push(
+                      conditionalOrderService.addSTEvent({
+                        symbol: item.code,
+                        entryPrice: item.limitPrice,
+                        quantity: qty,
+                        baselineStStage: ctx.stStatus.stage,
+                        strategyId: "recommend-exec",
+                      }),
+                    );
+                  }
+
+                  // Catalyst trigger (if upcoming catalyst exists)
+                  if (ctx.catalyst && ctx.catalyst.daysUntil != null && ctx.catalyst.daysUntil > 0) {
+                    conditionalIds.push(
+                      conditionalOrderService.addCatalystTrigger({
+                        symbol: item.code,
+                        entryPrice: item.limitPrice,
+                        quantity: Math.max(1, Math.floor(qty / 2)),
+                        watchCatalystType: ctx.catalyst.type,
+                        strategyId: "recommend-exec",
+                      }),
+                    );
+                  }
+                }
+              } catch {
+                // Context not available — silently skip context orders
+              }
             } catch (err) {
               rejected.push({
                 code: item.code,
@@ -3571,6 +3645,91 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     handler: secure((_req, res) => {
       const recent = eventBus.getRecentEvents(undefined, 100);
       json(res, { events: recent, sseClients: eventBus.clientCount });
+    }),
+  });
+
+  // ── Decision Log (post-trade analysis) ──────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/decision-log",
+    handler: secure(async (req, res) => {
+      const { default: fs } = await import("node:fs/promises");
+      const { default: path } = await import("node:path");
+      const { default: os } = await import("node:os");
+      const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+      const filePath = path.join(dir, "decision-log.json");
+      interface DLogEntry {
+        timestamp: string;
+        symbol: string;
+        action: string;
+        source: string;
+        reason: string;
+        details: Record<string, unknown>;
+      }
+      let entries: DLogEntry[] = [];
+      try {
+        entries = JSON.parse(await fs.readFile(filePath, "utf-8")) as DLogEntry[];
+      } catch {
+        json(res, { entries: [], stats: {} });
+        return;
+      }
+
+      // Apply filters
+      const url = new URL(req.url ?? "", `http://${req.headers.host ?? "localhost"}`);
+      const symbol = url.searchParams.get("symbol");
+      const action = url.searchParams.get("action");
+      const source = url.searchParams.get("source");
+      const since = url.searchParams.get("since");
+      const limit = Number(url.searchParams.get("limit") ?? "200");
+
+      let filtered = entries;
+      if (symbol) filtered = filtered.filter((e) => e.symbol === symbol);
+      if (action) filtered = filtered.filter((e) => e.action === action);
+      if (source) filtered = filtered.filter((e) => e.source === source);
+      if (since) filtered = filtered.filter((e) => e.timestamp >= since);
+
+      // Compute summary stats
+      const total = filtered.length;
+      const buys = filtered.filter((e) => e.action === "buy").length;
+      const sells = filtered.filter((e) => e.action === "sell").length;
+      const rejects = filtered.filter((e) => e.action === "reject").length;
+      const sizeAdjusts = filtered.filter((e) => e.action === "size_adjust").length;
+      const skips = filtered.filter((e) => e.action === "skip").length;
+
+      // Reason frequency breakdown
+      const reasonCounts: Record<string, number> = {};
+      for (const e of filtered) {
+        reasonCounts[e.reason] = (reasonCounts[e.reason] ?? 0) + 1;
+      }
+      // Sort by count descending, take top 20
+      const topReasons = Object.entries(reasonCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([reason, count]) => ({ reason, count }));
+
+      // Per-symbol breakdown
+      const symbolCounts: Record<string, { buy: number; sell: number; reject: number }> = {};
+      for (const e of filtered) {
+        if (!symbolCounts[e.symbol]) symbolCounts[e.symbol] = { buy: 0, sell: 0, reject: 0 };
+        if (e.action === "buy") symbolCounts[e.symbol].buy++;
+        else if (e.action === "sell") symbolCounts[e.symbol].sell++;
+        else if (e.action === "reject") symbolCounts[e.symbol].reject++;
+      }
+
+      json(res, {
+        entries: filtered.slice(-limit),
+        stats: {
+          total,
+          buys,
+          sells,
+          rejects,
+          sizeAdjusts,
+          skips,
+          rejectRate: total > 0 ? (rejects / total * 100).toFixed(1) + "%" : "0%",
+          topReasons,
+          bySymbol: symbolCounts,
+        },
+      });
     }),
   });
 

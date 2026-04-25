@@ -24,6 +24,8 @@ import { createBrokerAdapter } from "../broker/index.js";
 import { DataStalenessMonitor } from "../services/data-staleness-monitor.js";
 import type { StalenessAlertCallback } from "../services/data-staleness-monitor.js";
 import { isCnMarketOpen } from "../broker/paper-broker.js";
+import { MarketContextService } from "../services/market-context.js";
+import type { MarketContext } from "../services/market-context.js";
 import { tryNotify, tryNotifyWithPush } from "../services/notify-helper.js";
 import { OrderManager } from "../services/order-manager.js";
 import type {
@@ -117,10 +119,17 @@ export class LiveEngine implements OpenClawPluginService {
   /** Counter for regime checks (check every 10 syncs = ~10 min). */
   private regimeCheckCounter = 0;
 
+  /** Market context enrichment service (sentiment, lianban, catalyst, etc.). */
+  private marketCtx: MarketContextService;
+
+  /** Portfolio-level risk overlay scale function (MDD gradient + vol scaling). */
+  private riskOverlayFn?: () => number;
+
   constructor(cfg: QuantTradingConfig, api: OpenClawPluginApi) {
     this.cfg = cfg;
     this.api = api;
     this.registry = new LiveStrategyRegistry(cfg);
+    this.marketCtx = new MarketContextService(cfg);
   }
 
   /** Set a callback that fires on every staleness alert (wire to AlertStore). */
@@ -167,6 +176,13 @@ export class LiveEngine implements OpenClawPluginService {
     this.regimeFn = fn;
   }
 
+  /** Set a portfolio-level risk overlay scale function (MDD gradient + vol scaling). */
+  setRiskOverlayFn(fn: () => number): void {
+    this.riskOverlayFn = fn;
+    // Forward to existing OrderManager if already running
+    this.orderMgr?.setRiskOverlayFn(fn);
+  }
+
   /** Transition engine status with callback notification. */
   private setStatus(next: LiveEngineStatus): void {
     const prev = this.status;
@@ -195,6 +211,7 @@ export class LiveEngine implements OpenClawPluginService {
       // Create order manager
       const mgr = new OrderManager(this.cfg, brokerAdapter, this.api);
       if (this.tradeCb) mgr.setTradeCallback(this.tradeCb);
+      if (this.riskOverlayFn) mgr.setRiskOverlayFn(this.riskOverlayFn);
       this.orderMgr = mgr;
 
       // Seed position cost cache before any fill callbacks can fire
@@ -257,6 +274,9 @@ export class LiveEngine implements OpenClawPluginService {
       }
       this.stalenessMonitor.start();
 
+      // Start market context enrichment service (sentiment, lianban, catalyst, etc.)
+      this.marketCtx.start();
+
       this.setStatus("running");
       this.log("Live engine running");
     } catch (err) {
@@ -314,6 +334,11 @@ export class LiveEngine implements OpenClawPluginService {
   /** Expose broker adapter for option exercise and other broker-specific ops */
   get broker(): IBrokerAdapter | null {
     return this.brokerAdapter;
+  }
+
+  /** Expose market context service for enrichment queries. */
+  get marketContext(): MarketContextService {
+    return this.marketCtx;
   }
 
   getAccount(): BrokerAccount | null {
@@ -503,7 +528,10 @@ export class LiveEngine implements OpenClawPluginService {
           ? { maxPositionPct: ls?.maxPositionPct, maxOrderValue: ls?.maxOrderValue, capitalBudget: ls?.capitalBudget }
           : undefined;
 
-      const result = await this.orderMgr.submitFromSignal(signal, riskOverrides);
+      // Enrich signal with market context for downstream risk checks & sizing
+      const ctx = this.marketCtx.getContext(signal.symbol);
+
+      const result = await this.orderMgr.submitFromSignal(signal, riskOverrides, ctx);
       if (!result.ok) {
         this.log(`信号被拦截: ${result.reason}`, "warn");
       }
@@ -525,6 +553,8 @@ export class LiveEngine implements OpenClawPluginService {
     this.stalenessMonitor?.recordQuote(quote.symbol.code);
 
     // Convert snapshot to bar and feed to Python engine
+    // Include market context so Python strategies can access sentiment/lianban/etc.
+    const ctx = this.marketCtx.getContext(quote.symbol.code);
     const bar = {
       symbol: quote.symbol.code,
       timestamp: quote.timestamp,
@@ -535,6 +565,21 @@ export class LiveEngine implements OpenClawPluginService {
       volume: quote.volume,
       amount: quote.amount,
       interval: "tick",
+      context: ctx.sentiment || ctx.lianban || ctx.macroRegime ? {
+        sentiment_score: ctx.sentiment?.score ?? null,
+        sentiment_tone: ctx.sentiment?.tone ?? null,
+        zbgc_rate: ctx.sentiment?.zbgcRate ?? null,
+        lianban_level: ctx.lianban?.level ?? null,
+        lianban_board_quality: ctx.lianban?.boardQuality ?? null,
+        lianban_in_pool: ctx.lianban?.inPool ?? null,
+        macro_regime: ctx.macroRegime ?? null,
+        volatility_regime: ctx.volatilityRegime ?? null,
+        catalyst_type: ctx.catalyst?.eventType ?? null,
+        catalyst_days_until: ctx.catalyst?.daysUntil ?? null,
+        catalyst_impact: ctx.catalyst?.impact ?? null,
+        st_stage: ctx.stStatus?.stage ?? null,
+        st_risk_level: ctx.stStatus?.riskLevel ?? null,
+      } : undefined,
     };
     try {
       await proc.call("feed_bar", { bar });
@@ -707,6 +752,9 @@ export class LiveEngine implements OpenClawPluginService {
   }
 
   private async teardown(): Promise<void> {
+    // Stop market context enrichment
+    this.marketCtx.stop();
+
     // Stop staleness monitor
     this.stalenessMonitor?.stop();
     this.stalenessMonitor = null;

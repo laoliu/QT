@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
+import type { MarketContext } from "./market-context.js";
 
 export type ConditionalOrderType =
   | "stop_loss"
@@ -28,7 +29,13 @@ export type ConditionalOrderType =
   | "trailing_tp"
   | "staged_tp"
   | "indicator_stop"
-  | "swing_grid";
+  | "swing_grid"
+  // Market context-based triggers
+  | "sentiment_crash"
+  | "lianban_exit"
+  | "st_event"
+  | "regime_shift"
+  | "catalyst_trigger";
 
 /** A single tier in a staged take-profit order. */
 export interface StagedTier {
@@ -129,6 +136,20 @@ export interface ConditionalOrder {
   // ── Staged take-profit state ──
   /** All tiers for staged take-profit. */
   tiers?: StagedTier[];
+
+  // ── Market context trigger state ──
+  /** Baseline sentiment score recorded at creation (for sentiment_crash delta). */
+  baselineSentiment?: number;
+  /** Sentiment drop threshold (e.g. 20 = trigger when score drops 20+ points). */
+  sentimentDropThreshold?: number;
+  /** Baseline lianban level at creation (for lianban_exit detection). */
+  baselineLianbanLevel?: number;
+  /** Expected regime at creation (for regime_shift detection). */
+  baselineRegime?: string;
+  /** Catalyst event type to watch (for catalyst_trigger). */
+  watchCatalystType?: string;
+  /** ST stage at creation (for st_event stage change detection). */
+  baselineStStage?: string;
 }
 
 export interface ConditionalOrderServiceOptions {
@@ -227,6 +248,133 @@ export class ConditionalOrderService {
     ) => Promise<{ maValue: number } | null>,
   ): void {
     this.indicatorFn = fn;
+  }
+
+  /** Market context callback — used by sentiment/lianban/ST/regime/catalyst triggers. */
+  private marketContextFn?: (symbol: string) => MarketContext | null;
+
+  setMarketContextFn(fn: (symbol: string) => MarketContext | null): void {
+    this.marketContextFn = fn;
+  }
+
+  // ── Market Context Conditional Order Creators ──────────────────
+
+  /** Add a sentiment crash trigger: sell when sentiment drops ≥ threshold points. */
+  addSentimentCrash(params: {
+    symbol: string;
+    entryPrice: number;
+    quantity: number;
+    baselineSentiment: number;
+    dropThreshold?: number;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    const threshold = params.dropThreshold ?? 20;
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "sentiment_crash",
+      entryPrice: params.entryPrice,
+      triggerValue: threshold,
+      quantity: params.quantity,
+      strategyId: params.strategyId,
+      baselineSentiment: params.baselineSentiment,
+      sentimentDropThreshold: threshold,
+      description:
+        params.description ??
+        `情绪崩塌: ${params.symbol} 情绪下降 ≥${threshold}点时卖出 ${params.quantity} 股`,
+    });
+  }
+
+  /** Add a lianban exit trigger: sell when stock exits the limit-up pool. */
+  addLianbanExit(params: {
+    symbol: string;
+    entryPrice: number;
+    quantity: number;
+    baselineLianbanLevel: number;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "lianban_exit",
+      entryPrice: params.entryPrice,
+      triggerValue: 0,
+      quantity: params.quantity,
+      strategyId: params.strategyId,
+      baselineLianbanLevel: params.baselineLianbanLevel,
+      description:
+        params.description ??
+        `连板退出: ${params.symbol} 从${params.baselineLianbanLevel}连板池移除时卖出 ${params.quantity} 股`,
+    });
+  }
+
+  /** Add an ST event trigger: sell when ST restructuring stage changes to high/extreme risk. */
+  addSTEvent(params: {
+    symbol: string;
+    entryPrice: number;
+    quantity: number;
+    baselineStStage?: string;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "st_event",
+      entryPrice: params.entryPrice,
+      triggerValue: 0,
+      quantity: params.quantity,
+      strategyId: params.strategyId,
+      baselineStStage: params.baselineStStage,
+      description:
+        params.description ??
+        `ST事件: ${params.symbol} ST重整阶段变为高风险时卖出 ${params.quantity} 股`,
+    });
+  }
+
+  /** Add a regime shift trigger: sell when macro regime changes from baseline. */
+  addRegimeShift(params: {
+    symbol: string;
+    entryPrice: number;
+    quantity: number;
+    baselineRegime: string;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "regime_shift",
+      entryPrice: params.entryPrice,
+      triggerValue: 0,
+      quantity: params.quantity,
+      strategyId: params.strategyId,
+      baselineRegime: params.baselineRegime,
+      description:
+        params.description ??
+        `环境切换: 宏观环境从 ${params.baselineRegime} 切换时卖出 ${params.symbol} ${params.quantity} 股`,
+    });
+  }
+
+  /** Add a catalyst trigger: act when catalyst event arrives for symbol. */
+  addCatalystTrigger(params: {
+    symbol: string;
+    entryPrice: number;
+    quantity: number;
+    watchCatalystType?: string;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "catalyst_trigger",
+      entryPrice: params.entryPrice,
+      triggerValue: 0,
+      quantity: params.quantity,
+      strategyId: params.strategyId,
+      watchCatalystType: params.watchCatalystType,
+      description:
+        params.description ??
+        `催化触发: ${params.symbol} 催化事件到来时操作 ${params.quantity} 股`,
+    });
   }
 
   /** Add a stop-loss order. Returns the order ID. */
@@ -574,6 +722,13 @@ export class ConditionalOrderService {
       swingGridPct?: number;
       swingFillPrice?: number;
       linkedOrderId?: string;
+      // Market context trigger fields
+      baselineSentiment?: number;
+      sentimentDropThreshold?: number;
+      baselineLianbanLevel?: number;
+      baselineRegime?: string;
+      watchCatalystType?: string;
+      baselineStStage?: string;
     },
   ): string {
     if (this.activeCount >= this.maxOrders) {
@@ -615,6 +770,13 @@ export class ConditionalOrderService {
       swingGridPct: params.swingGridPct,
       swingFillPrice: params.swingFillPrice,
       linkedOrderId: params.linkedOrderId,
+      // Market context trigger state
+      baselineSentiment: params.baselineSentiment,
+      sentimentDropThreshold: params.sentimentDropThreshold,
+      baselineLianbanLevel: params.baselineLianbanLevel,
+      baselineRegime: params.baselineRegime,
+      watchCatalystType: params.watchCatalystType,
+      baselineStStage: params.baselineStStage,
     };
 
     this.orders.set(id, order);
@@ -869,6 +1031,78 @@ export class ConditionalOrderService {
           } else if (order.swingDirection === "sell" && price >= gp) {
             shouldTrigger = true;
             triggerReason = `波段网格高抛: ${order.symbol} 当前价 ¥${price.toFixed(2)} ≥ 网格价 ¥${gp.toFixed(2)} (第${order.gridIndex ?? 0}层)`;
+          }
+          break;
+        }
+
+        // ── Market Context Triggers ──────────────────────────────
+        case "sentiment_crash": {
+          if (!this.marketContextFn) break;
+          const ctx = this.marketContextFn(order.symbol);
+          if (!ctx?.sentiment) break;
+          const baseline = order.baselineSentiment ?? 50;
+          const drop = baseline - ctx.sentiment.score;
+          const threshold = order.sentimentDropThreshold ?? 20;
+          if (drop >= threshold) {
+            shouldTrigger = true;
+            triggerReason = `情绪崩塌触发: ${order.symbol} 情绪从 ${baseline.toFixed(0)} 降至 ${ctx.sentiment.score.toFixed(0)}（下降 ${drop.toFixed(0)} 点 ≥ 阈值 ${threshold}），卖出 ${order.quantity} 股`;
+          }
+          break;
+        }
+
+        case "lianban_exit": {
+          if (!this.marketContextFn) break;
+          const ctx = this.marketContextFn(order.symbol);
+          // Trigger when stock is no longer in the limit-up pool
+          if (ctx && !ctx.lianban?.inPool) {
+            shouldTrigger = true;
+            const prevLevel = order.baselineLianbanLevel ?? 0;
+            triggerReason = `连板退出触发: ${order.symbol} 已从连板池移除（原 ${prevLevel} 板），卖出 ${order.quantity} 股`;
+          }
+          break;
+        }
+
+        case "st_event": {
+          if (!this.marketContextFn) break;
+          const ctx = this.marketContextFn(order.symbol);
+          if (!ctx?.stStatus) break;
+          const risk = ctx.stStatus.riskLevel;
+          if (risk === "extreme" || risk === "high") {
+            const prevStage = order.baselineStStage ?? "unknown";
+            if (ctx.stStatus.stage !== prevStage) {
+              shouldTrigger = true;
+              triggerReason = `ST事件触发: ${order.symbol} 重整阶段从 ${prevStage} 变为 ${ctx.stStatus.stage}（${risk}风险），卖出 ${order.quantity} 股`;
+            }
+          }
+          break;
+        }
+
+        case "regime_shift": {
+          if (!this.marketContextFn) break;
+          const ctx = this.marketContextFn(order.symbol);
+          if (!ctx?.macroRegime) break;
+          const baseline = order.baselineRegime ?? "SIDEWAYS";
+          if (ctx.macroRegime !== baseline) {
+            // Only trigger on deterioration (not improvement)
+            const deteriorated =
+              (baseline === "BULL" && ctx.macroRegime !== "BULL") ||
+              (baseline === "SIDEWAYS" && (ctx.macroRegime === "BEAR" || ctx.macroRegime === "VOLATILE"));
+            if (deteriorated) {
+              shouldTrigger = true;
+              triggerReason = `环境切换触发: 宏观环境从 ${baseline} 切换至 ${ctx.macroRegime}，卖出 ${order.symbol} ${order.quantity} 股`;
+            }
+          }
+          break;
+        }
+
+        case "catalyst_trigger": {
+          if (!this.marketContextFn) break;
+          const ctx = this.marketContextFn(order.symbol);
+          if (!ctx?.catalyst) break;
+          const matchType = !order.watchCatalystType || ctx.catalyst.eventType === order.watchCatalystType;
+          if (matchType && ctx.catalyst.daysUntil <= 0) {
+            shouldTrigger = true;
+            triggerReason = `催化触发: ${order.symbol} 催化事件已到来（${ctx.catalyst.description}），操作 ${order.quantity} 股`;
           }
           break;
         }

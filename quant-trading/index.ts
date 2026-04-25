@@ -75,6 +75,7 @@ import { createDataProvider } from "./src/data/market-data-provider.js";
 import { LiveEngine } from "./src/engine/live-engine.js";
 import { TickFeatureStore } from "./src/engine/tick-feature-store.js";
 import { registerAdminRoutes } from "./src/http/admin-routes.js";
+import { registerRiskOverlayRoutes } from "./src/http/routes/risk-overlay.js";
 import {
   withSecurity,
   withCors,
@@ -117,6 +118,7 @@ import { StrategyHealthMonitor } from "./src/services/strategy-health.js";
 import { UserStrategyStore } from "./src/services/strategy-template.js";
 import { TaskScheduler } from "./src/services/task-scheduler.js";
 import { AutoTradeScheduler } from "./src/services/auto-trade-scheduler.js";
+import { PortfolioRiskOverlay } from "./src/services/portfolio-risk-overlay.js";
 import { TickHistoryStore } from "./src/services/tick-history-store.js";
 import { TickIngressService } from "./src/services/tick-ingress-service.js";
 import { TickStrategyService } from "./src/services/tick-strategy-service.js";
@@ -236,6 +238,35 @@ async function persistSignal(signal: TradingSignal, config: QuantTradingConfig):
   await fs.writeFile(filePath, JSON.stringify(signals, null, 2));
 }
 
+/** Decision log entry for post-trade analysis. */
+interface DecisionLogEntry {
+  timestamp: string;
+  symbol: string;
+  action: "buy" | "sell" | "reject" | "size_adjust" | "skip";
+  source: "signal" | "recommend" | "conditional" | "scheduler";
+  reason: string;
+  details: Record<string, unknown>;
+}
+
+/** Append a decision log entry for post-trade analysis. */
+async function persistDecisionLog(entry: DecisionLogEntry, config: QuantTradingConfig): Promise<void> {
+  const { default: fs } = await import("node:fs/promises");
+  const { default: path } = await import("node:path");
+  const { default: os } = await import("node:os");
+  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const filePath = path.join(dir, "decision-log.json");
+  let log: DecisionLogEntry[] = [];
+  try {
+    log = JSON.parse(await fs.readFile(filePath, "utf-8")) as DecisionLogEntry[];
+  } catch {
+    // file doesn't exist yet
+  }
+  log.push(entry);
+  if (log.length > 5000) log = log.slice(-5000);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(log, null, 2));
+}
+
 /** Permissive config schema — accepts any object so all QuantTradingConfig fields are allowed. */
 function quantTradingConfigSchema(): OpenClawPluginConfigSchema {
   return {
@@ -326,6 +357,15 @@ const quantTradingPlugin = {
     };
     // Alias for backward compat — routes and services that just need "the current one"
     const equityHistory = equityHistoryPaper;
+
+    // ── Portfolio Risk Overlay (live MDD gradient + vol scaling) ──
+    const portfolioRiskOverlay = new PortfolioRiskOverlay({
+      dataDir: config.dataDir ?? undefined,
+      log: (msg, level) => api.logger[level === "error" ? "error" : level === "warn" ? "warn" : "info"](msg),
+    });
+    void portfolioRiskOverlay.load().then(() => {
+      portfolioRiskOverlay.start(60_000);
+    });
 
     // ── Benchmark Service ────────────────────────────────────────
     const benchmarkService = new BenchmarkService(config);
@@ -512,6 +552,46 @@ const quantTradingPlugin = {
           status: "submitted",
           strategyId: signal.strategyId,
         });
+
+        // Auto-create market context conditional orders for buy signals
+        if (signal.direction === "buy") {
+          try {
+            const ctx = liveEngine.marketContext.getContext(signal.symbol);
+            const qty = signal.quantity ?? 100;
+
+            if (ctx.sentiment && ctx.sentiment.score > 0) {
+              conditionalOrderService.addSentimentCrash({
+                symbol: signal.symbol,
+                entryPrice: signal.price,
+                quantity: qty,
+                baselineSentiment: ctx.sentiment.score,
+                strategyId: signal.strategyId ?? "live-signal",
+              });
+            }
+
+            if (ctx.lianban?.inPool && ctx.lianban.level != null) {
+              conditionalOrderService.addLianbanExit({
+                symbol: signal.symbol,
+                entryPrice: signal.price,
+                quantity: qty,
+                baselineLianbanLevel: ctx.lianban.level,
+                strategyId: signal.strategyId ?? "live-signal",
+              });
+            }
+
+            if (ctx.macroRegime && ctx.macroRegime !== "UNKNOWN") {
+              conditionalOrderService.addRegimeShift({
+                symbol: signal.symbol,
+                entryPrice: signal.price,
+                quantity: qty,
+                baselineRegime: ctx.macroRegime,
+                strategyId: signal.strategyId ?? "live-signal",
+              });
+            }
+          } catch {
+            // Context not ready — skip context conditional orders
+          }
+        }
       }
       // Track signal for hit rate accuracy checking
       signalHitRateTracker.trackSignal(signal);
@@ -522,9 +602,56 @@ const quantTradingPlugin = {
       );
       // Persist signal to signals.json for trading_signal tool queries
       void persistSignal(signal, config);
+
+      // Persist structured decision log for post-trade analysis
+      try {
+        const ctx = liveEngine.marketContext.getContext(signal.symbol);
+        void persistDecisionLog({
+          timestamp: new Date(signal.timestamp).toISOString(),
+          symbol: signal.symbol,
+          action: result.ok ? (signal.direction as "buy" | "sell") : "reject",
+          source: "signal",
+          reason: result.ok
+            ? (signal.reason ?? signal.direction)
+            : (result.reason ?? "风控拒绝"),
+          details: {
+            strategyId: signal.strategyId,
+            price: signal.price,
+            quantity: signal.quantity,
+            confidence: signal.confidence,
+            orderId: result.orderId,
+            sentimentScore: ctx.sentiment?.score ?? null,
+            sentimentTone: ctx.sentiment?.tone ?? null,
+            macroRegime: ctx.macroRegime ?? null,
+            volatilityRegime: ctx.volatilityRegime ?? null,
+            lianbanInPool: ctx.lianban?.inPool ?? false,
+            lianbanLevel: ctx.lianban?.level ?? null,
+            stStage: ctx.stStatus?.stage ?? null,
+            stRiskLevel: ctx.stStatus?.riskLevel ?? null,
+            catalystType: ctx.catalyst?.type ?? null,
+            catalystDaysUntil: ctx.catalyst?.daysUntil ?? null,
+          },
+        }, config);
+      } catch {
+        // Context not available — log without enrichment
+        void persistDecisionLog({
+          timestamp: new Date(signal.timestamp).toISOString(),
+          symbol: signal.symbol,
+          action: result.ok ? (signal.direction as "buy" | "sell") : "reject",
+          source: "signal",
+          reason: result.ok ? (signal.reason ?? signal.direction) : (result.reason ?? "风控拒绝"),
+          details: {
+            strategyId: signal.strategyId,
+            price: signal.price,
+            quantity: signal.quantity,
+            confidence: signal.confidence,
+            orderId: result.orderId,
+          },
+        }, config);
+      }
     });
 
-    // Wire LiveEngine account sync to equity history + event bus
+    // Wire LiveEngine account sync to equity history + event bus + risk overlay
     liveEngine.setAccountSyncCallback((account, positions) => {
       const activeEH = getActiveEquityHistory();
       const snap = activeEH.record(account, positions);
@@ -536,6 +663,16 @@ const quantTradingPlugin = {
         dailyPnl: snap.dailyPnl,
         positionCount: snap.positionCount,
       });
+
+      // Feed NAV to portfolio risk overlay (MDD gradient + vol scaling)
+      const overlayScale = portfolioRiskOverlay.updateNav(account.totalAssets, snap.date);
+      if (overlayScale < 1.0 && portfolioRiskOverlay.getConfig().enabled) {
+        eventBus.emit("risk_overlay", {
+          scale: overlayScale,
+          state: portfolioRiskOverlay.getStatus().mddState,
+          drawdown: portfolioRiskOverlay.getStatus().currentDrawdown,
+        });
+      }
 
       // Auto-register price alerts for held positions
       const posSymbols = positions
@@ -555,6 +692,9 @@ const quantTradingPlugin = {
         strategyHealthMonitor.recordTrade(trade.strategyId, trade.netPnl, trade.exitTime);
       }
     });
+
+    // Wire portfolio risk overlay into LiveEngine → OrderManager
+    liveEngine.setRiskOverlayFn(() => portfolioRiskOverlay.getScale());
 
     // ── Backtest Store (persistent history) ──────────────────────
     const backtestStore = new BacktestStore({
@@ -904,6 +1044,11 @@ const quantTradingPlugin = {
       return { maValue: lastValue };
     });
     conditionalOrderService.start();
+
+    // Wire market context to conditional order service for enrichment triggers
+    conditionalOrderService.setMarketContextFn((symbol: string) =>
+      liveEngine.marketContext.getContext(symbol),
+    );
 
     // Wire price alert triggers to AlertStore + EventBus for persistence and SSE
     priceAlertService.setAlertCallback((severity, message, metadata) => {
@@ -1360,6 +1505,11 @@ const quantTradingPlugin = {
     });
     autoTradeScheduler.setNotify((m: string) => tryNotify(api, m));
 
+    // Wire market context to auto-trade scheduler for pre-exec validation
+    autoTradeScheduler.setMarketContextFn((symbol: string) =>
+      liveEngine.marketContext.getContext(symbol),
+    );
+
     registerQuantRoutes({
       api,
       config,
@@ -1409,6 +1559,12 @@ const quantTradingPlugin = {
       secure,
       securePublic,
     });
+
+    // ── Risk Overlay API Routes ──────────────────────────────
+    registerRiskOverlayRoutes(
+      { api, config, dataWarehouse, receiverService, userStrategyStore, alertStore, eventBus, logStore, priceAlertService, conditionalOrderService, favoritesStore, taskScheduler, getEngine, secure, securePublic },
+      portfolioRiskOverlay,
+    );
 
     // ── Standalone HTTP Server ─────────────────────────────
     if (routeCollector && standalonePort) {

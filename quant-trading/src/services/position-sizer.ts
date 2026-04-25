@@ -11,6 +11,8 @@
  * All methods auto-round to A-share lot size (100 shares).
  */
 
+import type { MarketContext } from "./market-context.js";
+
 export type SizingMethod = "fixed_amount" | "fixed_pct" | "risk_pct" | "kelly" | "atr_vol";
 
 export interface SizingParams {
@@ -179,4 +181,197 @@ export function computePositionSize(params: SizingParams): SizingResult {
     method: params.method,
     explanation,
   };
+}
+
+// ── Market Context Position Sizing Adjustment ────────────────────
+
+/**
+ * Detailed result of context-based sizing adjustment.
+ */
+export interface ContextSizingDetail {
+  multiplier: number;
+  reasons: string[];
+}
+
+/**
+ * Compute a multiplier (0-1) that scales position size based on
+ * current market context (sentiment, regime, lianban, ST status).
+ *
+ * The multiplier is applied AFTER the base sizing calculation:
+ *   finalQuantity = baseQuantity × multiplier
+ *
+ * Returns 1.0 when no adjustment is needed.
+ */
+export function contextSizingMultiplier(ctx: MarketContext, symbol?: string): number {
+  return contextSizingDetail(ctx, symbol).multiplier;
+}
+
+/**
+ * Same as contextSizingMultiplier but also returns human-readable reasons.
+ */
+export function contextSizingDetail(ctx: MarketContext, _symbol?: string): ContextSizingDetail {
+  let mult = 1.0;
+  const reasons: string[] = [];
+
+  // Sentiment-based scaling
+  if (ctx.sentiment) {
+    const score = ctx.sentiment.score;
+    if (score >= 80) {
+      mult *= 0.5;
+      reasons.push(`情绪过热(${score.toFixed(0)}分)→×0.5`);
+    } else if (score <= 20) {
+      mult *= 0.3;
+      reasons.push(`极度恐慌(${score.toFixed(0)}分)→×0.3`);
+    } else if (score <= 35) {
+      mult *= 0.7;
+      reasons.push(`情绪偏弱(${score.toFixed(0)}分)→×0.7`);
+    }
+  }
+
+  // Macro regime scaling
+  if (ctx.macroRegime === "BEAR") {
+    mult *= 0.5;
+    reasons.push(`熊市环境→×0.5`);
+  } else if (ctx.macroRegime === "VOLATILE" || ctx.volatilityRegime === "EXTREME") {
+    mult *= 0.6;
+    reasons.push(`高波动环境(${ctx.macroRegime}/${ctx.volatilityRegime})→×0.6`);
+  } else if (ctx.volatilityRegime === "HIGH") {
+    mult *= 0.8;
+    reasons.push(`波动偏高→×0.8`);
+  }
+
+  // Lianban stock → cap exposure
+  if (ctx.lianban?.inPool) {
+    const prev = mult;
+    mult = Math.min(mult, 0.5);
+    if (mult < prev) reasons.push(`连板股(${ctx.lianban.level ?? "?"}板)→上限0.5`);
+  }
+
+  // ST stock → minimal exposure
+  if (ctx.stStatus) {
+    const risk = ctx.stStatus.riskLevel;
+    const prev = mult;
+    if (risk === "extreme") {
+      mult = Math.min(mult, 0.1);
+    } else if (risk === "high") {
+      mult = Math.min(mult, 0.2);
+    } else if (risk === "medium") {
+      mult = Math.min(mult, 0.4);
+    }
+    if (mult < prev) reasons.push(`ST风险(${risk})→上限${mult.toFixed(1)}`);
+  }
+
+  // Catalyst proximity → slightly reduce
+  if (ctx.catalyst && ctx.catalyst.daysUntil >= 0 && ctx.catalyst.daysUntil <= 3) {
+    if (ctx.catalyst.impact === "high") {
+      mult *= 0.7;
+      reasons.push(`催化临近(${ctx.catalyst.type ?? "事件"},${ctx.catalyst.daysUntil}天)→×0.7`);
+    }
+  }
+
+  mult = Math.max(0.1, mult);
+  return { multiplier: mult, reasons };
+}
+
+// ── Position Adjustment (加减仓) ─────────────────────────────────
+
+export type AdjustmentAction = "add" | "reduce" | "close" | "hold";
+
+export interface AdjustmentResult {
+  action: AdjustmentAction;
+  /** Adjustment percentage (0-1, e.g. 0.3 = reduce/add 30%). */
+  adjustPct: number;
+  /** Human-readable reason for the adjustment. */
+  reason: string;
+}
+
+/**
+ * Compute a position adjustment recommendation based on market context changes.
+ *
+ * Call this periodically (e.g. every check interval) with the current context
+ * and previous context to detect changes that warrant position adjustments.
+ *
+ * @param symbol           - Stock symbol
+ * @param currentPosition  - Current position quantity (>0 = long)
+ * @param ctx              - Current market context
+ * @param prevSentiment    - Previous sentiment score (for delta detection)
+ */
+export function computeAdjustment(
+  symbol: string,
+  currentPosition: number,
+  ctx: MarketContext,
+  prevSentiment?: number,
+): AdjustmentResult {
+  if (currentPosition <= 0) {
+    return { action: "hold", adjustPct: 0, reason: "无持仓" };
+  }
+
+  // Priority 1: ST event near critical stage → close position
+  if (ctx.stStatus) {
+    const risk = ctx.stStatus.riskLevel;
+    if (risk === "extreme") {
+      return {
+        action: "close",
+        adjustPct: 1.0,
+        reason: `${symbol} ST重整进入 ${ctx.stStatus.stage} 阶段（极高风险），建议清仓`,
+      };
+    }
+    if (risk === "high") {
+      return {
+        action: "reduce",
+        adjustPct: 0.5,
+        reason: `${symbol} ST重整 ${ctx.stStatus.stage} 阶段（高风险），建议减仓50%`,
+      };
+    }
+  }
+
+  // Priority 2: Sentiment crash (dropped >15 points)
+  if (ctx.sentiment && prevSentiment != null) {
+    const delta = ctx.sentiment.score - prevSentiment;
+    if (delta <= -20) {
+      return {
+        action: "reduce",
+        adjustPct: 0.5,
+        reason: `市场情绪骤降 ${Math.abs(delta).toFixed(0)} 点（${prevSentiment.toFixed(0)}→${ctx.sentiment.score.toFixed(0)}），建议减仓50%`,
+      };
+    }
+    if (delta <= -15) {
+      return {
+        action: "reduce",
+        adjustPct: 0.3,
+        reason: `市场情绪下降 ${Math.abs(delta).toFixed(0)} 点，建议减仓30%`,
+      };
+    }
+  }
+
+  // Priority 3: Lianban stock dropped out of pool → sell signal
+  if (ctx.lianban && !ctx.lianban.inPool) {
+    return {
+      action: "reduce",
+      adjustPct: 0.5,
+      reason: `${symbol} 已从连板池移除（原 ${ctx.lianban.level} 板），建议减仓50%`,
+    };
+  }
+
+  // Priority 4: Catalyst approaching → add position if underweight
+  if (ctx.catalyst && ctx.catalyst.daysUntil >= 0 && ctx.catalyst.daysUntil <= 3) {
+    if (ctx.catalyst.impact === "high") {
+      return {
+        action: "add",
+        adjustPct: 0.2,
+        reason: `${symbol} 高影响催化事件将在 ${ctx.catalyst.daysUntil} 天内到来（${ctx.catalyst.description}），可考虑加仓20%`,
+      };
+    }
+  }
+
+  // Priority 5: Regime deterioration
+  if (ctx.macroRegime === "BEAR" || ctx.volatilityRegime === "EXTREME") {
+    return {
+      action: "reduce",
+      adjustPct: 0.3,
+      reason: `宏观环境恶化（${ctx.macroRegime}/${ctx.volatilityRegime}），建议减仓30%`,
+    };
+  }
+
+  return { action: "hold", adjustPct: 0, reason: "当前市场环境无需调整" };
 }

@@ -28,7 +28,8 @@ export type EventCategory =
   | "equity"
   | "tick"
   | "data_sync"
-  | "sector_flow_anomaly";
+  | "sector_flow_anomaly"
+  | "risk_overlay";
 
 export interface QuantEvent {
   /** Unique event ID (monotonic counter) */

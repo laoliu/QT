@@ -64,6 +64,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-combo::before{background:linear-gradient(90deg,var(--accent),var(--purple))}
 .nav-card.card-stockopt::before{background:linear-gradient(90deg,var(--green),var(--purple))}
 .nav-card.card-risksim::before{background:linear-gradient(90deg,var(--red),var(--orange))}
+.nav-card.card-portfolio-wf::before{background:linear-gradient(90deg,var(--purple),var(--accent),var(--green))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
 .nav-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .nav-card p{font-size:13px;color:var(--text-dim);line-height:1.5}
@@ -352,6 +353,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <span class="tag">紧急停止</span>
     </div>
   </a>
+  <a href="${b}/quant/admin/portfolio-workflow" class="nav-card card-portfolio-wf" style="color:inherit;text-decoration:none">
+    <div class="icon">🔄</div>
+    <h3>组合工作流</h3>
+    <p>一站式向导：策略适配分析 → Top-N 组合回测 → 跨资产组合构建 → 模拟盘应用，四步完成投资组合</p>
+    <div class="tags">
+      <span class="tag">策略适配</span><span class="tag">组合回测</span><span class="tag">组合构建</span>
+      <span class="tag">模拟盘</span><span class="tag">全流程</span>
+    </div>
+  </a>
   <div class="nav-card card-stock" onclick="focusStockInput()" style="cursor:pointer">
     <div class="icon">📈</div>
     <h3>个股详情</h3>
@@ -394,6 +404,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/risk-dashboard</span><span class="api-desc">风险管理仪表板</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/trade-history</span><span class="api-desc">交易记录</span></div>
       <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/stock-compare</span><span class="api-desc">股票对比</span></div>
+      <div class="api-item"><span class="api-method get">GET</span><span class="api-path">/quant/admin/portfolio-workflow</span><span class="api-desc">组合工作流（四步向导）</span></div>
     </div>
 
     <div class="api-group">

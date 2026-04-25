@@ -28,8 +28,9 @@ import type {
 } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
 import { ConfirmationManager } from "./confirmation-manager.js";
-import { computePositionSize } from "./position-sizer.js";
+import { computePositionSize, contextSizingDetail } from "./position-sizer.js";
 import { RiskGate } from "./risk-gate.js";
+import type { MarketContext } from "./market-context.js";
 import { todayCST } from "../utils/cst-time.js";
 
 const ordersMutex = new AsyncMutex();
@@ -195,6 +196,7 @@ export class OrderManager {
   private confirmMgr: ConfirmationManager;
   private api: OpenClawPluginApi | null;
   private tradeCb?: (trade: TradeRecord) => void;
+  private riskOverlayFn?: () => number;
 
   // Tracks open buy orders for a symbol so we can match exits to entries
   // symbol → list of open entry order IDs (queue: FIFO)
@@ -275,6 +277,11 @@ export class OrderManager {
     this.tradeCb = cb;
   }
 
+  /** Set a function that returns the portfolio-level risk overlay scale factor [0, 1.5]. */
+  setRiskOverlayFn(fn: () => number): void {
+    this.riskOverlayFn = fn;
+  }
+
   /**
    * Update the position cost cache from broker positions.
    * Should be called on every position sync so that sell fills always
@@ -347,6 +354,7 @@ export class OrderManager {
   async submitFromSignal(
     signal: TradingSignal,
     riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; capitalBudget?: number },
+    marketContext?: MarketContext,
   ): Promise<SubmitResult> {
     // Compute quantity via position sizing (unless signal has explicit quantity)
     let quantity = signal.quantity ?? 100;
@@ -376,6 +384,20 @@ export class OrderManager {
         });
         if (result.quantity > 0) {
           quantity = result.quantity;
+
+          // Apply market context multiplier (sentiment, regime, lianban, ST adjustments)
+          if (marketContext) {
+            const detail = contextSizingDetail(marketContext, signal.symbol);
+            if (detail.multiplier < 1.0) {
+              const before = quantity;
+              const lotSize = 100;
+              quantity = Math.floor((quantity * detail.multiplier) / lotSize) * lotSize;
+              quantity = Math.max(lotSize, quantity);
+              this.log(
+                `[上下文缩仓] ${signal.symbol}: ${before}→${quantity}股 (×${detail.multiplier.toFixed(2)}) | ${detail.reasons.join("; ")}`,
+              );
+            }
+          }
         }
       } catch {
         // Sizing failed — fall back to default 100 shares
@@ -392,7 +414,7 @@ export class OrderManager {
       strategyId: signal.strategyId,
       signalId: `${signal.timestamp}_${signal.symbol}`,
     };
-    return this.submit(req, riskOverrides);
+    return this.submit(req, riskOverrides, marketContext);
   }
 
   /**
@@ -401,6 +423,7 @@ export class OrderManager {
   async submit(
     req: OrderRequest,
     riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; capitalBudget?: number; skipMarketHours?: boolean },
+    marketContext?: MarketContext,
   ): Promise<SubmitResult> {
     // Get current account state for risk checks
     let account: BrokerAccount;
@@ -442,6 +465,27 @@ export class OrderManager {
       brokerType: this.broker.brokerType,
     });
 
+    // Portfolio-level risk overlay: scale down buy order quantities
+    if (this.riskOverlayFn && (req.side === "buy" || req.side === "cover" || req.side === "buy_open")) {
+      const overlayScale = this.riskOverlayFn();
+      if (overlayScale < 1.0) {
+        const lotSize = 100;
+        const before = req.quantity;
+        if (overlayScale <= 0) {
+          this.log(
+            `[风控覆盖] ${req.symbol} 买入被阻止 — 组合风控缩放=0 (清仓状态)`,
+            "warn",
+          );
+          return { ok: false, reason: "风控覆盖: 组合处于清仓/冻结状态，禁止新买入" };
+        }
+        req = { ...req };
+        req.quantity = Math.max(lotSize, Math.floor((before * overlayScale) / lotSize) * lotSize);
+        this.log(
+          `[风控覆盖] ${req.symbol}: ${before}→${req.quantity}股 (×${overlayScale.toFixed(2)})`,
+        );
+      }
+    }
+
     // Risk check
     const riskResult = this.riskGate.check(
       req,
@@ -451,8 +495,13 @@ export class OrderManager {
       req.market,
       openOrders,
       riskOverrides,
+      marketContext,
     );
     if (!riskResult.passed) {
+      this.log(
+        `[风控拦截] ${req.symbol} ${req.side} ${req.quantity}股 | 规则=${riskResult.failedRule ?? "unknown"} | ${riskResult.reason ?? "风控拒绝"}`,
+        "warn",
+      );
       return { ok: false, reason: riskResult.reason ?? "风控拒绝", ruleId: riskResult.failedRule };
     }
 
@@ -954,9 +1003,9 @@ export class OrderManager {
     }
   }
 
-  private log(msg: string): void {
+  private log(msg: string, level: "info" | "warn" | "error" = "info"): void {
     if (this.api) {
-      this.api.logger.info(`[OrderManager] ${msg}`);
+      this.api.logger[level](`[OrderManager] ${msg}`);
     } else {
       console.log(`[OrderManager] ${msg}`);
     }

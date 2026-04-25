@@ -53,6 +53,7 @@ class Bar:
     volume: float
     amount: float = 0.0
     interval: str = "1d"
+    context: Optional[Dict[str, Any]] = None  # market enrichment from MarketContextService
 
 # ── Signal dataclass ──────────────────────────────────────────────
 
@@ -149,6 +150,115 @@ class LiveStrategy:
             return 100.0
         rs = avg_gain / avg_loss
         return 100 - 100 / (1 + rs)
+
+
+class ContextAwareStrategy(LiveStrategy):
+    """
+    Enhanced base class that provides convenient access to market context
+    (sentiment, lianban, macro regime, catalyst, ST status) injected by
+    the TS LiveEngine via the bar's ``context`` field.
+
+    Subclass this instead of LiveStrategy when your strategy needs to factor
+    in market-wide or per-stock enrichment data for signal generation.
+    """
+
+    def on_bar(self, bar: Bar) -> None:
+        """Override on_bar_with_context() instead of this method."""
+        self.on_bar_with_context(bar, bar.context or {})
+
+    def on_bar_with_context(self, bar: Bar, ctx: Dict[str, Any]) -> None:
+        """Called with both bar data and market context. Override in subclass."""
+        raise NotImplementedError
+
+    # ── Context convenience helpers ────────────────────────────
+
+    @staticmethod
+    def sentiment_score(ctx: Dict[str, Any]) -> Optional[float]:
+        """Get composite sentiment score (0-100) from context."""
+        return ctx.get("sentiment_score")
+
+    @staticmethod
+    def sentiment_tone(ctx: Dict[str, Any]) -> Optional[str]:
+        """Get sentiment tone label (强势/偏多/中性/偏空/弱势)."""
+        return ctx.get("sentiment_tone")
+
+    @staticmethod
+    def is_overheated(ctx: Dict[str, Any], threshold: float = 80) -> bool:
+        """Check if market sentiment is overheated (score >= threshold)."""
+        score = ctx.get("sentiment_score")
+        return score is not None and score >= threshold
+
+    @staticmethod
+    def is_fearful(ctx: Dict[str, Any], threshold: float = 20) -> bool:
+        """Check if market sentiment is extremely fearful (score <= threshold)."""
+        score = ctx.get("sentiment_score")
+        return score is not None and score <= threshold
+
+    @staticmethod
+    def lianban_level(ctx: Dict[str, Any]) -> Optional[int]:
+        """Get the stock's current consecutive board level (None if not in pool)."""
+        return ctx.get("lianban_level")
+
+    @staticmethod
+    def is_in_lianban_pool(ctx: Dict[str, Any]) -> bool:
+        """Check if the stock is currently in the limit-up pool."""
+        return ctx.get("lianban_in_pool") is True
+
+    @staticmethod
+    def board_failure_rate(ctx: Dict[str, Any]) -> Optional[float]:
+        """Get the current board failure rate (炸板率, 0-1)."""
+        return ctx.get("zbgc_rate")
+
+    @staticmethod
+    def macro_regime(ctx: Dict[str, Any]) -> Optional[str]:
+        """Get macro regime label (BULL/BEAR/SIDEWAYS/VOLATILE)."""
+        return ctx.get("macro_regime")
+
+    @staticmethod
+    def volatility_regime(ctx: Dict[str, Any]) -> Optional[str]:
+        """Get volatility regime (LOW/NORMAL/HIGH/EXTREME)."""
+        return ctx.get("volatility_regime")
+
+    @staticmethod
+    def has_catalyst(ctx: Dict[str, Any], max_days: int = 5) -> bool:
+        """Check if the stock has an upcoming catalyst within max_days."""
+        days = ctx.get("catalyst_days_until")
+        return days is not None and 0 <= days <= max_days
+
+    @staticmethod
+    def catalyst_impact(ctx: Dict[str, Any]) -> Optional[str]:
+        """Get catalyst impact level (high/medium/low)."""
+        return ctx.get("catalyst_impact")
+
+    @staticmethod
+    def is_st(ctx: Dict[str, Any]) -> bool:
+        """Check if the stock is in ST restructuring."""
+        return ctx.get("st_stage") is not None
+
+    @staticmethod
+    def st_risk_level(ctx: Dict[str, Any]) -> Optional[str]:
+        """Get ST risk level (extreme/high/medium/low)."""
+        return ctx.get("st_risk_level")
+
+    def should_reduce_position(self, ctx: Dict[str, Any]) -> bool:
+        """Heuristic: should the strategy consider reducing position size?
+
+        Returns True when:
+        - Market is overheated (sentiment >= 80)
+        - Board failure rate is high (> 30%)
+        - Stock is in ST with high/extreme risk
+        - Volatility regime is EXTREME
+        """
+        if self.is_overheated(ctx):
+            return True
+        zbgc = self.board_failure_rate(ctx)
+        if zbgc is not None and zbgc > 0.3:
+            return True
+        if self.is_st(ctx) and self.st_risk_level(ctx) in ("extreme", "high"):
+            return True
+        if self.volatility_regime(ctx) == "EXTREME":
+            return True
+        return False
 
 
 # ── Built-in live strategies ──────────────────────────────────────
@@ -395,6 +505,7 @@ class LiveEngine:
             volume=float(bar_data.get("volume", 0)),
             amount=float(bar_data.get("amount", 0)),
             interval=bar_data.get("interval", "1d"),
+            context=bar_data.get("context"),
         )
 
         signals_emitted = 0

@@ -30,7 +30,7 @@ ${THEME_CSS_VARS}
 ${BASE_CSS_RESET}
 ${HEADER_CSS}
 ${KPI_CSS}
-.container{max-width:960px;margin:0 auto;padding:16px 20px}
+.container{max-width:1200px;margin:0 auto;padding:16px 20px}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
 .card h3{font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .kpi-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -69,6 +69,10 @@ ${KPI_CSS}
 .alloc-table th{color:var(--text-dim);font-weight:500}
 .toast{position:fixed;top:24px;right:24px;padding:10px 20px;border-radius:8px;color:#fff;font-size:13px;z-index:9999;animation:fadeIn .2s}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.step-card{background:var(--bg3);border-radius:8px;padding:12px;border-left:3px solid var(--border)}
+.step-card .step-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.step-card .step-desc{font-size:11px;color:var(--text-dim);line-height:1.5}
+a{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -115,6 +119,52 @@ ${KPI_CSS}
     <div id="status-detail" class="log-box">加载中…</div>
   </div>
 
+  <!-- Workflow Guide (always visible) -->
+  <div class="card" id="guide-card">
+    <h3 style="cursor:pointer" onclick="toggleSection('guide-body')">
+      📖 工作流程说明 <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="guide-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px">
+        <div style="background:var(--bg3);border-radius:8px;padding:12px;border-left:3px solid #60a5fa">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">① 每日筛选 <span style="font-size:11px;color:var(--text-dim)">(默认 07:30)</span></div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.5">运行多策略综合选股 → 策略回测排名 → 选出 Top 策略 → 合并候选股 → 个股回测验证 → 生成最终入围名单</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:8px;padding:12px;border-left:3px solid #fbbf24">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">② 推荐生成</div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.5">根据最终入围股、资金量、风险偏好 → 分配仓位和股数 → 生成推荐方案（待执行列表）</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:8px;padding:12px;border-left:3px solid #4ade80">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">③ 执行下单 <span style="font-size:11px;color:var(--text-dim)">(默认 09:31)</span></div>
+          <div style="font-size:11px;color:var(--text-dim);line-height:1.5">市场环境二次校验 → 过滤高风险标的 → 提交限价委托 → 自动创建止损止盈条件单</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+        <b>快速开始：</b>点击「🔍 手动筛选」运行一次完整流程，筛选完成后下方会显示策略排名、选股明细等详情。<br>
+        <b>自动模式：</b>打开总开关 → 系统按 cron 时间自动执行筛选和下单。试运行模式下不会真实下单。<br>
+        <b>策略来源：</b>勾选「使用适配度优选策略」会自动从 <a href="/quant/admin/strategy-fitness" target="_blank" style="color:var(--accent)">策略适配度分析</a> 中选取表现最好的策略。
+      </div>
+    </div>
+  </div>
+
+  <!-- Fitness Strategies (live fetch) -->
+  <div class="card" id="fitness-card">
+    <h3 style="cursor:pointer" onclick="toggleSection('fitness-body')">
+      🏅 当前优选策略 <span id="fitness-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="fitness-body"><div style="color:var(--text-dim);font-size:12px">加载中…</div></div>
+  </div>
+
+  <!-- Pick History (live fetch) -->
+  <div class="card" id="history-card">
+    <h3 style="cursor:pointer" onclick="toggleSection('history-body')">
+      📅 历史筛选记录 <span id="history-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="history-body"><div style="color:var(--text-dim);font-size:12px">加载中…</div></div>
+  </div>
+
   <!-- Pending Allocations -->
   <div class="card" id="alloc-card" style="display:none">
     <h3>📋 待执行推荐 <span id="alloc-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span></h3>
@@ -128,6 +178,48 @@ ${KPI_CSS}
       </div>
       <p style="font-size:11px;color:var(--text-dim)">• "执行下单" 会按推荐的股数和价格提交订单（试运行模式不会真实下单）<br>• "创建条件单" 跳转到组合优化页面，可批量创建止损/止盈/买卖区间监控<br>• 0 股的标的表示资金不足以买入 1 手（100股），可增加初始资金或减少选股数量</p>
     </div>
+  </div>
+
+  <!-- Market Context -->
+  <div class="card" id="market-card" style="display:none">
+    <h3>🌍 市场环境</h3>
+    <div id="market-body"></div>
+  </div>
+
+  <!-- Strategy Ranking -->
+  <div class="card" id="strategy-card" style="display:none">
+    <h3 style="cursor:pointer" onclick="toggleSection('strategy-body')">
+      🏆 策略排名 <span id="strategy-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="strategy-body"></div>
+  </div>
+
+  <!-- Combined Stock List -->
+  <div class="card" id="combined-card" style="display:none">
+    <h3 style="cursor:pointer" onclick="toggleSection('combined-body')">
+      📊 综合选股明细 <span id="combined-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="combined-body"></div>
+  </div>
+
+  <!-- Routing Enrichment -->
+  <div class="card" id="routing-card" style="display:none">
+    <h3 style="cursor:pointer" onclick="toggleSection('routing-body')">
+      🔀 策略路由分配 <span id="routing-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="routing-body"></div>
+  </div>
+
+  <!-- Stock Backtest Ranking -->
+  <div class="card" id="stock-bt-card" style="display:none">
+    <h3 style="cursor:pointer" onclick="toggleSection('stock-bt-body')">
+      📈 个股回测排名 <span id="stock-bt-count" style="font-size:12px;color:var(--text-dim);font-weight:normal"></span>
+      <span style="font-size:11px;color:var(--text-dim)">(点击展开/收起)</span>
+    </h3>
+    <div id="stock-bt-body"></div>
   </div>
 
   <!-- Configuration -->
@@ -220,10 +312,20 @@ function renderStatus(s) {
   lines.push('状态: ' + (isOn ? '✅ 运行中' : '⏸️ 已停止'));
   lines.push('模式: ' + (s.config.dryRun ? '🧪 试运行（不实际下单）' : '⚡ 实盘模式'));
   lines.push('筛选定时: ' + s.config.screenCron + '  |  执行定时: ' + s.config.executeCron);
+  if (s.config.useFitnessStrategies) {
+    lines.push('策略来源: 🏆 适配度优选 (Top ' + (s.config.fitnessTopN || 6) + ')');
+  } else if (s.config.strategies && s.config.strategies.length) {
+    lines.push('策略来源: 📌 手动指定 (' + s.config.strategies.length + ' 个)');
+  } else {
+    lines.push('策略来源: 🔄 全量策略');
+  }
+  lines.push('资金: ¥' + (s.config.initialCapital || 0).toLocaleString() + '  |  风险: ' + (s.config.riskTolerance || '—') + '  |  选股: ' + (s.config.finalStockLimit || 8) + ' 只');
   lines.push('');
   if (s.lastScreenAt) {
     lines.push('📊 上次筛选: ' + s.lastScreenAt);
     lines.push('   结果: ' + (s.lastScreenResult || '—'));
+  } else {
+    lines.push('📊 尚未执行过筛选 — 点击「🔍 手动筛选」开始');
   }
   if (s.lastExecuteAt) {
     lines.push('🚀 上次执行: ' + s.lastExecuteAt);
@@ -274,6 +376,9 @@ function renderStatus(s) {
 
   // Config form
   fillConfig(s.config);
+
+  // Rich screening snapshot sections
+  renderScreenSnapshot(s.lastScreenSnapshot);
 }
 
 function fillConfig(c) {
@@ -447,8 +552,264 @@ function viewInOptimization() {
   window.open('/quant/admin/stock-optimization', '_blank');
 }
 
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function pct(v) { return v != null ? (v * 100).toFixed(1) + '%' : '—'; }
+function num2(v) { return v != null ? Number(v).toFixed(2) : '—'; }
+function scoreColor(v) { return v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text-dim)'; }
+
+function renderScreenSnapshot(snap) {
+  // Hide all snapshot sections if no data
+  var ids = ['market-card','strategy-card','combined-card','routing-card','stock-bt-card'];
+  if (!snap) {
+    ids.forEach(function(id){ document.getElementById(id).style.display = 'none'; });
+    return;
+  }
+
+  // ── Market Context ──
+  var mCard = document.getElementById('market-card');
+  if (snap.marketEnrichment && snap.marketEnrichment.macroRegime) {
+    mCard.style.display = '';
+    var me = snap.marketEnrichment;
+    var pg = me.positionGuidance || {};
+    var regimeColors = { BULL: '#4ade80', NEUTRAL: '#fbbf24', BEAR: '#f87171', RECOVERY: '#60a5fa' };
+    var regimeColor = regimeColors[me.macroRegime] || 'var(--text-dim)';
+    var html = '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">';
+    html += '<div style="font-size:20px;font-weight:700;color:' + regimeColor + '">' + (me.macroRegime || '—') + '</div>';
+    html += '<div style="color:var(--text-dim);font-size:13px;flex:1;min-width:200px">' + (me.macroDescription || '') + '</div>';
+    html += '</div>';
+    if (pg.positionScale != null) {
+      html += '<div style="display:flex;gap:20px;margin-top:12px;flex-wrap:wrap;font-size:12px">';
+      html += '<div>📏 仓位系数: <b>' + (pg.positionScale != null ? (pg.positionScale * 100).toFixed(0) + '%' : '—') + '</b></div>';
+      html += '<div>🔒 单只上限: <b>' + (pg.maxSinglePositionPct != null ? pg.maxSinglePositionPct + '%' : '—') + '</b></div>';
+      html += '<div>📊 最大持仓: <b>' + (pg.maxPositions || '—') + ' 只</b></div>';
+      html += '<div>🎯 调整方向: <b>' + (pg.regimeAdjustment || '—') + '</b></div>';
+      html += '</div>';
+    }
+    if (snap.resolvedStrategies && snap.resolvedStrategies.length) {
+      html += '<div style="margin-top:10px;font-size:12px;color:var(--text-dim)">🎯 使用策略: <span style="color:var(--accent)">' + snap.resolvedStrategies.join(', ') + '</span></div>';
+    }
+    html += '<div style="margin-top:6px;font-size:11px;color:var(--text-dim)">生成时间: ' + snap.generatedAt + '</div>';
+    document.getElementById('market-body').innerHTML = html;
+  } else {
+    mCard.style.display = 'none';
+  }
+
+  // ── Strategy Ranking ──
+  var sCard = document.getElementById('strategy-card');
+  var ranking = snap.strategyRanking || [];
+  if (ranking.length > 0) {
+    sCard.style.display = '';
+    var selSet = {};
+    (snap.selectedStrategies || []).forEach(function(s){ selSet[s.strategy] = true; });
+    document.getElementById('strategy-count').textContent = '(' + ranking.length + ' 个策略)';
+    var html = '<table class="alloc-table"><thead><tr><th>#</th><th>策略</th><th>综合分</th><th>总收益</th><th>年化</th><th>夏普</th><th>最大回撤</th><th>胜率</th><th>利润因子</th><th>交易次数</th><th>候选股</th></tr></thead><tbody>';
+    ranking.forEach(function(r) {
+      var isSel = selSet[r.strategy];
+      var rowStyle = isSel ? 'background:rgba(34,197,94,0.08)' : r.error ? 'opacity:0.5' : '';
+      var badge = isSel ? '<span style="color:#4ade80;font-size:10px">✓ 入选</span> ' : '';
+      html += '<tr style="' + rowStyle + '">';
+      html += '<td>' + (r.rank || '—') + '</td>';
+      html += '<td>' + badge + '<b>' + (r.strategyLabel || r.strategy) + '</b></td>';
+      html += '<td style="color:' + scoreColor(r.compositeScore) + '">' + num2(r.compositeScore) + '</td>';
+      html += '<td style="color:' + scoreColor(r.totalReturn) + '">' + pct(r.totalReturn) + '</td>';
+      html += '<td style="color:' + scoreColor(r.annualizedReturn) + '">' + pct(r.annualizedReturn) + '</td>';
+      html += '<td>' + num2(r.sharpeRatio) + '</td>';
+      html += '<td style="color:var(--red)">' + pct(r.maxDrawdown) + '</td>';
+      html += '<td>' + pct(r.winRate) + '</td>';
+      html += '<td>' + num2(r.profitFactor) + '</td>';
+      html += '<td>' + (r.totalTrades || '—') + '</td>';
+      html += '<td style="font-size:11px;color:var(--text-dim)">' + (r.topSymbols || []).slice(0,4).join(', ') + '</td>';
+      html += '</tr>';
+      if (r.error) {
+        html += '<tr style="opacity:0.5"><td></td><td colspan="10" style="font-size:11px;color:var(--red)">❌ ' + r.error + '</td></tr>';
+      }
+    });
+    html += '</tbody></table>';
+    document.getElementById('strategy-body').innerHTML = html;
+  } else {
+    sCard.style.display = 'none';
+  }
+
+  // ── Combined Stock List ──
+  var cCard = document.getElementById('combined-card');
+  var combined = snap.combinedList || [];
+  if (combined.length > 0) {
+    cCard.style.display = '';
+    document.getElementById('combined-count').textContent = '(' + combined.length + ' 只)';
+    var html = '<table class="alloc-table"><thead><tr><th>#</th><th>代码</th><th>名称</th><th>综合分</th><th>出现次数</th><th>回测收益</th><th>夏普</th><th>回撤</th><th>入选策略</th><th>选股理由</th></tr></thead><tbody>';
+    combined.forEach(function(c) {
+      var isSel = c.selected;
+      var rowStyle = isSel ? 'background:rgba(34,197,94,0.08)' : 'opacity:0.6';
+      var badge = isSel ? '<span style="color:#4ade80;font-size:10px">✓</span> ' : '';
+      // Collect top reasons from all source strategies
+      var allReasons = [];
+      (c.sourceDetails || []).forEach(function(sd) {
+        (sd.reasons || []).forEach(function(r) {
+          if (allReasons.indexOf(r) === -1 && allReasons.length < 3) allReasons.push(r);
+        });
+      });
+      html += '<tr style="' + rowStyle + '">';
+      html += '<td>' + c.rank + '</td>';
+      html += '<td style="font-family:monospace"><a href="/quant/admin/stock?symbol=' + c.symbol + '" target="_blank" style="color:var(--accent);text-decoration:none">' + badge + c.symbol + '</a></td>';
+      html += '<td>' + c.name + '</td>';
+      html += '<td style="color:' + scoreColor(c.combinedScore) + '">' + num2(c.combinedScore) + '</td>';
+      html += '<td><b>' + c.appearanceCount + '</b> 个策略</td>';
+      html += '<td style="color:' + scoreColor(c.backtestReturn) + '">' + pct(c.backtestReturn) + '</td>';
+      html += '<td>' + num2(c.backtestSharpe) + '</td>';
+      html += '<td style="color:var(--red)">' + pct(c.backtestDrawdown) + '</td>';
+      html += '<td style="font-size:11px">' + (c.selectedBy || []).join(', ') + '</td>';
+      html += '<td style="font-size:11px;color:var(--text-dim)">' + allReasons.join('; ') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('combined-body').innerHTML = html;
+  } else {
+    cCard.style.display = 'none';
+  }
+
+  // ── Routing Enrichment ──
+  var rCard = document.getElementById('routing-card');
+  var routing = snap.routingEnrichment || [];
+  if (routing.length > 0) {
+    rCard.style.display = '';
+    document.getElementById('routing-count').textContent = '(' + routing.length + ' 只)';
+    var html = '<table class="alloc-table"><thead><tr><th>代码</th><th>名称</th><th>组合策略</th><th>策略列表</th><th>波动性</th><th>趋势</th><th>分配方式</th><th>理由</th></tr></thead><tbody>';
+    routing.forEach(function(r) {
+      html += '<tr>';
+      html += '<td style="font-family:monospace"><a href="/quant/admin/stock?symbol=' + r.symbol + '" target="_blank" style="color:var(--accent);text-decoration:none">' + r.symbol + '</a></td>';
+      html += '<td>' + (r.name || '') + '</td>';
+      html += '<td><b>' + (r.combo || '—') + '</b></td>';
+      html += '<td style="font-size:11px">' + (r.strategies || []).join(', ') + '</td>';
+      html += '<td>' + (r.volatility || '—') + '</td>';
+      html += '<td>' + (r.trend || '—') + '</td>';
+      html += '<td style="font-size:11px">' + (r.comboMethod || r.source || '—') + '</td>';
+      html += '<td style="font-size:11px;color:var(--text-dim)">' + (r.reason || '—') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('routing-body').innerHTML = html;
+  } else {
+    rCard.style.display = 'none';
+  }
+
+  // ── Stock Backtest Ranking ──
+  var btCard = document.getElementById('stock-bt-card');
+  var stockBt = snap.stockBacktestRanking || [];
+  if (stockBt.length > 0) {
+    btCard.style.display = '';
+    document.getElementById('stock-bt-count').textContent = '(' + stockBt.length + ' 只)';
+    var html = '<table class="alloc-table"><thead><tr><th>#</th><th>代码</th><th>名称</th><th>回测策略</th><th>总收益</th><th>夏普比率</th><th>最大回撤</th><th>胜率</th></tr></thead><tbody>';
+    stockBt.forEach(function(r) {
+      html += '<tr>';
+      html += '<td>' + (r.rank || '—') + '</td>';
+      html += '<td style="font-family:monospace"><a href="/quant/admin/stock?symbol=' + r.symbol + '" target="_blank" style="color:var(--accent);text-decoration:none">' + r.symbol + '</a></td>';
+      html += '<td>' + (r.name || '') + '</td>';
+      html += '<td>' + (r.strategyLabel || r.strategy || '—') + '</td>';
+      html += '<td style="color:' + scoreColor(r.totalReturn) + '">' + pct(r.totalReturn) + '</td>';
+      html += '<td>' + num2(r.sharpeRatio) + '</td>';
+      html += '<td style="color:var(--red)">' + pct(r.maxDrawdown) + '</td>';
+      html += '<td>' + pct(r.winRate) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('stock-bt-body').innerHTML = html;
+  } else {
+    btCard.style.display = 'none';
+  }
+}
+
+// ── Fitness Strategies (live fetch) ──
+async function loadFitnessStrategies() {
+  try {
+    var resp = await fetch('/quant/admin/api/strategy-fitness/global');
+    var data = await resp.json();
+    var strats = data.strategies || [];
+    var el = document.getElementById('fitness-body');
+    var countEl = document.getElementById('fitness-count');
+    if (strats.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-dim);font-size:12px">暂无适配度数据。请先运行 <a href="/quant/admin/strategy-fitness" target="_blank" style="color:var(--accent)">策略适配度分析</a>。</div>';
+      countEl.textContent = '';
+      return;
+    }
+    countEl.textContent = '(' + strats.length + ' 个)';
+    var html = '<table class="alloc-table"><thead><tr><th>#</th><th>策略</th><th>综合评分</th><th>年化收益</th><th>夏普比率</th><th>最大回撤</th><th>胜率</th><th>标签</th></tr></thead><tbody>';
+    strats.forEach(function(s, i) {
+      var score = s.composite_score || s.avg_score || s.final_score || s.score || 0;
+      var ann = s.annualized_return || s.annual_return;
+      var sharpe = s.sharpe_ratio || s.sharpe;
+      var dd = s.max_drawdown;
+      var wr = s.win_rate;
+      var label = s.strategy_label || s.strategy_name || s.strategy_id || '';
+      var tags = s.tags || s.category || '';
+      html += '<tr>';
+      html += '<td>' + (s.rank || (i+1)) + '</td>';
+      html += '<td><b>' + label + '</b><div style="font-size:10px;color:var(--text-dim)">' + (s.strategy_id || '') + '</div></td>';
+      html += '<td style="color:' + scoreColor(score) + ';font-weight:600">' + num2(score) + '</td>';
+      html += '<td style="color:' + scoreColor(ann) + '">' + pct(ann) + '</td>';
+      html += '<td>' + num2(sharpe) + '</td>';
+      html += '<td style="color:var(--red)">' + pct(dd) + '</td>';
+      html += '<td>' + pct(wr) + '</td>';
+      html += '<td style="font-size:11px;color:var(--text-dim)">' + tags + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div style="margin-top:8px;font-size:11px;color:var(--text-dim)">数据来源: <a href="/quant/admin/strategy-fitness" target="_blank" style="color:var(--accent)">策略适配度分析</a>  |  batch: ' + (data.batch_id || '—') + '</div>';
+    el.innerHTML = html;
+  } catch(e) {
+    document.getElementById('fitness-body').innerHTML = '<div style="color:var(--text-dim);font-size:12px">加载失败: ' + e.message + '</div>';
+  }
+}
+
+// ── Pick History (live fetch) ──
+async function loadPickHistory() {
+  try {
+    var resp = await fetch('/quant/admin/api/daily-pick-history');
+    var data = await resp.json();
+    var items = Array.isArray(data) ? data : [];
+    var el = document.getElementById('history-body');
+    var countEl = document.getElementById('history-count');
+    if (items.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-dim);font-size:12px">暂无历史记录。运行「手动筛选」后可在 <a href="/quant/admin/daily-picks" target="_blank" style="color:var(--accent)">每日综合选股</a> 页面保存结果。</div>';
+      countEl.textContent = '';
+      return;
+    }
+    // Show most recent first, limit 10
+    items.sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+    items = items.slice(0, 10);
+    countEl.textContent = '(最近 ' + items.length + ' 条)';
+    var html = '<table class="alloc-table"><thead><tr><th>时间</th><th>入围股票</th><th>策略数</th><th>备注</th><th>操作</th></tr></thead><tbody>';
+    items.forEach(function(item) {
+      var summary = item.summary || {};
+      var params = item.params || {};
+      var symbols = summary.finalSymbols || summary.symbols || [];
+      var stratCount = summary.strategyCount || params.topStrategyCount || params.top_strategy_count || '—';
+      var note = summary.note || '';
+      if (typeof symbols === 'object' && Array.isArray(symbols)) {
+        note = symbols.join(', ');
+      }
+      html += '<tr>';
+      html += '<td style="white-space:nowrap">' + formatTime(item.createdAt) + '</td>';
+      html += '<td><b>' + (Array.isArray(symbols) ? symbols.length : '—') + '</b> 只</td>';
+      html += '<td>' + stratCount + '</td>';
+      html += '<td style="font-size:11px;color:var(--text-dim);max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + note + '</td>';
+      html += '<td><a href="/quant/admin/daily-picks?history=' + (item.id||'') + '" target="_blank" style="color:var(--accent);font-size:11px;text-decoration:none">查看详情 →</a></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(e) {
+    document.getElementById('history-body').innerHTML = '<div style="color:var(--text-dim);font-size:12px">加载失败: ' + e.message + '</div>';
+  }
+}
+
 // Auto-refresh every 10 seconds
 loadStatus();
+loadFitnessStrategies();
+loadPickHistory();
 refreshInterval = setInterval(loadStatus, 10000);
 
 </script>

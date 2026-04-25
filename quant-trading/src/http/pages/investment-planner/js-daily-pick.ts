@@ -61,6 +61,7 @@ function summarizeDailyPickResult(d){
   return {
     bestStrategy:(best&&(best.strategyLabel||best.strategy))||'-',
     bestScore:(best&&best.compositeScore!=null)?Number(best.compositeScore).toFixed(1):'-',
+    strategyCount:ranking.length||0,
     finalCount:finalSymbols.length,
     finalSymbols:finalSymbols
   };

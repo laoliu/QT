@@ -134,6 +134,15 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
       </div>
       <div class="param-row">
         <div class="param-group">
+          <label>股票池</label>
+          <select id="s1-universe" style="width:130px">
+            <option value="csi300">沪深300</option>
+            <option value="csi500">中证500</option>
+            <option value="csi1000" selected>中证1000</option>
+            <option value="all_a">全部A股</option>
+          </select>
+        </div>
+        <div class="param-group">
           <label>回测天数</label>
           <input type="number" id="s1-days" value="250" style="width:100px" min="60" max="2000">
         </div>
@@ -145,7 +154,7 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
           <button class="btn btn-primary" id="s1-run-btn" onclick="step1Run()">🚀 运行分析</button>
         </div>
         <div class="param-group" style="padding-bottom:0">
-          <button class="btn" onclick="step1Load()">📂 加载历史批次</button>
+          <button class="btn" onclick="step1Load()" id="s1-load-btn">📂 加载历史批次</button>
         </div>
         <div class="param-group" style="padding-bottom:0">
           <button class="btn btn-danger btn-sm" onclick="step1Stop()" id="s1-stop-btn" disabled>⏹ 停止</button>
@@ -166,6 +175,17 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
       <div style="margin-top:12px">
         <button class="btn btn-primary" onclick="step1Done()">✅ 继续下一步 →</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Batch picker modal -->
+  <div id="batch-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;width:680px;max-width:92vw;max-height:80vh;overflow:auto;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0;font-size:15px">📂 选择历史批次</h3>
+        <button class="btn btn-sm" onclick="closeBatchModal()">✕ 关闭</button>
+      </div>
+      <div id="batch-modal-body" style="font-size:13px">加载中...</div>
     </div>
   </div>
 
@@ -433,7 +453,8 @@ function step1Run(){
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       days:parseInt(document.getElementById('s1-days').value)||250,
-      initialCash:parseFloat(document.getElementById('s1-cash').value)||100000
+      initialCash:parseFloat(document.getElementById('s1-cash').value)||100000,
+      universe:document.getElementById('s1-universe').value||'csi1000'
     }),
     _timeout:4*3600000
   }).then(function(d){
@@ -478,16 +499,52 @@ function step1CheckStatus(){
 }
 
 function step1Load(){
-  step1LoadResults();
+  var modal=document.getElementById('batch-modal');
+  modal.style.display='flex';
+  document.getElementById('batch-modal-body').innerHTML='<div style="text-align:center;padding:20px;color:var(--text-dim)">加载中...</div>';
+  api('/quant/admin/api/strategy-fitness/history',{_timeout:15000}).then(function(data){
+    var batches=data.batches||[];
+    if(!batches.length){
+      document.getElementById('batch-modal-body').innerHTML='<div style="text-align:center;padding:20px;color:var(--text-dim)">暂无历史批次数据</div>';
+      return;
+    }
+    var html='<table><thead><tr><th>#</th><th>批次ID</th><th>时间</th><th>股票数</th><th>策略数</th><th>操作</th></tr></thead><tbody>';
+    batches.forEach(function(b,i){
+      var ts=b.createdAt||b.created_at||'';
+      html+='<tr>'
+        +'<td>'+(i+1)+'</td>'
+        +'<td style="font-family:monospace;font-size:12px">'+esc(b.batchId||b.batch_id||'')+'</td>'
+        +'<td>'+esc(ts)+'</td>'
+        +'<td>'+numInt(b.stockCount||b.stock_count||0)+'</td>'
+        +'<td>'+numInt(b.strategyCount||b.strategy_count||0)+'</td>'
+        +'<td><button class="btn btn-primary btn-sm" data-bid="'+esc(b.batchId||b.batch_id||'')+'" onclick="selectBatch(this.dataset.bid)">选用此批次</button></td>'
+        +'</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('batch-modal-body').innerHTML=html;
+  }).catch(function(e){
+    document.getElementById('batch-modal-body').innerHTML='<div style="color:var(--red);padding:20px;text-align:center">加载失败: '+esc(e.message)+'</div>';
+  });
 }
 
-function step1LoadResults(){
-  api('/quant/admin/api/strategy-fitness/global').then(function(d){
+function closeBatchModal(){
+  document.getElementById('batch-modal').style.display='none';
+}
+
+function selectBatch(batchId){
+  closeBatchModal();
+  step1LoadResults(batchId);
+}
+
+function step1LoadResults(batchId){
+  var url='/quant/admin/api/strategy-fitness/global';
+  if(batchId) url+='?batch_id='+encodeURIComponent(batchId);
+  api(url).then(function(d){
     if(!d||!d.strategies){toast('暂无排名数据');return}
-    globalBatchId=d.batch_id||'';
+    globalBatchId=d.batch_id||batchId||'';
     globalRanking=d.strategies.sort(function(a,b){return(b.total_score||0)-(a.total_score||0)});
     renderStep1Results();
-    toast('✅ 已加载全局排名 ('+globalRanking.length+' 个策略)');
+    toast('✅ 已加载全局排名 ('+globalRanking.length+' 个策略)'+(globalBatchId?' ['+globalBatchId+']':''));
   });
 }
 

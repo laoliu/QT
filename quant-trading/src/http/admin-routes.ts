@@ -332,6 +332,18 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Daily Picks Page (alias → planner page) ────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/daily-picks",
+    handler: securePublic(async (_req, res) => {
+      const { getInvestmentPlannerPageHtml } = await import("./pages/investment-planner/index.js");
+      const html = getInvestmentPlannerPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
+    }),
+  });
+
   // ── Favorites Page ────────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",

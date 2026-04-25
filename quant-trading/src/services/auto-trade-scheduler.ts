@@ -14,6 +14,7 @@ import { dirname } from "node:path";
 import http from "node:http";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
+import { DAILY_PICK_STRATEGIES } from "../http/routes/_helpers.js";
 import type { MarketContext } from "./market-context.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -63,6 +64,99 @@ export interface AutoTradeConfig {
   comboReoptCron: string;
 }
 
+/** Summary of a strategy's performance from daily-picks screening. */
+export interface StrategyRankingSummary {
+  rank: number | null;
+  strategy: string;
+  strategyLabel: string;
+  compositeScore: number | null;
+  totalReturn: number | null;
+  annualizedReturn: number | null;
+  maxDrawdown: number | null;
+  sharpeRatio: number | null;
+  winRate: number | null;
+  profitFactor: number | null;
+  totalTrades: number | null;
+  topSymbols: string[];
+  error?: string;
+}
+
+/** Summary of a stock in the combined selection list. */
+export interface CombinedStockSummary {
+  rank: number;
+  symbol: string;
+  name: string;
+  selected: boolean;
+  appearanceCount: number;
+  combinedScore: number;
+  selectedBy: string[];
+  backtestReturn: number | null;
+  backtestSharpe: number | null;
+  backtestDrawdown: number | null;
+  backtestWinRate: number | null;
+  sourceDetails: Array<{
+    strategy: string;
+    strategyLabel: string;
+    candidateRank: number;
+    screenScore: number;
+    reasons: string[];
+  }>;
+}
+
+/** Per-stock routing enrichment summary. */
+export interface RoutingEnrichmentSummary {
+  symbol: string;
+  name?: string;
+  combo?: string;
+  comboMethod?: string;
+  strategies?: string[];
+  volatility?: string;
+  trend?: string;
+  source?: string;
+  reason?: string;
+}
+
+/** Market enrichment context from the screening phase. */
+export interface MarketEnrichmentSummary {
+  macroRegime?: string;
+  macroDescription?: string;
+  positionGuidance?: {
+    regimeAdjustment?: string;
+    positionScale?: number;
+    maxSinglePositionPct?: number;
+    maxPositions?: number;
+  };
+}
+
+/** Snapshot of the last screening's rich data. */
+export interface LastScreenSnapshot {
+  generatedAt: string;
+  /** Resolved strategy IDs used for this screening. */
+  resolvedStrategies?: string[];
+  /** Strategy ranking with performance metrics. */
+  strategyRanking: StrategyRankingSummary[];
+  /** Which strategies were selected as top. */
+  selectedStrategies: Array<{ rank: number | null; strategy: string; strategyLabel: string; compositeScore: number }>;
+  /** Combined stock list with selection reasons. */
+  combinedList: CombinedStockSummary[];
+  /** Routing enrichment per stock. */
+  routingEnrichment: RoutingEnrichmentSummary[];
+  /** Market context at screening time. */
+  marketEnrichment?: MarketEnrichmentSummary;
+  /** Per-stock backtest ranking summary. */
+  stockBacktestRanking: Array<{
+    rank: number | null;
+    symbol: string;
+    name: string;
+    strategy: string;
+    strategyLabel: string;
+    totalReturn: number | null;
+    sharpeRatio: number | null;
+    maxDrawdown: number | null;
+    winRate: number | null;
+  }>;
+}
+
 export interface AutoTradeStatus {
   enabled: boolean;
   config: AutoTradeConfig;
@@ -77,6 +171,8 @@ export interface AutoTradeStatus {
   pendingSymbols: string[];
   /** Allocations from last recommend (pending execution). */
   pendingAllocations: unknown[];
+  /** Rich snapshot from the last screening phase. */
+  lastScreenSnapshot?: LastScreenSnapshot;
 }
 
 type NotifyFn = (message: string) => void | Promise<void>;
@@ -458,14 +554,28 @@ export class AutoTradeScheduler {
             ? fitnessResult.strategies as Array<{ strategy_id?: string; rank?: number }>
             : [];
           if (fitnessStrategies.length > 0) {
-            resolvedStrategies = fitnessStrategies
+            const topIds = fitnessStrategies
               .slice(0, this.config.fitnessTopN)
               .map((s) => String(s.strategy_id ?? ""))
               .filter(Boolean);
-            if (resolvedStrategies.length > 0) {
-              this.notify(
-                `📊 已从策略适配度分析中选取 ${resolvedStrategies.length} 个优选策略: ${resolvedStrategies.join(", ")}`,
-              );
+            if (topIds.length > 0) {
+              // Split into known daily-pick strategies and aipha-only strategies
+              const allowedSet = new Set<string>(DAILY_PICK_STRATEGIES);
+              const knownStrategies = topIds.filter((id) => allowedSet.has(id));
+              const aiphaIds = topIds.filter((id) => !allowedSet.has(id));
+              resolvedStrategies = [...knownStrategies];
+              if (aiphaIds.length > 0) {
+                // Use fitness_optimal to proxy the aipha strategies
+                resolvedStrategies.push("fitness_optimal");
+                (this as unknown as Record<string, unknown>)._aiphaStrategies = aiphaIds;
+              }
+              if (resolvedStrategies.length > 0) {
+                this.notify(
+                  `📊 已从策略适配度分析中选取 ${topIds.length} 个优选策略: ${topIds.join(", ")}`,
+                );
+              } else {
+                resolvedStrategies = undefined;
+              }
             } else {
               resolvedStrategies = undefined;
             }
@@ -512,6 +622,9 @@ export class AutoTradeScheduler {
         this.notify("❌ 自动交易筛选失败: " + pickResult.error);
         return { ok: false, symbols: [], error: err };
       }
+
+      // ── Save rich screening snapshot for UI display ──
+      this.status.lastScreenSnapshot = this.extractScreenSnapshot(pickResult, resolvedStrategies);
 
       const finalSymbols: string[] = Array.isArray(pickResult.finalSymbols) ? pickResult.finalSymbols : [];
       if (finalSymbols.length === 0) {
@@ -748,6 +861,92 @@ export class AutoTradeScheduler {
     });
   }
 
+  /** Extract summary-level data from daily-picks result for UI display (drops heavy payloads like equity curves). */
+  private extractScreenSnapshot(
+    pickResult: Record<string, unknown>,
+    resolvedStrategies?: string[],
+  ): LastScreenSnapshot {
+    const ranking = Array.isArray(pickResult.strategyRanking) ? pickResult.strategyRanking as Record<string, unknown>[] : [];
+    const selected = Array.isArray(pickResult.selectedStrategies) ? pickResult.selectedStrategies as Record<string, unknown>[] : [];
+    const combined = Array.isArray(pickResult.combinedList) ? pickResult.combinedList as Record<string, unknown>[] : [];
+    const routing = Array.isArray(pickResult.routingEnrichment) ? pickResult.routingEnrichment as Record<string, unknown>[] : [];
+    const stockBt = Array.isArray(pickResult.stockBacktestRanking) ? pickResult.stockBacktestRanking as Record<string, unknown>[] : [];
+    const enrichment = pickResult.enrichment as Record<string, unknown> | undefined;
+
+    return {
+      generatedAt: String(pickResult.generatedAt ?? nowCSTISO()),
+      resolvedStrategies,
+      strategyRanking: ranking.map((r) => ({
+        rank: r.rank as number | null,
+        strategy: String(r.strategy ?? ""),
+        strategyLabel: String(r.strategyLabel ?? r.strategy ?? ""),
+        compositeScore: r.compositeScore as number | null,
+        totalReturn: r.totalReturn as number | null,
+        annualizedReturn: r.annualizedReturn as number | null,
+        maxDrawdown: r.maxDrawdown as number | null,
+        sharpeRatio: r.sharpeRatio as number | null,
+        winRate: r.winRate as number | null,
+        profitFactor: r.profitFactor as number | null,
+        totalTrades: r.totalTrades as number | null,
+        topSymbols: Array.isArray(r.topSymbols) ? r.topSymbols as string[] : [],
+        error: r.error as string | undefined,
+      })),
+      selectedStrategies: selected.map((s) => ({
+        rank: s.rank as number | null,
+        strategy: String(s.strategy ?? ""),
+        strategyLabel: String(s.strategyLabel ?? s.strategy ?? ""),
+        compositeScore: Number(s.compositeScore ?? 0),
+      })),
+      combinedList: combined.map((c) => ({
+        rank: Number(c.rank ?? 0),
+        symbol: String(c.symbol ?? ""),
+        name: String(c.name ?? ""),
+        selected: !!c.selected,
+        appearanceCount: Number(c.appearanceCount ?? 0),
+        combinedScore: Number(c.combinedScore ?? 0),
+        selectedBy: Array.isArray(c.selectedBy) ? c.selectedBy as string[] : [],
+        backtestReturn: c.backtestReturn as number | null,
+        backtestSharpe: c.backtestSharpe as number | null,
+        backtestDrawdown: c.backtestDrawdown as number | null,
+        backtestWinRate: c.backtestWinRate as number | null,
+        sourceDetails: Array.isArray(c.sourceDetails) ? (c.sourceDetails as Record<string, unknown>[]).map((sd) => ({
+          strategy: String(sd.strategy ?? ""),
+          strategyLabel: String(sd.strategyLabel ?? sd.strategy ?? ""),
+          candidateRank: Number(sd.candidateRank ?? 0),
+          screenScore: Number(sd.screenScore ?? 0),
+          reasons: Array.isArray(sd.reasons) ? sd.reasons as string[] : [],
+        })) : [],
+      })),
+      routingEnrichment: routing.map((r) => ({
+        symbol: String(r.symbol ?? ""),
+        name: r.name as string | undefined,
+        combo: r.combo as string | undefined,
+        comboMethod: r.comboMethod as string | undefined,
+        strategies: Array.isArray(r.strategies) ? r.strategies as string[] : undefined,
+        volatility: r.volatility as string | undefined,
+        trend: r.trend as string | undefined,
+        source: r.source as string | undefined,
+        reason: r.reason as string | undefined,
+      })),
+      marketEnrichment: enrichment ? {
+        macroRegime: enrichment.macroRegime as string | undefined,
+        macroDescription: enrichment.macroDescription as string | undefined,
+        positionGuidance: enrichment.positionGuidance as MarketEnrichmentSummary["positionGuidance"],
+      } : undefined,
+      stockBacktestRanking: stockBt.map((r) => ({
+        rank: r.rank as number | null,
+        symbol: String(r.symbol ?? ""),
+        name: String(r.name ?? ""),
+        strategy: String(r.strategy ?? ""),
+        strategyLabel: String(r.strategyLabel ?? r.strategy ?? ""),
+        totalReturn: r.totalReturn as number | null,
+        sharpeRatio: r.sharpeRatio as number | null,
+        maxDrawdown: r.maxDrawdown as number | null,
+        winRate: r.winRate as number | null,
+      })),
+    };
+  }
+
   private callApi(path: string, body: unknown): Promise<Record<string, unknown>> {
     return new Promise((resolve) => {
       const data = JSON.stringify(body);
@@ -860,6 +1059,11 @@ export class AutoTradeScheduler {
       if (data.lastScreenResult) this.status.lastScreenResult = data.lastScreenResult;
       if (data.lastExecuteAt) this.status.lastExecuteAt = data.lastExecuteAt;
       if (data.lastExecuteResult) this.status.lastExecuteResult = data.lastExecuteResult;
+      // Restore screen snapshot
+      const rawSnap = (data as Record<string, unknown>).lastScreenSnapshot;
+      if (rawSnap && typeof rawSnap === 'object') {
+        this.status.lastScreenSnapshot = rawSnap as LastScreenSnapshot;
+      }
       // Restore aipha strategies (set by portfolio workflow)
       const rawAipha = (data as Record<string, unknown>)._aiphaStrategies;
       if (Array.isArray(rawAipha)) {
@@ -889,6 +1093,7 @@ export class AutoTradeScheduler {
             lastScreenResult: this.status.lastScreenResult,
             lastExecuteAt: this.status.lastExecuteAt,
             lastExecuteResult: this.status.lastExecuteResult,
+            lastScreenSnapshot: this.status.lastScreenSnapshot,
           },
           null,
           2,

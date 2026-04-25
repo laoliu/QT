@@ -924,7 +924,7 @@ def _query_stock(symbol: str, batch_id: str = "") -> dict:
 
 
 def _query_global(batch_id: str = "") -> dict:
-    """查询全局策略排名。"""
+    """查询全局策略排名，并聚合每个策略的平均指标。"""
     db_path = _get_db_path()
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -938,7 +938,24 @@ def _query_global(batch_id: str = "") -> dict:
             return {"strategies": [], "error": "无可用数据"}
 
         rows = conn.execute(
-            "SELECT * FROM global_strategy_ranking WHERE batch_id = ? ORDER BY rank ASC",
+            """
+            SELECT
+                g.*,
+                AVG(s.composite_score)    AS composite_score,
+                AVG(s.annualized_return)  AS annualized_return,
+                AVG(s.sharpe_ratio)       AS sharpe_ratio,
+                AVG(s.max_drawdown)       AS max_drawdown,
+                AVG(s.win_rate)           AS win_rate,
+                AVG(s.total_return)       AS total_return,
+                AVG(s.sortino_ratio)      AS sortino_ratio,
+                AVG(s.calmar_ratio)       AS calmar_ratio
+            FROM global_strategy_ranking g
+            LEFT JOIN stock_strategy_fitness s
+              ON g.strategy_id = s.strategy_id AND g.batch_id = s.batch_id
+            WHERE g.batch_id = ?
+            GROUP BY g.strategy_id
+            ORDER BY g.rank ASC
+            """,
             (batch_id,),
         ).fetchall()
         return {

@@ -167,6 +167,16 @@ function updatePlanModeIndicator(){
   loadPlanHistory();restoreCachedPlan();
   var h=(location.hash||'').replace('#','');
   if(h){_onTabDataLoad(h);}
+
+  // Auto-restore daily-pick history when accessed via ?history=<id>
+  var urlParams=new URLSearchParams(location.search);
+  var historyId=urlParams.get('history');
+  if(historyId){
+    activateTab('recommend');
+    fetchDailyPickHistory().then(function(){
+      restoreDailyPickHistory(historyId);
+    });
+  }
 })();
 `;
 }

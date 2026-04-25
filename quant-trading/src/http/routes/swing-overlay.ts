@@ -289,21 +289,31 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           posMap.set(p.symbol, { quantity: p.quantity, name: p.name ?? p.symbol });
         }
 
-        // Fetch all K-line data in parallel to avoid sequential timeout
+        // Fetch all K-line data in parallel with per-symbol timeout guard
         const symbols = [...allBySymbol.keys()];
         const priceMap = new Map<string, number>();
-        await Promise.all(
-          symbols.map(async (symbol) => {
-            try {
-              const klines = await provider.getKlines(symbol, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(symbol));
-              if (klines?.length) {
-                priceMap.set(symbol, klines[klines.length - 1]!.close);
-              }
-            } catch {
-              // best-effort
-            }
-          }),
-        );
+        const STATUS_PER_SYM_TIMEOUT = 8_000; // 8s per symbol max
+        const timedGetPrice = (sym: string) =>
+          new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+              console.log(`[swing-overlay/status] ⚠ ${sym} K线获取超时 (${STATUS_PER_SYM_TIMEOUT / 1000}s), 跳过`);
+              resolve();
+            }, STATUS_PER_SYM_TIMEOUT);
+            provider
+              .getKlines(sym, "1d", dateOffset(30), dateOffset(0), detectMarketFromSymbol(sym))
+              .then((klines) => {
+                clearTimeout(timer);
+                if (klines?.length) {
+                  priceMap.set(sym, klines[klines.length - 1]!.close);
+                }
+                resolve();
+              })
+              .catch(() => {
+                clearTimeout(timer);
+                resolve();
+              });
+          });
+        await Promise.all(symbols.map(timedGetPrice));
 
         for (const [symbol, orders] of allBySymbol) {
           // Get active (non-triggered) orders for this symbol

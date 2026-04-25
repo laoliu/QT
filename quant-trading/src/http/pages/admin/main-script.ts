@@ -186,7 +186,7 @@ function openStockDetail(sym){
 }
 function checkSync(){
   toast('🔍 检查数据更新…');
-  api('/quant/admin/api/data-warehouse/sync').then(function(r){
+  api('/quant/admin/api/data-warehouse/sync',{timeout:5*60*1000}).then(function(r){
     var el=document.getElementById('sync-result');
     if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'检查失败')+'</span>';return}
     var b=r.bridge||{};
@@ -203,7 +203,7 @@ function doSync(){
   toast('📥 正在同步数据… (可能需要几分钟)');
   var el=document.getElementById('sync-result');
   el.innerHTML='<div style="color:var(--text-dim)">⏳ 同步进行中，请耐心等待…</div>';
-  api('/quant/admin/api/data-warehouse/sync',{method:'POST',body:JSON.stringify({source:source,max_stocks:maxStocks})}).then(function(r){
+  api('/quant/admin/api/data-warehouse/sync',{method:'POST',body:JSON.stringify({source:source,max_stocks:maxStocks}),timeout:10*60*1000}).then(function(r){
     if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'同步失败')+'</span>';toast('❌ 同步失败');return}
     var b=r.bridge||{};
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span>':'<span class="badge badge-red">离线</span>');
@@ -229,7 +229,7 @@ function doWarmup(){
   var end=document.getElementById('warmup-end').value;
   if(!symbols.length||!start||!end){toast('请填写完整');return}
   toast('⏳ 预热中…');
-  api('/quant/admin/api/data-warehouse/warmup',{method:'POST',body:JSON.stringify({symbols:symbols,interval:interval,start:start,end:end})}).then(function(r){
+  api('/quant/admin/api/data-warehouse/warmup',{method:'POST',body:JSON.stringify({symbols:symbols,interval:interval,start:start,end:end}),timeout:10*60*1000}).then(function(r){
     document.getElementById('warmup-result').innerHTML=(r.results||[]).map(function(x){
       return '<div>'+esc(x.symbol)+': 获取 '+x.fetched+' 条, 缓存 '+x.cached+' 条'+(x.error?' <span style="color:var(--red)">'+esc(x.error)+'</span>':'')+'</div>';
     }).join('');toast('✅ 预热完成');loadData();

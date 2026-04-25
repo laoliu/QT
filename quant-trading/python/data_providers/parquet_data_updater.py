@@ -363,8 +363,72 @@ def _sync_adj_factor_month(api, month: str, cache_dir: Path, force=False) -> dic
 # ── Sync logic: stock_basic ───────────────────────────────────────
 
 
+def _akshare_stock_basic_fallback(cache_dir: Path) -> dict | None:
+    """Last-resort fallback: build stock_basic from AkShare (code + name only).
+
+    Returns result dict on success, None on failure.
+    """
+    import pandas as pd
+
+    try:
+        import akshare as ak
+
+        df = ak.stock_info_a_code_name()
+        if df is None or df.empty:
+            return None
+
+        # Normalise to TuShare-compatible schema
+        records = []
+        for _, row in df.iterrows():
+            code = str(row["code"]).zfill(6)
+            # Determine exchange suffix
+            if code.startswith(("6", "9")):
+                ts_code = f"{code}.SH"
+                market = "主板"
+            elif code.startswith(("0", "2")):
+                ts_code = f"{code}.SZ"
+                market = "主板" if code.startswith("00") else "主板"
+            elif code.startswith("3"):
+                ts_code = f"{code}.SZ"
+                market = "创业板"
+            elif code.startswith(("4", "8")):
+                ts_code = f"{code}.BJ"
+                market = "北交所"
+            else:
+                ts_code = f"{code}.SZ"
+                market = ""
+            records.append({
+                "ts_code": ts_code,
+                "symbol": code,
+                "name": row["name"],
+                "area": "",
+                "industry": "",
+                "market": market,
+                "list_date": "",
+                "list_status": "L",
+                "delist_date": "",
+                "is_hs": "",
+            })
+
+        result = pd.DataFrame(records)
+        path = cache_dir / "stock_basic.parquet"
+        _safe_write_parquet(result, path)
+        print(
+            f"[updater] stock_basic: AkShare fallback saved {len(result)} stocks",
+            file=sys.stderr,
+        )
+        return {
+            "status": "synced_akshare",
+            "stocks": len(result),
+            "message": "TuShare unavailable, used AkShare fallback (code+name only)",
+        }
+    except Exception as exc:
+        print(f"[updater] AkShare stock_basic fallback failed: {exc}", file=sys.stderr)
+        return None
+
+
 def _sync_stock_basic(api, cache_dir: Path, force=False, max_retries=3) -> dict:
-    """Refresh stock_basic.parquet if older than 7 days.
+    """Refresh stock_basic.parquet if older than 30 days.
 
     stock_basic API has strict rate limits (L: 1/hour, D: 1/min),
     so we use short retries with longer waits and fall back to
@@ -378,7 +442,7 @@ def _sync_stock_basic(api, cache_dir: Path, force=False, max_retries=3) -> dict:
     if has_existing and not force:
         mtime = datetime.fromtimestamp(path.stat().st_mtime)
         age_days = (datetime.now() - mtime).days
-        if age_days < 7:
+        if age_days < 30:
             return {"status": "fresh", "age_days": age_days}
 
     # Fetch active + delisted stocks
@@ -418,6 +482,10 @@ def _sync_stock_basic(api, cache_dir: Path, force=False, max_retries=3) -> dict:
                 "errors": errors,
                 "message": f"API rate-limited, using existing cache ({age_days}d old)",
             }
+        # No existing cache — try AkShare as last resort (code + name only)
+        ak_result = _akshare_stock_basic_fallback(cache_dir)
+        if ak_result:
+            return ak_result
         return {"status": "failed", "error": "; ".join(errors) or "No data returned"}
 
     merged = pd.concat(dfs, ignore_index=True)

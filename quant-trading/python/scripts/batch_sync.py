@@ -172,10 +172,11 @@ def fetch_via_bridge(codes: list[str], kline_days: int) -> tuple[dict, int]:
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT + 10) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
-                if resp_data.get("status") != "ok":
+                if not resp_data.get("ok") and resp_data.get("status") != "ok":
                     failed += len(batch)
                     continue
-                data = resp_data.get("data", {})
+                raw_data = resp_data.get("data", {})
+                data = raw_data.get("bars", raw_data) if isinstance(raw_data, dict) else raw_data
                 for qmt_code, bars in data.items():
                     plain = _qmt_to_plain(qmt_code)
                     converted = []

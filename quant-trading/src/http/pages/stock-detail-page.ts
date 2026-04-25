@@ -627,11 +627,13 @@ function drawKlineChart(){
       ctx.fillRect(x-bodyW/2,top,bodyW,bh);
     }
 
-    // Date labels (every ~10 bars)
-    if(i%10===0){
+    // Date labels (every ~10 bars + always last bar)
+    if(i%10===0 || i===bars.length-1){
       var dt=new Date(b.timestamp);
       var lbl=(dt.getMonth()+1)+'/'+dt.getDate();
-      ctx.fillStyle='#666';ctx.font='9px system-ui';ctx.textAlign='center';
+      ctx.fillStyle=(i===bars.length-1)?'#4fc3f7':'#666';
+      ctx.font=(i===bars.length-1)?'bold 10px system-ui':'9px system-ui';
+      ctx.textAlign='center';
       ctx.fillText(lbl,x,H-4);
     }
   });

@@ -237,7 +237,7 @@ function refreshSwingDashboard() {
   if (!el) return;
 
   var mode = window._currentViewMode || 'paper';
-  api('/quant/admin/api/swing-overlay/status?mode=' + mode, { _timeout: 20000 }).then(function(d) {
+  api('/quant/admin/api/swing-overlay/status?mode=' + mode, { _timeout: 30000 }).then(function(d) {
     if (!d || !d.overlays || !d.overlays.length) {
       el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-dim)">暂无激活的波段监控</div>';
       return;

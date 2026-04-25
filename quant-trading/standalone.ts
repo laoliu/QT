@@ -135,6 +135,29 @@ function createMockApi(
   return { api, services };
 }
 
+// ── Crash Guard ───────────────────────────────────────────────────
+// Prevent transient socket errors (write EOF, ECONNRESET, EPIPE, etc.)
+// from crashing the whole process.
+process.on("uncaughtException", (err: NodeJS.ErrnoException) => {
+  const transient = ["EOF", "ECONNRESET", "EPIPE", "ECONNABORTED", "ETIMEDOUT"];
+  if (err?.code && transient.includes(err.code)) {
+    console.warn(`[standalone] transient error ignored: ${err.code} (${err.syscall ?? "unknown syscall"})`);
+    return;
+  }
+  console.error("[standalone] uncaughtException:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  const err = reason as NodeJS.ErrnoException | undefined;
+  const transient = ["EOF", "ECONNRESET", "EPIPE", "ECONNABORTED", "ETIMEDOUT"];
+  if (err?.code && transient.includes(err.code)) {
+    console.warn(`[standalone] transient rejection ignored: ${err.code}`);
+    return;
+  }
+  console.error("[standalone] unhandledRejection:", reason);
+});
+
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {

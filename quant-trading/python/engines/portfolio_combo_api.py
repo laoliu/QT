@@ -57,7 +57,8 @@ def action_combine(config: dict) -> dict:
 def action_validate(config: dict) -> dict:
     from engines.statistical_validator import StatisticalValidator
 
-    daily_returns = [float(r) for r in config.get("daily_returns", [])]
+    raw = config.get("portfolio_returns") or config.get("daily_returns") or []
+    daily_returns = [float(r) for r in raw]
     if len(daily_returns) < 30:
         return {"error": "需要至少 30 个日收益率数据点"}
 
@@ -93,10 +94,9 @@ def action_perturbation(config: dict) -> dict:
     )
 
     equity_curves: dict[str, list[float]] = config.get("equity_curves", {})
-    noise_pct = float(config.get("noise_pct", 0.05))
-    n_runs = int(config.get("n_runs", 50))
+    noise_pct = float(config.get("noise_pct", 0.20))
 
-    result = combiner.weight_perturbation_test(equity_curves, noise_pct=noise_pct, n_runs=n_runs)
+    result = combiner.weight_perturbation_test(equity_curves, perturbation=noise_pct)
     return result
 
 
@@ -120,13 +120,13 @@ def action_slippage(config: dict) -> dict:
     )
 
     equity_curves: dict[str, list[float]] = config.get("equity_curves", {})
-    bps_range = config.get("bps_range")
-    if bps_range is None:
-        bps_range = [0, 5, 10, 20, 30, 50]
+    multipliers = config.get("multipliers") or config.get("bps_range")
+    if multipliers is None:
+        multipliers = [1.0, 2.0, 4.0]
     else:
-        bps_range = [float(b) for b in bps_range]
+        multipliers = [float(m) for m in multipliers]
 
-    result = combiner.slippage_sensitivity_test(equity_curves, bps_range=bps_range)
+    result = combiner.slippage_sensitivity_test(equity_curves, multipliers=multipliers)
     return result
 
 

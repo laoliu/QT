@@ -361,6 +361,7 @@ class PortfolioCombiner:
             "weight_history": weight_history,
             "correlation": corr_summary,
             "equity_curve": combined_curve,
+            "portfolio_returns": [round(r, 8) for r in portfolio_returns],
         }
 
     def _calc_metrics(self, values: list[float], returns: list[float]) -> dict:

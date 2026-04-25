@@ -84,7 +84,7 @@ function renderSwingScanResults(results) {
 
   var html = '<table class="data-table"><thead><tr>' +
     '<th>排名</th><th>代码</th><th>名称</th><th>综合得分</th>' +
-    '<th>趋势</th><th>振荡</th><th>均值回归</th><th>振幅</th><th>流动性</th>' +
+    '<th>趋势</th><th>振荡</th><th>均值回归</th><th>振幅</th><th>振幅得分</th><th>流动性</th>' +
     '<th>建议网格%</th><th>建议核心比</th><th>操作</th></tr></thead><tbody>';
 
   results.forEach(function(r, idx) {
@@ -99,6 +99,7 @@ function renderSwingScanResults(results) {
       '<td>' + (f.trend_score || 0).toFixed(1) + '</td>' +
       '<td>' + (f.oscillation_score || 0).toFixed(1) + '</td>' +
       '<td>' + (f.mean_reversion_score || 0).toFixed(1) + '</td>' +
+      '<td>' + (f.amplitude_pct != null ? f.amplitude_pct.toFixed(1) + '%' : '-') + '</td>' +
       '<td>' + (f.amplitude_score || 0).toFixed(1) + '</td>' +
       '<td>' + (f.liquidity_score || 0).toFixed(1) + '</td>' +
       '<td>' + (f.recommended_grid_pct || '-') + '%</td>' +

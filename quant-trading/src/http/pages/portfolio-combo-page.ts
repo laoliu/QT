@@ -618,7 +618,7 @@ function runPerturbation(){
     html+='<table><thead><tr><th>策略</th><th>扰动方向</th><th>扰动后权重</th><th>扰动SR</th><th>SR变化%</th><th>稳定?</th></tr></thead><tbody>';
     (d.results||[]).forEach(function(r){
       html+='<tr><td>'+esc(r.strategy)+'</td><td>'+esc(r.direction)+'</td>'
-        +'<td>'+(r.perturbed_weight*100).toFixed(1)+'%</td>'
+        +'<td>'+r.perturbed_weight.toFixed(1)+'%</td>'
         +'<td>'+num(r.sharpe_ratio)+'</td>'
         +'<td style="color:'+(r.sr_change_pct>15?'var(--yellow)':'var(--green)')+'">'+r.sr_change_pct.toFixed(2)+'%</td>'
         +'<td>'+(r.stable?'<span class="badge badge-green">✅</span>':'<span class="badge badge-red">❌</span>')+'</td></tr>';

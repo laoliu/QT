@@ -430,13 +430,16 @@ class StatisticalValidator:
     def run_dsr(self) -> DSRResult:
         """Run Deflated Sharpe Ratio test."""
         n_obs = len(self.daily_returns)
+        # Bailey & Lopez de Prado (2014) formula uses per-period (daily) SR,
+        # not annualized SR.  Convert: SR_daily = SR_annual / √252.
+        daily_sr = self.observed_sr / math.sqrt(252)
         # SR standard deviation
-        sr_var = (1 - self.skewness * self.observed_sr +
-                  (self.excess_kurtosis / 4) * self.observed_sr ** 2) / max(n_obs - 1, 1)
+        sr_var = (1 - self.skewness * daily_sr +
+                  (self.excess_kurtosis / 4) * daily_sr ** 2) / max(n_obs - 1, 1)
         sr_std = math.sqrt(max(sr_var, 1e-10))
 
         return deflated_sharpe_ratio(
-            observed_sr=self.observed_sr,
+            observed_sr=daily_sr,
             sr_std=sr_std,
             n_trials=self.n_trials,
             n_observations=n_obs,
@@ -499,8 +502,8 @@ class StatisticalValidator:
                 "score": f"{score}/10",
             },
             "dsr": {
-                "observed_sr": dsr.observed_sr,
-                "haircut_sr": dsr.haircut_sr,
+                "observed_sr": round(self.observed_sr, 4),
+                "haircut_sr": round(dsr.haircut_sr * math.sqrt(252), 4),
                 "p_value": dsr.p_value,
                 "significant": dsr.significant,
                 "verdict": "✅ PASS" if dsr.significant else "❌ FAIL",
@@ -509,6 +512,7 @@ class StatisticalValidator:
                 "t_observed": hlz.t_observed,
                 "penalty": hlz.penalty,
                 "t_adjusted": hlz.t_adjusted,
+                "haircut_pct": hlz.haircut_pct,
                 "significant": hlz.significant,
                 "verdict": "✅ PASS" if hlz.significant else "❌ FAIL (t_adj < 2.0)",
                 "note": (

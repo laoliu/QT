@@ -2755,6 +2755,23 @@ def update_screening(
         candidates = _screen_fitness_optimal(profile, top_n, aipha_strategies=aipha_strategies)
         if candidates:
             enhanced = list(candidates[:top_n])
+            # Refresh quotes for fitness_optimal too
+            try:
+                all_syms = [s["symbol"] for s in enhanced if s.get("symbol")]
+                if all_syms:
+                    live_quotes = _fetch_quotes_qmt_first(all_syms)
+                    for stock in enhanced:
+                        q = live_quotes.get(stock["symbol"])
+                        if not q:
+                            continue
+                        qp = q.get("price", 0)
+                        qc = q.get("changePct", 0)
+                        if qp > 0:
+                            stock["price"] = round(qp, 2)
+                        if abs(qc) > 0.001 or abs(stock.get("changePct", 0)) < 0.001:
+                            stock["changePct"] = round(qc, 2)
+            except Exception:
+                pass
             # Skip Round 4 kline re-fetch since fitness data is from full backtest
             print(f"[planner:timing] fitness_optimal: {_time.time()-t_total:.1f}s ({len(enhanced)} stocks)", file=sys.stderr, flush=True)
             return {
@@ -2772,6 +2789,35 @@ def update_screening(
     # screen_stocks already includes technical validation with klines (Round 4),
     # so skip redundant batch kline re-fetch here.
     enhanced = list(candidates[:top_n])
+
+    # ── Real-time quote refresh ──
+    # When screening runs before market open (or data source returns stale prices),
+    # changePct and price may be 0 / stale.  Use QMT bridge → Tencent fallback to
+    # patch with live data so the combined table always shows current numbers.
+    try:
+        all_syms = [s["symbol"] for s in enhanced if s.get("symbol")]
+        if all_syms:
+            t_quote = _time.time()
+            live_quotes = _fetch_quotes_qmt_first(all_syms)
+            patched = 0
+            for stock in enhanced:
+                q = live_quotes.get(stock["symbol"])
+                if not q:
+                    continue
+                qp = q.get("price", 0)
+                qc = q.get("changePct", 0)
+                if qp > 0:
+                    stock["price"] = round(qp, 2)
+                if abs(qc) > 0.001 or abs(stock.get("changePct", 0)) < 0.001:
+                    stock["changePct"] = round(qc, 2)
+                    patched += 1
+            print(
+                "[planner:timing] live quote refresh: %.1fs (patched %d/%d)"
+                % (_time.time() - t_quote, patched, len(all_syms)),
+                file=sys.stderr, flush=True,
+            )
+    except Exception as e:
+        print(f"[planner] live quote refresh failed: {e}", file=sys.stderr, flush=True)
 
     # Institutional + sentiment + analyst enrichment for top candidates (parallel)
     t_enrich = _time.time()

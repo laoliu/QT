@@ -186,6 +186,53 @@ export const DAILY_PICK_STRATEGIES = [
   "fitness_optimal",
 ] as const;
 
+// ── AIPHA 动态策略同步 ──────────────────────────────────────────
+
+export interface AiphaStrategyInfo {
+  id: string;
+  name: string;
+}
+
+/** Cached AIPHA A-stock strategies loaded from Python registry. */
+let _aiphaStrategies: AiphaStrategyInfo[] = [];
+let _aiphaLoaded = false;
+
+/** Set the AIPHA strategies cache (called when loaded from Python). */
+export function setAiphaStrategies(strategies: AiphaStrategyInfo[]): void {
+  _aiphaStrategies = strategies;
+  _aiphaLoaded = true;
+  // Sync labels
+  for (const s of strategies) {
+    if (!DAILY_PICK_STRATEGY_LABELS[s.id]) {
+      DAILY_PICK_STRATEGY_LABELS[s.id] = s.name;
+    }
+  }
+}
+
+/** Get cached AIPHA strategy list. */
+export function getAiphaStrategies(): AiphaStrategyInfo[] {
+  return _aiphaStrategies;
+}
+
+/** Check if AIPHA strategies have been loaded. */
+export function isAiphaLoaded(): boolean {
+  return _aiphaLoaded;
+}
+
+/** Check if a strategy ID is a known AIPHA strategy. */
+export function isAiphaStrategy(id: string): boolean {
+  return _aiphaStrategies.some((s) => s.id === id);
+}
+
+/** Get the full set of allowed strategy IDs (hardcoded + AIPHA). */
+export function getAllAllowedStrategies(): Set<string> {
+  const set = new Set<string>(DAILY_PICK_STRATEGIES);
+  for (const s of _aiphaStrategies) {
+    set.add(s.id);
+  }
+  return set;
+}
+
 export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
   momentum: "趋势动量",
   value: "价值投资",

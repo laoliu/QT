@@ -7,8 +7,7 @@
 # Uses ContextInfo for market data + passorder()/get_trade_detail_data() for trading.
 # All trading runs on main thread (get_trade_detail_data requires thread-local ContextInfo).
 #
-# For miniQMT gateway, use BRIDGE_MINI.py.
-# For legacy standalone push/serve modes, use BRIDGE_LEGACY.py.
+# For miniQMT gateway, use qmt_data_bridge.py.
 #
 
 BRIDGE_VERSION = 23
@@ -677,6 +676,31 @@ def _trading_get_klines(params):
     return {"ok": True, "data": result}
 
 
+def _trading_save_strategy_file(params):
+    """Save a strategy file to the MiniQMT strategies directory."""
+    content = params.get("content", "")
+    filename = params.get("filename", "")
+    save_dir = params.get("save_dir", "")
+    if not content or not filename:
+        return {"ok": False, "error": "content and filename are required"}
+
+    if not save_dir:
+        mini_qmt = os.environ.get("MINI_QMT_PATH", r"d:\st_lc\userdata_mini")
+        save_dir = os.path.join(mini_qmt, "strategies") if mini_qmt else ""
+    if not save_dir:
+        return {"ok": False, "error": "Cannot determine save directory (MINI_QMT_PATH not set)"}
+
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        filepath = os.path.join(save_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        _log("Saved strategy file: %s" % filepath)
+        return {"ok": True, "data": {"filepath": filepath, "filename": filename}}
+    except Exception as e:
+        return {"ok": False, "error": "Failed to save file: %s" % str(e)}
+
+
 _TRADING_DISPATCH = {
     "connect": _trading_connect,
     "disconnect": _trading_disconnect,
@@ -688,6 +712,7 @@ _TRADING_DISPATCH = {
     "query_account": _trading_query_account,
     "get_quote": _trading_get_quote,
     "get_klines": _trading_get_klines,
+    "save_strategy_file": _trading_save_strategy_file,
 }
 
 

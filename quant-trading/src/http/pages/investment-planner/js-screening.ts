@@ -42,7 +42,14 @@ function refreshPortfolio(){
   }
   toast('🔄 刷新持仓行情…');
   var _mode=window._currentViewMode||'paper';
+  var isLive=_mode==='live';
   _getSyncedPlan(currentPlan).then(function(syncedPlan){
+  if(isLive&&(!syncedPlan.portfolio||!syncedPlan.portfolio.length)){
+    document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">实盘持仓查询失败<br><span style="font-size:13px">请检查 QMT/miniQMT 是否正常运行并已登录</span></div></div>';
+    document.querySelector('#portfolio-table tbody').innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text-dim)">暂无实盘持仓数据</td></tr>';
+    toast('❌ 实盘未连接');
+    return;
+  }
   api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan,mode:_mode}),_timeout:60000}).then(function(d){
     var s=d.summary;
     _lastPortfolioSignals[_mode]=d.signals||[];
@@ -487,11 +494,22 @@ function loadRebalancePortfolio(){
   var statusEl=document.getElementById('rebalance-holdings-status');
   statusEl.textContent='正在加载持仓…';
   var _mode=window._currentViewMode||'paper';
+  var isLive=_mode==='live';
+  var url=isLive?'/quant/api/portfolio?mode=live':'/quant/api/portfolio';
 
-  // Try live portfolio first, fall back to plan-based monitor
-  api('/quant/api/portfolio',{_timeout:30000}).then(function(d){
+  api(url,{_timeout:30000}).then(function(d){
     if(!d||d.status!=='ok'||!d.data||!d.data.positions||!d.data.positions.length){
-      // Fall back to plan-based monitor
+      if(isLive){
+        // Live mode: never fall back to plan data — show broker error
+        _rebalancePositions=[];
+        _renderRebalanceKpis({totalValue:0,cash:0,profit:0,profitPct:0},0);
+        document.getElementById('rebalance-holdings-body').innerHTML=
+          '<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:30px">'+
+          '⚠️ 实盘持仓查询失败 — 请检查 QMT/miniQMT 是否正常运行并已登录'+
+          '</td></tr>';
+        statusEl.textContent='实盘未连接或无持仓';
+        return;
+      }
       return _loadRebalanceFromPlan();
     }
     var pf=d.data;
@@ -518,6 +536,16 @@ function loadRebalancePortfolio(){
     _renderRebalanceHoldings();
     statusEl.textContent='持仓已加载 ('+_rebalancePositions.length+'只) · '+(pf.source||_mode);
   }).catch(function(e){
+    if(isLive){
+      _rebalancePositions=[];
+      _renderRebalanceKpis({totalValue:0,cash:0,profit:0,profitPct:0},0);
+      document.getElementById('rebalance-holdings-body').innerHTML=
+        '<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:30px">'+
+        '⚠️ 实盘持仓查询失败: '+esc(e.message||'请求超时')+'<br>请检查 QMT/miniQMT 是否正常运行并已登录'+
+        '</td></tr>';
+      statusEl.textContent='实盘查询失败: '+(e.message||'超时');
+      return;
+    }
     console.warn('[rebalance] portfolio API failed, trying plan-based',e.message);
     _loadRebalanceFromPlan();
   });
@@ -1435,7 +1463,13 @@ function loadSignals(){
   }
   // Refresh portfolio to get latest signals
   var _mode=window._currentViewMode||'paper';
+  var isLive=_mode==='live';
   _getSyncedPlan(currentPlan).then(function(syncedPlan){
+  if(isLive&&(!syncedPlan.portfolio||!syncedPlan.portfolio.length)){
+    document.getElementById('signal-kpis').innerHTML=[kpiHtml('🔴 实盘','当前模式'),kpiHtml('—','信号')].join('');
+    document.getElementById('signal-list').innerHTML='<div class="card"><h3>⚠️ 实盘持仓查询失败</h3><p style="font-size:12px;color:var(--text-dim)">请检查 QMT/miniQMT 是否正常运行并已登录</p></div>';
+    return;
+  }
   api('/quant/admin/api/investment-monitor',{method:'POST',body:JSON.stringify({action:'monitor',plan:syncedPlan,mode:_mode}),_timeout:60000}).then(function(d){
     var signals=d.signals||[];
     _lastPortfolioSignals[_mode]=signals;

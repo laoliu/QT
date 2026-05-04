@@ -1474,6 +1474,12 @@ export function getPlannerBodyHtml(b: string): string {
         <label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="regime-switch" checked style="vertical-align:middle;margin-right:4px">趋势/震荡切换</label>
         <span id="dp-composed-strategies"></span>
       </div>
+      <div id="dp-aipha-strategies-wrap" class="form-row" style="flex-wrap:wrap;gap:4px 8px;display:none">
+        <label style="color:var(--purple);font-weight:600;font-size:11px;min-width:auto">AIPHA多因子</label>
+        <button class="btn btn-sm" type="button" onclick="toggleAiphaStrategies()" style="padding:2px 6px;font-size:10px;border-color:var(--purple);color:var(--purple)" id="dp-aipha-toggle">展开</button>
+        <span id="dp-aipha-count" style="font-size:11px;color:var(--text-dim)"></span>
+        <div id="dp-aipha-strategies" style="display:none;width:100%;flex-wrap:wrap;gap:4px 8px;margin-top:4px"></div>
+      </div>
       <!-- Fitness Ranking Panel (hidden by default) -->
       <div id="dp-fitness-panel" style="display:none;margin:8px 0;padding:12px;background:var(--bg);border:1px solid var(--purple);border-radius:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">

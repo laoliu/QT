@@ -12,7 +12,7 @@ import { runBuiltinBacktest } from "../../engine/builtin-engine.js";
 import { hasStrategyFactory, resolveBuiltinStrategy } from "../../engine/strategy-registry.js";
 import { createDataProvider } from "../../data/market-data-provider.js";
 import type { AdminRouteDeps } from "../admin-routes.js";
-import { json, parseObjectBody } from "./_helpers.js";
+import { json, parseObjectBody, setAiphaStrategies } from "./_helpers.js";
 import type { BacktestResult, QuantTradingConfig } from "../../types.js";
 import type { QuantStorage, StockStrategyFitnessRow, GlobalStrategyRankingRow } from "../../services/sqlite-storage.js";
 import * as fs from "node:fs/promises";
@@ -979,6 +979,37 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         json(res, { ok: true, message: "已发送取消信号" });
       } else {
         json(res, { ok: false, message: "当前没有正在运行的Builtin适配分析" });
+      }
+    }),
+  });
+
+  // ── List available AIPHA A-stock strategies ────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/aipha-strategies",
+    handler: secure(async (_req, res) => {
+      try {
+        const result = await runPythonScript<{
+          strategies: Array<{ id: string; name: string }>;
+          count: number;
+          error?: string;
+        }>(
+          "scripts/strategy_fitness.py",
+          { action: "list_strategies" },
+          config,
+          { timeoutMs: 30_000 },
+        );
+        if (result.ok && result.data) {
+          // Cache into global allowed strategies for daily-pick validation
+          if (result.data.strategies?.length) {
+            setAiphaStrategies(result.data.strategies);
+          }
+          json(res, result.data);
+        } else {
+          json(res, { strategies: [], count: 0, error: result.error ?? "加载失败" });
+        }
+      } catch (err) {
+        json(res, { strategies: [], count: 0, error: String(err) }, 500);
       }
     }),
   });

@@ -4,7 +4,7 @@ qmt_data_bridge.py -- Windows QMT Unified Bridge
 ================================================
 
 Unified bridge for miniQMT: market data (K-lines + quotes) AND trading.
-Supersedes BRIDGE_MINI.py -- use this file for all miniQMT operations.
+Unified bridge for all miniQMT operations.
 
 Starts HTTP server on Windows (default 0.0.0.0:58088), Mac directly
 POSTs requests to pull data and execute trades.
@@ -721,7 +721,7 @@ def _fetch_tick_data_xtdata(codes, trade_date):
     return result
 
 
-# ========== 交易桥 (XtQuantTrader, from BRIDGE_MINI) ==========
+# ========== 交易桥 (XtQuantTrader) ==========
 
 _trading_trader = None
 _trading_account = None
@@ -1148,6 +1148,31 @@ def _trading_unsubscribe_quote(params):
     return {"ok": True, "data": {"subscribed": list(_trading_subscribed_codes)}}
 
 
+def _trading_save_strategy_file(params):
+    """Save a strategy file to the MiniQMT strategies directory."""
+    content = params.get("content", "")
+    filename = params.get("filename", "")
+    save_dir = params.get("save_dir", "")
+    if not content or not filename:
+        return {"ok": False, "error": "content and filename are required"}
+
+    if not save_dir:
+        base = MINI_QMT_PATH or _xtquant_userdata
+        save_dir = os.path.join(base, "strategies") if base else ""
+    if not save_dir:
+        return {"ok": False, "error": "Cannot determine save directory (MINI_QMT_PATH not set)"}
+
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        filepath = os.path.join(save_dir, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        _log("Saved strategy file: %s" % filepath)
+        return {"ok": True, "data": {"filepath": filepath, "filename": filename}}
+    except Exception as e:
+        return {"ok": False, "error": "Failed to save file: %s" % str(e)}
+
+
 _TRADING_DISPATCH = {
     "connect": _trading_connect,
     "disconnect": _trading_disconnect,
@@ -1159,6 +1184,7 @@ _TRADING_DISPATCH = {
     "query_account": _trading_query_account,
     "subscribe_quote": _trading_subscribe_quote,
     "unsubscribe_quote": _trading_unsubscribe_quote,
+    "save_strategy_file": _trading_save_strategy_file,
 }
 
 

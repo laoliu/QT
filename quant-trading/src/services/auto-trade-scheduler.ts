@@ -14,7 +14,7 @@ import { dirname } from "node:path";
 import http from "node:http";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
-import { DAILY_PICK_STRATEGIES } from "../http/routes/_helpers.js";
+import { DAILY_PICK_STRATEGIES, getAllAllowedStrategies } from "../http/routes/_helpers.js";
 import type { MarketContext } from "./market-context.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -560,7 +560,7 @@ export class AutoTradeScheduler {
               .filter(Boolean);
             if (topIds.length > 0) {
               // Split into known daily-pick strategies and aipha-only strategies
-              const allowedSet = new Set<string>(DAILY_PICK_STRATEGIES);
+              const allowedSet = getAllAllowedStrategies();
               const knownStrategies = topIds.filter((id) => allowedSet.has(id));
               const aiphaIds = topIds.filter((id) => !allowedSet.has(id));
               resolvedStrategies = [...knownStrategies];

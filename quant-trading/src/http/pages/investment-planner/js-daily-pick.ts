@@ -989,6 +989,47 @@ var _fitnessStratNames={
   'volatility-breakout':'波动率突破','regime-switch':'趋势/震荡切换'
 };
 
+/* ── Load AIPHA strategies dynamically ── */
+var _aiphaStrategiesLoaded=false;
+function loadAiphaStrategies(){
+  if(_aiphaStrategiesLoaded)return;
+  _aiphaStrategiesLoaded=true;
+  api('/quant/admin/api/strategy-fitness/aipha-strategies',{_timeout:15000}).then(function(data){
+    var strats=data&&data.strategies?data.strategies:[];
+    if(!strats.length)return;
+    // Add to _fitnessStratNames
+    strats.forEach(function(s){
+      if(!_fitnessStratNames[s.id])_fitnessStratNames[s.id]=s.name;
+    });
+    // Render checkboxes
+    var wrap=document.getElementById('dp-aipha-strategies-wrap');
+    var container=document.getElementById('dp-aipha-strategies');
+    var countEl=document.getElementById('dp-aipha-count');
+    if(!wrap||!container)return;
+    wrap.style.display='';
+    if(countEl)countEl.textContent='('+strats.length+'个策略)';
+    container.innerHTML=strats.map(function(s){
+      return '<label style="min-width:auto"><input type="checkbox" class="dp-strategy" value="'+s.id+'" style="vertical-align:middle;margin-right:4px">'+s.name+'</label>';
+    }).join('');
+  }).catch(function(){});
+}
+
+function toggleAiphaStrategies(){
+  var el=document.getElementById('dp-aipha-strategies');
+  var btn=document.getElementById('dp-aipha-toggle');
+  if(!el)return;
+  if(el.style.display==='none'){
+    el.style.display='flex';
+    if(btn)btn.textContent='收起';
+  }else{
+    el.style.display='none';
+    if(btn)btn.textContent='展开';
+  }
+}
+
+// Auto-load AIPHA strategies on page load
+setTimeout(loadAiphaStrategies,500);
+
 function _loadFitnessGlobal(callback){
   if(_fitnessGlobalRanking){callback(_fitnessGlobalRanking);return;}
   if(_fitnessLoading)return;

@@ -381,6 +381,23 @@ def _get_astock_strategies() -> list[str]:
         return []
 
 
+def _list_available_strategies() -> dict:
+    """返回所有可用的AIPHA A股策略ID和名称（排除可转债策略）。"""
+    try:
+        import aipha.strategy.register_all  # noqa: F401
+        from aipha.strategy.registry import StrategyRegistry
+        reg = StrategyRegistry()
+        a_stock_ids = _get_astock_strategies()
+        strategies = []
+        for sid in a_stock_ids:
+            cls = reg.get(sid)
+            label = getattr(cls, "name", sid) if cls else sid
+            strategies.append({"id": sid, "name": label})
+        return {"strategies": strategies, "count": len(strategies)}
+    except Exception as e:
+        return {"strategies": [], "count": 0, "error": str(e)}
+
+
 # ── Load kline data ──────────────────────────────────────────────
 
 def _load_klines(symbols: list[str], start_date: str, end_date: str) -> dict[str, list[dict]]:
@@ -1567,6 +1584,8 @@ if __name__ == "__main__":
                 result = _delete_batch(bid)
         elif action == "aggregate_global":
             result = _aggregate_global(config.get("top_n", 10))
+        elif action == "list_strategies":
+            result = _list_available_strategies()
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:

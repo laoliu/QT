@@ -9,6 +9,7 @@
  *   trailing_tp    — trailing take-profit: activates at +X%, then trails upward
  *   staged_tp      — staged take-profit: auto-creates multiple sell tiers
  *   indicator_stop — sell when price breaks below a moving average (SMA/EMA)
+ *   batch_entry   — buy when price drops to a pre-set batch entry level
  *
  * Runs as a periodic check (default: every 30s). When triggered, submits
  * a market exit order via a user-provided callback (wired to OrderManager).
@@ -30,6 +31,8 @@ export type ConditionalOrderType =
   | "staged_tp"
   | "indicator_stop"
   | "swing_grid"
+  // Batch entry trigger (auto-buy on price dip)
+  | "batch_entry"
   // Market context-based triggers
   | "sentiment_crash"
   | "lianban_exit"
@@ -114,6 +117,10 @@ export interface ConditionalOrder {
   swingFillPrice?: number;
   /** Linked order ID (the reverse order created after fill). */
   linkedOrderId?: string;
+
+  // ── Batch entry state ──
+  /** Batch number (2 or 3) for batch_entry orders. */
+  batchNumber?: number;
 
   // ── Indicator-based stop state ──
   /** Moving average period (e.g. 10, 20, 60). */
@@ -374,6 +381,34 @@ export class ConditionalOrderService {
       description:
         params.description ??
         `催化触发: ${params.symbol} 催化事件到来时操作 ${params.quantity} 股`,
+    });
+  }
+
+  /**
+   * Add a batch entry order: auto-buy when price drops to the target level.
+   * Used for 分批入场 (tranche 2/3 after initial batch 1 execution).
+   */
+  addBatchEntry(params: {
+    symbol: string;
+    entryPrice: number;
+    targetPrice: number;
+    quantity: number;
+    batchNumber: number;
+    strategyId?: string;
+    description?: string;
+  }): string {
+    return this.addOrder({
+      symbol: params.symbol,
+      type: "batch_entry",
+      entryPrice: params.entryPrice,
+      triggerValue: params.targetPrice,
+      quantity: params.quantity,
+      exitSide: "buy",
+      strategyId: params.strategyId,
+      batchNumber: params.batchNumber,
+      description:
+        params.description ??
+        `分批入场(第${params.batchNumber}批): ${params.symbol} 跌至 ¥${params.targetPrice.toFixed(2)} 自动买入 ${params.quantity} 股`,
     });
   }
 
@@ -777,6 +812,7 @@ export class ConditionalOrderService {
       baselineRegime: params.baselineRegime,
       watchCatalystType: params.watchCatalystType,
       baselineStStage: params.baselineStStage,
+      batchNumber: params.batchNumber,
     };
 
     this.orders.set(id, order);
@@ -1035,6 +1071,15 @@ export class ConditionalOrderService {
           break;
         }
 
+        case "batch_entry": {
+          const targetPrice = order.triggerValue;
+          if (price <= targetPrice) {
+            shouldTrigger = true;
+            triggerReason = `分批入场(第${order.batchNumber ?? "?"}批): ${order.symbol} 当前价 ¥${price.toFixed(2)} ≤ 目标价 ¥${targetPrice.toFixed(2)}，自动买入 ${order.quantity} 股`;
+          }
+          break;
+        }
+
         // ── Market Context Triggers ──────────────────────────────
         case "sentiment_crash": {
           if (!this.marketContextFn) break;
@@ -1114,6 +1159,7 @@ export class ConditionalOrderService {
         triggered.push(order.id);
 
         // Submit exit order
+        let exitOk = false;
         if (this.exitFn) {
           const result = await this.exitFn(
             order.symbol,
@@ -1122,13 +1168,15 @@ export class ConditionalOrderService {
             order.strategyId,
             order.exitSide,
           );
+          exitOk = result.ok;
           order.triggerResult = result.ok ? "exit_submitted" : `exit_failed: ${result.reason}`;
         } else {
           order.triggerResult = "no_exit_fn_configured";
         }
 
         // ── Swing grid: record fill price, log trade, create reverse order ──
-        if (order.type === "swing_grid") {
+        // Only proceed if the order was actually submitted successfully
+        if (order.type === "swing_grid" && exitOk) {
           const fillPrice = quotes.get(order.symbol) ?? order.gridPrice ?? order.triggerValue;
           order.swingFillPrice = fillPrice;
 
@@ -1169,6 +1217,16 @@ export class ConditionalOrderService {
               `[conditional-order] swing_grid auto-reverse: ${order.id}(${order.swingDirection}) → ${reverseId}(${reverseDir}) @ ¥${reversePrice.toFixed(2)}`,
             );
           }
+        } else if (order.type === "swing_grid" && !exitOk) {
+          // Exit failed — revert trigger so order stays active and retries next cycle
+          order.triggered = false;
+          order.triggeredAt = undefined;
+          const failReason = order.triggerResult;
+          order.triggerResult = undefined;
+          triggered.pop(); // remove from triggered list
+          console.log(
+            `[conditional-order] swing_grid exit failed, reverting to active: ${order.id} (${failReason})`,
+          );
         }
 
         // Notify user
@@ -1259,6 +1317,7 @@ export class ConditionalOrderService {
         order.triggeredAt = nowCSTISO();
         triggered.push(order.id);
 
+        let exitOk = false;
         if (this.exitFn) {
           const result = await this.exitFn(
             order.symbol,
@@ -1267,13 +1326,14 @@ export class ConditionalOrderService {
             order.strategyId,
             order.exitSide,
           );
+          exitOk = result.ok;
           order.triggerResult = result.ok ? "exit_submitted" : `exit_failed: ${result.reason}`;
         } else {
           order.triggerResult = "no_exit_fn_configured";
         }
 
-        // Swing grid: record fill, create reverse order
-        if (order.type === "swing_grid") {
+        // Swing grid: record fill, create reverse order — only if exit succeeded
+        if (order.type === "swing_grid" && exitOk) {
           order.swingFillPrice = price;
           this.appendSwingTrade({
             orderId: order.id,
@@ -1305,12 +1365,22 @@ export class ConditionalOrderService {
             });
             order.linkedOrderId = reverseId;
           }
+        } else if (order.type === "swing_grid" && !exitOk) {
+          // Exit failed — revert trigger so order stays active and retries next cycle
+          order.triggered = false;
+          order.triggeredAt = undefined;
+          const failReason = order.triggerResult;
+          order.triggerResult = undefined;
+          triggered.pop();
+          console.log(
+            `[conditional-order] swing_grid(rt) exit failed, reverting to active: ${order.id} (${failReason})`,
+          );
         }
 
         const resultSuffix =
           order.triggerResult === "exit_submitted"
             ? order.exitSide === "buy" ? "，买入委托已提交" : "，卖出委托已提交"
-            : `（${order.triggerResult}）`;
+            : `（${order.triggerResult ?? "pending"})`;
         void this.notifyFn?.(`🔔 ${triggerReason}${resultSuffix}`);
       }
     }

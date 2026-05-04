@@ -50,6 +50,9 @@ import {
   round2,
   formatDateYmd,
   parseObjectBody,
+  getAiphaStrategies,
+  isAiphaLoaded,
+  setAiphaStrategies,
 } from "./routes/_helpers.js";
 import { registerDailyPickRoutes, fetchStockNames } from "./routes/daily-pick.js";
 import { registerStrategyFitnessRoutes } from "./routes/strategy-fitness.js";
@@ -1465,6 +1468,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           stopLossPrice?: number;
           takeProfitPrice?: number;
           sourceShares: number;
+          entryPrices?: Record<string, unknown>;
         };
 
         const planItems: ExecPlanItem[] = [];
@@ -1547,6 +1551,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             stopLossPrice: stopLossPrice > 0 ? round2(stopLossPrice) : undefined,
             takeProfitPrice: takeProfitPrice > 0 ? round2(takeProfitPrice) : undefined,
             sourceShares,
+            entryPrices,
           });
         }
 
@@ -1640,14 +1645,43 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         // Only count orders from the current broker type so paper orders don't
         // block real QMT orders and vice versa.
         const currentBrokerType = broker?.brokerType;
-        const existingOpenCount = orderMgr
-          ? (
-              await orderMgr.getOrders({
-                status: ["pending", "submitted", "partial"] as any,
-                brokerType: currentBrokerType,
-              })
-            ).length
-          : 0;
+        let existingOpenOrders = orderMgr
+          ? await orderMgr.getOrders({
+              status: ["pending", "submitted", "partial"] as any,
+              brokerType: currentBrokerType,
+            })
+          : [];
+        let existingOpenCount = existingOpenOrders.length;
+
+        // Auto-cancel stale pending orders to make room for the new batch.
+        // Only cancel non-partial buy orders (safe to retry); keep partial
+        // fills and sell orders untouched.
+        const slotsNeeded = planItems.length;
+        if (existingOpenCount + slotsNeeded > maxOpenOrders && orderMgr) {
+          const cancellable = existingOpenOrders
+            .filter(
+              (o) =>
+                (o.status === "pending" || o.status === "submitted") &&
+                o.filledQty === 0 &&
+                (o.side === "buy" || o.side === "buy_open"),
+            )
+            .sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+            );
+          const toCancel = cancellable.slice(
+            0,
+            existingOpenCount + slotsNeeded - maxOpenOrders,
+          );
+          for (const o of toCancel) {
+            try {
+              await orderMgr.cancel(o.orderId);
+              existingOpenCount--;
+            } catch {
+              // best-effort; if cancel fails the order-limit check will reject later
+            }
+          }
+        }
         let batchSubmitted = 0;
 
         // Track remaining available cash across the batch so we can pre-check
@@ -1802,6 +1836,36 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                   description: `自动跟踪止损(${item.code})`,
                 }),
               );
+
+              // ── Auto-create batch entry orders for batch 2 & 3 ────
+              // Only create when executing batch 1 (initial entry).
+              if (batchNumber === 1 && item.entryPrices) {
+                const lotSize = getLotSize(item.code, item.market);
+                for (const bn of [2, 3] as const) {
+                  const bKey = `batch${bn}`;
+                  const bData =
+                    item.entryPrices[bKey] && typeof item.entryPrices[bKey] === "object"
+                      ? (item.entryPrices[bKey] as Record<string, unknown>)
+                      : undefined;
+                  if (!bData) continue;
+                  const bPrice = toFiniteNumber(bData.price, 0);
+                  const bPct = toFiniteNumber(bData.pct, 0);
+                  if (bPrice <= 0 || bPct <= 0) continue;
+                  let bShares = Math.max(1, Math.floor((item.sourceShares * bPct) / 100));
+                  if (lotSize > 1) bShares = Math.floor(bShares / lotSize) * lotSize;
+                  if (bShares <= 0) continue;
+                  conditionalIds.push(
+                    conditionalOrderService.addBatchEntry({
+                      symbol: item.code,
+                      entryPrice: item.limitPrice,
+                      targetPrice: round2(bPrice),
+                      quantity: bShares,
+                      batchNumber: bn,
+                      strategyId: "recommend-exec",
+                    }),
+                  );
+                }
+              }
 
               // ── Auto-create market context conditional orders ────
               try {
@@ -2180,8 +2244,20 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
               strategyId: String(body.strategyId ?? "manual"),
               description: String(body.description ?? `手动跟踪止损(${symbol})`),
             });
+          } else if (type === "swing_grid") {
+            orderId = conditionalOrderService.addSwingGrid({
+              symbol,
+              gridPrice: toFiniteNumber(body.gridPrice, 0),
+              gridIndex: clampInteger(body.gridIndex, 0, 100, 0),
+              swingDirection: body.swingDirection === "sell" ? "sell" : "buy",
+              quantity,
+              entryPrice,
+              strategyId: String(body.strategyId ?? "swing-overlay"),
+              gridPct: toFiniteNumber(body.gridPct, 3),
+              description: body.description ? String(body.description) : undefined,
+            });
           } else {
-            json(res, { error: "type 必须为 stop_loss / take_profit / trailing_stop" }, 400);
+            json(res, { error: "type 必须为 stop_loss / take_profit / trailing_stop / swing_grid" }, 400);
             return;
           }
           json(res, { ok: true, id: orderId });
@@ -3249,6 +3325,26 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     auth: "plugin",
     path: "/quant/admin/api/strategies",
     handler: secure(async (_req, res) => {
+      // Ensure AIPHA strategies are loaded (lazy load on first request)
+      if (!isAiphaLoaded()) {
+        try {
+          const pyResult = await runPythonScript<{
+            strategies: Array<{ id: string; name: string }>;
+            count: number;
+          }>(
+            "scripts/strategy_fitness.py",
+            { action: "list_strategies" },
+            config,
+            { timeoutMs: 30_000 },
+          );
+          if (pyResult.ok && pyResult.data?.strategies) {
+            setAiphaStrategies(pyResult.data.strategies);
+          }
+        } catch {
+          /* best-effort */
+        }
+      }
+
       // Built-in strategies from registry
       const builtin = listStrategies().map((s) => ({
         id: s.id,
@@ -3264,6 +3360,20 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           max: p.max,
         })),
       }));
+
+      // AIPHA Python strategies (loaded from Python registry)
+      const builtinIds = new Set(builtin.map((s) => s.id));
+      const aiphaStrategies = getAiphaStrategies()
+        .filter((s) => !builtinIds.has(s.id))
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: `AIPHA多因子策略: ${s.name}`,
+          engine: "aipha" as const,
+          parameters: [],
+        }));
+
+      const allBuiltin = [...builtin, ...aiphaStrategies];
 
       // User-defined strategies
       const userStrategies = userStrategyStore
@@ -3302,10 +3412,10 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       }
 
       json(res, {
-        builtin,
+        builtin: allBuiltin,
         userStrategies,
         templates,
-        totalBuiltin: builtin.length,
+        totalBuiltin: allBuiltin.length,
         totalUser: userStrategies.length,
         totalTemplates: templates.length,
       });

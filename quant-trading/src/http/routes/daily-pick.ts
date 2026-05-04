@@ -15,6 +15,10 @@ import {
   DAILY_PICK_STRATEGIES,
   DAILY_PICK_STRATEGY_LABELS,
   CTA_SCREEN_STRATEGY_MAP,
+  getAllAllowedStrategies,
+  isAiphaStrategy,
+  setAiphaStrategies,
+  isAiphaLoaded,
 } from "./_helpers.js";
 import { parseJsonBody } from "../parse-body.js";
 import * as fs from "node:fs";
@@ -22,6 +26,32 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as http from "node:http";
 import { nowCSTISO } from "../../utils/cst-time.js";
+import type { QuantTradingConfig } from "../../types.js";
+
+/** Load AIPHA strategies from Python registry and cache them. */
+function loadAiphaStrategies(config: QuantTradingConfig): void {
+  if (isAiphaLoaded()) return;
+  runPythonScript<{
+    strategies: Array<{ id: string; name: string }>;
+    count: number;
+  }>(
+    "scripts/strategy_fitness.py",
+    { action: "list_strategies" },
+    config,
+    { timeoutMs: 30_000 },
+  )
+    .then((result) => {
+      if (result.ok && result.data?.strategies) {
+        setAiphaStrategies(result.data.strategies);
+        console.log(
+          `[daily-pick] Loaded ${result.data.strategies.length} AIPHA strategies`,
+        );
+      }
+    })
+    .catch(() => {
+      /* best-effort — will be populated on first fitness API call */
+    });
+}
 
 /** Fetch stock names in batch from Tencent finance API (qt.gtimg.cn). */
 export async function fetchStockNames(symbols: string[]): Promise<Map<string, string>> {
@@ -77,6 +107,9 @@ export async function fetchStockNames(symbols: string[]): Promise<Map<string, st
 
 export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
   const { api, config, secure, securePublic, composedStrategyStore } = deps;
+
+  // ── Load AIPHA strategies from Python on startup ──────────
+  loadAiphaStrategies(config);
 
   // ── Daily Composite Picks API ────────────────────────────────
   api.registerHttpRoute({
@@ -225,7 +258,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         const rawStrategies = Array.isArray(body.strategies)
           ? body.strategies.map((s) => String(s).trim()).filter(Boolean)
           : [...DAILY_PICK_STRATEGIES];
-        const allowedStrategies = new Set<string>(DAILY_PICK_STRATEGIES);
+        const allowedStrategies = getAllAllowedStrategies();
         // Also allow user-created composed strategies (prefixed with "composed:")
         const composedIds = new Set<string>();
         if (composedStrategyStore) {
@@ -278,9 +311,10 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         let enrichmentContext: Record<string, unknown> = {};
         const strategyRuns = await Promise.all(
           strategies.map(async (strategy): Promise<StrategyRun> => {
-            // Resolve label and screen key for composed / CTA strategies
+            // Resolve label and screen key for composed / CTA / AIPHA strategies
             let screenStrategy = strategy;
             let strategyLabel = DAILY_PICK_STRATEGY_LABELS[strategy] ?? strategy;
+            let aiphaFilter: string[] | undefined;
             // When fitness_optimal is used with specific aipha_strategies, show those strategy names
             if (
               strategy === "fitness_optimal" &&
@@ -298,7 +332,11 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                   : "") +
                 ")";
             }
-            if (CTA_SCREEN_STRATEGY_MAP[strategy]) {
+            // AIPHA strategy IDs → route through fitness_optimal
+            if (isAiphaStrategy(strategy)) {
+              screenStrategy = "fitness_optimal";
+              aiphaFilter = [strategy];
+            } else if (CTA_SCREEN_STRATEGY_MAP[strategy]) {
               screenStrategy = CTA_SCREEN_STRATEGY_MAP[strategy];
             } else if (composedIds.has(strategy) && composedStrategyStore) {
               const compId = strategy.slice("composed:".length);
@@ -317,9 +355,11 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 strategy: screenStrategy,
                 risk_tolerance: riskTolerance,
                 top_n: topNPerStrategy,
-                ...(screenStrategy === "fitness_optimal" && Array.isArray(body.aipha_strategies) && body.aipha_strategies.length > 0
-                  ? { aipha_strategies: body.aipha_strategies }
-                  : {}),
+                ...(aiphaFilter
+                  ? { aipha_strategies: aiphaFilter }
+                  : screenStrategy === "fitness_optimal" && Array.isArray(body.aipha_strategies) && body.aipha_strategies.length > 0
+                    ? { aipha_strategies: body.aipha_strategies }
+                    : {}),
               },
               config,
               { timeoutMs: 360_000 },

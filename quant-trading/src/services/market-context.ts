@@ -86,7 +86,7 @@ export interface STStatus {
   riskLevel: "extreme" | "high" | "medium" | "low";
 }
 
-export type MacroRegime = "BULL" | "BEAR" | "SIDEWAYS" | "VOLATILE";
+export type MacroRegime = "BULL" | "BEAR" | "SIDEWAYS" | "VOLATILE" | "UNKNOWN";
 export type VolatilityRegime = "LOW" | "NORMAL" | "HIGH" | "EXTREME";
 
 /**

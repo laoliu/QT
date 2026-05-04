@@ -1931,7 +1931,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                         symbol: item.code,
                         entryPrice: item.limitPrice,
                         quantity: Math.max(1, Math.floor(qty / 2)),
-                        watchCatalystType: ctx.catalyst.type,
+                        watchCatalystType: ctx.catalyst.eventType,
                         strategyId: "recommend-exec",
                       }),
                     );
@@ -3661,8 +3661,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         return;
       }
       const body = await parseObjectBody(req);
-      const codes: string[] = body.codes || [];
-      const date: string = body.date || "";
+      const codes: string[] = (Array.isArray(body.codes) ? body.codes : []) as string[];
+      const date: string = String(body.date || "");
       if (!codes.length || !date) {
         json(res, { error: "codes 和 date 必填" }, 400);
         return;

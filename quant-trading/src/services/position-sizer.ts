@@ -265,7 +265,7 @@ export function contextSizingDetail(ctx: MarketContext, _symbol?: string): Conte
   if (ctx.catalyst && ctx.catalyst.daysUntil >= 0 && ctx.catalyst.daysUntil <= 3) {
     if (ctx.catalyst.impact === "high") {
       mult *= 0.7;
-      reasons.push(`催化临近(${ctx.catalyst.type ?? "事件"},${ctx.catalyst.daysUntil}天)→×0.7`);
+      reasons.push(`催化临近(${ctx.catalyst.eventType ?? "事件"},${ctx.catalyst.daysUntil}天)→×0.7`);
     }
   }
 

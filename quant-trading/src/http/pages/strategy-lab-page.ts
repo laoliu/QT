@@ -130,6 +130,37 @@ a:hover{text-decoration:underline}
         </div>
       </div>
     </div>
+    <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="openBatchAdd()" title="\u4ece\u5217\u8868\u4e2d\u591a\u9009\u7b56\u7565\u4e00\u6b21\u6027\u6dfb\u52a0">\u{1f4e6} \u6279\u91cf\u6dfb\u52a0</button>
+      <button class="btn btn-sm" onclick="smartRecommend()" title="\u6839\u636e\u7b56\u7565\u7c7b\u578b\u81ea\u52a8\u63a8\u8350\u4e92\u8865\u7ec4\u5408">\u{1f9e0} \u667a\u80fd\u63a8\u8350</button>
+      <button class="btn btn-sm" onclick="clearSubStrategies()" title="\u6e05\u7a7a\u5df2\u6dfb\u52a0\u7684\u5b50\u7b56\u7565">\u{1f5d1}\ufe0f \u6e05\u7a7a</button>
+    </div>
+    <!-- Batch-add modal overlay -->
+    <div id="batch-add-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;width:640px;max-height:80vh;display:flex;flex-direction:column;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="font-size:15px">\u{1f4e6} \u6279\u91cf\u6dfb\u52a0\u5b50\u7b56\u7565</h3>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="batch-add-search" placeholder="\u641c\u7d22\u7b56\u7565..." style="width:200px" oninput="filterBatchList()">
+            <button class="btn btn-sm" onclick="toggleBatchAll()">\u5168\u9009/\u53d6\u6d88</button>
+            <button class="btn btn-sm" onclick="closeBatchAdd()">\u2716</button>
+          </div>
+        </div>
+        <div id="batch-add-list" style="flex:1;overflow-y:auto;max-height:50vh;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+        <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+          <span id="batch-add-count" style="font-size:12px;color:var(--text-dim)">\u5df2\u9009 0 \u4e2a</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;margin:0">\u6743\u91cd:</label>
+            <input type="number" id="batch-add-weight" value="1" min="1" max="10" style="width:60px">
+            <select id="batch-add-role" style="width:90px">
+              <option value="primary">\u4e3b\u7b56\u7565</option>
+              <option value="filter">\u8fc7\u6ee4\u5668</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="confirmBatchAdd()">\u2705 \u786e\u8ba4\u6dfb\u52a0</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="comp-sub-list" class="sub-strategy-list"></div>
     <div style="margin-top:12px">
       <button class="btn btn-primary" onclick="createComposition()">\u{1f680} \u521b\u5efa\u7ec4\u5408\u7b56\u7565</button>
@@ -206,6 +237,10 @@ a:hover{text-decoration:underline}
     </div>
     <button class="btn btn-primary" id="btn-batch" onclick="runBatchBacktest()">\u{1f680} \u8fd0\u884c\u6279\u91cf\u56de\u6d4b</button>
     <div id="batch-results" style="margin-top:16px"></div>
+    <div style="margin-top:24px">
+      <h3>\u{1f4c2} \u5386\u53f2\u8bb0\u5f55 <button class="btn" onclick="loadBatchHistory()" style="font-size:12px;padding:2px 8px">\u5237\u65b0</button></h3>
+      <div id="batch-history" style="margin-top:8px"><div class="empty">\u70b9\u51fb\u5237\u65b0\u52a0\u8f7d\u5386\u53f2\u8bb0\u5f55</div></div>
+    </div>
   </div>
 </div>
 
@@ -217,6 +252,7 @@ a:hover{text-decoration:underline}
 var _apiToken = ${JSON.stringify(apiToken ?? "")};
 var _baseUrl = ${JSON.stringify(b)};
 var _subStrategies = [];
+var _lastBatchRanked = [];
 var _allStrategies = (function(){try{var el=document.getElementById('initial-strategies-data');return el?JSON.parse(el.textContent||'[]'):[]}catch(e){return[]}})();
 
 function api(path, opts){
@@ -253,6 +289,7 @@ function switchTab(name, triggerEl){
   if(name==='explore') loadExploreHistory();
   if(name==='history') loadStrategyManagement();
   if(name==='batch') loadBatchStrategies();
+  if(name==='batch') loadBatchHistory();
 }
 
 document.querySelectorAll('nav button[data-tab]').forEach(function(btn){
@@ -271,8 +308,20 @@ updateClock();
 function loadStrategies(){
   return api('/quant/admin/api/strategies').then(function(data){
     _allStrategies = data.builtin || data.strategies || data || [];
-    renderStrategyOptions(_allStrategies);
-    return _allStrategies;
+    // Also fetch user compositions and merge them
+    return api('/quant/admin/api/compositions').then(function(compData){
+      var compositions = compData.compositions || [];
+      compositions.forEach(function(c){
+        if(!_allStrategies.find(function(s){return s.id===c.id})){
+          _allStrategies.push({id: c.id, name: '\u2b50 '+c.name});
+        }
+      });
+      renderStrategyOptions(_allStrategies);
+      return _allStrategies;
+    }).catch(function(){
+      renderStrategyOptions(_allStrategies);
+      return _allStrategies;
+    });
   }).catch(function(){
     _allStrategies = [];
     renderStrategyOptions([]);
@@ -317,6 +366,177 @@ function updateComposeMethodFields(){
   var isVoting = methodEl.value === 'voting';
   minVotesWrap.style.display = isVoting ? '' : 'none';
   minVotesInput.disabled = !isVoting;
+}
+
+// ── Batch Add Sub-strategies ──
+function openBatchAdd(){
+  var overlay = document.getElementById('batch-add-overlay');
+  overlay.style.display = 'flex';
+  var list = document.getElementById('batch-add-list');
+  var existingIds = {};
+  _subStrategies.forEach(function(s){ existingIds[s.strategyId] = true; });
+  list.innerHTML = _allStrategies.map(function(s){
+    var checked = existingIds[s.id] ? ' checked disabled' : '';
+    return '<label class="batch-add-item" style="display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;border-radius:4px" data-id="'+s.id+'" data-name="'+(s.name||'').toLowerCase()+'" data-sid="'+s.id.toLowerCase()+'">'
+      + '<input type="checkbox" class="batch-cb" value="'+s.id+'"'+checked+' onchange="updateBatchCount()">'
+      + '<span style="font-size:13px">'+s.name+' <span style="color:var(--text-dim);font-size:11px">('+s.id+')</span></span>'
+      + '</label>';
+  }).join('');
+  updateBatchCount();
+  document.getElementById('batch-add-search').value = '';
+}
+
+function closeBatchAdd(){
+  document.getElementById('batch-add-overlay').style.display = 'none';
+}
+
+function filterBatchList(){
+  var q = (document.getElementById('batch-add-search').value || '').toLowerCase();
+  document.querySelectorAll('.batch-add-item').forEach(function(el){
+    var name = el.getAttribute('data-name') || '';
+    var sid = el.getAttribute('data-sid') || '';
+    el.style.display = (name.indexOf(q) >= 0 || sid.indexOf(q) >= 0) ? '' : 'none';
+  });
+}
+
+function toggleBatchAll(){
+  var cbs = document.querySelectorAll('.batch-cb:not(:disabled)');
+  var allChecked = true;
+  cbs.forEach(function(cb){ if(!cb.checked) allChecked = false; });
+  cbs.forEach(function(cb){
+    if(cb.closest('.batch-add-item').style.display !== 'none'){
+      cb.checked = !allChecked;
+    }
+  });
+  updateBatchCount();
+}
+
+function updateBatchCount(){
+  var count = 0;
+  document.querySelectorAll('.batch-cb:not(:disabled)').forEach(function(cb){ if(cb.checked) count++; });
+  document.getElementById('batch-add-count').textContent = '\u5df2\u9009 '+count+' \u4e2a';
+}
+
+function confirmBatchAdd(){
+  var weight = parseInt(document.getElementById('batch-add-weight').value) || 1;
+  var role = document.getElementById('batch-add-role').value;
+  var added = 0;
+  document.querySelectorAll('.batch-cb:not(:disabled)').forEach(function(cb){
+    if(cb.checked){
+      var id = cb.value;
+      if(!_subStrategies.find(function(s){return s.strategyId===id})){
+        _subStrategies.push({strategyId:id, weight:weight, role:role});
+        added++;
+      }
+    }
+  });
+  renderSubStrategies();
+  closeBatchAdd();
+  if(added > 0) alert('\u5df2\u6dfb\u52a0 '+added+' \u4e2a\u5b50\u7b56\u7565');
+}
+
+function clearSubStrategies(){
+  if(_subStrategies.length === 0) return;
+  if(!confirm('\u786e\u8ba4\u6e05\u7a7a\u5168\u90e8 '+_subStrategies.length+' \u4e2a\u5b50\u7b56\u7565\uff1f')) return;
+  _subStrategies = [];
+  renderSubStrategies();
+}
+
+// ── Smart Recommend ──
+var _recommendPresets = [
+  {
+    label: '\u8d8b\u52bf\u8ddf\u8e2a\u7ec4\u5408',
+    desc: '\u591a\u79cd\u5747\u7ebf\u4ea4\u53c9+\u52a8\u91cf+MACD\u4fe1\u53f7\u878d\u5408',
+    keywords: ['ma_crossover','dual-ma-crossover','macd','momentum','trend','ema','moving_average','triple_ma']
+  },
+  {
+    label: '\u6446\u52a8\u8fc7\u6ee4\u7ec4\u5408',
+    desc: 'RSI+KDJ+\u5e03\u6797\u5e26\u7b49\u6446\u52a8\u6307\u6807\u4ea4\u53c9\u9a8c\u8bc1',
+    keywords: ['rsi','kdj','bollinger','stochastic','oscillat','oversold','overbought','williams','cci']
+  },
+  {
+    label: '\u91cf\u4ef7\u5171\u632f\u7ec4\u5408',
+    desc: '\u6210\u4ea4\u91cf\u7a81\u7834+\u4ef7\u683c\u52a8\u91cf+VWAP\u591a\u7ef4\u786e\u8ba4',
+    keywords: ['volume','vwap','obv','money_flow','turnover','vol_breakout','accumulation']
+  },
+  {
+    label: '\u591a\u56e0\u5b50\u878d\u5408',
+    desc: '\u6df7\u5408\u8d8b\u52bf+\u6446\u52a8+\u91cf\u4ef7\u591a\u7c7b\u578b\u4fe1\u53f7',
+    keywords: ['ma_crossover','rsi','volume','macd','bollinger','momentum','kdj','trend']
+  }
+];
+
+function smartRecommend(){
+  var html = '<div style="margin-bottom:12px;font-size:13px;color:var(--text-dim)">\u9009\u62e9\u4e00\u79cd\u63a8\u8350\u6a21\u5f0f\uff0c\u81ea\u52a8\u5339\u914d\u5e76\u6dfb\u52a0\u4e92\u8865\u7b56\u7565\uff1a</div>';
+  _recommendPresets.forEach(function(p,i){
+    html += '<div style="padding:10px;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;cursor:pointer" onclick="applyRecommend('+i+')" onmouseover="this.style.borderColor=\\'var(--accent)\\'" onmouseout="this.style.borderColor=\\'var(--border)\\'">'
+      + '<strong>'+p.label+'</strong><div style="font-size:12px;color:var(--text-dim);margin-top:2px">'+p.desc+'</div></div>';
+  });
+  html += '<div style="padding:10px;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;cursor:pointer" onclick="applyRecommendRandom()" onmouseover="this.style.borderColor=\\'var(--accent)\\'" onmouseout="this.style.borderColor=\\'var(--border)\\'">'
+    + '<strong>\u{1f3b2} \u968f\u673a\u7ec4\u5408</strong><div style="font-size:12px;color:var(--text-dim);margin-top:2px">\u968f\u673a\u9009\u53d6 3-5 \u4e2a\u4e0d\u540c\u7b56\u7565\uff0c\u8bd5\u8bd5\u8fd0\u6c14</div></div>';
+  var overlay = document.getElementById('batch-add-overlay');
+  document.getElementById('batch-add-list').innerHTML = html;
+  document.getElementById('batch-add-count').textContent = '\u9009\u62e9\u63a8\u8350\u6a21\u5f0f';
+  overlay.querySelector('h3').textContent = '\u{1f9e0} \u667a\u80fd\u63a8\u8350';
+  overlay.style.display = 'flex';
+}
+
+function applyRecommend(presetIdx){
+  var preset = _recommendPresets[presetIdx];
+  if(!preset) return;
+  var matched = [];
+  _allStrategies.forEach(function(s){
+    var sid = s.id.toLowerCase();
+    var sname = (s.name||'').toLowerCase();
+    for(var k=0;k<preset.keywords.length;k++){
+      if(sid.indexOf(preset.keywords[k])>=0 || sname.indexOf(preset.keywords[k])>=0){
+        matched.push(s);
+        break;
+      }
+    }
+  });
+  if(matched.length < 2){
+    alert('\u672a\u627e\u5230\u8db3\u591f\u7684\u5339\u914d\u7b56\u7565\uff08\u81f3\u5c11\u9700\u8981 2 \u4e2a\uff09');
+    return;
+  }
+  // Limit to 6 max
+  if(matched.length > 6) matched = matched.slice(0, 6);
+  var added = 0;
+  matched.forEach(function(s){
+    if(!_subStrategies.find(function(x){return x.strategyId===s.id})){
+      _subStrategies.push({strategyId:s.id, weight:1, role:'primary'});
+      added++;
+    }
+  });
+  renderSubStrategies();
+  closeBatchAdd();
+  alert('\u300c'+preset.label+'\u300d\u5df2\u6dfb\u52a0 '+added+' \u4e2a\u7b56\u7565\uff08\u5171\u5339\u914d '+matched.length+' \u4e2a\uff09');
+}
+
+function applyRecommendRandom(){
+  if(_allStrategies.length < 3){
+    alert('\u53ef\u7528\u7b56\u7565\u4e0d\u8db3');
+    return;
+  }
+  var pool = _allStrategies.slice();
+  var n = 3 + Math.floor(Math.random() * 3); // 3-5
+  if(n > pool.length) n = pool.length;
+  // Fisher-Yates shuffle
+  for(var i = pool.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  }
+  var picked = pool.slice(0, n);
+  var added = 0;
+  picked.forEach(function(s){
+    if(!_subStrategies.find(function(x){return x.strategyId===s.id})){
+      _subStrategies.push({strategyId:s.id, weight:1, role:'primary'});
+      added++;
+    }
+  });
+  renderSubStrategies();
+  closeBatchAdd();
+  alert('\u968f\u673a\u6dfb\u52a0\u4e86 '+added+' \u4e2a\u7b56\u7565');
 }
 
 function createComposition(){
@@ -571,6 +791,18 @@ function loadBatchStrategies(){
       opt.textContent = (isUser ? '\u2b50 ' : '\u{1f4d0} ')+s.name+' ('+s.id+')';
       sel.appendChild(opt);
     });
+    // Also load user compositions (composed-* and fav-*)
+    api('/quant/admin/api/compositions').then(function(data){
+      var compositions = data.compositions || [];
+      compositions.forEach(function(c){
+        // Skip if already in _allStrategies
+        if(_allStrategies.find(function(s){return s.id===c.id})) return;
+        var opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = '\u2b50 '+c.name+' ('+c.id+')';
+        sel.appendChild(opt);
+      });
+    });
   });
 }
 
@@ -621,7 +853,11 @@ function renderBatchResults(data){
     el.innerHTML = failHtml;
     return;
   }
+  _lastBatchRanked = ranked;
   var html = '<div class="card"><h3>\u{1f3c6} \u6279\u91cf\u56de\u6d4b\u7ed3\u679c (\u6210\u529f '+data.successCount+'/'+data.totalRuns+')</h3>';
+  html += '<div style="margin:8px 0"><button class="btn btn-primary" onclick="importTopNToCompose(3)" style="font-size:12px;margin-right:6px">\u{1f4e5} Top-3 \u5bfc\u5165\u7ec4\u5408</button>';
+  html += '<button class="btn btn-primary" onclick="importTopNToCompose(5)" style="font-size:12px;margin-right:6px">\u{1f4e5} Top-5 \u5bfc\u5165\u7ec4\u5408</button>';
+  html += '<button class="btn" onclick="importTopNToCompose(10)" style="font-size:12px">Top-10</button></div>';
   html += '<table><thead><tr><th>\u6392\u540d</th><th>\u7b56\u7565</th><th>\u603b\u6536\u76ca</th><th>\u5e74\u5316</th><th>\u6700\u5927\u56de\u64a4</th><th>\u590f\u666e</th><th>\u80dc\u7387</th><th>\u4ea4\u6613\u6570</th></tr></thead><tbody>';
   ranked.forEach(function(r,i){
     var rankClass = i<3?'rank-'+(i+1):'';
@@ -644,6 +880,69 @@ function renderBatchResults(data){
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// ── Import Top-N to Compose ──
+function importTopNToCompose(n){
+  var topN = _lastBatchRanked.slice(0, n);
+  if(topN.length===0){ alert('\u6ca1\u6709\u53ef\u5bfc\u5165\u7684\u7ed3\u679c'); return; }
+  var added = 0;
+  topN.forEach(function(r, i){
+    var sid = r.strategyId || r.label;
+    if(_subStrategies.find(function(s){return s.strategyId===sid})) return;
+    _subStrategies.push({strategyId: sid, weight: n - i, role: 'signal'});
+    added++;
+  });
+  renderSubStrategies();
+  alert('\u5df2\u5bfc\u5165 ' + added + ' \u4e2a\u7b56\u7565\u5230\u7ec4\u5408 Tab\uff08\u6743\u91cd\u6309\u6392\u540d\u9012\u51cf\uff09');
+  switchTab('compose');
+}
+
+// ── Batch Backtest History ──
+function loadBatchHistory(){
+  var el = document.getElementById('batch-history');
+  if(!el) return;
+  el.innerHTML = '<div class="empty">\u52a0\u8f7d\u4e2d...</div>';
+  api('/quant/admin/api/batch-backtest/history').then(function(data){
+    var records = data.records || [];
+    if(records.length===0){
+      el.innerHTML = '<div class="empty">\u8fd8\u6ca1\u6709\u6279\u91cf\u56de\u6d4b\u5386\u53f2\u8bb0\u5f55</div>';
+      return;
+    }
+    var html = '<table><thead><tr><th>\u65f6\u95f4</th><th>\u6807\u7684</th><th>\u533a\u95f4</th><th>\u6210\u529f/\u603b\u6570</th><th>\u6700\u4f18\u7b56\u7565</th><th>\u5206\u6570</th><th>\u64cd\u4f5c</th></tr></thead><tbody>';
+    records.forEach(function(r){
+      var dt = new Date(r.timestamp);
+      var dateStr = dt.toLocaleDateString('zh-CN',{month:'2-digit',day:'2-digit'})+' '+dt.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+      var syms = Array.isArray(r.symbols) ? r.symbols.join(',') : r.symbols;
+      html += '<tr>';
+      html += '<td>'+dateStr+'</td>';
+      html += '<td>'+syms+'</td>';
+      html += '<td>'+r.startDate+' ~ '+r.endDate+'</td>';
+      html += '<td>'+r.successCount+'/'+r.totalRuns+'</td>';
+      html += '<td><strong>'+(r.bestStrategy||'-')+'</strong></td>';
+      html += '<td>'+(r.bestCompositeScore||0).toFixed(1)+'</td>';
+      html += '<td><button class="btn" onclick="viewBatchRecord(\\''+r.id+'\\')" style="font-size:11px;padding:1px 6px">\u67e5\u770b</button> ';
+      html += '<button class="btn" onclick="deleteBatchRecord(\\''+r.id+'\\')" style="font-size:11px;padding:1px 6px;color:var(--red)">\u5220\u9664</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }).catch(function(e){ el.innerHTML = '<div style="color:var(--red)">\u52a0\u8f7d\u5931\u8d25: '+e.message+'</div>'; });
+}
+
+function viewBatchRecord(id){
+  api('/quant/admin/api/batch-backtest/history?id='+id).then(function(data){
+    if(!data.ok){ alert('\u672a\u627e\u5230\u8bb0\u5f55'); return; }
+    var record = data.record;
+    renderBatchResults({ok:true, ranked:record.ranked, successCount:record.successCount, totalRuns:record.totalRuns, results:record.ranked});
+  });
+}
+
+function deleteBatchRecord(id){
+  if(!confirm('\u786e\u8ba4\u5220\u9664\u8be5\u6279\u91cf\u56de\u6d4b\u8bb0\u5f55?')) return;
+  api('/quant/admin/api/batch-backtest/history?id='+id,{method:'DELETE'}).then(function(){
+    loadBatchHistory();
+  });
 }
 
 // ── Explore History ──

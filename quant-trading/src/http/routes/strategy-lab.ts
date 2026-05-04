@@ -8,7 +8,14 @@ import {
   listComposedStrategies,
   listStrategies,
 } from "../../engine/strategy-registry.js";
-import { runBatchBacktest, type BatchBacktestItem } from "../../services/batch-backtest.js";
+import {
+  runBatchBacktest,
+  saveBatchBacktestResult,
+  listBatchBacktestHistory,
+  getBatchBacktestById,
+  deleteBatchBacktest,
+  type BatchBacktestItem,
+} from "../../services/batch-backtest.js";
 /**
  * Strategy Lab API routes (composed strategies, exploration, batch backtest)
  *
@@ -409,7 +416,9 @@ export function registerStrategyLabRoutes(deps: AdminRouteDeps): void {
         }));
 
         const summary = await runBatchBacktest(items, config, { maxConcurrency: 4 });
-        json(res, { ok: true, ...summary });
+        // Persist results for later retrieval
+        const record = saveBatchBacktestResult(summary, { symbols, startDate, endDate }, config);
+        json(res, { ok: true, recordId: record.id, ...summary });
       } catch (err) {
         json(
           res,
@@ -417,6 +426,34 @@ export function registerStrategyLabRoutes(deps: AdminRouteDeps): void {
           500,
         );
       }
+    }),
+  });
+
+  // ── Strategy Lab: Batch Backtest History ───────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/batch-backtest/history",
+    handler: secure(async (req, res) => {
+      const params = new URL(req.url ?? "", "http://localhost").searchParams;
+      const id = params.get("id");
+
+      // If id provided: GET=detail, DELETE=remove
+      if (id) {
+        if (req.method === "DELETE") {
+          const ok = deleteBatchBacktest(id, config);
+          json(res, { ok });
+          return;
+        }
+        const record = getBatchBacktestById(id, config);
+        if (!record) { json(res, { error: "未找到记录" }, 404); return; }
+        json(res, { ok: true, record });
+        return;
+      }
+
+      // No id: list all
+      if (req.method !== "GET") { json(res, { error: "仅支持 GET" }, 405); return; }
+      const records = listBatchBacktestHistory(config);
+      json(res, { ok: true, records });
     }),
   });
 }

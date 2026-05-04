@@ -9,6 +9,7 @@ import type {
   StrategyDefinition,
 } from "../types.js";
 import { runBacktraderBacktest } from "./backtrader-engine.js";
+import { runAiphaBacktest } from "./aipha-engine.js";
 import { runVnpyBacktest } from "./vnpy-engine.js";
 import {
   compositeStrategy,
@@ -1171,6 +1172,18 @@ export async function runBacktest(
 ): Promise<BacktestResult> {
   const strategy = getStrategy(request.strategyId);
   const engine = request.engine ?? strategy?.engine ?? config.backtestEngine ?? "builtin";
+
+  // AIPHA strategies — route to Python aipha backtest engine
+  if (engine === "aipha" || strategy?.engine === "aipha" || (!strategy && !strategyMap.has(request.strategyId))) {
+    // If not a known builtin strategy, try aipha engine
+    try {
+      return await runAiphaBacktest(request, config);
+    } catch (err) {
+      // If aipha also doesn't know it, throw the original error
+      if (strategy || strategyMap.has(request.strategyId)) throw err;
+      throw new Error(`未知策略: "${request.strategyId}"。内置引擎和 AIPHA 引擎均不支持。`);
+    }
+  }
 
   if (engine === "backtrader" || strategy?.engine === "backtrader") {
     const fallback = backtraderBuiltinFallback[request.strategyId];

@@ -124,7 +124,7 @@ export type QuoteSnapshot = {
 
 // ── Strategy & Backtest ──────────────────────────────────────────
 
-export type BacktestEngine = "builtin" | "backtrader" | "vnpy" | "qmt";
+export type BacktestEngine = "builtin" | "backtrader" | "vnpy" | "qmt" | "aipha";
 
 export type StrategyParameter = {
   name: string;
@@ -957,6 +957,27 @@ export type QuantTradingConfig = {
    * Useful when the gateway (龙虾) is not running.  Example: 18891.
    */
   standalonePort?: number;
+
+  /**
+   * LLM configuration for standalone mode.
+   * Uses OpenAI-compatible API (supports OpenAI, DeepSeek, Moonshot, etc.).
+   * When configured, the strategy lab AI exploration will use this LLM
+   * instead of falling back to rule-based generation.
+   */
+  llm?: {
+    /** API base URL (e.g. "https://api.deepseek.com/v1", "https://api.openai.com/v1") */
+    baseUrl?: string;
+    /** API key (or set env OPENCLAW_LLM_API_KEY) */
+    apiKey?: string;
+    /** Model name (default: "deepseek-chat") */
+    model?: string;
+    /** Max tokens for response (default: 4096) */
+    maxTokens?: number;
+    /** Temperature (default: 0.7) */
+    temperature?: number;
+    /** Request timeout in ms (default: 120000) */
+    timeoutMs?: number;
+  };
 
   /**
    * Data staleness monitoring configuration.

@@ -608,15 +608,118 @@ export function buildFallbackCandidates(params: {
     return candidates;
   }
 
-  for (let i = 0; i < candidateCount; i++) {
-    const method = methods[i % methods.length] ?? "voting";
+  // ── Classify strategies by category for smarter combinations ──
+  const categoryKeywords: Record<string, string[]> = {
+    trend: ["ma_crossover", "dual-ma", "triple_ma", "ema", "trend", "moving_average", "macd", "supertrend", "ichimoku"],
+    oscillator: ["rsi", "kdj", "bollinger", "stochastic", "cci", "williams", "oscillat", "oversold", "overbought", "mfi"],
+    volume: ["volume", "vwap", "obv", "money_flow", "turnover", "accumulation", "vol_breakout"],
+    momentum: ["momentum", "breakout", "channel", "donchian", "atr", "adx", "acceleration"],
+    mean_reversion: ["mean_reversion", "reversion", "zscore", "deviation", "regression"],
+    composite: ["combo", "combined", "multi", "fusion", "ensemble", "scored"],
+  };
+  const categorized: Record<string, string[]> = {};
+  const uncategorized: string[] = [];
+  for (const cat of Object.keys(categoryKeywords)) categorized[cat] = [];
+
+  for (const sid of ids) {
+    const lower = sid.toLowerCase();
+    let matched = false;
+    for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some((kw) => lower.includes(kw))) {
+        categorized[cat]!.push(sid);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) uncategorized.push(sid);
+  }
+
+  const nonEmptyCategories = Object.entries(categorized).filter(([, arr]) => arr.length > 0);
+
+  // ── Template-based generation: cross-category complementary combos ──
+  const comboTemplates = [
+    { name: "趋势+震荡互补", cats: ["trend", "oscillator"], method: "voting" as CompositionMethod },
+    { name: "动量突破+均值回归对冲", cats: ["momentum", "mean_reversion"], method: "weighted-score" as CompositionMethod },
+    { name: "趋势确认+量价验证", cats: ["trend", "volume"], method: "gated" as CompositionMethod },
+    { name: "多维度融合", cats: ["trend", "oscillator", "volume"], method: "cascade" as CompositionMethod },
+    { name: "震荡+动量互补", cats: ["oscillator", "momentum"], method: "voting" as CompositionMethod },
+    { name: "全方位信号融合", cats: ["trend", "oscillator", "momentum", "volume"], method: "weighted-score" as CompositionMethod },
+    { name: "均线+动量+量价", cats: ["trend", "momentum", "volume"], method: "voting" as CompositionMethod },
+    { name: "回归过滤+趋势主导", cats: ["mean_reversion", "trend"], method: "gated" as CompositionMethod },
+    { name: "震荡过滤+动量主导", cats: ["oscillator", "momentum"], method: "gated" as CompositionMethod },
+    { name: "多因子评分", cats: ["trend", "oscillator", "momentum", "mean_reversion"], method: "weighted-score" as CompositionMethod },
+  ];
+
+  // Seeded pseudo-random for deterministic-ish but varied picks
+  let seed = ids.length * 7 + candidateCount * 13;
+  const nextRand = () => { seed = (seed * 1664525 + 1013904223) & 0x7fffffff; return seed / 0x7fffffff; };
+
+  for (let i = 0; i < candidateCount && candidates.length < candidateCount; i++) {
+    const template = comboTemplates[i % comboTemplates.length]!;
+    const method = template.method;
     const width = Math.min(maxStrategies, Math.max(minStrategies, 2));
-    const pickedIds = Array.from({ length: width }, (_, idx) => ids[(i + idx) % ids.length] ?? "")
-      .filter(Boolean)
-      .filter((sid, idx, arr) => arr.indexOf(sid) === idx);
-    if (pickedIds.length < 2) {
+
+    // Pick strategies from template categories
+    const pickedIds: string[] = [];
+    for (const cat of template.cats) {
+      const pool = categorized[cat] ?? [];
+      if (pool.length === 0) continue;
+      // Pick 1-2 from each category
+      const pick = Math.min(2, pool.length, width - pickedIds.length);
+      for (let p = 0; p < pick; p++) {
+        const idx = Math.floor(nextRand() * pool.length);
+        const sid = pool[idx]!;
+        if (!pickedIds.includes(sid)) pickedIds.push(sid);
+      }
+      if (pickedIds.length >= width) break;
+    }
+
+    // Fill from uncategorized if needed
+    if (pickedIds.length < minStrategies) {
+      const filler = uncategorized.length > 0 ? uncategorized : ids;
+      for (let f = 0; f < filler.length && pickedIds.length < minStrategies; f++) {
+        const idx = Math.floor(nextRand() * filler.length);
+        const sid = filler[idx]!;
+        if (!pickedIds.includes(sid)) pickedIds.push(sid);
+      }
+    }
+
+    if (pickedIds.length < 2) continue;
+
+    // Check duplicates against existing candidates
+    const sigKey = method + "|" + [...pickedIds].sort().join("+");
+    if (candidates.some((c) => c.method + "|" + c.strategies.map((s) => s.strategyId).sort().join("+") === sigKey)) {
       continue;
     }
+
+    const strategies: AiSubStrategy[] = pickedIds.map((strategyId, idx) => ({
+      strategyId,
+      weight: method === "weighted-score" ? ((idx % 3) + 1) : 1,
+      role:
+        method === "gated" || method === "cascade" ? (idx === 0 ? "primary" : "filter") : "primary",
+    }));
+
+    const base: AiCompositionCandidate = {
+      name: `${template.name} #${i + 1}`,
+      method,
+      rationale: `按策略类型互补规则自动组合（${template.cats.join("+")}）`,
+      strategies,
+    };
+    if (method === "voting") {
+      base.minVotes = Math.max(1, Math.min(strategies.length, Math.ceil(strategies.length / 2)));
+    }
+    candidates.push(base);
+  }
+
+  // If templates didn't produce enough, fill with simple rotation
+  for (let i = candidates.length; i < candidateCount; i++) {
+    const method = methods[i % methods.length] ?? "voting";
+    const width = Math.min(maxStrategies, Math.max(minStrategies, 2));
+    const start = Math.floor(nextRand() * ids.length);
+    const pickedIds = Array.from({ length: width }, (_, idx) => ids[(start + idx) % ids.length] ?? "")
+      .filter(Boolean)
+      .filter((sid, idx, arr) => arr.indexOf(sid) === idx);
+    if (pickedIds.length < 2) continue;
 
     const strategies: AiSubStrategy[] = pickedIds.map((strategyId, idx) => ({
       strategyId,
@@ -625,17 +728,13 @@ export function buildFallbackCandidates(params: {
         method === "gated" || method === "cascade" ? (idx === 0 ? "primary" : "filter") : "primary",
     }));
 
-    const base: AiCompositionCandidate = {
-      name: `\u81EA\u52A8\u7EC4\u5408 ${i + 1}`,
+    candidates.push({
+      name: `组合 ${i + 1}`,
       method,
-      rationale:
-        "AI \u5EFA\u8BAE\u4E0D\u53EF\u7528\uFF0C\u4F7F\u7528\u89C4\u5219\u56DE\u9000\u7EC4\u5408",
+      rationale: `按轮转规则自动组合`,
       strategies,
-    };
-    if (method === "voting") {
-      base.minVotes = Math.max(1, Math.min(strategies.length, Math.ceil(strategies.length / 2)));
-    }
-    candidates.push(base);
+      ...(method === "voting" ? { minVotes: Math.max(1, Math.ceil(strategies.length / 2)) } : {}),
+    });
   }
 
   return candidates;

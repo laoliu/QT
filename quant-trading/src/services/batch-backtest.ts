@@ -1,5 +1,7 @@
 import { createDataProvider } from "../data/market-data-provider.js";
 import { runBacktest } from "../engine/strategy-registry.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
 /**
  * Batch Backtest Service — run N strategy backtests in parallel with
  * concurrency control and aggregate results into a comparison table.
@@ -169,4 +171,102 @@ function computeCompositeScore(r: BatchBacktestResultItem): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ── Persistence ────────────────────────────────────────────────────
+
+export interface BatchBacktestRecord {
+  id: string;
+  timestamp: string;
+  symbols: string[];
+  startDate: string;
+  endDate: string;
+  totalRuns: number;
+  successCount: number;
+  bestStrategy: string | null;
+  bestCompositeScore: number;
+  ranked: BatchBacktestResultItem[];
+}
+
+function getBatchHistoryDir(config: QuantTradingConfig): string {
+  const dataDir = config.dataDir ?? path.join(
+    process.env["HOME"] ?? process.env["USERPROFILE"] ?? ".",
+    ".openclaw",
+    "quant-data",
+  );
+  const dir = path.join(dataDir, "batch-backtest-history");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Save batch backtest results to disk.
+ */
+export function saveBatchBacktestResult(
+  summary: BatchBacktestSummary,
+  meta: { symbols: string[]; startDate: string; endDate: string },
+  config: QuantTradingConfig,
+): BatchBacktestRecord {
+  const dir = getBatchHistoryDir(config);
+  const id = `batch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+  const record: BatchBacktestRecord = {
+    id,
+    timestamp: new Date().toISOString(),
+    symbols: meta.symbols,
+    startDate: meta.startDate,
+    endDate: meta.endDate,
+    totalRuns: summary.totalRuns,
+    successCount: summary.successCount,
+    bestStrategy: summary.bestStrategy,
+    bestCompositeScore: summary.bestCompositeScore,
+    ranked: summary.ranked,
+  };
+  const filePath = path.join(dir, `${id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(record, null, 2), "utf-8");
+  return record;
+}
+
+/**
+ * List all saved batch backtest history (most recent first).
+ */
+export function listBatchBacktestHistory(config: QuantTradingConfig, limit = 50): BatchBacktestRecord[] {
+  const dir = getBatchHistoryDir(config);
+  if (!fs.existsSync(dir)) return [];
+  const files = fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .reverse()
+    .slice(0, limit);
+  const records: BatchBacktestRecord[] = [];
+  for (const f of files) {
+    try {
+      const raw = fs.readFileSync(path.join(dir, f), "utf-8");
+      records.push(JSON.parse(raw) as BatchBacktestRecord);
+    } catch { /* skip corrupted */ }
+  }
+  return records;
+}
+
+/**
+ * Get a single batch backtest record by ID.
+ */
+export function getBatchBacktestById(id: string, config: QuantTradingConfig): BatchBacktestRecord | null {
+  const dir = getBatchHistoryDir(config);
+  const filePath = path.join(dir, `${id}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as BatchBacktestRecord;
+  } catch { return null; }
+}
+
+/**
+ * Delete a batch backtest record by ID.
+ */
+export function deleteBatchBacktest(id: string, config: QuantTradingConfig): boolean {
+  const dir = getBatchHistoryDir(config);
+  const filePath = path.join(dir, `${id}.json`);
+  if (!fs.existsSync(filePath)) return false;
+  fs.unlinkSync(filePath);
+  return true;
 }

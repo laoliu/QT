@@ -628,7 +628,7 @@ const quantTradingPlugin = {
             lianbanLevel: ctx.lianban?.level ?? null,
             stStage: ctx.stStatus?.stage ?? null,
             stRiskLevel: ctx.stStatus?.riskLevel ?? null,
-            catalystType: ctx.catalyst?.type ?? null,
+            catalystType: ctx.catalyst?.eventType ?? null,
             catalystDaysUntil: ctx.catalyst?.daysUntil ?? null,
           },
         }, config);

@@ -17,6 +17,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import { createRouteCollector, startStandaloneServer } from "./src/http/standalone-server.js";
+import { resolveLlmConfig, createStandaloneSubagent } from "./src/services/standalone-llm.js";
 
 // ── Config Loading ────────────────────────────────────────────────
 
@@ -87,7 +88,21 @@ function createMockApi(
     registrationMode: "eager" as const,
     config: { gateway: {} } as unknown,
     pluginConfig,
-    runtime: new Proxy({} as object, { get: () => () => Promise.reject(new Error("not available in standalone mode")) }),
+    runtime: (() => {
+      const llmConfig = resolveLlmConfig(pluginConfig);
+      if (llmConfig) {
+        console.log(`[standalone] LLM configured: ${llmConfig.baseUrl} (model: ${llmConfig.model})`);
+        const subagent = createStandaloneSubagent(llmConfig);
+        return new Proxy({ subagent } as object, {
+          get(target, prop) {
+            if (prop === "subagent") return subagent;
+            return () => Promise.reject(new Error("not available in standalone mode"));
+          },
+        });
+      }
+      console.warn("[standalone] LLM not configured — set llm.apiKey in config or OPENCLAW_LLM_API_KEY env");
+      return new Proxy({} as object, { get: () => () => Promise.reject(new Error("not available in standalone mode")) });
+    })(),
     logger,
     registerHttpRoute: (params: { path: string; handler: unknown; match?: "exact" | "prefix" }) => {
       routeCollector.collect(params as Parameters<typeof routeCollector.collect>[0]);

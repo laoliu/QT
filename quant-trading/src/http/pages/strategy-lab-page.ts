@@ -232,6 +232,12 @@ a:hover{text-decoration:underline}
     </div>
     <div class="form-row">
       <div style="flex:3"><label>\u7b56\u7565 (\u591a\u9009)</label>
+        <input type="text" id="batch-search" placeholder="\u{1f50d} \u641c\u7d22\u7b56\u7565\u540d\u79f0\u6216ID..." oninput="filterBatchStrategies()" style="margin-bottom:6px;width:100%">
+        <div style="display:flex;gap:6px;margin-bottom:6px;font-size:12px">
+          <button class="btn" onclick="batchSelectAll()" style="padding:2px 8px">\u5168\u9009</button>
+          <button class="btn" onclick="batchSelectNone()" style="padding:2px 8px">\u53d6\u6d88\u5168\u9009</button>
+          <span id="batch-count" style="color:var(--text-dim);line-height:24px"></span>
+        </div>
         <select id="batch-strategies" multiple style="height:320px"></select>
       </div>
     </div>
@@ -780,16 +786,64 @@ function deleteComposition(id){
 }
 
 // ── Batch Backtest Tab ──
+var _batchAllOptions = []; // {value, text, selected}
+
+function filterBatchStrategies(){
+  var keyword = (document.getElementById('batch-search').value || '').trim().toLowerCase();
+  var sel = document.getElementById('batch-strategies');
+  // Save current selections
+  var selectedSet = {};
+  for(var i=0; i<sel.options.length; i++){
+    if(sel.options[i].selected) selectedSet[sel.options[i].value] = true;
+  }
+  // Also merge from stored state
+  _batchAllOptions.forEach(function(o){ if(o.selected) selectedSet[o.value] = true; });
+  // Update stored selections
+  _batchAllOptions.forEach(function(o){ o.selected = !!selectedSet[o.value]; });
+  // Filter: split keyword by space, all parts must match
+  var parts = keyword ? keyword.split(/\s+/) : [];
+  var filtered = _batchAllOptions.filter(function(o){
+    if(parts.length===0) return true;
+    var haystack = (o.text + ' ' + o.value).toLowerCase();
+    return parts.every(function(p){ return haystack.indexOf(p)!==-1; });
+  });
+  // Rebuild select
+  sel.innerHTML = '';
+  filtered.forEach(function(o){
+    var opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.text;
+    opt.selected = !!selectedSet[o.value];
+    sel.appendChild(opt);
+  });
+  var countEl = document.getElementById('batch-count');
+  if(countEl) countEl.textContent = keyword ? '\u5339\u914d: '+filtered.length+'/'+_batchAllOptions.length : '\u5171 '+_batchAllOptions.length+' \u4e2a\u7b56\u7565';
+}
+
+function batchSelectAll(){
+  var sel = document.getElementById('batch-strategies');
+  for(var i=0; i<sel.options.length; i++) sel.options[i].selected = true;
+  // Sync to stored
+  var selectedSet = {};
+  for(var i=0; i<sel.options.length; i++) selectedSet[sel.options[i].value] = true;
+  _batchAllOptions.forEach(function(o){ if(selectedSet[o.value]) o.selected = true; });
+}
+
+function batchSelectNone(){
+  var sel = document.getElementById('batch-strategies');
+  for(var i=0; i<sel.options.length; i++) sel.options[i].selected = false;
+  _batchAllOptions.forEach(function(o){ o.selected = false; });
+}
+
 function loadBatchStrategies(){
   loadStrategies().then(function(){
     var sel = document.getElementById('batch-strategies');
     sel.innerHTML = '';
+    _batchAllOptions = [];
     _allStrategies.forEach(function(s){
-      var opt = document.createElement('option');
-      opt.value = s.id;
       var isUser = s.id.indexOf('fav-')===0 || s.id.indexOf('composed-')===0;
-      opt.textContent = (isUser ? '\u2b50 ' : '\u{1f4d0} ')+s.name+' ('+s.id+')';
-      sel.appendChild(opt);
+      var text = (isUser ? '\u2b50 ' : '\u{1f4d0} ')+s.name+' ('+s.id+')';
+      _batchAllOptions.push({value: s.id, text: text, selected: false});
     });
     // Also load user compositions (composed-* and fav-*)
     api('/quant/admin/api/compositions').then(function(data){
@@ -797,11 +851,11 @@ function loadBatchStrategies(){
       compositions.forEach(function(c){
         // Skip if already in _allStrategies
         if(_allStrategies.find(function(s){return s.id===c.id})) return;
-        var opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = '\u2b50 '+c.name+' ('+c.id+')';
-        sel.appendChild(opt);
+        if(_batchAllOptions.find(function(o){return o.value===c.id})) return;
+        var text = '\u2b50 '+c.name+' ('+c.id+')';
+        _batchAllOptions.push({value: c.id, text: text, selected: false});
       });
+      filterBatchStrategies();
     });
   });
 }
@@ -809,7 +863,12 @@ function loadBatchStrategies(){
 function runBatchBacktest(){
   var btn = document.getElementById('btn-batch');
   var sel = document.getElementById('batch-strategies');
-  var ids = Array.from(sel.selectedOptions).map(function(o){return o.value});
+  // Sync current visible selections into stored state
+  for(var i=0; i<sel.options.length; i++){
+    var o = _batchAllOptions.find(function(x){return x.value===sel.options[i].value});
+    if(o) o.selected = sel.options[i].selected;
+  }
+  var ids = _batchAllOptions.filter(function(o){return o.selected}).map(function(o){return o.value});
   if(ids.length===0){
     alert('\u8bf7\u81f3\u5c11\u9009\u62e9\u4e00\u4e2a\u7b56\u7565');
     return;

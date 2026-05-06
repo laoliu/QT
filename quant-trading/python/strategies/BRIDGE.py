@@ -109,6 +109,18 @@ def _fetch_klines_context(codes, period, count):
         return {}
 
     print("[bridge] !!! _fetch_klines_context called (ctx=%s) !!!" % type(ctx).__name__)
+
+    # Refresh local cache before reading so we get latest bars
+    try:
+        import xtquant.xtdata as _xtdata
+        for _code in codes:
+            try:
+                _xtdata.download_history_data(_code, period, "", "")
+            except Exception as _e:
+                print("[bridge] download_history_data(%s) warning: %s" % (_code, _e))
+    except Exception:
+        pass
+
     result = {}
 
     # Method 1: get_market_data (PROVEN WORKING in probe)
@@ -881,6 +893,17 @@ def _sync_poll_loop(context):
 
                 klines = {}
                 source = "sync-init"
+
+                # Refresh local cache so get_market_data returns latest bars
+                try:
+                    import xtquant.xtdata as _xtdata
+                    for _code in codes:
+                        try:
+                            _xtdata.download_history_data(_code, period, "", "")
+                        except Exception as _e:
+                            _log("download_history_data(%s) warning: %s" % (_code, _e))
+                except Exception:
+                    pass
 
                 for code in codes:
                     try:

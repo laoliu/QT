@@ -4621,7 +4621,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     const s = Math.floor(seconds % 60);
     const parts: string[] = [];
     if (d > 0) parts.push(`${d}天`);
-    if (h > 0) parts.push(`${h}ʱ`);
+    if (h > 0) parts.push(`${h}时`);
     if (m > 0) parts.push(`${m}分`);
     parts.push(`${s}秒`);
     return parts.join("");

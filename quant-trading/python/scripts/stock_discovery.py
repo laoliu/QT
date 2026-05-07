@@ -99,10 +99,11 @@ def _sanitize(obj):
 # ── Universe loaders ──────────────────────────────────────────────
 
 def _load_universe_from_spot(universe: str) -> list[dict]:
-    """Fetch all A-share quotes via akshare stock_zh_a_spot_em.
+    """Fetch all A-share quotes via akshare.
 
-    Returns list of {code, name, price, pe, pb, total_market_val_yi, industry, ...}
-    Falls back to cached symbols from SQLite when network is unavailable.
+    Tries stock_zh_a_spot_em (East Money) first, then stock_zh_a_spot (Sina)
+    as fallback. Falls back to cached symbols from SQLite when both fail.
+    Returns list of {code, name, price, pe, pb, total_market_val_yi, ...}
     """
     last_err = None
     for attempt in range(2):
@@ -164,6 +165,53 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
             if attempt == 0:
                 import time as _t
                 _t.sleep(2)
+
+    # ── Fallback to Sina data source ──────────────────────────────
+    print("[discovery] 东方财富接口失败，切换新浪数据源...", file=sys.stderr, flush=True)
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot()
+        if df is not None and not df.empty:
+            # Universe size targets (Sina has no market cap — use count limits)
+            limit_map = {"csi300": 700, "csi500": 1200, "csi1000": 2000, "all": None}
+            size_limit = limit_map.get(universe)
+
+            records = []
+            for _, row in df.iterrows():
+                code = str(row.get("代码", "")).zfill(6)
+                name = str(row.get("名称", ""))
+                price = _safe_float(row.get("最新价"))
+
+                if not code or not name:
+                    continue
+                if "ST" in name or "*" in name:
+                    continue
+                if price <= 0:
+                    continue
+
+                records.append({
+                    "code": code,
+                    "name": name,
+                    "price": price,
+                    "pe": None,
+                    "pb": None,
+                    "total_market_val_yi": None,  # not available in Sina data
+                    "change_pct": _safe_float(row.get("涨跌幅")),
+                    "volume": _safe_float(row.get("成交量")),
+                    "turnover_rate": None,
+                    "amplitude": None,
+                    "_sina_fallback": True,
+                })
+
+            # Apply a rough size cap since we can't filter by market cap
+            if size_limit and len(records) > size_limit:
+                records = records[:size_limit]
+
+            print(f"[discovery] 新浪数据源加载完成，{len(records)} 只股票 (universe={universe})",
+                  file=sys.stderr, flush=True)
+            return records
+    except Exception as e2:
+        print(f"[discovery] 新浪数据源也失败: {e2}", file=sys.stderr, flush=True)
 
     # ── Fallback: load symbols from local SQLite cache ────────────
     print("[discovery] akshare 不可用，尝试从本地缓存加载...", file=sys.stderr, flush=True)

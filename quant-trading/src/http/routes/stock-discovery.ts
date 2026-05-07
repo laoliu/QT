@@ -14,6 +14,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { getPythonDir } from "../../bridge/python-dir.js";
 import { nowCSTISO } from "../../utils/cst-time.js";
+import { fetchStockNames } from "./daily-pick.js";
 
 // ── Progress file ────────────────────────────────────────────────
 
@@ -43,6 +44,31 @@ async function writeProgress(data: Record<string, unknown>): Promise<void> {
 // ── Abort controller ─────────────────────────────────────────────
 
 let discoveryAbort: AbortController | null = null;
+
+// ── History file ─────────────────────────────────────────────────
+
+const HISTORY_MAX = 50; // keep last 50 runs
+
+function getHistoryPath(): string {
+  const pythonDir = getPythonDir();
+  const logsDir = path.join(path.dirname(pythonDir), "logs");
+  return path.join(logsDir, "stock-discovery-history.json");
+}
+
+async function appendHistory(entry: Record<string, unknown>): Promise<void> {
+  try {
+    const p = getHistoryPath();
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    let history: Record<string, unknown>[] = [];
+    try {
+      const raw = await fs.readFile(p, "utf-8");
+      history = JSON.parse(raw) as Record<string, unknown>[];
+    } catch { /* no existing history */ }
+    history.unshift(entry); // newest first
+    if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
+    await fs.writeFile(p, JSON.stringify(history, null, 2), "utf-8");
+  } catch { /* best-effort */ }
+}
 
 // ── Route registration ───────────────────────────────────────────
 
@@ -173,6 +199,47 @@ export function registerStockDiscoveryRoutes(deps: AdminRouteDeps): void {
 
           if (result.ok && result.data?.ok) {
             const { ok: _ok, ...restData } = result.data;
+
+            // Back-fill missing stock names
+            if (Array.isArray(restData.results)) {
+              const missing = (restData.results as Array<{ stock_id: string; name?: string }>)
+                .filter((r) => !r.name)
+                .map((r) => r.stock_id);
+              if (missing.length > 0) {
+                try {
+                  const nameMap = await fetchStockNames(missing);
+                  for (const r of restData.results as Array<{ stock_id: string; name?: string }>) {
+                    if (!r.name && nameMap.has(r.stock_id)) {
+                      r.name = nameMap.get(r.stock_id) ?? "";
+                    }
+                  }
+                } catch { /* best-effort */ }
+              }
+            }
+
+            // Append to history
+            const topResults = Array.isArray(restData.results)
+              ? (restData.results as Array<Record<string, unknown>>).slice(0, 10).map((r) => ({
+                  stock_id: r["stock_id"],
+                  name: r["name"],
+                  score: r["score"],
+                  rank: r["rank"],
+                  signals: (r["signals"] as string[] | undefined)?.slice(0, 2),
+                }))
+              : [];
+            await appendHistory({
+              batch_id: batchId,
+              strategy,
+              strategy_label: restData.strategy_label,
+              universe,
+              universe_count: restData.universe_count,
+              screened_count: restData.screened_count,
+              elapsed_seconds: restData.elapsed_seconds,
+              finished_at: nowCSTISO(),
+              is_offline: restData.is_offline ?? false,
+              top_results: topResults,
+            });
+
             json(res, { ok: true, batch_id: batchId, ...restData });
           } else {
             const errMsg = result.ok
@@ -212,6 +279,21 @@ export function registerStockDiscoveryRoutes(deps: AdminRouteDeps): void {
         json(res, { ok: true, message: "已取消" });
       } else {
         json(res, { ok: true, message: "无运行中任务" });
+      }
+    }),
+  });
+
+  // ── Run history ────────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/stock-discovery/history",
+    handler: secure(async (_req, res) => {
+      try {
+        const raw = await fs.readFile(getHistoryPath(), "utf-8");
+        const history = JSON.parse(raw) as Record<string, unknown>[];
+        json(res, { ok: true, history });
+      } catch {
+        json(res, { ok: true, history: [] });
       }
     }),
   });

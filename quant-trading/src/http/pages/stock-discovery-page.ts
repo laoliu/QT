@@ -123,6 +123,27 @@ tr:hover td{background:rgba(255,255,255,.025)}
 /* Spinner */
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(88,166,255,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+
+/* History panel */
+.history-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:0}
+.history-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.history-header h3{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;color:var(--text-dim)}
+.history-header:hover h3{color:var(--text)}
+.history-toggle{font-size:11px;color:var(--text-dim)}
+.history-list{padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.history-item{background:var(--bg3);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.history-item-head{padding:9px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;flex-wrap:wrap}
+.history-item-head:hover{background:rgba(255,255,255,.03)}
+.history-strat{font-size:12px;font-weight:600;flex:1;min-width:80px}
+.history-meta{font-size:11px;color:var(--text-dim);display:flex;gap:10px;flex-wrap:wrap}
+.history-pill{display:inline-block;font-size:10px;background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.2);color:var(--accent);border-radius:10px;padding:1px 6px}
+.history-item-body{padding:8px 12px;border-top:1px solid var(--border);display:none}
+.history-item-body.open{display:block}
+.history-top-list{display:flex;flex-wrap:wrap;gap:6px;font-size:11px}
+.history-top-stock{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;display:flex;flex-direction:column;gap:1px;min-width:90px}
+.history-top-stock .hs-code{font-family:monospace;color:var(--accent)}
+.history-top-stock .hs-name{color:var(--text);font-size:10px}
+.history-top-stock .hs-score{color:var(--text-dim);font-size:10px}
 </style>
 </head>
 <body>
@@ -234,6 +255,15 @@ tr:hover td{background:rgba(255,255,255,.025)}
     </div>
   </div>
 
+  <!-- History -->
+  <div class="history-card" id="historyCard" style="display:none">
+    <div class="history-header" onclick="toggleHistory()">
+      <h3>🕘 历史运行记录 <span id="historyCount" style="font-size:11px;font-weight:400"></span></h3>
+      <span class="history-toggle" id="historyToggleIcon">▼</span>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </div>
+
 </div>
 </div>
 </div>
@@ -341,6 +371,7 @@ async function runDiscovery() {
 
     // Render results
     renderResults(allResults, currentStrategy);
+    loadHistory();
 
   } catch (e) {
     runBtn.disabled = false;
@@ -525,8 +556,78 @@ document.getElementById('withKlines').addEventListener('change', function() {
   document.getElementById('klineDaysGroup').style.display = this.checked ? 'block' : 'none';
 });
 
+// ── History ───────────────────────────────────────────────────
+let historyOpen = true;
+
+function toggleHistory() {
+  historyOpen = !historyOpen;
+  document.getElementById('historyList').style.display = historyOpen ? 'flex' : 'none';
+  document.getElementById('historyToggleIcon').textContent = historyOpen ? '▼' : '▶';
+}
+
+function renderHistory(history) {
+  const card = document.getElementById('historyCard');
+  const list = document.getElementById('historyList');
+  const countEl = document.getElementById('historyCount');
+  if (!history || !history.length) return;
+  card.style.display = 'block';
+  countEl.textContent = '(' + history.length + ' 条)';
+  list.innerHTML = history.map((h, idx) => {
+    const stratDef = STRATEGY_DEFS.find(s => s.id === h.strategy);
+    const icon = stratDef ? stratDef.icon : '📊';
+    const label = h.strategy_label || (stratDef ? stratDef.name : h.strategy);
+    const time = h.finished_at ? h.finished_at.replace('T', ' ').slice(0, 16) : '';
+    const elapsed = h.elapsed_seconds != null ? h.elapsed_seconds + 's' : '';
+    const offline = h.is_offline ? '<span class="history-pill" style="border-color:rgba(210,153,34,.4);color:var(--yellow);background:rgba(210,153,34,.1)">离线</span>' : '';
+    const topHtml = (h.top_results || []).map(r => \`
+      <div class="history-top-stock">
+        <span class="hs-code"><a style="color:var(--accent)" href="\${B}/quant/admin/stock?symbol=\${esc(r.stock_id)}" target="_blank">\${esc(r.stock_id)}</a></span>
+        <span class="hs-name">\${esc(r.name || '')}</span>
+        <span class="hs-score">分: \${r.score != null ? Number(r.score).toFixed(1) : '-'}</span>
+      </div>
+    \`).join('');
+    return \`
+      <div class="history-item">
+        <div class="history-item-head" onclick="toggleHistoryItem(this)">
+          <span class="history-strat">\${icon} \${esc(label)}</span>
+          <span class="history-meta">
+            <span>\${esc(h.universe || '')}</span>
+            <span>筛选 \${h.screened_count ?? '-'} 只</span>
+            \${elapsed ? '<span>' + esc(elapsed) + '</span>' : ''}
+            \${offline}
+          </span>
+          <span style="font-size:11px;color:var(--text-dim);white-space:nowrap">\${esc(time)}</span>
+          <span style="font-size:10px;color:var(--text-dim)">▶</span>
+        </div>
+        <div class="history-item-body">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">Top 结果:</div>
+          <div class="history-top-list">\${topHtml || '<span style="color:var(--text-dim);font-size:11px">暂无数据</span>'}</div>
+        </div>
+      </div>
+    \`;
+  }).join('');
+  list.style.display = historyOpen ? 'flex' : 'none';
+}
+
+function toggleHistoryItem(headEl) {
+  const body = headEl.nextElementSibling;
+  const arrow = headEl.querySelector('span:last-child');
+  const isOpen = body.classList.toggle('open');
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
+}
+
+async function loadHistory() {
+  try {
+    const resp = await fetch(B + '/quant/admin/api/stock-discovery/history');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.ok && data.history) renderHistory(data.history);
+  } catch { /* ignore */ }
+}
+
 // ── Init ──────────────────────────────────────────────────────
 buildStrategyGrid();
+loadHistory();
 </script>
 </body>
 </html>`;

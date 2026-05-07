@@ -61,6 +61,7 @@ import { registerPortfolioComboRoutes } from "./routes/portfolio-combo.js";
 import { registerStrategyRoutingRoutes } from "./routes/strategy-routing.js";
 import { registerSwingOverlayRoutes } from "./routes/swing-overlay.js";
 import { registerStockOptimizationRoutes } from "./routes/stock-optimization.js";
+import { registerStockDiscoveryRoutes } from "./routes/stock-discovery.js";
 import { todayCST, formatDateCST, nowCSTISO } from "../utils/cst-time.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -1800,9 +1801,6 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const conditionalIds: string[] = [];
           if (createConditionalOrders) {
             try {
-              // All exit orders for this buy share an OCO group: the first to trigger cancels the others.
-              const ocoGroupId = `oco-${item.code}-${Date.now()}`;
-
               if (item.stopLossPrice && item.stopLossPrice < item.limitPrice) {
                 conditionalIds.push(
                   conditionalOrderService.addStopLoss({
@@ -1812,7 +1810,6 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                     quantity: qty,
                     strategyId: "recommend-exec",
                     description: `自动止损(${item.code})`,
-                    ocoGroupId,
                   }),
                 );
               }
@@ -1826,7 +1823,6 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                     quantity: Math.max(1, Math.floor(qty / 2)),
                     strategyId: "recommend-exec",
                     description: `自动止盈(${item.code})`,
-                    ocoGroupId,
                   }),
                 );
               }
@@ -1839,7 +1835,6 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                   quantity: qty,
                   strategyId: "recommend-exec",
                   description: `自动跟踪止损(${item.code})`,
-                  ocoGroupId,
                 }),
               );
 
@@ -4410,6 +4405,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   // Stock Combo Optimization (个股组合优化 extracted to routes/stock-optimization.ts)
   registerStockOptimizationRoutes(deps);
 
+  // Stock Discovery (多维度选股引擎 extracted to routes/stock-discovery.ts)
+  registerStockDiscoveryRoutes(deps);
+
   // ── Quote Push (QMT 实时行情推送 → 即时触发条件单) ──────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -4537,6 +4535,18 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       } catch (err) {
         json(res, { error: `操作失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
       }
+    }),
+  });
+
+  // ── Stock Discovery Page ─────────────────────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/stock-discovery",
+    handler: securePublic(async (_req, res) => {
+      const { getStockDiscoveryPageHtml } = await import("./pages/stock-discovery-page.js");
+      const html = getStockDiscoveryPageHtml("");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(html);
     }),
   });
 

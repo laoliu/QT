@@ -124,6 +124,11 @@ def _load_all_screeners() -> None:
         "screeners.cb_stock_quality",
         "screeners.ml_ranking_screener",
         "screeners.swing_suitability_screener",
+        "screeners.low_position_screener",
+        "screeners.turnaround_screener",
+        "screeners.relative_strength_screener",
+        "screeners.sector_laggard_screener",
+        "screeners.st_restructuring_screener",
     ]
     for mod_name in modules:
         try:

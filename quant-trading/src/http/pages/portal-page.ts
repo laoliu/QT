@@ -21,7 +21,7 @@ export function getPortalPageHtml(baseUrl: string): string {
 <title>OpenClaw 量化交易</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📈</text></svg>">
 <style>
-:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#c9d1d9;--text-dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922;--orange:#db6d28;--purple:#bc8cff}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#c9d1d9;--text-dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922;--orange:#db6d28;--purple:#bc8cff;--teal:#39d353}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 a{color:var(--accent);text-decoration:none}
@@ -63,6 +63,7 @@ main{max-width:1100px;margin:0 auto;padding:24px}
 .nav-card.card-strestructure::before{background:linear-gradient(90deg,var(--yellow),var(--orange))}
 .nav-card.card-combo::before{background:linear-gradient(90deg,var(--accent),var(--purple))}
 .nav-card.card-stockopt::before{background:linear-gradient(90deg,var(--green),var(--purple))}
+.nav-card.card-discovery::before{background:linear-gradient(90deg,var(--teal),var(--accent))}
 .nav-card.card-risksim::before{background:linear-gradient(90deg,var(--red),var(--orange))}
 .nav-card.card-portfolio-wf::before{background:linear-gradient(90deg,var(--purple),var(--accent),var(--green))}
 .nav-card .icon{font-size:28px;margin-bottom:8px}
@@ -324,6 +325,15 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
     <div class="tags">
       <span class="tag">多策略组合</span><span class="tag">参数优化</span><span class="tag">交易计划</span>
       <span class="tag">条件单</span><span class="tag">绩效跟踪</span>
+    </div>
+  </a>
+  <a href="${b}/quant/admin/stock-discovery" class="nav-card card-discovery" style="color:inherit;text-decoration:none">
+    <div class="icon">🔍</div>
+    <h3>多维度选股引擎</h3>
+    <p>低位潜力股 · 困境反转 · RS相对强度 · 板块补涨 · Magic Formula · CAN SLIM · 量价异动 — 多种算法在全市场中挖掘潜力品种</p>
+    <div class="tags">
+      <span class="tag">低位选股</span><span class="tag">困境反转</span><span class="tag">RS评级</span>
+      <span class="tag">板块补涨</span><span class="tag">综合选股</span>
     </div>
   </a>
   <a href="${b}/quant/admin/risk-simulator" class="nav-card card-risksim" style="color:inherit;text-decoration:none">

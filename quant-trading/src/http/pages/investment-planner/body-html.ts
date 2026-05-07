@@ -1182,7 +1182,7 @@ export function getPlannerBodyHtml(b: string): string {
     <div id="opt-history-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px">暂无历史</div>
     <div id="opt-history-panel" style="display:none">
       <div style="overflow-x:auto"><table id="opt-history-table" style="font-size:12px">
-        <thead><tr><th>#</th><th>时间</th><th>资金</th><th>起始日</th><th>轮次</th><th>ɸѡ</th><th>最优股票池</th><th>最优策略</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>股票数</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>时间</th><th>资金</th><th>起始日</th><th>轮次</th><th>筛选模式</th><th>最优股票池</th><th>最优策略</th><th>收益%</th><th>夏普</th><th>回撤%</th><th>股票数</th><th>操作</th></tr></thead>
         <tbody></tbody>
       </table></div>
     </div>

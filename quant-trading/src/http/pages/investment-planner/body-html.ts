@@ -1684,6 +1684,10 @@ export function getPlannerBodyHtml(b: string): string {
     </div>
   </div>
 
+  <div id="rec-pool-stale-banner" style="display:none;margin-bottom:10px;padding:8px 12px;background:rgba(210,153,34,.15);border:1px solid rgba(210,153,34,.5);border-radius:6px;font-size:12px;color:#d29922">
+    ⚠️ 股票池已修改，当前结果是基于旧股票池生成的。请点击 <strong>生成建仓推荐</strong> 重新分析。
+  </div>
+
   <div id="rec-results" style="display:none">
     <!-- Backtest basis -->
     <div class="kpi-row" id="rec-bt-kpis"></div>

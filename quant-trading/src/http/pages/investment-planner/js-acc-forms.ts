@@ -169,6 +169,17 @@ setInterval(function(){document.getElementById('clock').textContent=new Date().t
 (function(){
   var saved=localStorage.getItem('openclaw-rec-symbols');
   if(saved){document.getElementById('rec-symbols').value=saved}
+  // Show stale-results banner when user manually changes the pool after an analysis
+  var symInput=document.getElementById('rec-symbols');
+  if(symInput){
+    symInput.addEventListener('input',function(){
+      var banner=document.getElementById('rec-pool-stale-banner');
+      var results=document.getElementById('rec-results');
+      if(!banner||!results||results.style.display==='none')return;
+      var current=(symInput.value||'').trim();
+      banner.style.display=(current!==_recSymbolsAtAnalysis)?'block':'none';
+    });
+  }
 })();
 
 (function(){

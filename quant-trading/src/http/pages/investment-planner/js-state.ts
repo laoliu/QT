@@ -90,6 +90,7 @@ var _dailyPickRunning = false;
 var DAILY_PICK_HISTORY_KEY = 'openclaw-daily-pick-history-v1';
 var _dailyPickHistory = [];
 var _lastRecommendData = null;
+var _recSymbolsAtAnalysis = '';
 var _recExecRunning = false;
 var _recExecuted = false;
 var _recCurrentBatch = 1;  // which batch was last executed (1, 2, or 3)

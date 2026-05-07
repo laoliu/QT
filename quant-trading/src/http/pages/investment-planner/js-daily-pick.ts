@@ -465,6 +465,9 @@ function runRecommend(){
   var endVal=document.getElementById('rec-end').value.trim();
   var symVal=document.getElementById('rec-symbols').value.trim();
   if(symVal)localStorage.setItem('openclaw-rec-symbols',symVal);
+  _recSymbolsAtAnalysis=symVal;
+  var staleBanner=document.getElementById('rec-pool-stale-banner');
+  if(staleBanner)staleBanner.style.display='none';
   var body={
     capital:Number(document.getElementById('rec-capital').value)||500000,
     target_capital:Number(document.getElementById('rec-target-capital').value)||0,

@@ -117,6 +117,8 @@ export interface ConditionalOrder {
   swingFillPrice?: number;
   /** Linked order ID (the reverse order created after fill). */
   linkedOrderId?: string;
+  /** OCO group ID: when one order in this group triggers successfully, all others are cancelled. */
+  ocoGroupId?: string;
 
   // ── Batch entry state ──
   /** Batch number (2 or 3) for batch_entry orders. */
@@ -420,6 +422,7 @@ export class ConditionalOrderService {
     quantity: number;
     strategyId?: string;
     description?: string;
+    ocoGroupId?: string;
   }): string {
     return this.addOrder({
       symbol: params.symbol,
@@ -428,6 +431,7 @@ export class ConditionalOrderService {
       triggerValue: params.stopPrice,
       quantity: params.quantity,
       strategyId: params.strategyId,
+      ocoGroupId: params.ocoGroupId,
       description:
         params.description ??
         `止损: ${params.symbol} 跌破 ¥${params.stopPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股`,
@@ -442,6 +446,7 @@ export class ConditionalOrderService {
     quantity: number;
     strategyId?: string;
     description?: string;
+    ocoGroupId?: string;
   }): string {
     return this.addOrder({
       symbol: params.symbol,
@@ -450,6 +455,7 @@ export class ConditionalOrderService {
       triggerValue: params.targetPrice,
       quantity: params.quantity,
       strategyId: params.strategyId,
+      ocoGroupId: params.ocoGroupId,
       description:
         params.description ??
         `止盈: ${params.symbol} 涨到 ¥${params.targetPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股`,
@@ -464,6 +470,7 @@ export class ConditionalOrderService {
     quantity: number;
     strategyId?: string;
     description?: string;
+    ocoGroupId?: string;
   }): string {
     const trailingStopPrice = params.entryPrice * (1 - params.trailPct);
     return this.addOrder({
@@ -473,6 +480,7 @@ export class ConditionalOrderService {
       triggerValue: params.trailPct,
       quantity: params.quantity,
       strategyId: params.strategyId,
+      ocoGroupId: params.ocoGroupId,
       description:
         params.description ??
         `跟踪止损: ${params.symbol} 回撤 ${(params.trailPct * 100).toFixed(1)}% 自动卖出`,
@@ -757,6 +765,7 @@ export class ConditionalOrderService {
       swingGridPct?: number;
       swingFillPrice?: number;
       linkedOrderId?: string;
+      ocoGroupId?: string;
       // Market context trigger fields
       baselineSentiment?: number;
       sentimentDropThreshold?: number;
@@ -805,6 +814,7 @@ export class ConditionalOrderService {
       swingGridPct: params.swingGridPct,
       swingFillPrice: params.swingFillPrice,
       linkedOrderId: params.linkedOrderId,
+      ocoGroupId: params.ocoGroupId,
       // Market context trigger state
       baselineSentiment: params.baselineSentiment,
       sentimentDropThreshold: params.sentimentDropThreshold,
@@ -1174,6 +1184,28 @@ export class ConditionalOrderService {
           order.triggerResult = "no_exit_fn_configured";
         }
 
+        // OCO: if a sell-side exit succeeded, cancel all other non-triggered sell-side orders
+        // in the same OCO group so they don't attempt to sell an already-closed position.
+        if (exitOk && order.ocoGroupId && order.exitSide !== "buy") {
+          const ocoTs = nowCSTISO();
+          for (const other of this.orders.values()) {
+            if (
+              other.id !== order.id &&
+              !other.triggered &&
+              other.ocoGroupId === order.ocoGroupId &&
+              other.exitSide !== "buy"
+            ) {
+              other.triggered = true;
+              other.triggeredAt = ocoTs;
+              other.triggerResult = `cancelled_by_oco: ${order.id} already sold`;
+              triggered.push(other.id);
+              console.log(
+                `[conditional-order] OCO cancel ${other.id} (group ${order.ocoGroupId}) after ${order.id} triggered`,
+              );
+            }
+          }
+        }
+
         // ── Swing grid: record fill price, log trade, create reverse order ──
         // Only proceed if the order was actually submitted successfully
         if (order.type === "swing_grid" && exitOk) {
@@ -1330,6 +1362,27 @@ export class ConditionalOrderService {
           order.triggerResult = result.ok ? "exit_submitted" : `exit_failed: ${result.reason}`;
         } else {
           order.triggerResult = "no_exit_fn_configured";
+        }
+
+        // OCO: cancel other non-triggered sell-side orders in the same group
+        if (exitOk && order.ocoGroupId && order.exitSide !== "buy") {
+          const ocoTs = nowCSTISO();
+          for (const other of this.orders.values()) {
+            if (
+              other.id !== order.id &&
+              !other.triggered &&
+              other.ocoGroupId === order.ocoGroupId &&
+              other.exitSide !== "buy"
+            ) {
+              other.triggered = true;
+              other.triggeredAt = ocoTs;
+              other.triggerResult = `cancelled_by_oco: ${order.id} already sold`;
+              triggered.push(other.id);
+              console.log(
+                `[conditional-order] OCO cancel ${other.id} (group ${order.ocoGroupId}) after ${order.id} triggered`,
+              );
+            }
+          }
         }
 
         // Swing grid: record fill, create reverse order — only if exit succeeded

@@ -1800,6 +1800,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const conditionalIds: string[] = [];
           if (createConditionalOrders) {
             try {
+              // All exit orders for this buy share an OCO group: the first to trigger cancels the others.
+              const ocoGroupId = `oco-${item.code}-${Date.now()}`;
+
               if (item.stopLossPrice && item.stopLossPrice < item.limitPrice) {
                 conditionalIds.push(
                   conditionalOrderService.addStopLoss({
@@ -1809,6 +1812,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                     quantity: qty,
                     strategyId: "recommend-exec",
                     description: `自动止损(${item.code})`,
+                    ocoGroupId,
                   }),
                 );
               }
@@ -1822,6 +1826,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                     quantity: Math.max(1, Math.floor(qty / 2)),
                     strategyId: "recommend-exec",
                     description: `自动止盈(${item.code})`,
+                    ocoGroupId,
                   }),
                 );
               }
@@ -1834,6 +1839,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                   quantity: qty,
                   strategyId: "recommend-exec",
                   description: `自动跟踪止损(${item.code})`,
+                  ocoGroupId,
                 }),
               );
 

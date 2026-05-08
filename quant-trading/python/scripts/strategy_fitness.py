@@ -30,6 +30,7 @@ import math
 import os
 import sqlite3
 import sys
+import tempfile
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -410,6 +411,46 @@ def _load_klines(symbols: list[str], start_date: str, end_date: str) -> dict[str
         return {}
 
 
+def _save_klines_temp(klines: dict[str, list[dict]]) -> str:
+    """Save klines to a NDJSON temp file for TS to read line-by-line.
+
+    Returns the temp file path, or "" on failure.
+    Format: one line per symbol, each line is: symbol\tJSON_array_of_bars
+    This avoids Node.js string length limits that occur with a single giant JSON.
+    """
+    if not klines:
+        return ""
+    try:
+        fd, fpath = tempfile.mkstemp(prefix="fitness_klines_", suffix=".ndjson")
+        count = 0
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for sym, bars in klines.items():
+                minimal = [
+                    {
+                        "t": b.get("timestamp", 0),
+                        "o": b.get("open", 0),
+                        "h": b.get("high", 0),
+                        "l": b.get("low", 0),
+                        "c": b.get("close", 0),
+                        "v": b.get("volume", 0),
+                    }
+                    for b in bars
+                    if b.get("close", 0) > 0
+                ]
+                if minimal:
+                    f.write(sym)
+                    f.write("\t")
+                    f.write(json.dumps(minimal, separators=(",", ":")))
+                    f.write("\n")
+                    count += 1
+        size_mb = os.path.getsize(fpath) / (1024 * 1024)
+        print(f"[Klines] 保存 {count} 只股票K线到临时文件 ({size_mb:.1f}MB)", file=sys.stderr)
+        return fpath
+    except Exception as e:
+        print(f"[Klines] 保存临时文件失败: {e}", file=sys.stderr)
+        return ""
+
+
 # ── Single stock-strategy backtest ───────────────────────────────
 
 # ── Load fundamental metadata ────────────────────────────────────
@@ -649,17 +690,17 @@ def _run_strategy_backtest(
                 remaining_value = remaining_qty * last_bars[sym].close
 
             total_pnl = sell_proceeds + remaining_value - buy_cost
-            total_return_pct = (total_pnl / buy_cost * 100) if buy_cost > 0 else 0
+            total_return_dec = (total_pnl / buy_cost) if buy_cost > 0 else 0
 
             total_trades_count = len(trades)
 
-            # 年化收益
+            # 年化收益 (decimal: 0.10 = 10%)
             trading_days = len(sorted_dates)
             ann_return = 0.0
             if buy_cost > 0 and trading_days > 0:
                 total_r = (sell_proceeds + remaining_value) / buy_cost
                 years = trading_days / 245
-                ann_return = ((total_r ** (1 / years)) - 1) * 100 if years > 0 and total_r > 0 else 0
+                ann_return = (total_r ** (1 / years)) - 1 if years > 0 and total_r > 0 else 0
 
             # ── 计算 per-stock 每日净值、最大回撤、夏普 ──
             # 以买入成本为基准，构建组合价值曲线（而非 P&L 曲线）
@@ -734,7 +775,7 @@ def _run_strategy_backtest(
                         sortino = (avg_ret - 0.03 / 252) / down_std * (252 ** 0.5)
 
             # Calmar
-            calmar = ann_return / (max_dd * 100) if max_dd > 0 else 0.0
+            calmar = ann_return / max_dd if max_dd > 0 else 0.0
 
             # Win rate & Profit/loss ratio: 基于买卖配对计算实际盈亏
             buy_trades = sorted([t for t in trades if t.side == Side.BUY], key=lambda t: t.trade_date)
@@ -775,11 +816,11 @@ def _run_strategy_backtest(
                 avg_loss = abs(sum(losses_pnl) / len(losses_pnl)) if losses_pnl else 0
                 profit_loss_ratio = avg_win / avg_loss if avg_loss > 0 else (avg_win if avg_win > 0 else 0)
             else:
-                profit_loss_ratio = max(total_return_pct / 10, 0) if total_return_pct > 0 else 0
+                profit_loss_ratio = max(total_return_dec * 10, 0) if total_return_dec > 0 else 0
 
             cs = composite_score({
-                "total_return": total_return_pct,
-                "annualized_return": ann_return,
+                "total_return": total_return_dec * 100,  # 转为百分比传入评分函数
+                "annualized_return": ann_return * 100,
                 "sharpe_ratio": sharpe,
                 "win_rate": win_rate * 100,  # 转为百分比，与 TS builtin-engine 一致
                 "profit_loss_ratio": profit_loss_ratio,
@@ -791,8 +832,8 @@ def _run_strategy_backtest(
                 "strategy_id": strategy_id,
                 "symbol": sym,
                 "composite_score": cs,
-                "total_return": round(total_return_pct, 4),
-                "annualized_return": round(ann_return, 4),
+                "total_return": round(total_return_dec, 6),
+                "annualized_return": round(ann_return, 6),
                 "sharpe_ratio": round(sharpe, 4),
                 "sortino_ratio": round(sortino, 4),
                 "max_drawdown": round(max_dd, 6),
@@ -1409,6 +1450,10 @@ def run_fitness_analysis(
             "completed_strategies": len(strategy_ids),
             "elapsed_seconds": int(elapsed),
         })
+        # Save klines to temp file so TS can reuse without re-fetching from bridge
+        klines_file = _save_klines_temp(filtered_klines)
+        if klines_file:
+            print(f"[Step 7] K线数据已保存到临时文件: {klines_file}", file=sys.stderr)
         return {
             "batch_id": batch_id,
             "universe": universe,
@@ -1419,12 +1464,17 @@ def run_fitness_analysis(
             "start_date": start_date,
             "end_date": end_date,
             "alpha_results": alpha_raw,
+            "klines_file": klines_file,
             "_phase": "alpha_only",
         }
 
     if has_builtin and not strategy_ids:
         # 只跑 builtin，返回元数据让 TS 侧处理
         elapsed = time.time() - t0
+        # Save klines to temp file so TS can reuse without re-fetching from bridge
+        klines_file = _save_klines_temp(filtered_klines)
+        if klines_file:
+            print(f"[Step 7] K线数据已保存到临时文件: {klines_file}", file=sys.stderr)
         return {
             "batch_id": batch_id,
             "universe": universe,
@@ -1435,6 +1485,7 @@ def run_fitness_analysis(
             "start_date": start_date,
             "end_date": end_date,
             "alpha_results": [],
+            "klines_file": klines_file,
             "_phase": "metadata_only",
         }
 

@@ -120,7 +120,7 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
     </div>
     <div class="step" onclick="goStep(4)" id="step-4">
       <div class="step-num">4</div>
-      <span class="step-label">应用到模拟盘</span>
+      <span class="step-label">应用到交易</span>
     </div>
   </div>
 
@@ -337,9 +337,9 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
   <!-- ====== STEP 4: Apply ====== -->
   <div class="step-panel" id="panel-4">
     <div class="card">
-      <h3>🎯 第四步：应用到模拟盘</h3>
+      <h3>🎯 第四步：应用到交易</h3>
       <div class="info-note">
-        确认组合配置无误后，可将此策略组合应用到模拟盘。系统将按照确定的权重分配资金并自动执行。
+        确认组合配置无误后，可将此策略组合应用到模拟盘或实盘。系统将按照确定的权重分配资金并自动执行。
       </div>
     </div>
 
@@ -357,8 +357,9 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
       <div class="param-row">
         <div class="param-group">
           <label>执行模式</label>
-          <select id="s4-mode" style="width:150px">
+          <select id="s4-mode" style="width:150px" onchange="onStep4ModeChange()">
             <option value="paper">模拟盘</option>
+            <option value="live">🔴 实盘</option>
             <option value="dry_run">仅生成信号（不下单）</option>
           </select>
         </div>
@@ -367,9 +368,13 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
           <input type="number" id="s4-cash" value="10000000" style="width:140px">
         </div>
       </div>
+      <div id="s4-live-warning" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);border-radius:8px;font-size:13px;color:#f85149">
+        ⚠️ <strong>实盘模式</strong>：将使用真实资金下单交易，请务必确认策略和资金配置正确！
+        <div id="s4-broker-info" style="margin-top:6px;font-size:12px;color:var(--text-dim)"></div>
+      </div>
       <div style="margin-top:16px;display:flex;gap:8px">
         <button class="btn" onclick="goStep(3)">← 上一步</button>
-        <button class="btn btn-success" onclick="step4Apply()">🚀 应用到模拟盘</button>
+        <button class="btn btn-success" id="s4-apply-btn" onclick="step4Apply()">🚀 应用到模拟盘</button>
       </div>
       <div id="s4-result" style="margin-top:12px"></div>
     </div>
@@ -1204,39 +1209,102 @@ function step4Apply(){
     return;
   }
 
+  var isLive=mode==='live';
   var fw=comboResult.final_weights||{};
   var allocations=Object.keys(fw).map(function(k){ return {strategy_name:k, weight:fw[k]}; });
+  var cashVal=parseFloat(document.getElementById('s4-cash').value)||10000000;
+
+  if(isLive){
+    var stratList=allocations.map(function(a){return a.strategy_name+' ('+((a.weight*100).toFixed(1))+'%)'}).join('\\n  ');
+    var msg='⚠️ 实盘交易确认 ⚠️\\n\\n'
+      +'即将使用真实资金执行以下策略组合：\\n  '+stratList+'\\n\\n'
+      +'初始资金：¥'+cashVal.toLocaleString()+'\\n\\n'
+      +'请确认：\\n'
+      +'1. 策略组合和权重已充分验证\\n'
+      +'2. 资金配置正确\\n'
+      +'3. 交易网关已正常连接\\n\\n'
+      +'是否确认应用到实盘？';
+    if(!confirm(msg))return;
+    // 二次确认
+    var confirmText=prompt('请输入 "确认实盘" 以最终确认：');
+    if(confirmText!=='确认实盘'){
+      toast('❌ 实盘操作已取消');
+      return;
+    }
+  }
+
+  var endpoint=isLive
+    ?'/quant/admin/api/strategy-fitness/portfolio-backtest/apply-live'
+    :'/quant/admin/api/strategy-fitness/portfolio-backtest/apply-paper';
 
   var payload={
     allocations:allocations,
     method:comboResult._cfg.method,
     rebalance_freq:comboResult._cfg.rebalance_freq,
-    initial_cash:parseFloat(document.getElementById('s4-cash').value)||10000000,
-    initial_capital:parseFloat(document.getElementById('s4-cash').value)||10000000
+    initial_cash:cashVal,
+    initial_capital:cashVal
   };
 
-  api('/quant/admin/api/strategy-fitness/portfolio-backtest/apply-paper',{
+  var btn=document.getElementById('s4-apply-btn');
+  btn.disabled=true;
+  btn.textContent=isLive?'⏳ 正在应用到实盘...':'⏳ 正在应用到模拟盘...';
+
+  api(endpoint,{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(payload),
-    _timeout:30000
+    _timeout:60000
   }).then(function(d){
+    btn.disabled=false;
+    onStep4ModeChange();
     if(d.error){
       document.getElementById('s4-result').innerHTML='<div class="info-note" style="border-left-color:var(--red)">❌ '+esc(d.error)+'</div>';
       return;
     }
+    var modeLabel=isLive?'实盘':'模拟盘';
     document.getElementById('s4-result').innerHTML=
-      '<div class="info-note" style="border-left-color:var(--green)">✅ 已成功应用到模拟盘！<br>'
+      '<div class="info-note" style="border-left-color:var(--green)">✅ 已成功应用到'+modeLabel+'！<br>'
       +'资金分配完成，系统将按照策略信号自动执行交易。<br>'
+      +(isLive?'<div style="margin-top:6px;font-size:12px;color:var(--yellow)">⚠️ 实盘模式已激活，请密切关注交易执行情况</div>':'')
       +(d.message?'<div style="margin-top:6px;font-size:12px;color:var(--text-dim)">'+esc(d.message)+'</div>':'')
       +(d.autoTradeConfigured?'<div style="margin-top:6px;font-size:12px;color:var(--green)">✅ 已自动配置到自动交易调度器（策略: '+allocations.map(function(a){return a.strategy_name}).join(', ')+'）</div>':'')
       +'<div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap">'
       +'<a href="/quant/admin/auto-trade" class="btn" style="display:inline-block;padding:6px 14px;background:var(--accent);color:#fff;border-radius:6px;text-decoration:none;font-size:13px">🚀 前往自动交易调度中心</a>'
       +'<a href="/quant/admin/ui" style="font-size:13px;color:var(--text-dim);text-decoration:underline">返回管理面板</a>'
       +'</div></div>';
-    toast('✅ 组合已应用到模拟盘');
+    toast('✅ 组合已应用到'+modeLabel);
   }).catch(function(e){
+    btn.disabled=false;
+    onStep4ModeChange();
     document.getElementById('s4-result').innerHTML='<div class="info-note" style="border-left-color:var(--red)">❌ '+esc(e.message)+'</div>';
   });
+}
+
+function onStep4ModeChange(){
+  var mode=document.getElementById('s4-mode').value;
+  var btn=document.getElementById('s4-apply-btn');
+  var warn=document.getElementById('s4-live-warning');
+  if(mode==='live'){
+    btn.textContent='🔴 应用到实盘';
+    btn.className='btn btn-danger';
+    warn.style.display='block';
+    // Fetch broker status
+    api('/quant/admin/api/engine-status',{_timeout:5000}).then(function(d){
+      var bt=d&&d.brokerType||'未连接';
+      var label=bt==='paper'?'🟡 虚拟盘 (Paper)':'🟢 '+bt;
+      document.getElementById('s4-broker-info').innerHTML='当前交易通道：<strong>'+esc(label)+'</strong>'
+        +(bt==='paper'?'<br><span style="color:var(--yellow)">⚠️ 当前引擎为 Paper 模式，实盘下单需要先连接实盘 broker (QMT/富途等)</span>':'');
+    }).catch(function(){
+      document.getElementById('s4-broker-info').innerHTML='<span style="color:var(--yellow)">⚠️ 无法获取引擎状态</span>';
+    });
+  }else if(mode==='paper'){
+    btn.textContent='🚀 应用到模拟盘';
+    btn.className='btn btn-success';
+    warn.style.display='none';
+  }else{
+    btn.textContent='📋 保存信号配置';
+    btn.className='btn btn-primary';
+    warn.style.display='none';
+  }
 }
 </script>
 </body>

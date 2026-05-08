@@ -71,6 +71,11 @@ function kpiHtml(val,label){return '<div class="kpi"><div class="kpi-val">'+val+
 function sevBadge(s){return '<span class="badge badge-'+(s==='critical'?'red':s==='warning'?'yellow':'blue')+'">'+esc(s)+'</span>'}
 function fmtTime(ts){return ts?new Date(ts).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'-'}
 
+/* ══════ Stock Name Cache ══════ */
+var _nameCache={};
+function resolveNames(symbols){var miss=symbols.filter(function(s){return s&&!_nameCache[s]});if(!miss.length)return Promise.resolve();return api('/quant/api/stock-names?symbols='+miss.join(',')).then(function(r){var d=r&&r.data||{};for(var k in d)if(d.hasOwnProperty(k))_nameCache[k]=d[k]}).catch(function(){})}
+var _condLabels={price_above:'价格≥',price_below:'价格≤',change_pct_above:'涨幅≥%',change_pct_below:'跌幅≤%',volume_above:'成交量≥',volume_spike:'量异动',sentiment_spike:'舆情异动',hot_rank_above:'热度排名≤'};
+
 /* ══════ OVERVIEW ══════ */
 function loadOverview(){
   api('/quant/admin/api/overview',{timeout:30000}).then(function(d){
@@ -434,17 +439,21 @@ function loadTrading(){
   }).catch(function(){});
   api('/quant/api/orders'+adminModeParam(false)).then(function(o){
     var orders=o.data||o.orders||[];
-    document.querySelector('#orders-table tbody').innerHTML=orders.slice(0,50).map(function(od){
-      var sideMap={buy:'买入',sell:'卖出',short:'做空',cover:'平仓',buy_open:'买开',sell_close:'卖平',buy_close:'买平',sell_open:'卖开'};
-      var sideLabel=sideMap[od.side]||od.side||'-';
-      var sideClass=(od.side==='buy'||od.side==='buy_open'||od.side==='cover'||od.side==='buy_close')?'green':'red';
-      var canCancel=(od.status==='pending'||od.status==='submitted');
-      return '<tr><td style="white-space:nowrap">'+fmtTime(od.createdAt)+'</td><td>'+esc(od.symbol)+'</td>'+
-        '<td><span class="badge badge-'+sideClass+'">'+sideLabel+'</span></td>'+
-        '<td>'+num(od.price!=null?od.price:(od.avgFillPrice!=null?od.avgFillPrice:od.filledPrice))+'</td><td>'+(od.quantity||'-')+'</td>'+
-        '<td><span class="badge badge-'+(od.status==='filled'?'green':od.status==='cancelled'?'red':'yellow')+'">'+esc(od.status)+'</span></td>'+
-        '<td>'+(canCancel?'<button class="btn btn-sm btn-danger" onclick="cancelOrder(\\''+esc(od.orderId)+'\\')">撤单</button>':'')+'</td></tr>';
-    }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">暂无委托</td></tr>';
+    var orderSyms=orders.map(function(od){return od.symbol}).filter(Boolean);
+    resolveNames(orderSyms).then(function(){
+      document.querySelector('#orders-table tbody').innerHTML=orders.slice(0,50).map(function(od){
+        var sideMap={buy:'买入',sell:'卖出',short:'做空',cover:'平仓',buy_open:'买开',sell_close:'卖平',buy_close:'买平',sell_open:'卖开'};
+        var sideLabel=sideMap[od.side]||od.side||'-';
+        var sideClass=(od.side==='buy'||od.side==='buy_open'||od.side==='cover'||od.side==='buy_close')?'green':'red';
+        var canCancel=(od.status==='pending'||od.status==='submitted');
+        var nm=_nameCache[od.symbol]||'';
+        return '<tr><td style="white-space:nowrap">'+fmtTime(od.createdAt)+'</td><td style="font-family:monospace">'+esc(od.symbol)+'</td><td>'+esc(nm)+'</td>'+
+          '<td><span class="badge badge-'+sideClass+'">'+sideLabel+'</span></td>'+
+          '<td>'+num(od.price!=null?od.price:(od.avgFillPrice!=null?od.avgFillPrice:od.filledPrice))+'</td><td>'+(od.quantity||'-')+'</td>'+
+          '<td><span class="badge badge-'+(od.status==='filled'?'green':od.status==='cancelled'?'red':'yellow')+'">'+esc(od.status)+'</span></td>'+
+          '<td>'+(canCancel?'<button class="btn btn-sm btn-danger" onclick="cancelOrder(\\''+esc(od.orderId)+'\\')">撤单</button>':'')+'</td></tr>';
+      }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">暂无委托</td></tr>';
+    });
   }).catch(function(){});
   api('/quant/api/signals?limit=30'+adminModeParam(true)).then(function(s){
     var sigs=s.data||s.signals||[];
@@ -575,11 +584,16 @@ function loadTasks(){
   api('/quant/admin/api/price-alerts').then(function(pa){
     if(!pa){return;}
     document.getElementById('pa-count').textContent=pa.activeCount;
-    document.querySelector('#pa-table tbody').innerHTML=pa.alerts.map(function(a){
-      return '<tr><td>'+esc(a.symbol)+'</td><td>'+esc(a.type)+'</td><td>'+a.threshold+'</td>'+
-        '<td><span class="badge badge-'+(a.triggered?'green':a.active!==false?'yellow':'red')+'">'+(a.triggered?'已触发':a.active!==false?'监控中':'已停止')+'</span></td>'+
-        '<td><button class="btn btn-sm btn-danger" onclick="removePriceAlert(\\''+esc(a.id)+'\\')">删除</button></td></tr>';
-    }).join('')||'<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">暂无预警</td></tr>';
+    var syms=pa.alerts.map(function(a){return a.symbol}).filter(Boolean);
+    resolveNames(syms).then(function(){
+      document.querySelector('#pa-table tbody').innerHTML=pa.alerts.map(function(a){
+        var nm=_nameCache[a.symbol]||'';
+        var typeLabel=_condLabels[a.type]||a.type;
+        return '<tr><td style="font-family:monospace">'+esc(a.symbol)+'</td><td>'+esc(nm)+'</td><td>'+esc(typeLabel)+'</td><td>'+a.threshold+'</td>'+
+          '<td><span class="badge badge-'+(a.triggered?'green':a.active!==false?'yellow':'red')+'">'+(a.triggered?'已触发':a.active!==false?'监控中':'已停止')+'</span></td>'+
+          '<td><button class="btn btn-sm btn-danger" onclick="removePriceAlert(\\''+esc(a.id)+'\\')">删除</button></td></tr>';
+      }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">暂无预警</td></tr>';
+    });
   }).catch(function(){});
 }
 function cancelTask(id){api('/quant/api/scheduled-tasks?id='+encodeURIComponent(id),{method:'DELETE'}).then(function(){toast('✅ 已取消');loadTasks()})}

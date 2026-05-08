@@ -160,7 +160,7 @@ export function getAdminBodyHtml(b: string): string {
     <div style="overflow-x:auto"><table id="positions-table"><thead><tr><th>代码</th><th>名称</th><th>方向</th><th>数量</th><th>成本</th><th>现价</th><th>盈亏</th><th>盈亏%</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" style="margin-bottom:14px"><h3>📝 委托单</h3>
-    <div style="overflow-x:auto"><table id="orders-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="orders-table"><thead><tr><th>时间</th><th>代码</th><th>名称</th><th>方向</th><th>价格</th><th>数量</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card" style="margin-top:4px"><h3>📈 信号日志</h3>
     <div style="overflow-x:auto"><table id="signals-table"><thead><tr><th>时间</th><th>代码</th><th>方向</th><th>价格</th><th>策略</th><th>置信度</th><th>原因</th></tr></thead><tbody></tbody></table></div>
@@ -189,20 +189,18 @@ export function getAdminBodyHtml(b: string): string {
 
 <!-- ═══ Tasks ═══ -->
 <div class="tab-content" id="tab-tasks">
-  <div class="cards">
-    <div class="card"><h3>⏰ 定时任务</h3>
-      <div style="overflow-x:auto"><table id="tasks-table"><thead><tr><th>ID</th><th>描述</th><th>状态</th><th>计划时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+  <div class="card" style="margin-bottom:14px"><h3>⏰ 定时任务</h3>
+    <div style="overflow-x:auto"><table id="tasks-table"><thead><tr><th>ID</th><th>描述</th><th>状态</th><th>计划时间</th><th>创建时间</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card">
+    <h3>🔔 价格预警 (<span id="pa-count">0</span> 活跃)</h3>
+    <div class="form-row">
+      <input type="text" id="pa-symbol" placeholder="代码 600519" style="width:100px">
+      <select id="pa-type"><option value="price_above">价格≥</option><option value="price_below">价格≤</option><option value="change_pct_above">涨幅≥%</option><option value="change_pct_below">跌幅≤%</option><option value="volume_above">量≥</option></select>
+      <input type="number" id="pa-threshold" placeholder="阈值" style="width:80px">
+      <button class="btn btn-primary btn-sm" onclick="addPriceAlert()">+ 添加</button>
     </div>
-    <div class="card">
-      <h3>🔔 价格预警 (<span id="pa-count">0</span> 活跃)</h3>
-      <div class="form-row">
-        <input type="text" id="pa-symbol" placeholder="代码 600519" style="width:100px">
-        <select id="pa-type"><option value="price_above">价格≥</option><option value="price_below">价格≤</option><option value="change_pct_above">涨幅≥%</option><option value="change_pct_below">跌幅≤%</option><option value="volume_above">量≥</option></select>
-        <input type="number" id="pa-threshold" placeholder="阈值" style="width:80px">
-        <button class="btn btn-primary btn-sm" onclick="addPriceAlert()">+ 添加</button>
-      </div>
-      <div style="overflow-x:auto;margin-top:8px"><table id="pa-table"><thead><tr><th>代码</th><th>条件</th><th>阈值</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-    </div>
+    <div style="margin-top:8px"><table id="pa-table"><thead><tr><th>代码</th><th>名称</th><th>条件</th><th>阈值</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
   </div>
 </div>
 

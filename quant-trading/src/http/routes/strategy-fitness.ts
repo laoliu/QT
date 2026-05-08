@@ -16,6 +16,7 @@ import { json, parseObjectBody, setAiphaStrategies } from "./_helpers.js";
 import type { BacktestResult, QuantTradingConfig } from "../../types.js";
 import type { QuantStorage, StockStrategyFitnessRow, GlobalStrategyRankingRow } from "../../services/sqlite-storage.js";
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { Worker } from "node:worker_threads";
@@ -335,6 +336,46 @@ interface FitnessTaskResult {
   [k: string]: unknown;
 }
 
+/**
+ * Load pre-fetched klines from a NDJSON temp file written by Python.
+ * Each line: symbol\tJSON_array_of_bars (parsed line-by-line to avoid string length limits).
+ * Returns a Map<symbol, KlineBar[]> ready for direct use, or null on failure.
+ */
+async function loadPreloadedKlines(filePath: string): Promise<Map<string, KlineBar[]> | null> {
+  try {
+    const { createInterface } = await import("node:readline");
+    const result = new Map<string, KlineBar[]>();
+    const input = fsSync.createReadStream(filePath, { encoding: "utf-8" });
+    const rl = createInterface({ input, crlfDelay: Infinity });
+    for await (const line of rl) {
+      const tabIdx = line.indexOf("\t");
+      if (tabIdx <= 0) continue;
+      const sym = line.slice(0, tabIdx);
+      const barsJson = line.slice(tabIdx + 1);
+      try {
+        const bars = JSON.parse(barsJson) as Array<{ t: number; o: number; h: number; l: number; c: number; v: number }>;
+        if (bars.length > 0) {
+          result.set(sym, bars.map((b) => ({
+            timestamp: b.t,
+            open: b.o,
+            high: b.h,
+            low: b.l,
+            close: b.c,
+            volume: b.v,
+          })));
+        }
+      } catch { /* skip malformed line */ }
+    }
+    console.log(`[Builtin Fitness] 从Python临时文件加载了 ${result.size} 只股票K线数据`);
+    // Clean up temp file (best-effort)
+    fs.unlink(filePath).catch(() => {});
+    return result;
+  } catch (err) {
+    console.log(`[Builtin Fitness] 加载预存K线失败: ${err}, 将回退到在线获取`);
+    return null;
+  }
+}
+
 // ── Builtin fitness runner ───────────────────────────────────────
 async function runBuiltinFitness(
   builtinStrategies: string[],
@@ -345,45 +386,52 @@ async function runBuiltinFitness(
   config: QuantTradingConfig,
   onProgress: (completed: number, total: number, current: string) => void,
   signal?: AbortSignal,
+  preloadedBars?: Map<string, KlineBar[]>,
 ): Promise<FitnessTaskResult[]> {
-  const provider = new CachingProvider(createDataProvider(config));
   const results: FitnessTaskResult[] = [];
   const total = builtinStrategies.length * symbols.length;
   let completed = 0;
 
-  // Phase 1: Prefetch all klines in parallel batches (each symbol fetched only once)
-  // Use a per-symbol timeout to avoid hanging on slow/failed remote fetches
-  const PER_SYMBOL_TIMEOUT_MS = 30_000;
-  const timedGetKlines = (sym: string) => {
-    return new Promise<KlineBar[]>((resolve) => {
-      const timer = setTimeout(() => {
-        console.log(`[Builtin Fitness] ⚠ ${sym} K线获取超时 (${PER_SYMBOL_TIMEOUT_MS / 1000}s), 跳过`);
-        resolve([]);
-      }, PER_SYMBOL_TIMEOUT_MS);
-      provider.getKlines(sym, "1d", startDate, endDate, "cn_stock")
-        .then((bars) => { clearTimeout(timer); resolve(bars); })
-        .catch(() => { clearTimeout(timer); resolve([]); });
-    });
-  };
-  console.log(`[Builtin Fitness] 预加载 ${symbols.length} 只股票K线数据...`);
-  const prefetchBatchSize = 16;
-  let prefetched = 0;
-  for (let i = 0; i < symbols.length; i += prefetchBatchSize) {
-    if (signal?.aborted) break;
-    const batch = symbols.slice(i, i + prefetchBatchSize);
-    await Promise.all(batch.map((s) => timedGetKlines(s)));
-    prefetched += batch.length;
-    if (prefetched % 50 === 0 || prefetched === symbols.length) {
-      console.log(`[Builtin Fitness] 已预加载 ${prefetched}/${symbols.length} 只股票K线`);
+  // If Python already loaded klines, use them directly — no bridge requests needed
+  let allBars: Map<string, KlineBar[]>;
+  if (preloadedBars && preloadedBars.size > 0) {
+    console.log(`[Builtin Fitness] 使用Python预加载的K线数据 (${preloadedBars.size} 只股票)`);
+    allBars = preloadedBars;
+  } else {
+    // Fallback: fetch from data provider with reduced concurrency to avoid overwhelming bridge
+    const provider = new CachingProvider(createDataProvider(config));
+    const PREFETCH_CONCURRENCY = 4;  // Reduced from 16 to avoid bridge overload
+    const PER_SYMBOL_TIMEOUT_MS = 30_000;
+    const timedGetKlines = (sym: string) => {
+      return new Promise<KlineBar[]>((resolve) => {
+        const timer = setTimeout(() => {
+          console.log(`[Builtin Fitness] ⚠ ${sym} K线获取超时 (${PER_SYMBOL_TIMEOUT_MS / 1000}s), 跳过`);
+          resolve([]);
+        }, PER_SYMBOL_TIMEOUT_MS);
+        provider.getKlines(sym, "1d", startDate, endDate, "cn_stock")
+          .then((bars) => { clearTimeout(timer); resolve(bars); })
+          .catch(() => { clearTimeout(timer); resolve([]); });
+      });
+    };
+    console.log(`[Builtin Fitness] 预加载 ${symbols.length} 只股票K线数据 (并发=${PREFETCH_CONCURRENCY})...`);
+    let prefetched = 0;
+    for (let i = 0; i < symbols.length; i += PREFETCH_CONCURRENCY) {
+      if (signal?.aborted) break;
+      const batch = symbols.slice(i, i + PREFETCH_CONCURRENCY);
+      await Promise.all(batch.map((s) => timedGetKlines(s)));
+      prefetched += batch.length;
+      if (prefetched % 50 === 0 || prefetched === symbols.length) {
+        console.log(`[Builtin Fitness] 已预加载 ${prefetched}/${symbols.length} 只股票K线`);
+      }
     }
-  }
-  console.log(`[Builtin Fitness] K线预加载完成, 开始回测 ${builtinStrategies.length} 个策略`);
+    console.log(`[Builtin Fitness] K线预加载完成, 开始回测 ${builtinStrategies.length} 个策略`);
 
-  // Materialize cached bars into a map for workers
-  const allBars = new Map<string, import("../../types.js").KlineBar[]>();
-  for (const sym of symbols) {
-    const bars = await provider.getKlines(sym, "1d", startDate, endDate, "cn_stock").catch(() => []);
-    if (bars.length > 0) allBars.set(sym, bars);
+    // Materialize cached bars into a map for workers
+    allBars = new Map<string, KlineBar[]>();
+    for (const sym of symbols) {
+      const bars = await provider.getKlines(sym, "1d", startDate, endDate, "cn_stock").catch(() => []);
+      if (bars.length > 0) allBars.set(sym, bars);
+    }
   }
   const validSymbols = symbols.filter((s) => allBars.has(s));
   console.log(`[Builtin Fitness] ${validSymbols.length}/${symbols.length} 只股票有K线数据`);
@@ -486,8 +534,8 @@ async function runBuiltinFitness(
                   }
                   const r = wr.result;
                   const cs = compositeScore({
-                    totalReturn: r.totalReturn ?? 0,
-                    annualizedReturn: r.annualizedReturn ?? 0,
+                    totalReturn: (r.totalReturn ?? 0) * 100,
+                    annualizedReturn: (r.annualizedReturn ?? 0) * 100,
                     sharpeRatio: r.sharpeRatio ?? 0,
                     winRate: (r.winRate ?? 0) * 100,
                     profitFactor: r.profitFactor ?? 0,
@@ -535,6 +583,15 @@ async function runBuiltinFitness(
   } else {
     // ── Single-threaded fallback ────────────────────────────────
     console.log(`[Builtin Fitness] 使用单线程模式回测`);
+    // Build a provider that serves bars directly from the in-memory map
+    const mapProvider: MarketDataProvider = {
+      name: "map-backed",
+      async getKlines(symbol: string) {
+        return allBars.get(symbol) ?? [];
+      },
+      async getQuote() { return null; },
+      async searchSymbols() { return []; },
+    };
     for (const strategyId of builtinStrategies) {
       if (signal?.aborted) { console.log(`[Builtin Fitness] 已取消`); break; }
       if (!hasStrategyFactory(strategyId)) {
@@ -550,10 +607,10 @@ async function runBuiltinFitness(
             const strategyFn = resolveBuiltinStrategy(strategyId);
             const result: BacktestResult = await runBuiltinBacktest(strategyFn, {
               strategyId, symbols: [symbol], startDate, endDate, initialCash, interval: "1d", market: "cn_stock",
-            }, config, provider);
+            }, config, mapProvider);
             if (result.totalTrades === 0) return null;
             const cs = compositeScore({
-              totalReturn: result.totalReturn ?? 0, annualizedReturn: result.annualizedReturn ?? 0,
+              totalReturn: (result.totalReturn ?? 0) * 100, annualizedReturn: (result.annualizedReturn ?? 0) * 100,
               sharpeRatio: result.sharpeRatio ?? 0, winRate: (result.winRate ?? 0) * 100,
               profitFactor: result.profitFactor ?? 0, maxDrawdown: (result.maxDrawdown ?? 0) * 100,
               totalTrades: result.totalTrades ?? 0,
@@ -819,6 +876,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         let alphaResults: Array<Record<string, unknown>> = [];
         let alphaStrategyCount = 0;
         let totalElapsed = 0;
+        let klinesFile = "";  // Temp file with pre-loaded klines from Python
 
         // Phase 1: Python alpha strategies (if enabled)
         if (includeAlpha || hasBuiltin) {
@@ -869,6 +927,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             startDate = (pyData.start_date as string) ?? "";
             endDate = (pyData.end_date as string) ?? "";
             alphaResults = (pyData.alpha_results as Array<Record<string, unknown>>) ?? [];
+            klinesFile = (pyData.klines_file as string) ?? "";
           } else {
             // Python handled everything (no builtin strategies)
             json(res, { ok: true, ...pyData });
@@ -888,6 +947,15 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
             completed_strategies: alphaStrategyCount,
             elapsed_seconds: totalElapsed,
           });
+
+          // Load pre-fetched klines from Python temp file (avoids re-fetching from bridge)
+          let preloadedBars: Map<string, KlineBar[]> | undefined;
+          if (klinesFile) {
+            const loaded = await loadPreloadedKlines(klinesFile);
+            if (loaded && loaded.size > 0) {
+              preloadedBars = loaded;
+            }
+          }
 
           const t0 = Date.now();
           const builtinResults = await runBuiltinFitness(
@@ -911,6 +979,7 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
               });
             },
             fitnessAbort!.signal,
+            preloadedBars,
           );
           fitnessAbort = null;
 
@@ -1612,6 +1681,74 @@ export function registerStrategyFitnessRoutes(deps: AdminRouteDeps): void {
         }
 
         json(res, { ...result, autoTradeConfigured });
+      } catch (err) {
+        json(res, { ok: false, error: String(err) }, 500);
+      }
+    }),
+  });
+
+  // ── Apply combo result to LIVE trading ─────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/strategy-fitness/portfolio-backtest/apply-live",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") { json(res, { error: "仅支持 POST" }, 405); return; }
+      try {
+        const body = (await parseObjectBody(req)) as Record<string, unknown>;
+        const allocations = body.allocations;
+        if (!Array.isArray(allocations) || allocations.length === 0) {
+          json(res, { ok: false, error: "需要 allocations 数组" }, 400);
+          return;
+        }
+
+        // Verify broker is connected and not paper
+        const engine = getEngine?.();
+        const broker = engine?.broker;
+        const currentBrokerType = broker?.brokerType;
+        if (!broker || !currentBrokerType) {
+          json(res, { ok: false, error: "交易引擎未启动或 broker 未连接，无法执行实盘操作" }, 400);
+          return;
+        }
+        if (currentBrokerType === "paper") {
+          json(res, { ok: false, error: "当前引擎为 Paper 模式，请先连接实盘 broker (QMT/富途等) 再执行实盘操作" }, 400);
+          return;
+        }
+
+        const result = await applyComboToPaper(
+          {
+            allocations: allocations as Array<{ strategy_name: string; weight: number; latest_signals?: unknown[] }>,
+            dryRun: false,
+            executePct: Number(body.execute_pct) || 100,
+            createConditionalOrders: body.create_conditional_orders === true,
+            trailingStopPct: Number(body.trailing_stop_pct) || 5,
+          },
+          config,
+        );
+
+        // Auto-configure the auto-trade scheduler for live
+        let autoTradeConfigured = false;
+        if (result.ok && deps.autoTradeScheduler) {
+          try {
+            const strategyNames = (allocations as Array<{ strategy_name: string }>)
+              .map((a) => a.strategy_name)
+              .filter(Boolean);
+            if (strategyNames.length > 0) {
+              deps.autoTradeScheduler.updateConfig({
+                strategies: ["fitness_optimal"],
+                initialCapital: Number(body.initial_capital) || 10_000_000,
+                dryRun: false, // live mode
+                useFitnessStrategies: false,
+              });
+              (deps.autoTradeScheduler as unknown as Record<string, unknown>)._aiphaStrategies = strategyNames;
+              autoTradeConfigured = true;
+              console.log(`[apply-live] autoTradeScheduler configured for LIVE with ${strategyNames.length} strategies`);
+            }
+          } catch (configErr) {
+            console.error(`[apply-live] autoTradeScheduler config error:`, configErr);
+          }
+        }
+
+        json(res, { ...result, autoTradeConfigured, brokerType: currentBrokerType, mode: "live" });
       } catch (err) {
         json(res, { ok: false, error: String(err) }, 500);
       }

@@ -359,7 +359,7 @@ async function runDiscovery() {
     allResults = data.results || [];
     const stratLabel = data.strategy_label || currentStrategy;
     const elapsed = data.elapsed_seconds != null ? data.elapsed_seconds + 's' : '-';
-    const offlineTag = data.is_offline ? ' ⚠️ 离线缓存模式' : '';
+    const offlineTag = data.is_offline ? ' ⚠️ 离线缓存模式' : (data.is_sina_fallback ? ' 📡 新浪备用源' : '');
     setStatus('done', \`✅ 选股完成 — 策略: \${esc(stratLabel)}, 耗时 \${elapsed}\${offlineTag}\`);
 
     // KPIs
@@ -578,7 +578,7 @@ function renderHistory(history) {
     const label = h.strategy_label || (stratDef ? stratDef.name : h.strategy);
     const time = h.finished_at ? h.finished_at.replace('T', ' ').slice(0, 16) : '';
     const elapsed = h.elapsed_seconds != null ? h.elapsed_seconds + 's' : '';
-    const offline = h.is_offline ? '<span class="history-pill" style="border-color:rgba(210,153,34,.4);color:var(--yellow);background:rgba(210,153,34,.1)">离线</span>' : '';
+    const offline = h.is_offline ? '<span class="history-pill" style="border-color:rgba(210,153,34,.4);color:var(--yellow);background:rgba(210,153,34,.1)">离线</span>' : (h.is_sina_fallback ? '<span class="history-pill" style="border-color:rgba(88,166,255,.4);color:var(--accent);background:rgba(88,166,255,.1)">新浪备用</span>' : '');
     const topHtml = (h.top_results || []).map(r => \`
       <div class="history-top-stock">
         <span class="hs-code"><a style="color:var(--accent)" href="\${B}/quant/admin/stock?symbol=\${esc(r.stock_id)}" target="_blank">\${esc(r.stock_id)}</a></span>

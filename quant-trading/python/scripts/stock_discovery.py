@@ -51,19 +51,14 @@ import math
 import os
 import sys
 import time
-import urllib.request
 from datetime import datetime, timedelta
 
-# ── Proxy bypass ──────────────────────────────────────────────────
-for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-           "all_proxy", "ALL_PROXY"):
-    os.environ.pop(_k, None)
-os.environ["no_proxy"] = "*"
-os.environ["NO_PROXY"] = "*"
-urllib.request.getproxies = lambda: {}  # type: ignore[assignment]
+# ── Proxy setup ───────────────────────────────────────────────────
+# stock_zh_a_spot_em makes ~50 paginated requests — Clash nodes often drop
+# connections mid-way. Only patch the default timeout; Sina-based fallback
+# is the reliable primary path.
 try:
-    import requests, requests.utils  # noqa: E401
-    requests.utils.getproxies = lambda: {}  # type: ignore[assignment]
+    import requests  # noqa: E401
     if not getattr(requests.Session.request, "_timeout_patched", False):
         _orig_req = requests.Session.request
         def _patched_request(self, method, url, **kwargs):
@@ -170,15 +165,15 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
     print("[discovery] 东方财富接口失败，切换新浪数据源...", file=sys.stderr, flush=True)
     try:
         import akshare as ak
+        import re as _re
         df = ak.stock_zh_a_spot()
         if df is not None and not df.empty:
-            # Universe size targets (Sina has no market cap — use count limits)
-            limit_map = {"csi300": 700, "csi500": 1200, "csi1000": 2000, "all": None}
-            size_limit = limit_map.get(universe)
-
             records = []
             for _, row in df.iterrows():
-                code = str(row.get("代码", "")).zfill(6)
+                raw_code = str(row.get("代码", ""))
+                # Strip exchange prefix: sh600519 → 600519, sz000001 → 000001
+                exchange = raw_code[:2] if raw_code[:2] in ("sh", "sz", "bj") else ""
+                code = _re.sub(r"^(sh|sz|bj)", "", raw_code).zfill(6)
                 name = str(row.get("名称", ""))
                 price = _safe_float(row.get("最新价"))
 
@@ -188,6 +183,22 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
                     continue
                 if price <= 0:
                     continue
+
+                # Universe filter using exchange prefix (no market cap available)
+                # bj = Beijing exchange (small caps ~270 stocks), always exclude for csi* universes
+                if universe in ("csi300", "csi500", "csi1000") and exchange == "bj":
+                    continue
+                # csi300: main board only (sh6* excl. STAR sh68*, sz000/001/002)
+                if universe == "csi300":
+                    if exchange == "sz" and code.startswith("3"):
+                        continue  # exclude ChiNext
+                    if exchange == "sh" and code.startswith("68"):
+                        continue  # exclude STAR market
+                # csi500: main board + SME + ChiNext, exclude STAR + BJ
+                if universe == "csi500" and exchange == "sh" and code.startswith("68"):
+                    continue  # exclude STAR
+                # csi1000: all except BJ (already filtered above)
+                # all: no additional filter
 
                 records.append({
                     "code": code,
@@ -202,10 +213,6 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
                     "amplitude": None,
                     "_sina_fallback": True,
                 })
-
-            # Apply a rough size cap since we can't filter by market cap
-            if size_limit and len(records) > size_limit:
-                records = records[:size_limit]
 
             print(f"[discovery] 新浪数据源加载完成，{len(records)} 只股票 (universe={universe})",
                   file=sys.stderr, flush=True)
@@ -283,6 +290,53 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
     except Exception as e2:
         print(f"[discovery] 缓存加载也失败: {e2}", file=sys.stderr, flush=True)
         return []
+
+
+def _fetch_em_fundamentals_batch(codes: list[str]) -> dict[str, dict]:
+    """Fetch PE/PB/market-cap for a batch of stocks via East Money single-stock API.
+
+    Uses individual requests (no pagination) so Clash proxy handles them reliably.
+    Returns dict of code → {pe, pb, total_market_val_yi}.
+    Silently skips failures — best-effort enrichment only.
+    """
+    result: dict[str, dict] = {}
+    if not codes:
+        return result
+    try:
+        import requests as _req
+        session = _req.Session()
+        for code in codes[:60]:  # cap to avoid timeout
+            try:
+                # East Money individual quote API — single request, no pagination
+                sec_id = f"1.{code}" if code.startswith("6") else f"0.{code}"
+                url = "https://push2.eastmoney.com/api/qt/stock/get"
+                params = {
+                    "secid": sec_id,
+                    "ut": "fa5fd1943c7b386f172d6893dbfba10b",
+                    "fields": "f58,f162,f167,f116",  # name, PE-TTM, PB, market cap
+                    "invt": "2",
+                    "fltt": "2",
+                }
+                r = session.get(url, params=params, timeout=5,
+                                proxies={"http": "http://127.0.0.1:7890",
+                                         "https": "http://127.0.0.1:7890"})
+                if r.status_code == 200:
+                    d = r.json().get("data", {}) or {}
+                    pe = d.get("f162")   # PE-TTM × 100
+                    pb = d.get("f167")   # PB × 100
+                    mv = d.get("f116")   # total market cap (元)
+                    result[code] = {
+                        "pe": round(pe / 100, 2) if pe and pe > 0 else None,
+                        "pb": round(pb / 100, 2) if pb and pb > 0 else None,
+                        "total_market_val_yi": round(mv / 1e8, 2) if mv and mv > 0 else None,
+                    }
+            except Exception:
+                continue
+        print(f"[discovery] 东财单只接口补充 PE/PB: {len(result)}/{len(codes)} 只",
+              file=sys.stderr, flush=True)
+    except Exception as e:
+        print(f"[discovery] 东财补充失败: {e}", file=sys.stderr, flush=True)
+    return result
 
 
 def _load_klines_from_cache(code: str, days: int) -> list[dict]:
@@ -458,13 +512,18 @@ def _run_strategy(strategy: str, stock_data: dict[str, dict], limit: int, params
     return results
 
 
-def _discover_offline(strategy: str, universe: str, limit: int, t_start: float) -> dict:
+def _discover_offline(strategy: str, universe: str, limit: int, t_start: float,
+                      sina_prices: dict[str, dict] | None = None) -> dict:
     """Fallback discovery using historical fitness data from SQLite cache.
 
-    Returns stocks ranked by composite backtest score for the closest matching strategy.
+    When sina_prices is provided (dict of code → Sina record), results are
+    enriched with current-day price/volume signals and sorted by a combined
+    score, giving varied results based on live market conditions.
     """
-    print("[discovery] 使用历史回测缓存模式...", file=sys.stderr, flush=True)
-    # Map our strategy IDs to fitness strategy_id patterns
+    is_sina_enriched = bool(sina_prices)
+    print(f"[discovery] 使用历史回测缓存模式 (Sina实时增强: {is_sina_enriched})...",
+          file=sys.stderr, flush=True)
+
     strategy_map = {
         "low_position":      ["swing", "mean_reversion"],
         "turnaround":        ["turnaround", "value", "fscore"],
@@ -474,7 +533,7 @@ def _discover_offline(strategy: str, universe: str, limit: int, t_start: float) 
         "growth_momentum":   ["canslim", "growth", "momentum"],
         "volume_anomaly":    ["volume", "swing"],
         "fscore":            ["fscore", "value"],
-        "combo":             [],  # all strategies
+        "combo":             [],
     }
     keywords = strategy_map.get(strategy, [])
 
@@ -495,7 +554,9 @@ def _discover_offline(strategy: str, universe: str, limit: int, t_start: float) 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
 
-        # Build WHERE clause to filter by strategy type
+        # Pull a broader candidate pool (3× limit) so we have room to re-rank
+        fetch_limit = limit * 3
+
         if keywords and strategy != "combo":
             placeholders = " OR ".join([f"LOWER(strategy_id) LIKE ?" for _ in keywords])
             like_vals = [f"%{kw}%" for kw in keywords]
@@ -505,8 +566,8 @@ def _discover_offline(strategy: str, universe: str, limit: int, t_start: float) 
                        AVG(composite_score) as avg_score,
                        AVG(total_return) as avg_return,
                        AVG(sharpe_ratio) as avg_sharpe,
-                       AVG(max_drawdown) as avg_drawdown,
-                       AVG(win_rate) as avg_winrate,
+                       AVG(CASE WHEN max_drawdown > 1 THEN max_drawdown ELSE max_drawdown * 100 END) as avg_drawdown,
+                       AVG(CASE WHEN win_rate > 1 THEN win_rate ELSE win_rate * 100 END) as avg_winrate,
                        COUNT(*) as strategy_count
                 FROM stock_strategy_fitness
                 WHERE ({placeholders})
@@ -514,77 +575,139 @@ def _discover_offline(strategy: str, universe: str, limit: int, t_start: float) 
                 ORDER BY avg_score DESC
                 LIMIT ?
                 """,
-                [*like_vals, limit],
+                [*like_vals, fetch_limit],
             ).fetchall()
         else:
-            # Combo or unknown: take best stocks across all strategies
             rows = conn.execute(
                 """
                 SELECT symbol, stock_name,
                        AVG(composite_score) as avg_score,
                        AVG(total_return) as avg_return,
                        AVG(sharpe_ratio) as avg_sharpe,
-                       AVG(max_drawdown) as avg_drawdown,
-                       AVG(win_rate) as avg_winrate,
+                       AVG(CASE WHEN max_drawdown > 1 THEN max_drawdown ELSE max_drawdown * 100 END) as avg_drawdown,
+                       AVG(CASE WHEN win_rate > 1 THEN win_rate ELSE win_rate * 100 END) as avg_winrate,
                        COUNT(*) as strategy_count
                 FROM stock_strategy_fitness
                 GROUP BY symbol
                 ORDER BY avg_score DESC
                 LIMIT ?
                 """,
-                [limit],
+                [fetch_limit],
             ).fetchall()
 
         total = conn.execute("SELECT COUNT(DISTINCT symbol) FROM stock_strategy_fitness").fetchone()[0]
         conn.close()
 
         results = []
-        for i, r in enumerate(rows):
-            results.append({
-                "rank": i + 1,
-                "stock_id": str(r["symbol"]).zfill(6),
-                "name": str(r["stock_name"] or ""),
-                "score": round(_safe_float(r["avg_score"]), 3),
-                "signals": [
-                    f"历史回测综合评分: {round(_safe_float(r['avg_score']), 2)}",
-                    f"历史年化收益: {round(_safe_float(r['avg_return']), 1)}%",
-                    f"Sharpe: {round(_safe_float(r['avg_sharpe']), 2)}",
-                    f"最大回撤: {round(_safe_float(r['avg_drawdown']), 1)}%",
-                    f"胜率: {round(_safe_float(r['avg_winrate']), 1)}%",
-                ],
-                "factors": _sanitize({
-                    "avg_score": _safe_float(r["avg_score"]),
-                    "avg_return_pct": round(_safe_float(r["avg_return"]), 2),
-                    "avg_sharpe": _safe_float(r["avg_sharpe"]),
-                    "avg_drawdown_pct": round(_safe_float(r["avg_drawdown"]), 2),
-                    "avg_winrate_pct": round(_safe_float(r["avg_winrate"]), 1),
-                    "strategy_count": _safe_float(r["strategy_count"]),
-                }),
+        for r in rows:
+            code = str(r["symbol"]).zfill(6)
+            name = str(r["stock_name"] or "")
+
+            base_score = _safe_float(r["avg_score"])
+            live_signals: list[str] = []
+            live_factors: dict = {}
+
+            # ── Enrich with Sina real-time data ────────────────────
+            if sina_prices:
+                sp = sina_prices.get(code)
+                if sp is None:
+                    # Stock not in current Sina universe (possibly delisted/suspended)
+                    continue
+                current_price = sp.get("price", 0)
+                change_pct = sp.get("change_pct", 0) or 0
+                volume = sp.get("volume", 0) or 0
+
+                live_factors["current_price"] = round(current_price, 3)
+                live_factors["change_pct_today"] = round(change_pct, 2)
+
+                # Strategy-specific live signals
+                if strategy in ("relative_strength", "growth_momentum"):
+                    # Prefer positive momentum today
+                    if change_pct > 1.5:
+                        base_score *= 1.10
+                        live_signals.append(f"今日涨幅 +{change_pct:.1f}%")
+                    elif change_pct > 0:
+                        base_score *= 1.03
+                elif strategy in ("low_position", "turnaround", "value_quality", "fscore"):
+                    # Prefer slight pullback (buying opportunity)
+                    if -3 < change_pct <= 0:
+                        base_score *= 1.05
+                        live_signals.append(f"今日小幅回调 {change_pct:.1f}% (低吸机会)")
+                    elif change_pct < -3:
+                        base_score *= 0.95
+                elif strategy == "volume_anomaly":
+                    # Prefer high volume today as anomaly signal
+                    if volume > 0:
+                        live_factors["volume"] = int(volume)
+                        live_signals.append(f"今日成交量: {int(volume):,}")
+
+                # Use live stock name if original was empty
+                if not name and sp.get("name"):
+                    name = sp["name"]
+
+            signals = live_signals + [
+                f"历史回测综合评分: {round(_safe_float(r['avg_score']), 2)}",
+                f"历史年化收益: {round(_safe_float(r['avg_return']), 1)}%",
+                f"Sharpe: {round(_safe_float(r['avg_sharpe']), 2)}",
+                f"最大回撤: {round(_safe_float(r['avg_drawdown']), 1)}%",
+                f"胜率: {round(_safe_float(r['avg_winrate']), 1)}%",
+            ]
+
+            factors = _sanitize({
+                **live_factors,
+                "avg_score": _safe_float(r["avg_score"]),
+                "avg_return_pct": round(_safe_float(r["avg_return"]), 2),
+                "avg_sharpe": _safe_float(r["avg_sharpe"]),
+                "avg_drawdown_pct": round(_safe_float(r["avg_drawdown"]), 2),
+                "avg_winrate_pct": round(_safe_float(r["avg_winrate"]), 1),
+                "strategy_count": _safe_float(r["strategy_count"]),
             })
+
+            results.append({
+                "stock_id": code,
+                "name": name,
+                "_score": base_score,
+                "signals": signals,
+                "factors": factors,
+            })
+
+        # Re-rank by (possibly adjusted) score
+        results.sort(key=lambda x: x["_score"], reverse=True)
+        results = results[:limit]
+        for i, item in enumerate(results):
+            item["rank"] = i + 1
+            item["score"] = round(item.pop("_score"), 3)
 
         elapsed = time.time() - t_start
         strategy_label = _SCREENER_LABELS.get(strategy, "综合选股" if strategy == "combo" else strategy)
-        print(f"[discovery] 离线模式返回 {len(results)} 只 (来自历史回测)",
+        universe_count_display = len(sina_prices) if sina_prices else total
+        print(f"[discovery] {'实时增强' if is_sina_enriched else '离线'}模式返回 {len(results)} 只",
               file=sys.stderr, flush=True)
+        warning = (
+            "⚠️ 行情快照使用新浪备用源（无PE/PB/K线），基于历史回测分数×今日价格动量排序"
+            if is_sina_enriched else
+            "⚠️ 实时行情不可用，结果来自历史回测评分缓存，不反映当前市场状态"
+        )
         return {
             "ok": True,
             "strategy": strategy,
             "strategy_label": strategy_label,
             "universe": universe,
-            "universe_count": total,
+            "universe_count": universe_count_display,
             "screened_count": len(results),
             "results": results,
             "elapsed_seconds": round(elapsed, 1),
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "is_offline": True,
-            "warning": "⚠️ 实时行情不可用，结果来自历史回测评分缓存，不反映当前市场状态",
+            "is_offline": not is_sina_enriched,
+            "is_sina_fallback": is_sina_enriched,
+            "warning": warning,
         }
 
     except Exception as e:
         print(f"[discovery] 离线回测缓存读取失败: {e}", file=sys.stderr, flush=True)
         return {
             "ok": False,
-            "error": f"无法加载行情数据（网络不可用）。建议检查网络连接后重试。",
+            "error": f"无法加载行情数据。建议检查网络连接后重试。",
             "universe_count": 0, "screened_count": 0, "results": [],
         }
 
@@ -614,11 +737,47 @@ def _discover(req: dict) -> dict:
         # No data at all — try offline historical fitness fallback
         return _discover_offline(strategy, universe, limit, t_start)
 
-    is_offline = any(r.get("_from_cache") for r in spot_records[:5])
+    is_cache_only = any(r.get("_from_cache") for r in spot_records[:5])
+    is_sina_fallback = any(r.get("_sina_fallback") for r in spot_records[:5])
 
-    # If all records are from cache (no real price data), use fitness fallback too
-    if is_offline:
+    # SQLite cache only (no real prices) → pure offline
+    if is_cache_only:
         return _discover_offline(strategy, universe, limit, t_start)
+
+    # Sina fallback → screeners can't work (no K-lines, no PE/PB/fundamentals in local DB)
+    # Use fitness-DB × real Sina prices hybrid mode
+    if is_sina_fallback:
+        # Try to enrich top fitness candidates with PE/PB via single-stock EM API
+        try:
+            import sqlite3 as _sq3
+            _data_dir = os.environ.get("QUANT_DATA_DIR",
+                os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"))
+            _db_path = os.path.join(_data_dir, "quant-trading.db")
+            if os.path.exists(_db_path):
+                _conn = _sq3.connect(_db_path)
+                _top_codes = [r[0] for r in _conn.execute(
+                    "SELECT symbol FROM stock_strategy_fitness "
+                    "GROUP BY symbol ORDER BY AVG(composite_score) DESC LIMIT 60"
+                ).fetchall()]
+                _conn.close()
+                if _top_codes:
+                    _em_data = _fetch_em_fundamentals_batch(_top_codes)
+                    if _em_data:
+                        # Merge PE/PB back into Sina spot records
+                        for rec in spot_records:
+                            em = _em_data.get(rec["code"])
+                            if em:
+                                if rec.get("pe") is None:
+                                    rec["pe"] = em.get("pe")
+                                if rec.get("pb") is None:
+                                    rec["pb"] = em.get("pb")
+                                if rec.get("total_market_val_yi") is None:
+                                    rec["total_market_val_yi"] = em.get("total_market_val_yi")
+        except Exception:
+            pass  # best-effort
+        sina_price_map = {r["code"]: r for r in spot_records}
+        return _discover_offline(strategy, universe, limit, t_start,
+                                 sina_prices=sina_price_map)
 
     universe_count = len(spot_records)
 

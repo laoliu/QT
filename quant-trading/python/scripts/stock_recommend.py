@@ -846,6 +846,9 @@ def recommend(
         q = quotes.get(code, {})
         tc = fundamentals.get(code, {})
         price = q.get("price", 0)
+        # 盘前/盘后当前价为0时，回退使用昨收价
+        if not price:
+            price = q.get("prevClose", 0)
         if not price:
             _no_quote_stocks.append({
                 "code": code,

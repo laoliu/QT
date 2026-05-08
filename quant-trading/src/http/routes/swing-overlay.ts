@@ -11,6 +11,7 @@ import { runPythonScript } from "../../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../../data/market-data-provider.js";
 import type { AdminRouteDeps } from "../admin-routes.js";
 import { json, parseObjectBody } from "./_helpers.js";
+import { fetchStockNames } from "./daily-pick.js";
 
 /** Compute YYYY-MM-DD date string offset from today. */
 function dateOffset(daysBack: number): string {
@@ -315,6 +316,15 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           });
         await Promise.all(symbols.map(timedGetPrice));
 
+        // Resolve stock names for symbols without a proper name in positions
+        const unresolvedSymbols = symbols.filter((s) => {
+          const pos = posMap.get(s);
+          return !pos?.name || pos.name === s;
+        });
+        const resolvedNames = unresolvedSymbols.length > 0
+          ? await fetchStockNames(unresolvedSymbols)
+          : new Map<string, string>();
+
         for (const [symbol, orders] of allBySymbol) {
           // Get active (non-triggered) orders for this symbol
           const activeOrders = orders.filter((o) => !o.triggered);
@@ -343,7 +353,9 @@ export function registerSwingOverlayRoutes(deps: AdminRouteDeps): void {
           // Position data: core shares from broker/paper, swing shares from trade log
           const pos = posMap.get(symbol);
           const totalHeld = pos?.quantity ?? 0;
-          const posName = pos?.name ?? symbol;
+          const posName = pos?.name && pos.name !== symbol
+            ? pos.name
+            : resolvedNames.get(symbol) ?? symbol;
 
           // Swing shares = net buys - net sells from grid trades
           const symbolTrades = conditionalOrderService.getSwingTradeLog(symbol);

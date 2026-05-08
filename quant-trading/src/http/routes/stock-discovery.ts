@@ -182,7 +182,7 @@ export function registerStockDiscoveryRoutes(deps: AdminRouteDeps): void {
           generated_at: string;
           error?: string;
         }>("scripts/stock_discovery.py", payload, config, {
-          timeoutMs: 180_000,
+          timeoutMs: 360_000,
         });
 
         if (!abortSignal.aborted) {
@@ -237,6 +237,7 @@ export function registerStockDiscoveryRoutes(deps: AdminRouteDeps): void {
               elapsed_seconds: restData.elapsed_seconds,
               finished_at: nowCSTISO(),
               is_offline: restData.is_offline ?? false,
+              is_sina_fallback: restData.is_sina_fallback ?? false,
               top_results: topResults,
             });
 

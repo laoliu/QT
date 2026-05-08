@@ -102,8 +102,8 @@ function renderSwingScanResults(results) {
       '<td>' + (f.amplitude_pct != null ? f.amplitude_pct.toFixed(1) + '%' : '-') + '</td>' +
       '<td>' + (f.amplitude_score || 0).toFixed(1) + '</td>' +
       '<td>' + (f.liquidity_score || 0).toFixed(1) + '</td>' +
-      '<td>' + (f.recommended_grid_pct || '-') + '%</td>' +
-      '<td>' + ((f.recommended_core_ratio || 0) * 100).toFixed(0) + '%</td>' +
+      '<td>' + (f.recommended_grid_pct ? f.recommended_grid_pct + '%' : '-') + '</td>' +
+      '<td>' + (f.recommended_core_ratio ? ((f.recommended_core_ratio) * 100).toFixed(0) + '%' : '-') + '</td>' +
       '<td>' + (isActive
         ? '<button class="btn btn-sm btn-danger" onclick="deactivateSwingOverlay(\\'' + esc(r.stock_id) + '\\')">⏹ 停止</button>'
         : '<button class="btn btn-sm btn-primary" onclick="showSwingConfig(\\'' + esc(r.stock_id) + '\\',' + idx + ')" ' + (r.score < 30 ? 'disabled title="得分过低不建议波段"' : '') + '>💹 激活</button>'

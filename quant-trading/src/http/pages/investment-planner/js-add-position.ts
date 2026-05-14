@@ -423,14 +423,14 @@ function executeAddPosition(dryRun,forcePremarket){
 
       var rows='';
       (exec.orders||[]).forEach(function(o){
-        rows+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent)">'+esc(o.code)+'</a></td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
+        rows+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent)">'+esc(o.code)+'</a></td><td>'+esc(o.name||'')+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
       });
       var failHtml='';
       if(Array.isArray(exec.failures)&&exec.failures.length){
         failHtml='<div style="margin-top:8px;font-size:12px;color:var(--orange)">失败明细：'+exec.failures.map(function(f){return esc(f.code+':'+f.reason)}).join('；')+'</div>';
       }
       resultEl.innerHTML='<div class="card" style="padding:10px">'+
-        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
+        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>名称</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
         failHtml+
         '</div>';
       toast(rejected>0?'⚠️ 加仓已执行，存在部分失败':'✅ 加仓委托已提交');

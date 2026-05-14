@@ -1725,7 +1725,7 @@ export function getPlannerBodyHtml(b: string): string {
       <h3>⏳ 成交确认</h3>
       <div id="fill-confirm-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px">正在等待订单成交…</div>
       <div id="fill-confirm-table-wrap" style="overflow-x:auto"><table id="fill-confirm-table" style="font-size:12px">
-        <thead><tr><th>代码</th><th>委托数量</th><th>已成交</th><th>均价</th><th>持仓确认</th><th>状态</th></tr></thead>
+        <thead><tr><th>代码</th><th>名称</th><th>委托数量</th><th>已成交</th><th>均价</th><th>持仓确认</th><th>状态</th></tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="btn-group" style="margin-top:10px;gap:8px">
@@ -1817,7 +1817,7 @@ export function getPlannerBodyHtml(b: string): string {
       <!-- Active conditional orders -->
       <div style="overflow-x:auto">
         <table id="cond-order-table">
-          <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>触发时间</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>代码</th><th>名称</th><th>类型</th><th>入场价</th><th>触发值</th><th>数量</th><th>策略</th><th>描述</th><th>创建时间</th><th>触发时间</th><th>状态</th><th>保护</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

@@ -345,6 +345,13 @@ def _fetch_cn_klines_baidu(ak, symbol: str, period: str, gap_start: str, gap_end
 _qmt_bridge_url_cache: str | None = None
 _qmt_bridge_failed: bool = False  # fast-fail: skip QMT after first connection error
 
+# ── East Money circuit breaker ────────────────────────────────────
+# After consecutive connection failures, skip eastmoney and go straight
+# to the Baidu Finance fallback to avoid flooding logs with retries.
+_eastmoney_fail_count: int = 0
+_eastmoney_circuit_open: bool = False
+_EASTMONEY_CIRCUIT_THRESHOLD: int = 5  # open circuit after N consecutive failures
+
 # ── QMT Auto-Batch Coalescer ──────────────────────────────────────
 # When multiple threads call _fetch_qmt_klines() concurrently, requests are
 # automatically merged into a single batch HTTP call to the bridge.
@@ -933,6 +940,7 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
       5. EastMoney           — stock_zh_a_hist (akshare)
       6. Baidu Finance       — stock_zh_a_daily (akshare fallback)
     """
+    global _eastmoney_fail_count, _eastmoney_circuit_open
     import akshare as ak
 
     # Normalize dates to %Y-%m-%d (cache, QMT, TDX all use this format)
@@ -1086,26 +1094,45 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
 
                 # Priority 3: eastmoney via stock_zh_a_hist (with retry)
                 df = None
-                for _attempt in range(3):
-                    try:
-                        df = ak.stock_zh_a_hist(
-                            symbol=symbol,
-                            period=period,
-                            start_date=gap_start.replace("-", ""),
-                            end_date=gap_end.replace("-", ""),
-                            adjust="qfq",
-                        )
-                        break
-                    except Exception as e_primary:
-                        if _attempt < 2 and ("限" in str(e_primary) or "429" in str(e_primary)
-                                              or "Timeout" in str(e_primary) or "timed out" in str(e_primary)):
-                            import time as _tm
-                            wait = 2 ** (_attempt + 1)
-                            print(f"[东财接口] {symbol} 限流重试 {_attempt+1}/3, 等待{wait}s: {e_primary}", file=sys.stderr)
-                            _tm.sleep(wait)
-                        else:
-                            print(f"[东财接口] {symbol} 获取失败: {e_primary}", file=sys.stderr)
+                if _eastmoney_circuit_open:
+                    # Circuit breaker open — skip eastmoney entirely
+                    pass
+                else:
+                    for _attempt in range(3):
+                        try:
+                            df = ak.stock_zh_a_hist(
+                                symbol=symbol,
+                                period=period,
+                                start_date=gap_start.replace("-", ""),
+                                end_date=gap_end.replace("-", ""),
+                                adjust="qfq",
+                            )
+                            # Success — reset circuit breaker counter
+                            _eastmoney_fail_count = 0
                             break
+                        except Exception as e_primary:
+                            err_str = str(e_primary)
+                            is_retryable = (
+                                "限" in err_str or "429" in err_str
+                                or "Timeout" in err_str or "timed out" in err_str
+                                or "RemoteDisconnected" in err_str
+                                or "Connection aborted" in err_str
+                                or "ConnectionReset" in err_str
+                            )
+                            if _attempt < 2 and is_retryable:
+                                import time as _tm
+                                wait = 2 ** (_attempt + 1)
+                                print(f"[东财接口] {symbol} 重试 {_attempt+1}/3, 等待{wait}s: {e_primary}", file=sys.stderr)
+                                _tm.sleep(wait)
+                            else:
+                                print(f"[东财接口] {symbol} 获取失败: {e_primary}", file=sys.stderr)
+                                break
+                    # Update circuit breaker on failure
+                    if df is None or (hasattr(df, 'empty') and df.empty):
+                        _eastmoney_fail_count += 1
+                        if _eastmoney_fail_count >= _EASTMONEY_CIRCUIT_THRESHOLD:
+                            _eastmoney_circuit_open = True
+                            print(f"[东财断路器] 连续{_eastmoney_fail_count}次失败，暂停东财接口，直接使用百度金融 fallback", file=sys.stderr)
 
                 if df is None or df.empty:
                     # Priority 4: Baidu Finance via stock_zh_a_daily

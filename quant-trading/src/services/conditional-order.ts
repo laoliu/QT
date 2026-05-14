@@ -22,6 +22,34 @@ import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
 import type { MarketContext } from "./market-context.js";
 
+/**
+ * Count elapsed trading days between two ISO date strings (inclusive of end date).
+ * Used for minHoldDays: returns how many trading days have passed since `from`.
+ */
+function tradingDaysSince(fromISO: string): number {
+  const from = new Date(fromISO);
+  const now = new Date();
+  // Use CST-adjusted dates for comparison
+  const fromDate = new Date(from.getTime() + 8 * 3600_000);
+  const nowDate = new Date(now.getTime() + 8 * 3600_000);
+  const fromYMD = fromDate.toISOString().slice(0, 10);
+  const nowYMD = nowDate.toISOString().slice(0, 10);
+
+  if (fromYMD >= nowYMD) return 0;
+
+  let count = 0;
+  const cursor = new Date(fromDate);
+  cursor.setUTCDate(cursor.getUTCDate() + 1); // start from next day
+
+  while (cursor.toISOString().slice(0, 10) <= nowYMD) {
+    if (isTradingDay(cursor.toISOString().slice(0, 10))) {
+      count++;
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return count;
+}
+
 export type ConditionalOrderType =
   | "stop_loss"
   | "take_profit"
@@ -147,6 +175,14 @@ export interface ConditionalOrder {
   tiers?: StagedTier[];
 
   // ── Market context trigger state ──
+  /**
+   * Minimum holding days (trading days) before stop-loss / trailing-stop can trigger.
+   * During this protection period, stop triggers are suppressed (but peak/trailing state
+   * is still updated). Prevents premature exits from short-term open-dip volatility.
+   * E.g. if the strategy suggests 6-20 day holds, set minHoldDays to 2-3.
+   */
+  minHoldDays?: number;
+
   /** Baseline sentiment score recorded at creation (for sentiment_crash delta). */
   baselineSentiment?: number;
   /** Sentiment drop threshold (e.g. 20 = trigger when score drops 20+ points). */
@@ -423,7 +459,10 @@ export class ConditionalOrderService {
     strategyId?: string;
     description?: string;
     ocoGroupId?: string;
+    /** Minimum holding days (trading days) before stop-loss can trigger. */
+    minHoldDays?: number;
   }): string {
+    const holdDesc = params.minHoldDays ? ` (持股保护${params.minHoldDays}天)` : "";
     return this.addOrder({
       symbol: params.symbol,
       type: "stop_loss",
@@ -432,9 +471,10 @@ export class ConditionalOrderService {
       quantity: params.quantity,
       strategyId: params.strategyId,
       ocoGroupId: params.ocoGroupId,
+      minHoldDays: params.minHoldDays,
       description:
         params.description ??
-        `止损: ${params.symbol} 跌破 ¥${params.stopPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股`,
+        `止损: ${params.symbol} 跌破 ¥${params.stopPrice.toFixed(2)} 卖出 ${String(params.quantity)} 股${holdDesc}`,
     });
   }
 
@@ -471,8 +511,11 @@ export class ConditionalOrderService {
     strategyId?: string;
     description?: string;
     ocoGroupId?: string;
+    /** Minimum holding days (trading days) before trailing stop can trigger. */
+    minHoldDays?: number;
   }): string {
     const trailingStopPrice = params.entryPrice * (1 - params.trailPct);
+    const holdDesc = params.minHoldDays ? ` (持股保护${params.minHoldDays}天)` : "";
     return this.addOrder({
       symbol: params.symbol,
       type: "trailing_stop",
@@ -481,9 +524,10 @@ export class ConditionalOrderService {
       quantity: params.quantity,
       strategyId: params.strategyId,
       ocoGroupId: params.ocoGroupId,
+      minHoldDays: params.minHoldDays,
       description:
         params.description ??
-        `跟踪止损: ${params.symbol} 回撤 ${(params.trailPct * 100).toFixed(1)}% 自动卖出`,
+        `跟踪止损: ${params.symbol} 回撤 ${(params.trailPct * 100).toFixed(1)}% 自动卖出${holdDesc}`,
       peakPrice: params.entryPrice,
       trailingStopPrice,
     });
@@ -510,11 +554,14 @@ export class ConditionalOrderService {
     quantity: number;
     strategyId?: string;
     description?: string;
+    /** Minimum holding days (trading days) before ATR trailing stop can trigger. */
+    minHoldDays?: number;
   }): string {
     const mult = params.atrMultiplier ?? 1.0;
     const ratchetUp = params.ratchetUpAtr ?? 0.8;
     const ratchetMove = params.ratchetMoveAtr ?? 0.5;
     const initialStop = params.entryPrice - mult * params.atrValue;
+    const holdDesc = params.minHoldDays ? ` (持股保护${params.minHoldDays}天)` : "";
     return this.addOrder({
       symbol: params.symbol,
       type: "trailing_atr",
@@ -522,9 +569,10 @@ export class ConditionalOrderService {
       triggerValue: 0, // not used for ATR trailing; kept for compat
       quantity: params.quantity,
       strategyId: params.strategyId,
+      minHoldDays: params.minHoldDays,
       description:
         params.description ??
-        `ATR跟踪止损: ${params.symbol} ATR=${params.atrValue.toFixed(2)} ×${mult.toFixed(1)} 初始止损 ¥${initialStop.toFixed(2)}`,
+        `ATR跟踪止损: ${params.symbol} ATR=${params.atrValue.toFixed(2)} ×${mult.toFixed(1)} 初始止损 ¥${initialStop.toFixed(2)}${holdDesc}`,
       peakPrice: params.entryPrice,
       trailingStopPrice: initialStop,
       atrValue: params.atrValue,
@@ -773,6 +821,7 @@ export class ConditionalOrderService {
       baselineRegime?: string;
       watchCatalystType?: string;
       baselineStStage?: string;
+      minHoldDays?: number;
     },
   ): string {
     if (this.activeCount >= this.maxOrders) {
@@ -823,6 +872,7 @@ export class ConditionalOrderService {
       watchCatalystType: params.watchCatalystType,
       baselineStStage: params.baselineStStage,
       batchNumber: params.batchNumber,
+      minHoldDays: params.minHoldDays,
     };
 
     this.orders.set(id, order);
@@ -841,6 +891,49 @@ export class ConditionalOrderService {
     this.orders.delete(id);
     this.saveToDisk();
     return true;
+  }
+
+  /**
+   * Update mutable fields on an existing active conditional order.
+   * Returns the updated order, or null if not found / already triggered.
+   */
+  updateOrder(
+    id: string,
+    updates: {
+      minHoldDays?: number;
+      triggerValue?: number;
+      quantity?: number;
+    },
+  ): ConditionalOrder | null {
+    const order = this.orders.get(id);
+    if (!order || order.triggered) return null;
+
+    if (updates.minHoldDays !== undefined) order.minHoldDays = updates.minHoldDays;
+    if (updates.triggerValue !== undefined) order.triggerValue = updates.triggerValue;
+    if (updates.quantity !== undefined) order.quantity = updates.quantity;
+
+    this.saveToDisk();
+    return order;
+  }
+
+  /**
+   * Batch-update minHoldDays on all active orders matching the given filter.
+   * Returns the count of updated orders.
+   */
+  batchSetMinHoldDays(
+    minHoldDays: number,
+    filter?: { types?: ConditionalOrderType[]; symbol?: string },
+  ): number {
+    let count = 0;
+    for (const order of this.orders.values()) {
+      if (order.triggered) continue;
+      if (filter?.types && !filter.types.includes(order.type)) continue;
+      if (filter?.symbol && order.symbol !== filter.symbol) continue;
+      order.minHoldDays = minHoldDays;
+      count++;
+    }
+    if (count > 0) this.saveToDisk();
+    return count;
   }
 
   /** List all conditional orders. */
@@ -1163,6 +1256,27 @@ export class ConditionalOrderService {
         }
       }
 
+      // ── Minimum holding period protection ──
+      // Suppress stop-loss type triggers during the protection window.
+      // Peak/trailing state was already updated above so tracking is accurate.
+      if (shouldTrigger && order.minHoldDays && order.minHoldDays > 0) {
+        const stopTypes: ConditionalOrderType[] = [
+          "stop_loss", "trailing_stop", "trailing_atr", "indicator_stop",
+        ];
+        if (stopTypes.includes(order.type)) {
+          const elapsed = tradingDaysSince(order.createdAt);
+          if (elapsed < order.minHoldDays) {
+            console.log(
+              `[conditional-order] 持股保护: ${order.id} ${order.symbol} 止损被抑制 (已持 ${elapsed}/${order.minHoldDays} 交易日)`,
+            );
+            void this.notifyFn?.(
+              `⏳ 持股保护: ${order.symbol} 当前已触及止损条件，但持股仅 ${elapsed} 交易日（保护期 ${order.minHoldDays} 天），暂不触发`,
+            );
+            shouldTrigger = false;
+          }
+        }
+      }
+
       if (shouldTrigger) {
         order.triggered = true;
         order.triggeredAt = nowCSTISO();
@@ -1342,6 +1456,22 @@ export class ConditionalOrderService {
         default:
           // trailing_atr, trailing_tp, staged_tp, indicator_stop → handled by periodic checkAll
           continue;
+      }
+
+      // ── Minimum holding period protection (real-time path) ──
+      if (shouldTrigger && order.minHoldDays && order.minHoldDays > 0) {
+        const stopTypes: ConditionalOrderType[] = [
+          "stop_loss", "trailing_stop", "trailing_atr", "indicator_stop",
+        ];
+        if (stopTypes.includes(order.type)) {
+          const elapsed = tradingDaysSince(order.createdAt);
+          if (elapsed < order.minHoldDays) {
+            console.log(
+              `[conditional-order] 持股保护(实时): ${order.id} ${order.symbol} 止损被抑制 (已持 ${elapsed}/${order.minHoldDays} 交易日)`,
+            );
+            shouldTrigger = false;
+          }
+        }
       }
 
       if (shouldTrigger) {

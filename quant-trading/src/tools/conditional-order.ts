@@ -27,7 +27,7 @@ export function createConditionalOrderTool(
       "action=add_trailing_stop 设置跟踪止损(百分比), action=add_trailing_atr 设置ATR跟踪止损, " +
       "action=add_trailing_tp 设置移动止盈(涨到激活价后跟踪回撤卖出), " +
       "action=add_staged_tp 设置分批止盈(多档位), action=add_indicator_stop 设置均线止损(跌破MA卖出), " +
-      "action=list 查看条件单, action=remove 删除条件单, action=check_now 立即检查。",
+      "action=list 查看条件单, action=remove 删除条件单, action=update 修改已有条件单(如加持股保护), action=check_now 立即检查。",
     parameters: {
       type: "object" as const,
       properties: {
@@ -43,6 +43,8 @@ export function createConditionalOrderTool(
             "add_indicator_stop",
             "list",
             "remove",
+            "update",
+            "batch_set_hold_days",
             "check_now",
           ],
           description: "操作类型",
@@ -112,6 +114,11 @@ export function createConditionalOrderTool(
         strategy_id: { type: "string", description: "策略ID（可选）" },
         order_id: { type: "string", description: "条件单ID (remove 操作)" },
         active_only: { type: "boolean", description: "仅显示活跃条件单 (list 操作)" },
+        min_hold_days: {
+          type: "number",
+          description:
+            "最小持股保护天数 (交易日, 如2表示买入后2个交易日内不触发止损, 适用于add_stop_loss/add_trailing_stop/add_trailing_atr)",
+        },
       },
       required: ["action"],
     },
@@ -137,13 +144,16 @@ export function createConditionalOrderTool(
             stopPrice,
             quantity,
             strategyId: args.strategy_id as string | undefined,
+            minHoldDays: args.min_hold_days as number | undefined,
           });
+          const holdNote = args.min_hold_days ? `, 持股保护 ${args.min_hold_days as number} 个交易日` : "";
           return {
-            message: `止损单已设置`,
+            message: `止损单已设置${holdNote}`,
             id,
             symbol,
             stopPrice: `¥${stopPrice.toFixed(2)}`,
             lossPct: `${(((entryPrice - stopPrice) / entryPrice) * 100).toFixed(1)}%`,
+            ...(args.min_hold_days ? { minHoldDays: args.min_hold_days } : {}),
           };
         }
 
@@ -193,13 +203,16 @@ export function createConditionalOrderTool(
             trailPct,
             quantity,
             strategyId: args.strategy_id as string | undefined,
+            minHoldDays: args.min_hold_days as number | undefined,
           });
+          const holdNote = args.min_hold_days ? `, 持股保护 ${args.min_hold_days as number} 个交易日` : "";
           return {
-            message: `跟踪止损单已设置`,
+            message: `跟踪止损单已设置${holdNote}`,
             id,
             symbol,
             trailPct: `${(trailPct * 100).toFixed(1)}%`,
             currentStopPrice: `¥${(entryPrice * (1 - trailPct)).toFixed(2)}`,
+            ...(args.min_hold_days ? { minHoldDays: args.min_hold_days } : {}),
           };
         }
 
@@ -224,9 +237,11 @@ export function createConditionalOrderTool(
             ratchetMoveAtr,
             quantity,
             strategyId: args.strategy_id as string | undefined,
+            minHoldDays: args.min_hold_days as number | undefined,
           });
+          const holdNote = args.min_hold_days ? `, 持股保护 ${args.min_hold_days as number} 个交易日` : "";
           return {
-            message: `ATR跟踪止损单已设置`,
+            message: `ATR跟踪止损单已设置${holdNote}`,
             id,
             symbol,
             atr: atrValue.toFixed(2),
@@ -422,6 +437,46 @@ export function createConditionalOrderTool(
           return removed
             ? { message: `条件单 ${orderId} 已删除` }
             : { error: `未找到条件单 ${orderId}` };
+        }
+
+        case "update": {
+          const orderId = args.order_id as string;
+          if (!orderId) return { error: "请提供 order_id" };
+          const updates: { minHoldDays?: number; triggerValue?: number; quantity?: number } = {};
+          if (args.min_hold_days !== undefined) updates.minHoldDays = args.min_hold_days as number;
+          if (args.stop_price !== undefined) updates.triggerValue = args.stop_price as number;
+          if (args.target_price !== undefined) updates.triggerValue = args.target_price as number;
+          if (args.quantity !== undefined) updates.quantity = args.quantity as number;
+          if (Object.keys(updates).length === 0) {
+            return { error: "请提供要修改的字段 (min_hold_days, stop_price, target_price, quantity)" };
+          }
+          const updated = condOrderService.updateOrder(orderId, updates);
+          if (!updated) return { error: `未找到活跃条件单 ${orderId}` };
+          return {
+            message: `条件单 ${orderId} 已更新`,
+            id: updated.id,
+            symbol: updated.symbol,
+            type: updated.type,
+            ...(updated.minHoldDays ? { minHoldDays: updated.minHoldDays } : {}),
+            triggerValue: updated.triggerValue,
+          };
+        }
+
+        case "batch_set_hold_days": {
+          const minHoldDays = args.min_hold_days as number;
+          if (!minHoldDays || minHoldDays < 0) {
+            return { error: "请提供 min_hold_days (交易日数, 如 2)" };
+          }
+          const filter: { types?: ("stop_loss" | "trailing_stop" | "trailing_atr" | "indicator_stop")[]; symbol?: string } = {};
+          filter.types = ["stop_loss", "trailing_stop", "trailing_atr", "indicator_stop"];
+          if (args.symbol) filter.symbol = args.symbol as string;
+          const count = condOrderService.batchSetMinHoldDays(minHoldDays, filter);
+          return {
+            message: `已为 ${count} 个活跃止损类条件单设置持股保护 ${minHoldDays} 个交易日`,
+            updated: count,
+            minHoldDays,
+            ...(args.symbol ? { symbol: args.symbol } : { scope: "全部止损类条件单" }),
+          };
         }
 
         case "check_now": {

@@ -533,27 +533,30 @@ async function runBuiltinFitness(
                     continue;
                   }
                   const r = wr.result;
+                  // BacktestResult returns percentage values (e.g. 15.5 = 15.5%)
+                  // compositeScore expects percentage, so pass directly (no * 100)
                   const cs = compositeScore({
-                    totalReturn: (r.totalReturn ?? 0) * 100,
-                    annualizedReturn: (r.annualizedReturn ?? 0) * 100,
+                    totalReturn: r.totalReturn ?? 0,
+                    annualizedReturn: r.annualizedReturn ?? 0,
                     sharpeRatio: r.sharpeRatio ?? 0,
-                    winRate: (r.winRate ?? 0) * 100,
+                    winRate: r.winRate ?? 0,
                     profitFactor: r.profitFactor ?? 0,
-                    maxDrawdown: (r.maxDrawdown ?? 0) * 100,
+                    maxDrawdown: Math.abs(r.maxDrawdown ?? 0),
                     totalTrades: r.totalTrades ?? 0,
                   });
                   completed++;
                   if (!Number.isFinite(cs)) continue;
+                  // Store as decimals (0-1) to match Python convention
                   results.push({
                     strategy_id: wr.strategyId,
                     symbol: wr.symbol,
                     composite_score: Math.round(cs * 10000) / 10000,
-                    total_return: Math.round((r.totalReturn ?? 0) * 10000) / 10000,
-                    annualized_return: Math.round((r.annualizedReturn ?? 0) * 10000) / 10000,
+                    total_return: Math.round((r.totalReturn ?? 0) / 100 * 10000) / 10000,
+                    annualized_return: Math.round((r.annualizedReturn ?? 0) / 100 * 10000) / 10000,
                     sharpe_ratio: Math.round((r.sharpeRatio ?? 0) * 10000) / 10000,
                     sortino_ratio: Math.round((r.sortinoRatio ?? 0) * 10000) / 10000,
-                    max_drawdown: Math.round((r.maxDrawdown ?? 0) * 1000000) / 1000000,
-                    win_rate: Math.round((r.winRate ?? 0) * 10000) / 10000,
+                    max_drawdown: Math.round(Math.abs(r.maxDrawdown ?? 0) / 100 * 1000000) / 1000000,
+                    win_rate: Math.round((r.winRate ?? 0) / 100 * 10000) / 10000,
                     profit_loss_ratio: Math.round((r.profitFactor ?? 0) * 10000) / 10000,
                     calmar_ratio: Math.round((r.calmarRatio ?? 0) * 10000) / 10000,
                     total_trades: r.totalTrades ?? 0,
@@ -609,21 +612,23 @@ async function runBuiltinFitness(
               strategyId, symbols: [symbol], startDate, endDate, initialCash, interval: "1d", market: "cn_stock",
             }, config, mapProvider);
             if (result.totalTrades === 0) return null;
+            // BacktestResult returns percentage values; compositeScore expects percentage
             const cs = compositeScore({
-              totalReturn: (result.totalReturn ?? 0) * 100, annualizedReturn: (result.annualizedReturn ?? 0) * 100,
-              sharpeRatio: result.sharpeRatio ?? 0, winRate: (result.winRate ?? 0) * 100,
-              profitFactor: result.profitFactor ?? 0, maxDrawdown: (result.maxDrawdown ?? 0) * 100,
+              totalReturn: result.totalReturn ?? 0, annualizedReturn: result.annualizedReturn ?? 0,
+              sharpeRatio: result.sharpeRatio ?? 0, winRate: result.winRate ?? 0,
+              profitFactor: result.profitFactor ?? 0, maxDrawdown: Math.abs(result.maxDrawdown ?? 0),
               totalTrades: result.totalTrades ?? 0,
             });
             if (!Number.isFinite(cs)) return null;
+            // Store as decimals (0-1) to match Python convention
             return {
               strategy_id: strategyId, symbol, composite_score: Math.round(cs * 10000) / 10000,
-              total_return: Math.round((result.totalReturn ?? 0) * 10000) / 10000,
-              annualized_return: Math.round((result.annualizedReturn ?? 0) * 10000) / 10000,
+              total_return: Math.round((result.totalReturn ?? 0) / 100 * 10000) / 10000,
+              annualized_return: Math.round((result.annualizedReturn ?? 0) / 100 * 10000) / 10000,
               sharpe_ratio: Math.round((result.sharpeRatio ?? 0) * 10000) / 10000,
               sortino_ratio: Math.round((result.sortinoRatio ?? 0) * 10000) / 10000,
-              max_drawdown: Math.round((result.maxDrawdown ?? 0) * 1000000) / 1000000,
-              win_rate: Math.round((result.winRate ?? 0) * 10000) / 10000,
+              max_drawdown: Math.round(Math.abs(result.maxDrawdown ?? 0) / 100 * 1000000) / 1000000,
+              win_rate: Math.round((result.winRate ?? 0) / 100 * 10000) / 10000,
               profit_loss_ratio: Math.round((result.profitFactor ?? 0) * 10000) / 10000,
               calmar_ratio: Math.round((result.calmarRatio ?? 0) * 10000) / 10000,
               total_trades: result.totalTrades ?? 0,

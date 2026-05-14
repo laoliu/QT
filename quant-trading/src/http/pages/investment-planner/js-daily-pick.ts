@@ -605,14 +605,14 @@ function executeRecommend(dryRun,forcePremarket){
 
       var rows='';
       (exec.orders||[]).forEach(function(o){
-        rows+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.code)+'</a></td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
+        rows+='<tr><td><a href="'+B+'/quant/admin/stock?symbol='+encodeURIComponent(o.code)+'" target="_blank" style="color:var(--accent);text-decoration:underline;cursor:pointer">'+esc(o.code)+'</a></td><td>'+esc(o.name||'')+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td>'+esc(o.orderId)+'</td><td>'+esc(o.status)+'</td><td>'+numInt((o.conditionals||[]).length)+'</td></tr>';
       });
       var failHtml='';
       if(Array.isArray(exec.failures)&&exec.failures.length){
         failHtml='<div style="margin-top:8px;font-size:12px;color:var(--orange)">失败明细：'+exec.failures.map(function(f){return esc(f.code+':'+f.reason)}).join('；')+'</div>';
       }
       resultEl.innerHTML='<div class="card" style="padding:10px">'+
-        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
+        (rows?('<div style="overflow-x:auto"><table><thead><tr><th>代码</th><th>名称</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th><th>条件单</th></tr></thead><tbody>'+rows+'</tbody></table></div>'):'<div style="font-size:12px;color:var(--text-dim)">本次没有成功提交委托。</div>')+
         failHtml+
         '</div>';
       toast(rejected>0?'⚠️ 已执行，存在部分失败':'✅ 建仓委托已提交，正在等待成交确认…');
@@ -753,7 +753,7 @@ function startFillConfirmPolling(executedOrders){
   document.getElementById('fill-confirm-status').style.color='var(--yellow)';
   // Initial render
   renderFillTable(_fillPollOrders.map(function(o){
-    return {orderId:o.orderId,symbol:o.code,status:o.status,quantity:o.quantity,filledQty:0,avgFillPrice:null,hasPosition:false,positionQty:0};
+    return {orderId:o.orderId,symbol:o.code,name:o.name||'',status:o.status,quantity:o.quantity,filledQty:0,avgFillPrice:null,hasPosition:false,positionQty:0};
   }));
   // Start polling
   if(_fillPollTimer){clearInterval(_fillPollTimer)}
@@ -770,6 +770,10 @@ function pollFillStatusOnce(){
     body:JSON.stringify({orderIds:_fillPollOrderIds})
   }).then(function(d){
     var orders=d.orders||[];
+    // Merge name from original orders
+    var nameMap={};
+    _fillPollOrders.forEach(function(o){if(o.code&&o.name)nameMap[o.code]=o.name;if(o.symbol&&o.name)nameMap[o.symbol]=o.name});
+    orders.forEach(function(o){if(!o.name&&nameMap[o.symbol])o.name=nameMap[o.symbol]});
     renderFillTable(orders);
     var filledCount=orders.filter(function(o){return o.status==='filled'||o.hasPosition}).length;
     var partialCount=orders.filter(function(o){return o.status==='partial'}).length;
@@ -829,13 +833,14 @@ function renderFillTable(orders){
     var rowStyle=filled?'background:rgba(63,185,80,.06)':'';
     return '<tr style="'+rowStyle+'">'+
       '<td>'+esc(o.symbol||o.orderId||'')+'</td>'+
+      '<td>'+esc(o.name||'')+'</td>'+
       '<td>'+numInt(o.quantity||0)+'</td>'+
       '<td>'+numInt(o.filledQty||0)+'</td>'+
       '<td>'+(o.avgFillPrice?num(o.avgFillPrice):'-')+'</td>'+
       '<td>'+(o.hasPosition?'<span style="color:var(--green)">✅ 有持仓('+numInt(o.positionQty)+')</span>':'<span style="color:var(--text-dim)">—</span>')+'</td>'+
       '<td>'+(statusLabels[o.status]||o.status)+'</td>'+
       '</tr>';
-  }).join('')||'<tr><td colspan="6" style="color:var(--text-dim)">无订单</td></tr>';
+  }).join('')||'<tr><td colspan="7" style="color:var(--text-dim)">无订单</td></tr>';
 }
 
 function startMonitoringAfterFill(){

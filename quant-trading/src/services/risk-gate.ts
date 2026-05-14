@@ -51,7 +51,7 @@ const DEFAULT_LIMITS: Required<RiskLimitsConfig> = {
   allowedSymbols: [],
   blockedSymbols: [],
   stopLossPct: 0.08, // 单持仓亏损超 8% 禁止加仓
-  maxOpenOrders: 10, // 最多同时挂单 10 个
+  maxOpenOrders: 20, // 最多同时挂单 20 个
   priceLimitPct: 0.1, // 限价偏离最新价超 10% 拒绝（A股涨跌停）
   maxNakedShort: 0, // 裸卖空禁止
   maxDeltaExposure: 500,

@@ -132,6 +132,7 @@ describe("ConditionalOrderService", () => {
       100,
       expect.stringContaining("止损触发"),
       undefined,
+      undefined,
     );
     expect(notifyFn).toHaveBeenCalled();
     expect(service.activeCount).toBe(0);
@@ -171,6 +172,7 @@ describe("ConditionalOrderService", () => {
       "600519",
       100,
       expect.stringContaining("止盈触发"),
+      undefined,
       undefined,
     );
   });
@@ -401,7 +403,7 @@ describe("ConditionalOrderService", () => {
     let triggered = await service.checkAll();
     expect(triggered).toHaveLength(1); // tier 1 triggered
     expect(exitFn).toHaveBeenCalledTimes(1);
-    expect(exitFn).toHaveBeenCalledWith("600979", 500, expect.stringContaining("+8%"), undefined);
+    expect(exitFn).toHaveBeenCalledWith("600979", 500, expect.stringContaining("+8%"), undefined, undefined);
 
     const order = service.listOrders()[0];
     expect(order.tiers![0].triggered).toBe(true);
@@ -482,6 +484,7 @@ describe("ConditionalOrderService", () => {
       500,
       expect.stringContaining("移动止盈触发"),
       undefined,
+      undefined,
     );
   });
 
@@ -502,5 +505,97 @@ describe("ConditionalOrderService", () => {
     expect(exitFn).not.toHaveBeenCalled();
     const orders = service.listOrders(true);
     expect(orders[0].tpActivated).toBe(false);
+  });
+
+  // ── minHoldDays: holding period protection ──
+
+  it("suppresses stop-loss during minHoldDays protection period", async () => {
+    const exitFn = vi.fn().mockResolvedValue({ ok: true });
+    service.setExitFn(exitFn);
+    service.setQuoteFn(vi.fn().mockResolvedValue({ price: 40 })); // below stop
+    service.setNotify(vi.fn());
+
+    service.addStopLoss({
+      symbol: "600519",
+      entryPrice: 50,
+      stopPrice: 45,
+      quantity: 100,
+      minHoldDays: 3,
+    });
+
+    // Order was just created (0 trading days elapsed) — should NOT trigger
+    const triggered = await service.checkAll();
+    expect(triggered).toHaveLength(0);
+    expect(exitFn).not.toHaveBeenCalled();
+    expect(service.activeCount).toBe(1);
+  });
+
+  it("allows stop-loss after minHoldDays have elapsed", async () => {
+    const exitFn = vi.fn().mockResolvedValue({ ok: true });
+    service.setExitFn(exitFn);
+    service.setQuoteFn(vi.fn().mockResolvedValue({ price: 40 }));
+    service.setNotify(vi.fn());
+
+    service.addStopLoss({
+      symbol: "600519",
+      entryPrice: 50,
+      stopPrice: 45,
+      quantity: 100,
+      minHoldDays: 2,
+    });
+
+    // Back-date createdAt to 5 calendar days ago (at least 2+ trading days)
+    const order = service.listOrders()[0];
+    const past = new Date();
+    past.setDate(past.getDate() - 7); // 7 calendar days = definitely ≥ 2 trading days
+    order.createdAt = past.toISOString();
+
+    const triggered = await service.checkAll();
+    expect(triggered).toHaveLength(1);
+    expect(exitFn).toHaveBeenCalled();
+  });
+
+  it("does not suppress take-profit during minHoldDays", async () => {
+    const exitFn = vi.fn().mockResolvedValue({ ok: true });
+    service.setExitFn(exitFn);
+    service.setQuoteFn(vi.fn().mockResolvedValue({ price: 60 })); // above target
+    service.setNotify(vi.fn());
+
+    // Even though minHoldDays is set, take_profit type should not be affected
+    service.addTakeProfit({
+      symbol: "600519",
+      entryPrice: 50,
+      targetPrice: 55,
+      quantity: 100,
+    });
+
+    // Manually set minHoldDays on the order (take_profit doesn't have it in API, but testing the guard)
+    const order = service.listOrders()[0];
+    order.minHoldDays = 5;
+
+    const triggered = await service.checkAll();
+    expect(triggered).toHaveLength(1);
+    expect(exitFn).toHaveBeenCalled();
+  });
+
+  it("suppresses trailing_stop during minHoldDays but still tracks peak", async () => {
+    service.setQuoteFn(vi.fn().mockResolvedValue({ price: 85 })); // below trailing stop
+    const exitFn = vi.fn().mockResolvedValue({ ok: true });
+    service.setExitFn(exitFn);
+    service.setNotify(vi.fn());
+
+    service.addTrailingStop({
+      symbol: "000001",
+      entryPrice: 100,
+      trailPct: 0.1,
+      quantity: 50,
+      minHoldDays: 3,
+    });
+
+    // First check: price is 85, below stop (100*0.9=90), but within hold period
+    const triggered = await service.checkAll();
+    expect(triggered).toHaveLength(0);
+    expect(exitFn).not.toHaveBeenCalled();
+    expect(service.activeCount).toBe(1);
   });
 });

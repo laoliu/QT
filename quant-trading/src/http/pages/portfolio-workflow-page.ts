@@ -418,6 +418,7 @@ function api(path,opts){
 }
 function kpi(v,l,c){return '<div class="kpi"><div class="kpi-val" style="color:'+(c||'var(--text)')+'">'+v+'</div><div class="kpi-label">'+l+'</div></div>'}
 function pctRaw(v){return v!=null?v.toFixed(2)+'%':'-'}
+function formatDur(sec){if(!sec||sec<0)return'-';var h=Math.floor(sec/3600);var m=Math.floor((sec%3600)/60);var s=sec%60;if(h>0)return h+'时'+m+'分';if(m>0)return m+'分'+s+'秒';return s+'秒'}
 
 // ── State ──
 var currentStep=1;
@@ -489,10 +490,26 @@ function step1Stop(){
 function step1CheckStatus(){
   api('/quant/admin/api/strategy-fitness/status',{_timeout:10000}).then(function(d){
     if(!d)return;
-    var pct=d.progress||0;
+    var pct=0;
+    var detail='运行中...';
+    if(d.status==='starting'||d.status==='loading_klines'||d.status==='loading_fundamentals'||d.status==='building_bars'){
+      detail=d.phase||'正在准备数据...';
+      // Show kline loading progress as 0-10% range
+      if(d.klines_loaded&&d.total_stocks){
+        pct=Math.round(d.klines_loaded/d.total_stocks*10);
+      }
+    }else if(d.status==='running'||d.status==='alpha_done'){
+      var total=d.total_strategies>0?d.total_strategies:(d.total_stocks||1);
+      var done=typeof d.completed_strategies==='number'?d.completed_strategies:(d.completed_stocks||0);
+      pct=Math.min(Math.round(done/total*100),100);
+      detail=d.phase||(d.completed_strategies?'策略: '+d.completed_strategies+'/'+d.total_strategies:'已完成: '+d.completed_stocks+'/'+d.total_stocks+' 只股票');
+    }else if(d.status==='done'||d.status==='completed'){
+      pct=100;detail='已完成';
+    }
+    if(d.elapsed_seconds)detail+=' | 耗时: '+formatDur(d.elapsed_seconds);
+    if(d.estimated_remaining)detail+=' | 预计剩余: '+formatDur(d.estimated_remaining);
     document.getElementById('s1-progress-fill').style.width=pct+'%';
-    document.getElementById('s1-progress-text').textContent=
-      (d.detail||'运行中...')+' ('+Math.round(pct)+'%)';
+    document.getElementById('s1-progress-text').textContent=detail+' ('+Math.round(pct)+'%)';
     if(d.status==='done'||d.status==='completed'){
       clearInterval(s1Timer);
       document.getElementById('s1-run-btn').disabled=false;

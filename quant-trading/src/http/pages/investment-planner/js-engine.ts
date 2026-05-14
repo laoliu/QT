@@ -473,7 +473,7 @@ function loadConditionalOrders(){
       document.getElementById('cond-status').textContent='共 '+orders.length+' 条记录，活跃 '+(d.activeCount||0)+' 条';
       var tbody=document.querySelector('#cond-order-table tbody');
       if(!orders.length){
-        tbody.innerHTML='<tr><td colspan="13" style="color:var(--text-dim)">暂无条件单</td></tr>';
+        tbody.innerHTML='<tr><td colspan="14" style="color:var(--text-dim)">暂无条件单</td></tr>';
         return;
       }
       var rows='';
@@ -512,6 +512,7 @@ function loadConditionalOrders(){
           '<td style="font-size:11px">'+time+'</td>'+
           '<td style="font-size:11px">'+triggerTime+'</td>'+
           '<td>'+statusHtml+'</td>'+
+          '<td style="font-size:11px;text-align:center">'+(o.minHoldDays?'<span class="badge badge-blue" title="持股保护期: 买入后'+o.minHoldDays+'个交易日内不触发止损">'+o.minHoldDays+'天</span>':'-')+'</td>'+
           '<td>'+actionHtml+'</td>'+
           '</tr>';
       });

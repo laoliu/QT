@@ -1024,9 +1024,9 @@ function executeRebalancePlan(dryRun){
     if(sellRes.orders)sellRes.orders.forEach(function(o){o._side='卖出';allOrders.push(o)});
     if(buyExec.orders)(buyExec.orders).forEach(function(o){o._side='买入';allOrders.push(o)});
     if(allOrders.length){
-      html+='<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>方向</th><th>代码</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th></tr></thead><tbody>';
+      html+='<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>方向</th><th>代码</th><th>名称</th><th>数量</th><th>价格</th><th>订单ID</th><th>状态</th></tr></thead><tbody>';
       allOrders.forEach(function(o){
-        html+='<tr><td>'+(o._side||'')+'</td><td>'+esc(o.code||o.symbol)+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td style="font-size:10px">'+esc((o.orderId||'').slice(0,8))+'</td><td>'+esc(o.status||'submitted')+'</td></tr>';
+        html+='<tr><td>'+(o._side||'')+'</td><td>'+esc(o.code||o.symbol)+'</td><td>'+esc(o.name||'')+'</td><td>'+numInt(o.quantity)+'</td><td>'+num(o.price)+'</td><td style="font-size:10px">'+esc((o.orderId||'').slice(0,8))+'</td><td>'+esc(o.status||'submitted')+'</td></tr>';
       });
       html+='</tbody></table></div>';
     }else{

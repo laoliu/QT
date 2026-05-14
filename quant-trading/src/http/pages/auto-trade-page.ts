@@ -560,6 +560,20 @@ function toggleSection(id) {
 function pct(v) { return v != null ? (v * 100).toFixed(1) + '%' : '—'; }
 function num2(v) { return v != null ? Number(v).toFixed(2) : '—'; }
 function scoreColor(v) { return v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text-dim)'; }
+function strategyCategory(id) {
+  if (!id) return '';
+  if (id.startsWith('cta-')) return 'CTA';
+  if (id.indexOf('grid') >= 0) return '网格';
+  if (id.indexOf('mean-reversion') >= 0 || id.indexOf('reversion') >= 0) return '均值回归';
+  if (id.indexOf('momentum') >= 0 || id.indexOf('breakout') >= 0) return '动量/突破';
+  if (id.indexOf('rsi') >= 0 || id.indexOf('stochastic') >= 0 || id.indexOf('oscillator') >= 0) return '振荡器';
+  if (id.indexOf('macd') >= 0) return '趋势';
+  if (id.indexOf('ma-') >= 0 || id.indexOf('-ma') >= 0 || id.indexOf('crossover') >= 0) return '均线';
+  if (id.indexOf('volume') >= 0 || id.indexOf('obv') >= 0 || id.indexOf('mfi') >= 0) return '量价';
+  if (id.indexOf('bollinger') >= 0 || id.indexOf('keltner') >= 0 || id.indexOf('envelope') >= 0) return '通道';
+  if (id.indexOf('regime') >= 0 || id.indexOf('adaptive') >= 0) return '自适应';
+  return '综合';
+}
 
 function renderScreenSnapshot(snap) {
   // Hide all snapshot sections if no data
@@ -744,7 +758,7 @@ async function loadFitnessStrategies() {
       var dd = s.max_drawdown;
       var wr = s.win_rate;
       var label = s.strategy_label || s.strategy_name || s.strategy_id || '';
-      var tags = s.tags || s.category || '';
+      var tags = s.tags || s.category || strategyCategory(s.strategy_id);
       html += '<tr>';
       html += '<td>' + (s.rank || (i+1)) + '</td>';
       html += '<td><b>' + label + '</b><div style="font-size:10px;color:var(--text-dim)">' + (s.strategy_id || '') + '</div></td>';

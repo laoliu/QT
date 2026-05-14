@@ -201,6 +201,14 @@ export class OrderManager {
   // Tracks open buy orders for a symbol so we can match exits to entries
   // symbol → list of open entry order IDs (queue: FIFO)
   private openBuys: Map<string, string[]> = new Map();
+
+  /**
+   * Cooldown map for risk-rejected orders: "symbol:side:ruleId" → expiry timestamp.
+   * Prevents repeatedly submitting orders that are guaranteed to fail
+   * (e.g. selling a stock with 0 position every 30s tick cycle).
+   */
+  private riskRejectCooldowns: Map<string, number> = new Map();
+  private static readonly RISK_REJECT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
   /** Resolves when openBuys rebuild completes (prevents race with early fills). */
   private readonly initialized: Promise<void>;
 
@@ -486,6 +494,13 @@ export class OrderManager {
       }
     }
 
+    // Cooldown check: skip orders that were recently rejected by the same risk rule
+    const cooldownKey = `${req.symbol}:${req.side}`;
+    const cooldownExpiry = this.riskRejectCooldowns.get(cooldownKey);
+    if (cooldownExpiry && Date.now() < cooldownExpiry) {
+      return { ok: false, reason: "风控冷却中，跳过重复提交", ruleId: "COOLDOWN" };
+    }
+
     // Risk check
     const riskResult = this.riskGate.check(
       req,
@@ -498,12 +513,20 @@ export class OrderManager {
       marketContext,
     );
     if (!riskResult.passed) {
+      // Set cooldown for position/state-based rejections to avoid log spam
+      const cooldownRules = new Set(["INSUFFICIENT_POSITION", "INSUFFICIENT_CASH", "MAX_DAILY_LOSS", "MAX_TOTAL_LOSS"]);
+      if (riskResult.failedRule && cooldownRules.has(riskResult.failedRule)) {
+        this.riskRejectCooldowns.set(cooldownKey, Date.now() + OrderManager.RISK_REJECT_COOLDOWN_MS);
+      }
       this.log(
         `[风控拦截] ${req.symbol} ${req.side} ${req.quantity}股 | 规则=${riskResult.failedRule ?? "unknown"} | ${riskResult.reason ?? "风控拒绝"}`,
         "warn",
       );
       return { ok: false, reason: riskResult.reason ?? "风控拒绝", ruleId: riskResult.failedRule };
     }
+
+    // Clear any cooldown on successful risk check (state may have changed)
+    this.riskRejectCooldowns.delete(cooldownKey);
 
     // Human confirmation if required
     const needsConfirmation =

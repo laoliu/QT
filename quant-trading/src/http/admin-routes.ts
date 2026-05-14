@@ -1470,6 +1470,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           takeProfitPrice?: number;
           sourceShares: number;
           entryPrices?: Record<string, unknown>;
+          expectedHoldDays?: number;
         };
 
         const planItems: ExecPlanItem[] = [];
@@ -1541,6 +1542,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
           const stopLossPrice = toFiniteNumber(stopLoss?.price, 0);
           const takeProfitPrice = toFiniteNumber(takeProfit1?.price, 0);
 
+          const expectedHoldDays = clampInteger(raw.expectedHoldDays, 1, 365, 0) || undefined;
+
           planItems.push({
             code,
             name,
@@ -1553,6 +1556,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             takeProfitPrice: takeProfitPrice > 0 ? round2(takeProfitPrice) : undefined,
             sourceShares,
             entryPrices,
+            expectedHoldDays,
           });
         }
 
@@ -1810,6 +1814,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                     quantity: qty,
                     strategyId: "recommend-exec",
                     description: `自动止损(${item.code})`,
+                    minHoldDays: item.expectedHoldDays,
                   }),
                 );
               }
@@ -1835,6 +1840,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
                   quantity: qty,
                   strategyId: "recommend-exec",
                   description: `自动跟踪止损(${item.code})`,
+                  minHoldDays: item.expectedHoldDays,
                 }),
               );
 

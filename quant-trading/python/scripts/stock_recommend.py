@@ -105,7 +105,7 @@ def _fetch_sina_quotes(codes: list[str]) -> dict:
             continue
         prev_close = float(fields[2]) if fields[2] else 0
         price = float(fields[3]) if fields[3] else 0
-        change_pct = ((price - prev_close) / prev_close * 100) if prev_close > 0 else 0
+        change_pct = ((price - prev_close) / prev_close * 100) if (prev_close > 0 and price > 0) else 0
         quotes[code] = {
             "name": fields[0],
             "price": price,
@@ -284,57 +284,57 @@ def _score_technicals(techs: dict) -> tuple[float, list[str]]:
     score = 0.0
     reasons = []
 
-    # ── Trend alignment (max +12) ──
+    # ── Trend alignment (max +16) ──
     trend = techs.get("trend_score", 0)
     if trend >= 4:
-        score += 12
+        score += 16
         reasons.append(f"多头排列(均线{trend}线)")
     elif trend >= 3:
-        score += 8
+        score += 11
         reasons.append(f"趋势强势({trend}线多头)")
     elif trend >= 2:
-        score += 4
+        score += 6
         reasons.append("趋势偏多")
     elif trend <= 0:
-        score -= 4
+        score -= 5
         reasons.append("趋势偏空")
 
-    # ── RSI health (max +8, min -8) ──
+    # ── RSI health (max +12, min -10) ──
     rsi = techs.get("rsi14")
     if rsi is not None:
         if rsi > 80:
-            score -= 8
+            score -= 10
             reasons.append(f"RSI超买({rsi:.0f})")
         elif rsi > 70:
-            score -= 4
+            score -= 5
             reasons.append(f"RSI偏高({rsi:.0f})")
         elif 25 < rsi < 40:
-            score += 6
+            score += 8
             reasons.append(f"RSI超卖回升({rsi:.0f})")
         elif rsi <= 25:
-            score += 3  # Deep oversold — risky, not full bonus
+            score += 4  # Deep oversold — risky, not full bonus
             reasons.append(f"RSI深度超卖({rsi:.0f})")
         elif 40 <= rsi <= 60:
-            score += 8
+            score += 12
             reasons.append("RSI健康区间")
         elif 60 < rsi <= 70:
-            score += 4
-            reasons.append("RSIƫǿ")
+            score += 5
+            reasons.append("RSI偏强")
 
-    # ── Momentum (max +10, min -6) ──
+    # ── Momentum (max +12, min -8) ──
     m20 = techs.get("momentum_20d", 0)
     m5 = techs.get("momentum_5d", 0)
     if m20 > 15:
-        score += 6
+        score += 8
         reasons.append(f"20日涨{m20:.1f}%")
     elif m20 > 5:
-        score += 4
+        score += 5
         reasons.append(f"20日涨{m20:.1f}%")
     elif m20 < -15:
-        score -= 6
+        score -= 8
         reasons.append(f"20日跌{m20:.1f}%")
     elif m20 < -5:
-        score -= 3
+        score -= 4
         reasons.append(f"20日跌{m20:.1f}%")
     # Short-term momentum bonus (complementary, max +4)
     if m5 > 3 and m20 > 0:
@@ -871,41 +871,42 @@ def recommend(
         score = 0.0
         reasons = []
 
-        # --- (A) Backtest signal: position match + cost basis (max +27) ---
+        # --- (A) Backtest signal: position match + cost basis (max +8) ---
+        # NOTE: backtest data may be stale; kept as minor reference only
         if code in pos_map:
-            score += 15
+            score += 5
             bt_cost = pos_map[code].get("avgCost", 0)
             if bt_cost > 0:
                 vs_cost = (price / bt_cost - 1) * 100
                 if vs_cost <= -5:
-                    score += 12
-                    reasons.append(f"大幅低于成本{abs(vs_cost):.1f}%")
+                    score += 3
+                    reasons.append(f"低于成本{abs(vs_cost):.1f}%")
                 elif vs_cost <= 0:
-                    score += 10
-                    reasons.append(f"低于回测成本{abs(vs_cost):.1f}%")
+                    score += 2
+                    reasons.append(f"接近回测成本")
                 elif vs_cost <= 5:
-                    score += 5
-                    reasons.append("接近回测成本")
+                    score += 1
+                    reasons.append("略高于成本")
                 elif vs_cost <= 15:
                     reasons.append(f"高于成本{vs_cost:.1f}%")
                 else:
-                    score -= 3
+                    score -= 2
                     reasons.append(f"远高于成本{vs_cost:.1f}%")
             reasons.append("策略持仓")
 
-        # --- (B) PE valuation (max +15, min -8) ---
+        # --- (B) PE valuation (max +18, min -8) ---
         pe = tc.get("pe", 0)
         if 0 < pe < 15:
-            score += 15
+            score += 18
             reasons.append(f"PE优秀({pe:.0f})")
         elif 0 < pe < 25:
-            score += 12
+            score += 15
             reasons.append(f"PE良好({pe:.0f})")
         elif 0 < pe < 40:
-            score += 6
+            score += 8
             reasons.append(f"PE适中({pe:.0f})")
         elif 0 < pe < 60:
-            score += 2
+            score += 3
             reasons.append(f"PE偏高({pe:.0f})")
         elif pe < 0:
             score -= 8
@@ -917,33 +918,33 @@ def recommend(
             score -= 2
             reasons.append(f"PE偏贵({pe:.0f})")
 
-        # --- (C) PB valuation (max +6, min -3) ---
+        # --- (C) PB valuation (max +10, min -3) ---
         pb = tc.get("pb", 0)
         if 0 < pb < 1.5:
-            score += 6
+            score += 10
             reasons.append(f"PB低估({pb:.1f})")
         elif 0 < pb < 3:
-            score += 4
+            score += 6
             reasons.append(f"PB合理({pb:.1f})")
         elif 0 < pb < 5:
-            score += 1
+            score += 2
         elif pb >= 10:
             score -= 3
             reasons.append(f"PB偏高({pb:.1f})")
 
-        # --- (D) Market cap stability (max +8) ---
+        # --- (D) Market cap stability (max +10) ---
         mc = tc.get("marketCap", 0)
         if mc > 5000:
-            score += 6
+            score += 8
             reasons.append("超大盘龙头")
         elif mc > 1000:
-            score += 8
+            score += 10
             reasons.append("大盘股稳健")
         elif mc > 300:
-            score += 5
+            score += 7
             reasons.append("中盘成长")
         elif mc > 50:
-            score += 2
+            score += 3
             reasons.append("小盘股")
         elif mc > 0:
             score -= 2

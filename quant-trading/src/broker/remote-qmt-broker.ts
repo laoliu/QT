@@ -501,7 +501,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
         symbol: { code: sym, name: sym, market: "cn_stock" },
         price,
         change,
-        changePct: lastClose ? (change / lastClose) * 100 : 0,
+        changePct: lastClose && price ? (change / lastClose) * 100 : 0,
         open: (raw.open as number) ?? 0,
         high: (raw.high as number) ?? 0,
         low: (raw.low as number) ?? 0,

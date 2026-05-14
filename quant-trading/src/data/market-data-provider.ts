@@ -541,8 +541,8 @@ class QMTBridgeProvider implements MarketDataProvider {
     return {
       symbol: { code, name: (raw.name as string) ?? "", market: market ?? "cn_stock" },
       price,
-      change: prevClose > 0 ? price - prevClose : 0,
-      changePct: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
+      change: prevClose > 0 && price > 0 ? price - prevClose : 0,
+      changePct: prevClose > 0 && price > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
       open: (raw.open as number) ?? 0,
       high: (raw.high as number) ?? 0,
       low: (raw.low as number) ?? 0,

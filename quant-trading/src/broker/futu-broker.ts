@@ -1053,7 +1053,7 @@ export class FutuBroker implements IBrokerAdapter {
       symbol: { code: sym, name: sym, market },
       price,
       change,
-      changePct: r.last_close ? (change / r.last_close) * 100 : 0,
+      changePct: r.last_close && price ? (change / r.last_close) * 100 : 0,
       open: r.open,
       high: r.high,
       low: r.low,

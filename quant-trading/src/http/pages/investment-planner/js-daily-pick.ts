@@ -96,7 +96,21 @@ function selectDefensiveOnly(){
     'cta-demarker','cta-ultimate-oscillator','cta-mass-index','cta-chaikin-oscillator',
     'cta-rsi-divergence','cta-ma-envelope','cta-connors-rsi',
     'stochastic','mfi','cmf','adl','vwap',
-    'engulfing','hammer','doji','harami','bollinger-rsi-combo','regime-switch'];
+    'engulfing','hammer','doji','harami','bollinger-rsi-combo','regime-switch',
+    // AIPHA A-stock defensive
+    'dividend_quality','value_quality','stable_compounder',
+    'defensive_value','dividend_defensive','dividend_quality_select',
+    'low_vol_value','cash_cow_select','fscore_value_enhanced',
+    'max_drawdown_guard','micro_cap_value','buyback_signal',
+    'vol_managed_value','turnaround_play','insider_buying',
+    'profitability_composite','mean_reversion',
+    // AIPHA CB defensive
+    'triple_low','double_low','double_low_plus',
+    'double_low_percentile','double_low_rank','double_low_zscore',
+    'low_price','low_premium','cb_credit_spread',
+    'pseudo_ytm','ytm_plus','cb_mean_reversion',
+    'cb_low_vol_reversion','negative_premium','forced_redeem_play',
+    'cb_reversal_small','conversion_arbitrage'];
   var defSet={};
   defensive.forEach(function(s){defSet[s]=true;});
   document.querySelectorAll('.dp-strategy').forEach(function(el){

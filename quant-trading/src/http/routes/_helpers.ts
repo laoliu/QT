@@ -541,6 +541,15 @@ const AGGRESSIVE_STRATEGIES = new Set<string>([
   "roc", "adaptive-ma", "obv",
   "three-soldiers", "morning-star",
   "ma-volume-combo", "ichimoku-adx-combo", "multi-tf-ma", "volatility-breakout",
+  // AIPHA A-stock aggressive
+  "earnings_momentum", "momentum_acceleration", "sector_rotation",
+  "sector_momentum", "sector_momentum_plus", "vol_breakout",
+  "volume_price_breakout", "trend_quality_managed", "etf_rotation",
+  "earnings_surprise_alpha", "pead_event", "pead_drift",
+  "northbound_enhanced", "smallcap_rotation", "size_style_rotation",
+  "dual_ma", "st_removal_play",
+  // AIPHA CB aggressive
+  "cb_momentum", "cb_heat_momentum", "turnover_surge", "cb_regime_rotation",
 ]);
 
 /** Mean-reversion / value / defensive strategies — preferred in bear markets. */
@@ -556,6 +565,20 @@ const DEFENSIVE_STRATEGIES = new Set<string>([
   "stochastic", "mfi", "cmf", "adl", "vwap",
   "engulfing", "hammer", "doji", "harami",
   "bollinger-rsi-combo", "regime-switch",
+  // AIPHA A-stock defensive
+  "dividend_quality", "value_quality", "stable_compounder",
+  "defensive_value", "dividend_defensive", "dividend_quality_select",
+  "low_vol_value", "cash_cow_select", "fscore_value_enhanced",
+  "max_drawdown_guard", "micro_cap_value", "buyback_signal",
+  "vol_managed_value", "turnaround_play", "insider_buying",
+  "profitability_composite", "mean_reversion",
+  // AIPHA CB defensive
+  "triple_low", "double_low", "double_low_plus",
+  "double_low_percentile", "double_low_rank", "double_low_zscore",
+  "low_price", "low_premium", "cb_credit_spread",
+  "pseudo_ytm", "ytm_plus", "cb_mean_reversion",
+  "cb_low_vol_reversion", "negative_premium", "forced_redeem_play",
+  "cb_reversal_small", "conversion_arbitrage",
 ]);
 
 /** Get the regime style for a strategy. */

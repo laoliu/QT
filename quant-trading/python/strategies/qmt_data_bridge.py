@@ -267,18 +267,32 @@ _trading_trader: Any = None
 _trading_account: Any = None
 _trading_connected = False
 _trading_subscribed_codes: set[str] = set()
-_trading_events_queue: list[dict] = []
+_trading_events_seq = 0          # monotonically increasing event sequence
+_trading_events_buf: list[dict] = []   # ring buffer with seq-tagged events
+_TRADING_EVENTS_MAX = 5000       # max events kept in memory
+_trading_events_lock = __import__("threading").Lock()
 _trading_bg_retry_running = False
+
+
+def _trading_events_append(event: str, data: dict) -> None:
+    """Append an event with an auto-incrementing seq number (thread-safe)."""
+    global _trading_events_seq
+    with _trading_events_lock:
+        _trading_events_seq += 1
+        _trading_events_buf.append({"seq": _trading_events_seq, "event": event, "data": data})
+        # Trim oldest events to cap memory
+        if len(_trading_events_buf) > _TRADING_EVENTS_MAX:
+            _trading_events_buf[:] = _trading_events_buf[-_TRADING_EVENTS_MAX:]
 
 
 class _TradingCallback:
     """Receives async push notifications from QMT and queues for polling."""
 
     def on_disconnected(self) -> None:
-        _trading_events_queue.append({"event": "disconnected", "data": {}})
+        _trading_events_append("disconnected", {})
 
     def on_stock_order(self, order: Any) -> None:
-        _trading_events_queue.append({"event": "order_status", "data": {
+        _trading_events_append("order_status", {
             "order_id": str(order.order_id),
             "stock_code": order.stock_code,
             "order_type": order.order_type,
@@ -290,12 +304,12 @@ class _TradingCallback:
             "strategy_name": order.strategy_name or "",
             "strategy_error_msg": getattr(order, "strategy_error_msg", "") or "",
             "order_time": getattr(order, "order_time", "") or "",
-        }})
+        })
 
     def on_stock_trade(self, trade: Any) -> None:
         value = trade.traded_price * trade.traded_volume
         commission = round(value * 0.0005, 4)
-        _trading_events_queue.append({"event": "fill", "data": {
+        _trading_events_append("fill", {
             "order_id": str(trade.order_id),
             "stock_code": trade.stock_code,
             "traded_price": trade.traded_price,
@@ -303,15 +317,15 @@ class _TradingCallback:
             "traded_amount": value,
             "commission": commission,
             "time": getattr(trade, "traded_time", "") or "",
-        }})
+        })
 
     def on_order_error(self, order_error: Any) -> None:
-        _trading_events_queue.append({"event": "order_status", "data": {
+        _trading_events_append("order_status", {
             "order_id": str(order_error.order_id),
             "stock_code": order_error.stock_code,
             "order_status": 58,
             "strategy_error_msg": order_error.error_msg or "unknown error",
-        }})
+        })
 
 
 def _is_xtminiqmt_running() -> bool:
@@ -634,7 +648,7 @@ def _on_quote_push(datas: dict) -> None:
             continue
         _quote_push_last[code] = now
         bar = bars[-1] if isinstance(bars, list) else bars
-        _trading_events_queue.append({"event": "quote", "data": {
+        _trading_events_append("quote", {
             "stock_code": code,
             "last_price": bar.get("lastPrice", 0),
             "open": bar.get("open", 0),
@@ -648,7 +662,7 @@ def _on_quote_push(datas: dict) -> None:
             "bid_vol": bar.get("bidVol", [0, 0, 0, 0, 0]),
             "ask_vol": bar.get("askVol", [0, 0, 0, 0, 0]),
             "time": int(now * 1000),
-        }})
+        })
 
 
 def _trading_subscribe_quote(params: dict) -> dict:
@@ -772,10 +786,22 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 "timestamp": datetime.now().isoformat(),
             })
         elif self.path == "/trading/events" or self.path.startswith("/trading/events?"):
-            global _trading_events_queue
-            events = _trading_events_queue[:]
-            _trading_events_queue = []
-            body = json.dumps({"events": events, "count": len(events)}, ensure_ascii=False).encode("utf-8")
+            # Parse afterSeq from query string for non-destructive reads
+            after_seq = 0
+            if "?" in self.path:
+                from urllib.parse import parse_qs, urlparse
+                qs = parse_qs(urlparse(self.path).query)
+                try:
+                    after_seq = int(qs.get("afterSeq", ["0"])[0])
+                except (ValueError, IndexError):
+                    pass
+            with _trading_events_lock:
+                if after_seq > 0:
+                    events = [e for e in _trading_events_buf if e["seq"] > after_seq]
+                else:
+                    events = _trading_events_buf[:]
+                latest_seq = _trading_events_seq
+            body = json.dumps({"events": events, "count": len(events), "latestSeq": latest_seq}, ensure_ascii=False).encode("utf-8")
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -783,7 +809,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionError, OSError):
-                _trading_events_queue = events + _trading_events_queue
+                pass
         elif self.path == "/debug/klines":
             self._handle_debug_klines()
         else:

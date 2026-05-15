@@ -517,6 +517,125 @@ export const CTA_SCREEN_STRATEGY_MAP: Record<string, string> = {
   "regime-switch": "mixed",
 };
 
+// ── Strategy regime style classification ─────────────────────────
+// Categorises each strategy as "aggressive", "defensive", or "balanced".
+// Used to auto-filter / warn during bear / recession macro regimes.
+
+export type StrategyStyle = "aggressive" | "balanced" | "defensive";
+
+/** Strategies that pursue momentum / trend-following / breakout — risky in bear markets. */
+const AGGRESSIVE_STRATEGIES = new Set<string>([
+  "momentum", "growth", "manipulation", "event_catalyst",
+  "momentum-breakout", "trend-combo", "volume-confirmation",
+  "trix-momentum", "aroon-trend", "elder-ray", "supertrend",
+  "hull-ma-crossover", "dema-crossover", "triple-ma-crossover", "kama-trend",
+  "cta-trend", "dual-thrust", "turtle-breakout", "macd-trend",
+  "dmi-adx", "parabolic-sar", "momentum-rotation", "obv-trend", "ichimoku",
+  "multi-ma-convergence", "roc-momentum", "ema-crossover", "atr-trailing",
+  "cta-elder-force", "cta-adx-breakout", "cta-trix-trend", "cta-hull-ma-trend",
+  "cta-coppock", "cta-volume-breakout", "cta-adaptive-ma",
+  "cta-aroon-oscillator", "cta-dema-crossover", "cta-triple-ma", "cta-supertrend",
+  "ema-cross", "adx-trend", "aroon", "vortex", "cci", "trix", "dmi",
+  "dema-cross", "tema-cross",
+  "donchian-breakout", "atr-channel", "price-channel-breakout",
+  "roc", "adaptive-ma", "obv",
+  "three-soldiers", "morning-star",
+  "ma-volume-combo", "ichimoku-adx-combo", "multi-tf-ma", "volatility-breakout",
+]);
+
+/** Mean-reversion / value / defensive strategies — preferred in bear markets. */
+const DEFENSIVE_STRATEGIES = new Set<string>([
+  "value", "swing", "spread-arbitrage",
+  "rsi-reversal", "vwap-reversion", "mean-reversion-zscore", "williams-r",
+  "double-bottom", "mean-reversion", "connors-rsi", "demarker",
+  "bollinger-breakout", "keltner-channel", "r-breaker", "aberration",
+  "donchian-mid-reversion", "grid-trading", "pivot-point",
+  "stochastic-rsi", "macd-histogram-reversal", "bollinger-bandwidth",
+  "cta-demarker", "cta-ultimate-oscillator", "cta-mass-index",
+  "cta-chaikin-oscillator", "cta-rsi-divergence", "cta-ma-envelope", "cta-connors-rsi",
+  "stochastic", "mfi", "cmf", "adl", "vwap",
+  "engulfing", "hammer", "doji", "harami",
+  "bollinger-rsi-combo", "regime-switch",
+]);
+
+/** Get the regime style for a strategy. */
+export function getStrategyStyle(id: string): StrategyStyle {
+  if (AGGRESSIVE_STRATEGIES.has(id)) return "aggressive";
+  if (DEFENSIVE_STRATEGIES.has(id)) return "defensive";
+  return "balanced";
+}
+
+/** Macro regimes where aggressive strategies are NOT recommended. */
+const BEAR_REGIMES = new Set(["recession", "stagflation", "bear", "overheating"]);
+
+/** Check if a macro regime is considered bearish / unfavourable for aggressive strategies. */
+export function isBearishRegime(regime: string): boolean {
+  return BEAR_REGIMES.has(regime.toLowerCase());
+}
+
+/**
+ * For a given macro regime, return strategies that are NOT recommended.
+ * These strategies can still be selected manually, but with a warning.
+ */
+export function getUnsuitableStrategies(regime: string): Set<string> {
+  const r = regime.toLowerCase();
+  if (r === "recession" || r === "stagflation") {
+    // Most severe — aggressive AND some balanced strategies are unsuitable
+    return AGGRESSIVE_STRATEGIES;
+  }
+  if (r === "bear" || r === "overheating") {
+    // Moderate — only aggressive strategies are unsuitable
+    return AGGRESSIVE_STRATEGIES;
+  }
+  // recovery / unknown → no restrictions
+  return new Set();
+}
+
+/**
+ * Regime-aware scoring weight adjustments.
+ * Returns multipliers for the composite scoring formula.
+ */
+export function getRegimeScoringWeights(regime: string): {
+  returnWeight: number;
+  annualizedWeight: number;
+  sharpeWeight: number;
+  winRateWeight: number;
+  profitFactorWeight: number;
+  drawdownPenalty: number;
+} {
+  const r = regime.toLowerCase();
+  if (r === "recession" || r === "stagflation") {
+    // Severely penalise drawdown, reward win-rate and risk-adjusted returns
+    return {
+      returnWeight: 0.5,
+      annualizedWeight: 0.2,
+      sharpeWeight: 16,
+      winRateWeight: 0.55,
+      profitFactorWeight: 3,
+      drawdownPenalty: 3.0,
+    };
+  }
+  if (r === "bear" || r === "overheating") {
+    return {
+      returnWeight: 0.7,
+      annualizedWeight: 0.3,
+      sharpeWeight: 14,
+      winRateWeight: 0.45,
+      profitFactorWeight: 3,
+      drawdownPenalty: 2.2,
+    };
+  }
+  // Normal / recovery / unknown — original weights
+  return {
+    returnWeight: 1.0,
+    annualizedWeight: 0.35,
+    sharpeWeight: 12,
+    winRateWeight: 0.28,
+    profitFactorWeight: 3,
+    drawdownPenalty: 1.5,
+  };
+}
+
 // ── Tick strategy helpers ────────────────────────────────────────
 
 export type TickStrategyConfig = NonNullable<

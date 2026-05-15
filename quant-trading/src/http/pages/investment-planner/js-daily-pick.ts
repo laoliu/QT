@@ -1,6 +1,122 @@
 /** Investment Planner — daily composite picks, recommendations, and order execution */
 export function getDailyPickJs(): string {
   return `
+// ── Macro Regime Awareness ──────────────────────────────────────
+var _currentRegime='unknown';
+var _regimeIsBearish=false;
+var _unsuitableStrategies=[];
+
+function loadMacroRegime(){
+  api('/quant/admin/api/macro-regime',{_timeout:90000}).then(function(d){
+    if(!d||d.regime==='unknown')return;
+    _currentRegime=d.regime;
+    _regimeIsBearish=!!d.isBearish;
+    _unsuitableStrategies=Array.isArray(d.unsuitableStrategies)?d.unsuitableStrategies:[];
+    showRegimeBanner(d);
+    if(_regimeIsBearish){
+      applyRegimeFilter();
+    }
+  }).catch(function(){});
+}
+
+function showRegimeBanner(d){
+  var banner=document.getElementById('dp-regime-banner');
+  if(!banner)return;
+  if(!d.isBearish){
+    banner.style.display='none';
+    return;
+  }
+  var regimeLabels={recession:'衰退期',stagflation:'滞胀期',bear:'熊市',overheating:'过热期'};
+  var label=regimeLabels[d.regime]||d.regime;
+  var desc=d.description||'';
+  banner.style.display='block';
+  banner.innerHTML=
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<span style="font-size:16px">⚠️</span>'+
+    '<strong>当前宏观周期: '+esc(label)+'</strong>'+
+    (desc?(' <span style="color:var(--text-dim);font-size:12px">'+esc(desc)+'</span>'):'')+
+    '<span style="margin-left:auto;font-size:12px;color:var(--text-dim)">已自动取消 '+d.unsuitableCount+' 个不适合的激进型策略</span>'+
+    '</div>'+
+    '<div style="margin-top:6px;font-size:12px;color:var(--text-dim)">'+
+    '系统已自动选择防御/均衡型策略。如需使用激进型策略，可手动勾选（会显示风险警告）。'+
+    '</div>';
+}
+
+function applyRegimeFilter(){
+  if(!_unsuitableStrategies.length)return;
+  var unsuitSet={};
+  _unsuitableStrategies.forEach(function(s){unsuitSet[s]=true;});
+  document.querySelectorAll('.dp-strategy').forEach(function(el){
+    if(unsuitSet[el.value]){
+      el.checked=false;
+      // Add visual warning indicator
+      var lbl=el.closest('label');
+      if(lbl){
+        lbl.setAttribute('data-regime-unsuitable','1');
+        lbl.style.opacity='0.55';
+        lbl.title='⚠️ 当前宏观周期('+_currentRegime+')下不建议使用此策略';
+      }
+    }
+  });
+}
+
+function onStrategyCheckboxChange(el){
+  if(!_regimeIsBearish)return;
+  var unsuitSet={};
+  _unsuitableStrategies.forEach(function(s){unsuitSet[s]=true;});
+  if(el.checked&&unsuitSet[el.value]){
+    var regimeLabels={recession:'衰退期',stagflation:'滞胀期',bear:'熊市',overheating:'过热期'};
+    var label=regimeLabels[_currentRegime]||_currentRegime;
+    var ok=confirm('⚠️ 风险警告\\n\\n当前宏观处于「'+label+'」，'+
+      '策略「'+(el.closest('label')?.textContent?.trim()||el.value)+'」属于激进型策略，'+
+      '在下行市场中回撤风险较大。\\n\\n'+
+      '确定要启用此策略吗？');
+    if(!ok){
+      el.checked=false;
+      return;
+    }
+    // User confirmed — mark with warning styling
+    var lbl=el.closest('label');
+    if(lbl){
+      lbl.style.opacity='1';
+      lbl.style.outline='2px solid #d29922';
+      lbl.style.outlineOffset='2px';
+      lbl.style.borderRadius='4px';
+      lbl.title='⚠️ 用户已手动启用（当前周期不推荐）';
+    }
+  }
+}
+
+function selectDefensiveOnly(){
+  // Defensive strategy set — mirrors backend DEFENSIVE_STRATEGIES
+  var defensive=['value','swing','spread-arbitrage','rsi-reversal','vwap-reversion',
+    'mean-reversion-zscore','williams-r','double-bottom','mean-reversion','connors-rsi','demarker',
+    'bollinger-breakout','keltner-channel','r-breaker','aberration','donchian-mid-reversion',
+    'grid-trading','pivot-point','stochastic-rsi','macd-histogram-reversal','bollinger-bandwidth',
+    'cta-demarker','cta-ultimate-oscillator','cta-mass-index','cta-chaikin-oscillator',
+    'cta-rsi-divergence','cta-ma-envelope','cta-connors-rsi',
+    'stochastic','mfi','cmf','adl','vwap',
+    'engulfing','hammer','doji','harami','bollinger-rsi-combo','regime-switch'];
+  var defSet={};
+  defensive.forEach(function(s){defSet[s]=true;});
+  document.querySelectorAll('.dp-strategy').forEach(function(el){
+    el.checked=!!defSet[el.value];
+    var lbl=el.closest('label');
+    if(lbl){
+      lbl.style.opacity=el.checked?'1':'0.55';
+      lbl.style.outline='';
+    }
+  });
+  toast('🛡️ 已切换为防御模式，仅选择均值回归/价值/反转类策略');
+}
+
+// ── Attach change listeners to strategy checkboxes ──
+function initRegimeListeners(){
+  document.querySelectorAll('.dp-strategy').forEach(function(el){
+    el.addEventListener('change',function(){onStrategyCheckboxChange(el);});
+  });
+}
+
 function getDailyPickStrategies(){
   return Array.from(document.querySelectorAll('.dp-strategy:checked')).map(function(el){
     return el.value;
@@ -309,6 +425,32 @@ function renderDailyCompositePick(d){
     kpiHtml(finalSymbols.length+'只','最终入围')+
     kpiHtml(selected.length+'个','入围策略')+
     kpiHtml(okStockBt+'只','单股可回测');
+
+  // ── Regime warning panel in results ──
+  var regimeInfo=d.regimeInfo||{};
+  var regimeWarnEl=document.getElementById('dp-regime-result-warn');
+  if(regimeWarnEl){
+    if(regimeInfo.isBearish&&regimeInfo.warnings&&regimeInfo.warnings.length>0){
+      var regimeLabels={recession:'衰退期',stagflation:'滞胀期',bear:'熊市',overheating:'过热期'};
+      var rl=regimeLabels[regimeInfo.regime]||regimeInfo.regime;
+      var warnHtml='<div style="padding:10px 14px;background:rgba(210,153,34,.1);border:1px solid #d29922;border-radius:8px;margin-bottom:10px;font-size:12px">';
+      warnHtml+='<div style="font-weight:600;color:#d29922;margin-bottom:4px">⚠️ 宏观周期风控提示 — 当前: '+esc(rl)+'</div>';
+      warnHtml+='<div style="color:var(--text-dim)">评分公式已根据当前周期自动调整：加大回撤惩罚权重、提高胜率/夏普比权重。';
+      if(regimeInfo.unsuitableCount>0){
+        warnHtml+=' 有 <strong>'+regimeInfo.unsuitableCount+'</strong> 个策略被标记为不适合当前周期（激进型），其评分已被自动降低。';
+      }
+      warnHtml+='</div>';
+      warnHtml+='<details style="margin-top:6px"><summary style="cursor:pointer;color:#d29922">查看被警告的策略 ('+regimeInfo.warnings.length+')</summary><ul style="margin:4px 0 0 16px;padding:0">';
+      regimeInfo.warnings.forEach(function(w){
+        warnHtml+='<li style="margin:2px 0">'+esc(w.label)+' <span style="color:var(--text-dim)">('+w.style+')</span></li>';
+      });
+      warnHtml+='</ul></details></div>';
+      regimeWarnEl.innerHTML=warnHtml;
+      regimeWarnEl.style.display='block';
+    }else{
+      regimeWarnEl.style.display='none';
+    }
+  }
 
   // Strategy ranking table
   var stBody=document.querySelector('#dp-strategy-table tbody');

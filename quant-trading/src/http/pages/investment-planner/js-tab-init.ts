@@ -165,6 +165,8 @@ function updatePlanModeIndicator(){
   refreshGlobalMode();
   updatePlanModeIndicator();
   loadPlanHistory();restoreCachedPlan();
+  initRegimeListeners();
+  loadMacroRegime();
   var h=(location.hash||'').replace('#','');
   if(h){_onTabDataLoad(h);}
 

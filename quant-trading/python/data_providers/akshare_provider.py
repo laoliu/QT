@@ -552,6 +552,10 @@ def _to_qmt_code(symbol: str, market: str = "cn_stock") -> str:
         if symbol.startswith(("6", "5", "9")):
             return f"{symbol}.SH"
         return f"{symbol}.SZ"
+    if market == "convertible_bond":
+        if symbol.startswith("11"):
+            return f"{symbol}.SH"
+        return f"{symbol}.SZ"
     return symbol
 
 

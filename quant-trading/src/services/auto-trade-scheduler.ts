@@ -14,7 +14,7 @@ import { dirname } from "node:path";
 import http from "node:http";
 import { isTradingDay } from "../utils/trading-calendar.js";
 import { nowCSTISO } from "../utils/cst-time.js";
-import { DAILY_PICK_STRATEGIES, getAllAllowedStrategies } from "../http/routes/_helpers.js";
+import { DAILY_PICK_STRATEGIES, getAllAllowedStrategies, isBearishRegime, getStrategyStyle } from "../http/routes/_helpers.js";
 import type { MarketContext } from "./market-context.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -216,6 +216,9 @@ export class AutoTradeScheduler {
   private baseUrl: string;
   private authToken: string;
   private running = false;
+  /** Regime-adjusted overrides for the current cycle (set during screen phase, used in execute). */
+  private _regimeExecutePct: number | null = null;
+  private _regimeTrailingStopPct: number | null = null;
 
   constructor(opts: {
     dataDir?: string | null;
@@ -590,15 +593,71 @@ export class AutoTradeScheduler {
       }
       // else: useFitnessStrategies=false and strategies=[] → undefined → daily-picks uses all
 
-      // Step 1: Run daily picks
+      // Step 1: Check macro regime and adjust parameters
+      let macroRegime = "unknown";
+      try {
+        const regimeResult = await this.callApi("/quant/admin/api/macro-regime", {});
+        if (regimeResult?.regime) {
+          macroRegime = String(regimeResult.regime);
+        }
+      } catch { /* continue with unknown regime */ }
+
+      const bearish = isBearishRegime(macroRegime);
+      const severe = macroRegime === "recession" || macroRegime === "stagflation";
+
+      // Regime-adaptive parameter overrides
+      let effectiveRiskTolerance = this.config.riskTolerance;
+      let effectiveExecutePct = this.config.executePct;
+      let effectiveTrailingStopPct = this.config.trailingStopPct;
+      let effectiveFinalStockLimit = this.config.finalStockLimit;
+      let effectiveTopStrategyCount = this.config.topStrategyCount;
+
+      if (bearish) {
+        // Downgrade risk tolerance: high→medium, aggressive→medium, medium→low
+        if (effectiveRiskTolerance === "aggressive" || effectiveRiskTolerance === "high") {
+          effectiveRiskTolerance = "medium";
+        } else if (effectiveRiskTolerance === "medium" && severe) {
+          effectiveRiskTolerance = "low";
+        }
+        // Reduce execution percentage in first batch
+        effectiveExecutePct = severe ? Math.min(effectiveExecutePct, 30) : Math.min(effectiveExecutePct, 40);
+        // Tighten trailing stop
+        effectiveTrailingStopPct = severe ? Math.min(effectiveTrailingStopPct, 5) : Math.min(effectiveTrailingStopPct, 6);
+        // Reduce final stock limit for concentration on high-quality
+        effectiveFinalStockLimit = severe ? Math.min(effectiveFinalStockLimit, 4) : Math.min(effectiveFinalStockLimit, 6);
+        // Reduce top strategy count
+        effectiveTopStrategyCount = severe ? Math.min(effectiveTopStrategyCount, 2) : effectiveTopStrategyCount;
+
+        const regimeLabels: Record<string, string> = { recession: "衰退期", stagflation: "滞胀期", bear: "熊市", overheating: "过热期" };
+        this.notify(
+          `⚠️ 宏观周期: ${regimeLabels[macroRegime] ?? macroRegime} — 已启用防御模式` +
+          ` (风险${effectiveRiskTolerance}, 仓位${effectiveExecutePct}%, 止损${effectiveTrailingStopPct}%, 入围${effectiveFinalStockLimit}只)`,
+        );
+
+        // Filter out aggressive strategies from resolved list
+        if (resolvedStrategies) {
+          const before = resolvedStrategies.length;
+          resolvedStrategies = resolvedStrategies.filter((id) => getStrategyStyle(id) !== "aggressive");
+          if (resolvedStrategies.length === 0) resolvedStrategies = undefined; // fall back to all
+          else if (resolvedStrategies.length < before) {
+            this.notify(`🛡️ 已从策略池中移除 ${before - resolvedStrategies.length} 个激进型策略`);
+          }
+        }
+      }
+
+      // Step 2: Run daily picks
+      // Store regime-adjusted values for execute phase
+      this._regimeExecutePct = bearish ? effectiveExecutePct : null;
+      this._regimeTrailingStopPct = bearish ? effectiveTrailingStopPct : null;
+
       const startDate = this.config.startDate || this.defaultStartDate();
       const pickBody: Record<string, unknown> = {
         strategies: resolvedStrategies,
         top_n_per_strategy: this.config.topNPerStrategy,
-        top_strategy_count: this.config.topStrategyCount,
-        final_stock_limit: this.config.finalStockLimit,
+        top_strategy_count: effectiveTopStrategyCount,
+        final_stock_limit: effectiveFinalStockLimit,
         initial_capital: this.config.initialCapital,
-        risk_tolerance: this.config.riskTolerance,
+        risk_tolerance: effectiveRiskTolerance,
         rebalance_days: this.config.rebalanceDays,
         start_date: startDate,
       };
@@ -770,9 +829,9 @@ export class AutoTradeScheduler {
       const execBody = {
         dry_run: this.config.dryRun,
         force_premarket: needsPremarket,
-        execute_pct: this.config.executePct,
+        execute_pct: this._regimeExecutePct ?? this.config.executePct,
         create_conditional_orders: this.config.createConditionalOrders,
-        trailing_stop_pct: this.config.trailingStopPct,
+        trailing_stop_pct: this._regimeTrailingStopPct ?? this.config.trailingStopPct,
         allocations: validAllocations,
       };
 

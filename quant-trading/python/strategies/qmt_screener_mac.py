@@ -128,6 +128,9 @@ def _to_qmt_code(stock_id: str, factors: dict | None = None) -> str | None:
       - 6xxxxx / 5xxxxx → .SH（上交所主板 / ETF）
       - 688xxx           → .SH（科创板）
       - 0xxxxx / 3xxxxx → .SZ（深交所主板 / 创业板）
+    可转债规则：
+      - 11xxxx           → .SH（沪市转债）
+      - 12xxxx / 13xxxx  → .SZ（深市转债）
     排除北交所（8xxxxx / 4xxxxx）；调用方不应传入 ETF(5xx)，
     但保留 SH 标记以防万一（QMT 会忽略不支持的代码）。
     """
@@ -137,6 +140,11 @@ def _to_qmt_code(stock_id: str, factors: dict | None = None) -> str | None:
     if c.startswith("6") or c.startswith("5") or c.startswith("688"):
         return f"{c}.SH"
     if c.startswith("0") or c.startswith("3"):
+        return f"{c}.SZ"
+    # 可转债
+    if c.startswith("11"):
+        return f"{c}.SH"
+    if c.startswith("12") or c.startswith("13"):
         return f"{c}.SZ"
     # 北交所等：不纳入
     return None

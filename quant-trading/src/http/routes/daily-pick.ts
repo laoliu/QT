@@ -19,6 +19,10 @@ import {
   isAiphaStrategy,
   setAiphaStrategies,
   isAiphaLoaded,
+  getStrategyStyle,
+  isBearishRegime,
+  getUnsuitableStrategies,
+  getRegimeScoringWeights,
 } from "./_helpers.js";
 import { parseJsonBody } from "../parse-body.js";
 import * as fs from "node:fs";
@@ -110,6 +114,35 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
 
   // ── Load AIPHA strategies from Python on startup ──────────
   loadAiphaStrategies(config);
+
+  // ── Quick Macro Regime Check (for frontend pre-filtering) ──────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/macro-regime",
+    handler: secure(async (_req, res) => {
+      try {
+        const result = await runPythonScript<Record<string, unknown>>(
+          "scripts/investment_planner.py",
+          { action: "screen", strategy: "mixed", top_n: 1 },
+          config,
+          { timeoutMs: 60_000 },
+        );
+        const data = result.ok ? (result.data ?? {}) : {};
+        const regime = String(data.macroRegime ?? "unknown");
+        const unsuitable = [...getUnsuitableStrategies(regime)];
+        json(res, {
+          status: "ok",
+          regime,
+          isBearish: isBearishRegime(regime),
+          description: String(data.macroDescription ?? ""),
+          unsuitableStrategies: unsuitable,
+          unsuitableCount: unsuitable.length,
+        });
+      } catch {
+        json(res, { status: "ok", regime: "unknown", isBearish: false, unsuitableStrategies: [], unsuitableCount: 0 });
+      }
+    }),
+  });
 
   // ── Daily Composite Picks API ────────────────────────────────
   api.registerHttpRoute({
@@ -231,25 +264,28 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
         };
       };
 
-      const strategyComposite = (summary: BacktestSummaryLite): number => {
+      const strategyComposite = (summary: BacktestSummaryLite, regime = ""): number => {
+        const w = getRegimeScoringWeights(regime);
         const score =
-          summary.totalReturn * 1.0 +
-          summary.annualizedReturn * 0.35 +
-          summary.sharpeRatio * 12 +
-          summary.winRate * 0.28 +
-          Math.min(summary.profitFactor, 8) * 3 -
-          summary.maxDrawdown * 1.5;
+          summary.totalReturn * w.returnWeight +
+          summary.annualizedReturn * w.annualizedWeight +
+          summary.sharpeRatio * w.sharpeWeight +
+          summary.winRate * w.winRateWeight +
+          Math.min(summary.profitFactor, 8) * w.profitFactorWeight -
+          summary.maxDrawdown * w.drawdownPenalty;
         return round2(score);
       };
 
-      const stockComposite = (summary: BacktestSummaryLite): number => {
+      const stockComposite = (summary: BacktestSummaryLite, regime = ""): number => {
+        const w = getRegimeScoringWeights(regime);
+        // Stock-level: slightly different base from strategy-level
         const score =
-          summary.totalReturn * 1.1 +
-          summary.annualizedReturn * 0.25 +
-          summary.sharpeRatio * 10 +
-          summary.winRate * 0.3 +
-          Math.min(summary.profitFactor, 8) * 3 -
-          summary.maxDrawdown * 1.2;
+          summary.totalReturn * Math.max(w.returnWeight, 0.8) +
+          summary.annualizedReturn * w.annualizedWeight +
+          summary.sharpeRatio * (w.sharpeWeight - 2) +
+          summary.winRate * (w.winRateWeight + 0.02) +
+          Math.min(summary.profitFactor, 8) * w.profitFactorWeight -
+          summary.maxDrawdown * Math.max(w.drawdownPenalty - 0.3, 1.2);
         return round2(score);
       };
 
@@ -523,6 +559,32 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           }),
         );
 
+        // ── Extract macro regime and re-score strategies with regime-awareness ──
+        const detectedRegime = String(enrichmentContext.macroRegime ?? "unknown");
+        const unsuitableSet = getUnsuitableStrategies(detectedRegime);
+        const regimeWarnings: Array<{ strategy: string; label: string; style: string; warning: string }> = [];
+
+        // Re-score with regime-aware weights now that we have macro data
+        for (const run of strategyRuns) {
+          if (run.summary && !run.error) {
+            run.compositeScore = strategyComposite(run.summary, detectedRegime);
+            // Penalise aggressive strategies in bear regimes
+            const style = getStrategyStyle(run.strategy);
+            if (isBearishRegime(detectedRegime) && style === "aggressive") {
+              run.compositeScore = round2(run.compositeScore * 0.5);
+            }
+          }
+          // Collect warnings for strategies that shouldn't be used in current regime
+          if (unsuitableSet.has(run.strategy)) {
+            regimeWarnings.push({
+              strategy: run.strategy,
+              label: run.strategyLabel,
+              style: getStrategyStyle(run.strategy),
+              warning: `当前宏观周期(${detectedRegime})下不建议使用${run.strategyLabel}(${getStrategyStyle(run.strategy)}型策略)`,
+            });
+          }
+        }
+
         const sortedRuns = [...strategyRuns].sort((a, b) => {
           const aOk = a.summary && !a.error;
           const bOk = b.summary && !b.error;
@@ -786,7 +848,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 strategyLabel: benchmark.strategyLabel,
                 selectedBy: stock.sourceDetails.map((x) => x.strategyLabel),
                 summary,
-                compositeScore: stockComposite(summary),
+                compositeScore: stockComposite(summary, detectedRegime),
                 equityCurve,
                 trades,
                 monthlyReturns,
@@ -1004,7 +1066,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
                 strategy,
                 strategyLabel,
                 summary,
-                compositeScore: strategyComposite(summary),
+                compositeScore: strategyComposite(summary, detectedRegime),
               };
             });
 
@@ -1062,6 +1124,13 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
           status: "ok",
           generatedAt: nowCSTISO(),
           enrichment: enrichmentContext,
+          regimeInfo: {
+            regime: detectedRegime,
+            isBearish: isBearishRegime(detectedRegime),
+            unsuitableCount: regimeWarnings.length,
+            warnings: regimeWarnings,
+            scoringAdjusted: detectedRegime !== "unknown" && detectedRegime !== "recovery",
+          },
           input: {
             strategies,
             topStrategyCount,

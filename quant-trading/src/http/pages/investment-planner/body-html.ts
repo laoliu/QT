@@ -1308,10 +1308,12 @@ export function getPlannerBodyHtml(b: string): string {
     <div class="card" style="margin-bottom:14px;border:1px solid var(--accent)">
       <h3>🧭 每日综合选股</h3>
       <p style="color:var(--text-dim);font-size:12px;margin:4px 0 10px">自动运行多策略，选出前 2-3 个强势策略，合并候选池并筛出不超过 8 只股票，再进行收益/回撤/胜率排行，作为每日总和选股清单。</p>
+      <div id="dp-regime-banner" style="display:none;margin-bottom:10px;padding:10px 14px;background:rgba(210,153,34,.12);border:1px solid #d29922;border-radius:8px;font-size:13px;color:#d29922"></div>
       <div class="form-row">
         <label>策略池</label>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=true)" style="padding:2px 8px;font-size:11px">全选</button>
         <button class="btn btn-sm" type="button" onclick="document.querySelectorAll('.dp-strategy').forEach(c=>c.checked=false)" style="padding:2px 8px;font-size:11px">全不选</button>
+        <button class="btn btn-sm" type="button" onclick="selectDefensiveOnly()" style="padding:2px 8px;font-size:11px;background:#1a7f37;color:#fff;border-color:#1a7f37" title="仅选择均值回归/价值/防御类策略（适合下行市场）">🛡️ 防御模式</button>
         <button class="btn btn-sm" type="button" onclick="selectFitnessGlobalTop()" style="padding:2px 8px;font-size:11px;background:var(--purple);color:#fff;border-color:var(--purple)" title="从策略适配分析中加载全局排名前10的策略">🏆 全局最优</button>
         <button class="btn btn-sm" type="button" onclick="selectFitnessStockOptimal()" style="padding:2px 8px;font-size:11px;background:#1f6feb;color:#fff;border-color:#1f6feb" title="使用fitness_optimal策略（根据每只股票的历史最优策略选股）">🎯 个股最优</button>
         <button class="btn btn-sm" type="button" onclick="showFitnessRankingPanel()" style="padding:2px 8px;font-size:11px;border-color:var(--purple);color:var(--purple)" title="查看全局策略排名详情并自选">📊 排名选择</button>
@@ -1600,6 +1602,7 @@ export function getPlannerBodyHtml(b: string): string {
     </div>
 
     <div id="dp-results" style="display:none;margin-bottom:14px">
+      <div id="dp-regime-result-warn" style="display:none"></div>
       <div class="kpi-row" id="dp-kpis"></div>
 
       <div class="card" style="margin-bottom:12px">

@@ -67,6 +67,11 @@ def _to_qmt_code(stock_id: str) -> str | None:
         return f"{stock_id}.SH"
     if first in ("0", "3"):
         return f"{stock_id}.SZ"
+    # 可转债: 11xxxx → .SH, 12xxxx/13xxxx → .SZ
+    if stock_id.startswith("11"):
+        return f"{stock_id}.SH"
+    if stock_id.startswith(("12", "13")):
+        return f"{stock_id}.SZ"
     return None
 
 

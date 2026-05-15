@@ -151,9 +151,14 @@ def _to_qmt_code(code: str) -> str:
 
     600519 → 600519.SH
     000001 → 000001.SZ
+    113050 → 113050.SH  (沪市转债)
+    127060 → 127060.SZ  (深市转债)
     """
     c = code.split(".")[0]  # strip any existing suffix
     if c.startswith(("6", "688", "500", "510", "512", "513", "515", "518")):
+        return f"{c}.SH"
+    # 沪市可转债 11xxxx
+    if c.startswith("11"):
         return f"{c}.SH"
     return f"{c}.SZ"
 

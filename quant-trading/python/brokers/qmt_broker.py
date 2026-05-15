@@ -268,7 +268,16 @@ class QMTBrokerBridge:
             raise RuntimeError("Not connected")
         assets = self.trader.query_stock_asset(self.account)
         if not assets:
-            raise RuntimeError("Failed to query account assets")
+            return {
+                "account_id": self.account_id,
+                "cash": 0,
+                "frozen_cash": 0,
+                "total_asset": 0,
+                "market_value": 0,
+                "profit": 0,
+                "profit_ratio": 0,
+                "_unavailable": True,
+            }
         return {
             "account_id": self.account_id,
             "cash": assets.cash,

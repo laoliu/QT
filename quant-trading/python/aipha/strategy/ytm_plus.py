@@ -22,12 +22,18 @@ class YTMPlusStrategy(CBRotationStrategy):
         cfg = self.config
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False
-        prem = getattr(c, "premium_rate", None)
-        if prem is not None and prem > cfg.max_premium: return False
+        p = getattr(c, "cb_over_rate", None)
+        if p is None:
+            p = getattr(c, "premium_rate", None)
+            if p is not None: p = p * 100.0
+        if p is None: return False
+        if p > cfg.max_premium: return False
         ry = getattr(c, "remain_years", None)
         if ry is not None and ry < cfg.min_years_to_maturity: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        if len(candidates) < 2:
+            return []
         from aipha.strategy.cb_ultra import _rank_scores
         from aipha.strategy.cb_rotation_base import days_to_maturity
         cfg = self.config

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -76,35 +77,92 @@ class MicroCapValueStrategy(EquityRotationStrategy):
 
     def _extra_filter(self, candidate: EquityCandidateInfo, context: StrategyContext) -> bool:
         cfg = self.config
-        roe = getattr(candidate, "roe", None)
-        if roe is not None and roe < cfg.min_roe:
+        roe = candidate.metadata.get("roe", None)
+        if roe is None or (isinstance(roe, float) and math.isnan(roe)):
             return False
-        debt = getattr(candidate, "debt_to_assets", None)
-        if debt is not None and debt > cfg.max_debt_to_assets:
+        if roe < cfg.min_roe:
             return False
-        if cfg.require_positive_profit:
-            profit = getattr(candidate, "net_profit", None)
-            if profit is not None and profit <= 0:
+        debt = candidate.metadata.get("debt_to_assets", None)
+        if debt is not None and not (isinstance(debt, float) and math.isnan(debt)):
+            if debt > cfg.max_debt_to_assets:
                 return False
+        if cfg.require_positive_profit:
+            eps = candidate.metadata.get("eps", None)
+            if eps is not None and not (isinstance(eps, float) and math.isnan(eps)):
+                if eps <= 0:
+                    return False
         return True
 
     def _compute_candidate_fscore(self, candidate: EquityCandidateInfo) -> int | None:
-        """计算 Piotroski F-score (简化版)"""
+        """计算 Piotroski F-score (简化版, 7维)"""
+        meta = candidate.metadata
         score = 0
-        roe = getattr(candidate, "roe", None)
-        if roe is not None and roe > 0:
-            score += 1
-        cfo = getattr(candidate, "ocf", None)
-        if cfo is not None and cfo > 0:
-            score += 1
-        debt = getattr(candidate, "debt_to_assets", None)
-        prev_debt = getattr(candidate, "prev_debt_to_assets", None)
-        if debt is not None and prev_debt is not None and debt < prev_debt:
-            score += 1
-        if roe is not None:
-            prev_roe = getattr(candidate, "prev_roe", None)
-            if prev_roe is not None and roe > prev_roe:
+        dims = 0
+
+        # 1. ROA positive
+        roa = meta.get("roa", None)
+        if roa is not None and not (isinstance(roa, float) and math.isnan(roa)):
+            dims += 1
+            if roa > 0:
                 score += 1
+
+        # 2. CFO positive
+        cfps = meta.get("cfps", None)
+        if cfps is not None and not (isinstance(cfps, float) and math.isnan(cfps)):
+            dims += 1
+            if cfps > 0:
+                score += 1
+
+        # 3. Accrual: CFO > EPS
+        eps = meta.get("eps", None)
+        if (cfps is not None and eps is not None
+                and not (isinstance(cfps, float) and math.isnan(cfps))
+                and not (isinstance(eps, float) and math.isnan(eps))):
+            dims += 1
+            if cfps > eps:
+                score += 1
+
+        # 4. ROA improving
+        prev_roa = meta.get("prev_roa", None)
+        if (roa is not None and prev_roa is not None
+                and not (isinstance(roa, float) and math.isnan(roa))
+                and not (isinstance(prev_roa, float) and math.isnan(prev_roa))):
+            dims += 1
+            if roa > prev_roa:
+                score += 1
+
+        # 5. Debt decreasing
+        debt = meta.get("debt_to_assets", None)
+        prev_debt = meta.get("prev_debt_to_assets", None)
+        if (debt is not None and prev_debt is not None
+                and not (isinstance(debt, float) and math.isnan(debt))
+                and not (isinstance(prev_debt, float) and math.isnan(prev_debt))):
+            dims += 1
+            if debt < prev_debt:
+                score += 1
+
+        # 6. Current ratio improving
+        cr = meta.get("current_ratio", None)
+        prev_cr = meta.get("prev_current_ratio", None)
+        if (cr is not None and prev_cr is not None
+                and not (isinstance(cr, float) and math.isnan(cr))
+                and not (isinstance(prev_cr, float) and math.isnan(prev_cr))):
+            dims += 1
+            if cr > prev_cr:
+                score += 1
+
+        # 7. Gross margin improving
+        gm = meta.get("grossprofit_margin", None)
+        prev_gm = meta.get("prev_grossprofit_margin", None)
+        if (gm is not None and prev_gm is not None
+                and not (isinstance(gm, float) and math.isnan(gm))
+                and not (isinstance(prev_gm, float) and math.isnan(prev_gm))):
+            dims += 1
+            if gm > prev_gm:
+                score += 1
+
+        if dims < 3:
+            return None
         return score
 
     def _score_candidates(

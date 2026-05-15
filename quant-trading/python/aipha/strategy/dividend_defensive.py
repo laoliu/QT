@@ -1,6 +1,6 @@
 """股息防御策略"""
 from __future__ import annotations
-import logging
+import logging, math
 from dataclasses import dataclass
 from aipha.factors.equity_factors import compute_dividend_factor, compute_momentum_factor, compute_quality_factor, compute_value_factor, compute_volatility_factor
 from aipha.strategy.base import StrategyContext
@@ -15,7 +15,8 @@ class DividendDefensiveConfig(EquityRotationConfig):
     weight_dividend: float = 0.35; weight_quality: float = 0.25; weight_volatility: float = 0.20
     weight_value: float = 0.10; weight_momentum: float = 0.10
     min_dividend_yield: float = 0.5; min_roe: float = 5.0; max_pe: float = 60.0; max_debt_to_assets: float = 75.0
-    momentum_lookback: int = 20; volatility_lookback: int = 60
+    momentum_lookback: int = 20; volatility_lookback: int = 60; weight_accruals: float = 0.0; weight_earnings_stability: float = 0.0; weight_piotroski: float = 0.0; piotroski_min_dims: int = 5
+    dividend_field: str = "dv_ratio"; quality_roe_weight: float = 0.6; quality_debt_weight: float = 0.4
 
 class DividendDefensiveStrategy(EquityRotationStrategy):
     name = "dividend_defensive"
@@ -26,11 +27,21 @@ class DividendDefensiveStrategy(EquityRotationStrategy):
     def _extra_filter(self, c: EquityCandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
         dv = getattr(c, "dv_ratio", None)
-        if dv is not None and dv < cfg.min_dividend_yield: return False
+        if dv is None:
+            return False
+        if isinstance(dv, float) and math.isnan(dv):
+            return False
+        if dv < cfg.min_dividend_yield:
+            return False
         roe = getattr(c, "roe", None)
         if roe is not None and roe < cfg.min_roe: return False
         pe = getattr(c, "pe_ttm", None)
-        if pe is not None and pe > cfg.max_pe: return False
+        if pe is not None:
+            if pe <= 0 or pe > cfg.max_pe:
+                return False
+        debt = getattr(c, "debt_to_assets", None)
+        if debt is not None and debt > cfg.max_debt_to_assets:
+            return False
         return True
     def _score_candidates(self, candidates: list[EquityCandidateInfo], ctx: StrategyContext) -> list[str]:
         cfg = self.config; ph = {c.code: getattr(c, "price_history", []) for c in candidates}

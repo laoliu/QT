@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from aipha.strategy.base import StrategyContext
-from aipha.strategy.cb_rotation_base import CBRotationConfig, CBRotationStrategy, CandidateInfo
+from aipha.strategy.cb_rotation_base import CBRotationConfig, CBRotationStrategy, CandidateInfo, days_since_listed
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -15,22 +15,42 @@ class NewBondStrategy(CBRotationStrategy):
     name = "new_bond"
     def __init__(self, config: NewBondConfig | None = None, **kw: object):
         super().__init__(config=config or NewBondConfig(), **kw)
+        self._effective_max_age: int = 0
     @property
     def config(self) -> NewBondConfig: return self._config  # type: ignore
+    def on_start(self) -> None:
+        super().on_start()
+        self._effective_max_age = self.config.max_age_days
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
-        age = getattr(c, "listed_days", None)
-        if age is not None:
-            if age < cfg.min_age_days: return False
-            if age > cfg.max_age_days:
-                if cfg.fallback_max_age_days > 0 and age <= cfg.fallback_max_age_days: pass
-                else: return False
-        price = getattr(c, "close", None)
-        if price is not None and price > cfg.max_price: return False
+        list_date = getattr(c, "list_date", "") or ""
+        if not list_date:
+            return False
+        now = getattr(ctx, "current_time", None)
+        age = days_since_listed(list_date, now)
+        if age < cfg.min_age_days:
+            return False
+        if age > self._effective_max_age:
+            if cfg.fallback_max_age_days > 0 and age <= cfg.fallback_max_age_days:
+                pass
+            else:
+                return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        if not candidates:
+            return []
         price = {c.code: getattr(c, "close", 999.0) or 999.0 for c in candidates}
         return sorted(price, key=price.get)[:self.config.top_k]  # type: ignore
+    def _relax_filters_one_step(self) -> bool:
+        cfg = self.config
+        if cfg.fallback_max_age_days > 0 and self._effective_max_age < cfg.fallback_max_age_days:
+            self._effective_max_age = min(self._effective_max_age + 30, cfg.fallback_max_age_days)
+            return True
+        return False
+    def _maybe_tighten_filters(self) -> None:
+        cfg = self.config
+        if self._effective_max_age > cfg.max_age_days:
+            self._effective_max_age = max(self._effective_max_age - 10, cfg.max_age_days)
 
 @dataclass
 class NewBondEnsembleConfig(NewBondConfig):

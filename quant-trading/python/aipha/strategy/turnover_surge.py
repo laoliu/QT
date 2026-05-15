@@ -20,8 +20,8 @@ class TurnoverSurgeStrategy(CBRotationStrategy):
         self._close_history: dict[str, deque[float]] = {}
     @property
     def config(self) -> TurnoverSurgeConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        # bars provided as argument
         maxlen = self.config.lookback_days + 5
         for sym, bar in bars.items():
             tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
@@ -36,7 +36,10 @@ class TurnoverSurgeStrategy(CBRotationStrategy):
         cfg = self.config
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > cfg.max_premium: return False
         th = self._turnover_history.get(c.code)
         if not th or len(th) < cfg.lookback_days: return False

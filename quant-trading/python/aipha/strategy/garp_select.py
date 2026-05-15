@@ -24,9 +24,8 @@ class GARPConfig(EquityRotationConfig):
 class GARPSelectStrategy(EquityRotationStrategy):
     name = "garp_select"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = GARPConfig()
+    def __init__(self, config: GARPConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or GARPConfig(), **kwargs)
 
     @property
     def config(self) -> GARPConfig:

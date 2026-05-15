@@ -25,9 +25,8 @@ class HighDeliveryConfig(EquityRotationConfig):
 class HighDeliveryExpectStrategy(EquityRotationStrategy):
     name = "high_delivery_expect"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = HighDeliveryConfig()
+    def __init__(self, config: HighDeliveryConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or HighDeliveryConfig(), **kwargs)
 
     @property
     def config(self) -> HighDeliveryConfig:

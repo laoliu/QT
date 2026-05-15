@@ -21,6 +21,20 @@ class NewSmallStrategy(CBRotationStrategy):
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
         age = getattr(c, "listed_days", None)
+        if age is None:
+            ld = getattr(c, "list_date", None) or (c.metadata.get("list_date") if hasattr(c, "metadata") else None)
+            if ld and ctx and ctx.current_time:
+                try:
+                    from datetime import datetime
+                    if isinstance(ld, str) and len(ld) == 8:
+                        ld_dt = datetime.strptime(ld, "%Y%m%d")
+                    elif isinstance(ld, str):
+                        ld_dt = datetime.fromisoformat(ld)
+                    else:
+                        ld_dt = ld
+                    age = (ctx.current_time - ld_dt).days
+                except Exception:
+                    pass
         if age is not None:
             if age < cfg.min_age_days: return False
             if age > cfg.max_age_days:

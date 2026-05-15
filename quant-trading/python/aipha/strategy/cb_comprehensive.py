@@ -69,26 +69,52 @@ class CBComprehensiveStrategy(CBRotationStrategy):
 
     def __init__(self, config: CBComprehensiveConfig | None = None, **kwargs: object):
         super().__init__(config=config or CBComprehensiveConfig(), **kwargs)
-        self._price_hist: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=300))
-        self._premium_hist: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=300))
+        self._premium_history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=300))
+        self._effective_max_age: int = self.config.max_age_days
 
     @property
     def config(self) -> CBComprehensiveConfig:
         return self._config  # type: ignore[return-value]
 
     def _on_start_extra(self) -> None:
-        self._price_hist.clear()
-        self._premium_hist.clear()
+        self._close_history.clear()
+        self._premium_history.clear()
+        self._effective_max_age = self.config.max_age_days
 
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
         for code, bar in bars.items():
-            self._price_hist[code].append(bar.close)
-            prem = getattr(bar, "premium_rate", None) or getattr(bar, "cb_over_rate", None)
+            self._close_history.setdefault(code, deque(maxlen=300))
+            self._close_history[code].append(bar.close)
+            meta = getattr(bar, "metadata", {}) or {}
+            prem = meta.get("cb_over_rate", None)
+            if prem is None:
+                prem = getattr(bar, "premium_rate", None) or getattr(bar, "cb_over_rate", None)
             if prem is not None:
-                self._premium_hist[code].append(float(prem))
+                self._premium_history.setdefault(code, deque(maxlen=300))
+                self._premium_history[code].append(float(prem))
 
     def _should_rebalance(self) -> bool:
-        return self._bar_count % self.config.rebalance_days == 0
+        if self._bar_count <= 1:
+            return False
+        return (self._bar_count - 1) % self.config.rebalance_days == 0
+
+    def _relax_filters_one_step(self) -> bool:
+        cfg = self.config
+        if self._effective_max_age < cfg.fallback_max_age_days:
+            self._effective_max_age = min(
+                self._effective_max_age + 90,
+                cfg.fallback_max_age_days,
+            )
+            return True
+        return False
+
+    def _maybe_tighten_filters(self) -> None:
+        cfg = self.config
+        if self._effective_max_age > cfg.max_age_days:
+            self._effective_max_age = max(
+                self._effective_max_age - 30,
+                cfg.max_age_days,
+            )
 
     def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
         cfg = self.config
@@ -98,19 +124,19 @@ class CBComprehensiveStrategy(CBRotationStrategy):
         premium = getattr(candidate, "premium_rate", None)
         if premium is not None and premium * 100 > cfg.max_premium:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
+        turnover = getattr(candidate, "amount", None) or 0.0
         if turnover < cfg.min_turnover:
             return False
         if cfg.use_age_filter:
             listed = getattr(candidate, "list_date", None)
             if listed:
-                age = days_since_listed(listed)
+                age = days_since_listed(listed, now=getattr(context, "current_time", None))
                 if age < cfg.min_age_days or age > cfg.max_age_days:
                     return False
         return True
 
     def _compute_bb_deviation(self, symbol: str, close: float) -> float | None:
-        hist = self._price_hist.get(symbol)
+        hist = self._close_history.get(symbol)
         lb = self.config.lookback
         if hist is None or len(hist) < lb:
             return None
@@ -122,7 +148,7 @@ class CBComprehensiveStrategy(CBRotationStrategy):
         return (close - mean) / std
 
     def _compute_momentum(self, symbol: str) -> float | None:
-        hist = self._price_hist.get(symbol)
+        hist = self._close_history.get(symbol)
         lb = self.config.momentum_lookback
         if hist is None or len(hist) < lb:
             return None
@@ -130,18 +156,21 @@ class CBComprehensiveStrategy(CBRotationStrategy):
         return (hist[-1] - old) / old if old > 0 else None
 
     def _compute_premium_percentile(self, symbol: str, current_rate: float) -> float:
-        hist = self._premium_hist.get(symbol)
+        hist = self._premium_history.get(symbol)
         lb = self.config.premium_pct_lookback
-        if hist is None or len(hist) < lb:
+        min_hist = max(10, lb // 2)
+        if hist is None or len(hist) < min_hist:
             return 0.5
-        recent = list(hist)[-lb:]
-        below = sum(1 for v in recent if v > current_rate)
-        return below / len(recent)
+        recent = list(hist)[-lb:] if len(hist) >= lb else list(hist)
+        pct_rank = sum(1 for v in recent if v <= current_rate) / len(recent)
+        return 1.0 - pct_rank
 
     def _compute_putback_proximity(self, cb_value: float | None) -> float:
-        if cb_value is None:
+        if cb_value is None or cb_value <= 0:
             return 0.0
-        return max(0.0, 1.0 - cb_value / 100.0) if cb_value < 100.0 else 0.0
+        trigger = self.config.putback_trigger_ratio
+        parity = cb_value / 100.0
+        return trigger - parity
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",
@@ -182,19 +211,19 @@ class CBComprehensiveStrategy(CBRotationStrategy):
             cb_value = getattr(c, "cb_value", None)
             putbacks.append(self._compute_putback_proximity(cb_value))
 
-        # Rank normalize
-        r_price = _rank_scores(prices, ascending=True)
-        r_prem = _rank_scores(premiums, ascending=True)
-        r_size = _rank_scores(sizes, ascending=True)
-        r_age = _rank_scores(ages, ascending=True)
-        r_bb = _rank_scores(bb_devs, ascending=True)
-        r_rating = _rank_scores(ratings, ascending=False)
-        r_delta = _rank_scores(deltas, ascending=False)
-        r_ytm = _rank_scores(ytms, ascending=False)
-        r_turn = _rank_scores(turnovers, ascending=False)
-        r_mom = _rank_scores(moms, ascending=False)
-        r_ppct = _rank_scores(prem_pcts, ascending=False)
-        r_put = _rank_scores(putbacks, ascending=False)
+        # Rank normalize — ascending=False means lower value → higher rank (1.0)
+        r_price = _rank_scores(prices, ascending=False)      # 低价优
+        r_prem = _rank_scores(premiums, ascending=False)      # 低溢价优
+        r_size = _rank_scores(sizes, ascending=False)         # 小规模优
+        r_age = _rank_scores(ages, ascending=False)           # 低龄优
+        r_bb = _rank_scores(bb_devs, ascending=False)         # 低BB偏差优（超跌）
+        r_rating = _rank_scores(ratings, ascending=True)      # 高评级优
+        r_delta = _rank_scores(deltas, ascending=True)        # 高delta优
+        r_ytm = _rank_scores(ytms, ascending=True)            # 高YTM优
+        r_turn = _rank_scores(turnovers, ascending=True)      # 高换手优
+        r_mom = _rank_scores(moms, ascending=True)            # 高动量优
+        r_ppct = _rank_scores(prem_pcts, ascending=True)      # 高百分位分优
+        r_put = _rank_scores(putbacks, ascending=True)        # 高回售接近度优
 
         scored: list[tuple[str, float]] = []
         for i, c in enumerate(candidates):

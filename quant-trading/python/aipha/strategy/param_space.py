@@ -21,7 +21,7 @@ class ParamType(str, Enum):
 class ParamSpec:
     name: str
     param_type: ParamType
-    default: Any
+    default: Any = None
     low: float | None = None
     high: float | None = None
     step: float | None = None
@@ -31,15 +31,17 @@ class ParamSpec:
 
     def __post_init__(self) -> None:
         if self.param_type == ParamType.CHOICE and not self.choices:
-            raise ValueError(f"ParamSpec '{self.name}': CHOICE type requires choices")
+            raise ValueError(f"ParamSpec '{self.name}': CHOICE 类型必须提供 choices")
         if self.param_type in (ParamType.INT, ParamType.FLOAT):
-            if self.low is not None and self.high is not None and self.low > self.high:
-                raise ValueError(f"ParamSpec '{self.name}': low > high")
+            if self.low is None or self.high is None:
+                raise ValueError(f"ParamSpec '{self.name}': {self.param_type.value} 类型必须指定 low 和 high")
+            if self.low > self.high:
+                raise ValueError(f"ParamSpec '{self.name}': low({self.low}) > high({self.high})")
 
 
 @dataclass
 class ParamSpace:
-    strategy_name: str
+    strategy_name: str = ""
     specs: list[ParamSpec] = field(default_factory=list)
 
     def get(self, name: str) -> ParamSpec | None:
@@ -77,6 +79,10 @@ def _generate_values(spec: ParamSpec) -> list[Any]:
         else:
             vals.append(round(v, 8))
         v += step
+    # Ensure high is included
+    high_val = int(round(spec.high)) if spec.param_type == ParamType.INT else round(spec.high, 8)
+    if vals and vals[-1] != high_val:
+        vals.append(high_val)
     return vals
 
 
@@ -124,13 +130,26 @@ def perturb_params(
     specs = space.critical_params() if only_critical else space.specs
     results: list[dict[str, Any]] = []
     for spec in specs:
-        if spec.param_type not in (ParamType.INT, ParamType.FLOAT):
-            continue
         base_val = base_params.get(spec.name, spec.default)
+        if spec.param_type == ParamType.BOOL:
+            perturbed = dict(base_params)
+            perturbed[spec.name] = not base_val
+            perturbed["_perturbed_param"] = spec.name
+            perturbed["_perturbation_pct"] = None
+            results.append(perturbed)
+            continue
+        if spec.param_type == ParamType.CHOICE:
+            for choice in (spec.choices or []):
+                if choice != base_val:
+                    perturbed = dict(base_params)
+                    perturbed[spec.name] = choice
+                    perturbed["_perturbed_param"] = spec.name
+                    perturbed["_perturbation_pct"] = None
+                    results.append(perturbed)
+            continue
         if not isinstance(base_val, (int, float)) or base_val == 0:
             continue
         for pct in perturbation_pcts:
-            perturbed = dict(base_params)
             new_val = base_val * (1 + pct)
             if spec.low is not None:
                 new_val = max(spec.low, new_val)
@@ -138,6 +157,11 @@ def perturb_params(
                 new_val = min(spec.high, new_val)
             if spec.param_type == ParamType.INT:
                 new_val = int(round(new_val))
+            if new_val == base_val:
+                continue
+            perturbed = dict(base_params)
             perturbed[spec.name] = new_val
+            perturbed["_perturbed_param"] = spec.name
+            perturbed["_perturbation_pct"] = pct
             results.append(perturbed)
     return results

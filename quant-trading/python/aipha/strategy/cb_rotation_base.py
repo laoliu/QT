@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -26,7 +27,7 @@ _RATING_ORDER: dict[str, int] = {
 
 
 def rating_score(rating: str) -> int:
-    return _RATING_ORDER.get(rating.strip().upper(), 0)
+    return _RATING_ORDER.get(rating.strip().upper(), -1)
 
 
 def days_to_maturity(maturity_str: str, now: datetime) -> int:
@@ -38,7 +39,9 @@ def days_to_maturity(maturity_str: str, now: datetime) -> int:
         return 9999
 
 
-def days_since_listed(list_date_str: str, now: datetime) -> int:
+def days_since_listed(list_date_str: str, now: datetime | None = None) -> int:
+    if now is None:
+        now = datetime.now()
     try:
         ld = datetime.strptime(list_date_str[:10], "%Y-%m-%d") if "-" in list_date_str \
             else datetime.strptime(list_date_str[:8], "%Y%m%d")
@@ -47,7 +50,7 @@ def days_since_listed(list_date_str: str, now: datetime) -> int:
         return 0
 
 
-@dataclass(slots=True)
+@dataclass
 class CandidateInfo:
     symbol: str
     close: float
@@ -61,6 +64,31 @@ class CandidateInfo:
     list_date: str = ""
     stk_short_name: str = ""
     rating: str = ""
+
+    @property
+    def code(self) -> str:
+        """Backward-compatible alias for symbol."""
+        return self.symbol
+
+    @property
+    def price(self) -> float:
+        """Backward-compatible alias for close."""
+        return self.close
+
+    @property
+    def premium_rate(self) -> float | None:
+        """Return cb_over_rate as decimal (e.g. 0.20 for 20%)."""
+        if self.cb_over_rate is not None:
+            return self.cb_over_rate / 100.0
+        return self.metadata.get("premium_rate")
+
+
+    def __getattr__(self, name: str):
+        """Fallback to metadata for missing attributes."""
+        meta = self.__dict__.get("metadata")
+        if meta and name in meta:
+            return meta[name]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 @dataclass
@@ -107,19 +135,82 @@ class CBRotationStrategy(Strategy):
     def __init__(self, config: CBRotationConfig | None = None, **kwargs: object) -> None:
         if config is not None:
             self._config = config
+        # Apply kwargs to config if they match config fields
+        if kwargs and hasattr(self, '_config'):
+            import dataclasses
+            field_names = {f.name for f in dataclasses.fields(self._config)}
+            for k, v in kwargs.items():
+                if k in field_names:
+                    object.__setattr__(self._config, k, v)
         self._bar_count = 0
         self._last_rebalance_bar = 0
         self._entry_prices: dict[str, float] = {}
         self._peak_prices: dict[str, float] = {}
+        self._close_history: dict[str, deque] = {}
+        self._turnover_history: dict[str, deque] = {}
+        self._stk_price_history: dict[str, deque] = {}
+        self._premium_hist: dict[str, deque] = {}
+        self._current_fundamentals: dict[str, Any] = {}
+        self._market_prices: deque = deque(maxlen=200)
+        self._hlc_history: dict[str, deque] = {}
+        self._cb_value_history: dict[str, deque] = {}
+        self._market_index: deque = deque(maxlen=200)
+        self._prev_close: dict[str, float] = {}
+        self._force_redeem_counter: dict[str, int] = {}
+        self._is_risk_off: bool = False
+        self._risk_off_count: int = 0
+
+    @property
+    def _price_history(self) -> dict[str, deque]:
+        """Alias for _close_history (backward compat)."""
+        return self._close_history
+
+    @_price_history.setter
+    def _price_history(self, value: dict) -> None:
+        self._close_history = value
+
+    @property
+    def _amount_history(self) -> dict[str, deque]:
+        """Alias for _turnover_history (backward compat)."""
+        return self._turnover_history
+
+    @_amount_history.setter
+    def _amount_history(self, value: dict) -> None:
+        self._turnover_history = value
+
+    @property
+    def _premium_history(self) -> dict[str, deque]:
+        """Alias for _premium_hist (backward compat)."""
+        return self._premium_hist
+
+    @_premium_history.setter
+    def _premium_history(self, value: dict) -> None:
+        self._premium_hist = value
 
     def on_start(self) -> None:
+        self._bar_count = 0
+        self._last_rebalance_bar = 0
+        self._entry_prices.clear()
+        self._peak_prices.clear()
+        self._close_history.clear()
+        self._turnover_history.clear()
+        self._stk_price_history.clear()
+        self._premium_hist.clear()
+        self._current_fundamentals.clear()
+        self._market_prices.clear()
+        self._hlc_history.clear()
+        self._cb_value_history.clear()
+        self._market_index.clear()
+        self._prev_close.clear()
+        self._is_risk_off = False
+        self._risk_off_count = 0
         self._on_start_extra()
 
     def on_fill(self, symbol: str, side: Side, qty: int, price: float) -> None:
         if side == Side.BUY:
             self._entry_prices[symbol] = price
             self._peak_prices[symbol] = price
-        elif side == Side.SELL and qty <= 0:
+        elif side == Side.SELL:
             self._entry_prices.pop(symbol, None)
             self._peak_prices.pop(symbol, None)
 
@@ -130,7 +221,7 @@ class CBRotationStrategy(Strategy):
         # 更新 peak prices
         for sym, bar in bars.items():
             if sym in self._peak_prices:
-                self._peak_prices[sym] = max(self._peak_prices[sym], bar.close)
+                self._peak_prices[sym] = max(self._peak_prices[sym], bar.high)
 
         intents: list[OrderIntent] = []
         intents.extend(self._check_stop_loss(bars, context))
@@ -147,9 +238,50 @@ class CBRotationStrategy(Strategy):
         return intents
 
     def _should_rebalance(self) -> bool:
+        if self._bar_count <= 1:
+            return True
         return (self._bar_count - self._last_rebalance_bar) >= self.config.rebalance_days
 
     def _check_stop_loss(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
+        intents: list[OrderIntent] = []
+        cfg = self.config
+        # 更新 peak prices
+        for sym, bar in bars.items():
+            if sym in self._peak_prices:
+                self._peak_prices[sym] = max(self._peak_prices[sym], bar.high)
+        for sym in list(context.positions.keys()):
+            bar = bars.get(sym)
+            if bar is None:
+                continue
+            pos = context.positions.get(sym, 0)
+            if pos <= 0:
+                continue
+            entry = self._entry_prices.get(sym)
+            # 固定止损：使用 bar.low 判断是否触穿
+            fixed_triggered = False
+            if entry and entry > 0:
+                threshold = entry * (1 - cfg.stop_loss_pct)
+                if bar.low < threshold:
+                    pnl = (bar.low - entry) / entry
+                    intents.append(OrderIntent(
+                        symbol=sym, intent_type=IntentType.ORDER,
+                        side=Side.SELL, qty=pos,
+                        reason=f"止损 {pnl:.2%} low={bar.low:.2f} entry={entry:.2f}",
+                    ))
+                    fixed_triggered = True
+            # 追踪止损：仅在固定止损未触发时检查
+            if not fixed_triggered and cfg.trailing_stop_pct > 0:
+                peak = self._peak_prices.get(sym, bar.close)
+                drop = (peak - bar.low) / peak if peak > 0 else 0
+                if drop > cfg.trailing_stop_pct:
+                    intents.append(OrderIntent(
+                        symbol=sym, intent_type=IntentType.ORDER,
+                        side=Side.SELL, qty=pos,
+                        reason=f"追踪止损 {drop:.2%} peak={peak:.2f} low={bar.low:.2f}",
+                    ))
+        return intents
+
+    def _check_force_redeem(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
         intents: list[OrderIntent] = []
         cfg = self.config
         for sym in list(context.positions.keys()):
@@ -159,46 +291,35 @@ class CBRotationStrategy(Strategy):
             pos = context.positions.get(sym, 0)
             if pos <= 0:
                 continue
-            entry = self._entry_prices.get(sym)
-            if entry and entry > 0:
-                pnl = (bar.close - entry) / entry
-                if pnl < -cfg.stop_loss_pct:
+            meta = getattr(bar, "metadata", {}) or {}
+            # 已公告强赎 → 立即卖出
+            if meta.get("is_called"):
+                intents.append(OrderIntent(
+                    symbol=sym, intent_type=IntentType.ORDER,
+                    side=Side.SELL, qty=pos, reason="强赎",
+                ))
+                continue
+            # 连续 N 日 cb_value >= threshold → 强赎预警卖出
+            threshold = getattr(cfg, "force_redeem_threshold", 0)
+            days_needed = getattr(cfg, "force_redeem_days", 0)
+            if threshold > 0 and days_needed > 0:
+                cb_val = meta.get("cb_value", bar.close)
+                if cb_val >= threshold:
+                    self._force_redeem_counter[sym] = self._force_redeem_counter.get(sym, 0) + 1
+                else:
+                    self._force_redeem_counter[sym] = 0
+                if self._force_redeem_counter.get(sym, 0) >= days_needed:
                     intents.append(OrderIntent(
                         symbol=sym, intent_type=IntentType.ORDER,
-                        side=Side.SELL, qty=pos, reason=f"stop_loss {pnl:.2%}",
+                        side=Side.SELL, qty=pos, reason="强赎预警",
                     ))
-            if cfg.trailing_stop_pct > 0:
-                peak = self._peak_prices.get(sym, bar.close)
-                drop = (peak - bar.close) / peak if peak > 0 else 0
-                if drop > cfg.trailing_stop_pct:
-                    intents.append(OrderIntent(
-                        symbol=sym, intent_type=IntentType.ORDER,
-                        side=Side.SELL, qty=pos, reason=f"trailing_stop {drop:.2%}",
-                    ))
-        return intents
-
-    def _check_force_redeem(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
-        if not self.config.exclude_called:
-            return []
-        intents: list[OrderIntent] = []
-        for sym in list(context.positions.keys()):
-            bar = bars.get(sym)
-            if bar and bar.close >= self.config.force_redeem_threshold:
-                meta = getattr(bar, "metadata", {}) or {}
-                if meta.get("force_redeem_triggered"):
-                    pos = context.positions.get(sym, 0)
-                    if pos > 0:
-                        intents.append(OrderIntent(
-                            symbol=sym, intent_type=IntentType.ORDER,
-                            side=Side.SELL, qty=pos, reason="force_redeem",
-                        ))
         return intents
 
     def _filter_candidates(
         self, bars: dict[str, "Bar"], context: StrategyContext,
     ) -> list[CandidateInfo]:
         cfg = self.config
-        now = datetime.now()
+        now = getattr(context, "current_time", None) or datetime.now()
         candidates: list[CandidateInfo] = []
         for sym, bar in bars.items():
             meta = getattr(bar, "metadata", {}) or {}
@@ -301,6 +422,9 @@ class CBRotationStrategy(Strategy):
                     ))
         return intents
 
+    # Alias for backward compat
+    _generate_rebalance_intents = _generate_rebalance
+
     # ── 子类可覆盖的钩子 ──────────────────────────────────
     def _on_start_extra(self) -> None:
         pass
@@ -313,3 +437,59 @@ class CBRotationStrategy(Strategy):
 
     def _custom_exit_check(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
         return []
+
+    def _update_history(self, bars: dict[str, "Bar"], context: StrategyContext | None = None) -> None:
+        """Update close history from bars (backward-compatible helper)."""
+        for sym, bar in bars.items():
+            if sym not in self._close_history:
+                self._close_history[sym] = deque(maxlen=120)
+            self._close_history[sym].append(bar.close)
+            # Update prev_close
+            self._prev_close[sym] = bar.close
+            # Update turnover if available
+            amount = getattr(bar, "amount", None) or getattr(bar, "turnover", None)
+            if amount is not None:
+                if sym not in self._turnover_history:
+                    self._turnover_history[sym] = deque(maxlen=120)
+                self._turnover_history[sym].append(amount)
+            # Update stk_price_history
+            stk_close = getattr(bar, "stock_close", None) or getattr(bar, "stk_close", None)
+            if stk_close is not None:
+                if sym not in self._stk_price_history:
+                    self._stk_price_history[sym] = deque(maxlen=200)
+                self._stk_price_history[sym].append(stk_close)
+            # Update premium_hist
+            prem = getattr(bar, "premium_rate", None)
+            if prem is not None:
+                if sym not in self._premium_hist:
+                    self._premium_hist[sym] = deque(maxlen=120)
+                self._premium_hist[sym].append(prem)
+            # Update HLC history
+            high = getattr(bar, "high", None)
+            low = getattr(bar, "low", None)
+            if high is not None and low is not None:
+                if sym not in self._hlc_history:
+                    self._hlc_history[sym] = deque(maxlen=120)
+                self._hlc_history[sym].append((high, low, bar.close))
+            # Update cb_value history
+            cbv = getattr(bar, "cb_value", None)
+            if cbv is not None:
+                if sym not in self._cb_value_history:
+                    self._cb_value_history[sym] = deque(maxlen=120)
+                self._cb_value_history[sym].append(cbv)
+
+    def _filter_universe(
+        self,
+        candidates_or_bars: list[CandidateInfo] | dict,
+        context: StrategyContext,
+    ) -> list[CandidateInfo]:
+        """Filter candidates using _extra_filter. Accepts list or bars dict."""
+        if isinstance(candidates_or_bars, dict):
+            candidates = self._filter_candidates(candidates_or_bars, context)
+        else:
+            candidates = candidates_or_bars
+        return [c for c in candidates if self._extra_filter(c, context)]
+
+    def delta_exposure(self, *args, **kwargs) -> float:
+        """Return target vs current exposure delta. Default: 0.0."""
+        return 0.0

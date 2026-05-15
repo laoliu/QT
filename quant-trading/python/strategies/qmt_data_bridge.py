@@ -902,8 +902,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
         except Exception as e:
             result = {"ok": False, "error": "handler exception: %s" % str(e)}
         _json_response(self, result)
+        # 高频轮询方法用 debug 级别，避免日志刷屏
+        _POLLING_METHODS = {"query_positions", "query_account"}
         if result.get("ok"):
-            logger.info("[trading] %s => ok", method)
+            if method in _POLLING_METHODS:
+                logger.debug("[trading] %s => ok", method)
+            else:
+                logger.info("[trading] %s => ok", method)
         else:
             logger.info("[trading] %s => error: %s", method, result.get("error", ""))
 

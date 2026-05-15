@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CBMomentumConfig(CBRotationConfig):
-    top_k: int = 20
+    top_k: int = 10
     rebalance_days: int = 5
     max_price: float = 150.0
     lookback_days: int = 20
@@ -58,6 +58,13 @@ class CBMomentumStrategy(CBRotationStrategy):
             return None
         return (hist[-1] - old) / old
 
+    def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
+        hist = self._price_history.get(candidate.code if hasattr(candidate, 'code') else candidate.symbol)
+        lb = self.config.lookback_days
+        if hist is None or len(hist) < lb:
+            return False
+        return True
+
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",
     ) -> list[str]:
@@ -65,7 +72,7 @@ class CBMomentumStrategy(CBRotationStrategy):
         scored: list[tuple[str, float]] = []
         for c in candidates:
             m = self._momentum(c.code)
-            if m is not None and m >= cfg.min_momentum:
+            if m is not None:
                 scored.append((c.code, m))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

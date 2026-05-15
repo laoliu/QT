@@ -93,7 +93,7 @@ class CBGammaConvexityStrategy(CBRotationStrategy):
             listed = getattr(candidate, "list_date", None)
             if listed and days_since_listed(listed) < cfg.min_age_days:
                 return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
+        turnover = getattr(candidate, "amount", None) or 0.0
         return turnover >= cfg.min_turnover
 
     def _compute_stk_vol(self, stk_code: str) -> float | None:

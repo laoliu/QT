@@ -23,8 +23,8 @@ class BreadthControlledStrategy(EquityRotationStrategy):
         self._breadth_history: deque[float] = deque(maxlen=100); self._is_bearish: bool = False
     @property
     def config(self) -> BreadthControlledConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        breadth = getattr(ctx, "market_breadth", None)
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        breadth = getattr(context, "market_breadth", None)
         if breadth is not None:
             self._breadth_history.append(breadth)
             recent = list(self._breadth_history)[-self.config.breadth_lookback:]

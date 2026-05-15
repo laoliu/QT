@@ -23,9 +23,8 @@ class BuybackSignalConfig(EquityRotationConfig):
 class BuybackSignalStrategy(EquityRotationStrategy):
     name = "buyback_signal"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = BuybackSignalConfig()
+    def __init__(self, config: BuybackSignalConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or BuybackSignalConfig(), **kwargs)
 
     @property
     def config(self) -> BuybackSignalConfig:

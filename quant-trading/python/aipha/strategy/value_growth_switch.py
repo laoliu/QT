@@ -27,9 +27,9 @@ class ValueGrowthSwitchStrategy(EquityRotationStrategy):
         self._pe_history: list[float] = []
     @property
     def config(self) -> ValueGrowthSwitchConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
         cfg = self.config
-        market_pe = getattr(ctx, "market_pe", None)
+        market_pe = getattr(context, "market_pe", None)
         if market_pe is not None:
             self._pe_history.append(market_pe)
             if len(self._pe_history) > cfg.pe_lookback:

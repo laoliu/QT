@@ -33,7 +33,10 @@ class CBMLRankingStrategy(CBRotationStrategy):
     def on_start(self) -> None:
         self._load_model()
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > self.config.max_premium: return False
         return True
     @staticmethod

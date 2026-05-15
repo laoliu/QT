@@ -32,45 +32,70 @@ class CBRegimeRotationStrategy(CBRotationStrategy):
     def __init__(self, config: CBRegimeRotationConfig | None = None, **kw: object):
         super().__init__(config=config or CBRegimeRotationConfig(), **kw)
         self._regime: MarketRegime = MarketRegime.NEUTRAL
-        self._index_history: deque[float] = deque(maxlen=200)
-        self._close_history: dict[str, deque[float]] = {}
-        self._turnover_history: dict[str, deque[float]] = {}
-        self._bar_count: int = 0
+
     @property
     def config(self) -> CBRegimeRotationConfig: return self._config  # type: ignore
+
     @property
     def current_regime(self) -> MarketRegime: return self._regime
+
+    @property
+    def _current_regime(self) -> MarketRegime: return self._regime
+
+    @_current_regime.setter
+    def _current_regime(self, value: MarketRegime) -> None:
+        self._regime = value
+
+    def _on_start_extra(self) -> None:
+        self._regime = MarketRegime.NEUTRAL
+
     def _detect_regime(self) -> None:
         cfg = self.config
-        if len(self._index_history) < cfg.regime_lookback: return
-        idx = list(self._index_history)
+        if len(self._market_index) < cfg.regime_lookback: return
+        idx = list(self._market_index)
         ret = (idx[-1] - idx[-cfg.regime_lookback]) / idx[-cfg.regime_lookback] if idx[-cfg.regime_lookback] > 0 else 0
         if ret > cfg.bull_threshold: self._regime = MarketRegime.BULL
         elif ret < cfg.bear_threshold: self._regime = MarketRegime.BEAR
         else: self._regime = MarketRegime.NEUTRAL
+
     def _get_regime_weights(self) -> dict[str, float]:
         cfg = self.config; r = self._regime
         prefix = {"BULL": "bull", "NEUTRAL": "neutral", "BEAR": "bear"}[r.name]
         return {k: getattr(cfg, f"{prefix}_w_{k}", 0.0) for k in ("size", "momentum", "surge", "premium", "price", "reversal")}
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        self._bar_count += 1; bars = getattr(ctx, "bars", {})
-        idx_val = getattr(ctx, "index_close", None)
-        if idx_val: self._index_history.append(idx_val)
+
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        # Build equal-weight market index from bar closes
+        closes = [bar.close for bar in bars.values() if getattr(bar, "close", None)]
+        if closes:
+            self._market_index.append(sum(closes) / len(closes))
         self._detect_regime()
-        maxlen = max(self.config.momentum_lookback, self.config.surge_lookback, self.config.reversal_lookback) + 5
+        # Update per-symbol histories
         for sym, bar in bars.items():
-            close = getattr(bar, "close", None); tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
-            if close:
-                if sym not in self._close_history: self._close_history[sym] = deque(maxlen=maxlen)
-                self._close_history[sym].append(close)
-            if tv is not None:
-                if sym not in self._turnover_history: self._turnover_history[sym] = deque(maxlen=maxlen)
-                self._turnover_history[sym].append(tv)
+            if sym not in self._close_history:
+                self._close_history[sym] = deque(maxlen=120)
+            self._close_history[sym].append(bar.close)
+            meta = getattr(bar, "metadata", None) or {}
+            amount = getattr(bar, "amount", None) or getattr(bar, "turnover", None) or meta.get("amount", 0.0)
+            if sym not in self._turnover_history:
+                self._turnover_history[sym] = deque(maxlen=120)
+            self._turnover_history[sym].append(amount)
+
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > self.config.max_premium: return False
+        # Require sufficient history
+        if c.code not in self._close_history or len(self._close_history[c.code]) < 2:
+            return False
+        if c.code not in self._turnover_history or len(self._turnover_history[c.code]) < 2:
+            return False
         return True
+
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        if not candidates:
+            return []
         from aipha.strategy.cb_ultra import _rank_scores
         cfg = self.config; w = self._get_regime_weights()
         size = {c.code: -(getattr(c, "issue_size", 1e9) or 1e9) for c in candidates}

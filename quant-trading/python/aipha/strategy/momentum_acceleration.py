@@ -25,9 +25,8 @@ class MomentumAccelConfig(EquityRotationConfig):
 class MomentumAccelerationStrategy(EquityRotationStrategy):
     name = "momentum_acceleration"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = MomentumAccelConfig()
+    def __init__(self, config: MomentumAccelConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or MomentumAccelConfig(), **kwargs)
 
     @property
     def config(self) -> MomentumAccelConfig:

@@ -19,24 +19,53 @@ if TYPE_CHECKING:
 class IntentType(str, Enum):
     TARGET_POSITION = "TARGET_POSITION"
     ORDER = "ORDER"
+    EXIT = "EXIT"
+    ENTRY = "ENTRY"
 
 
-@dataclass(frozen=True, slots=True)
 class OrderIntent:
     """Immutable order intention from strategy."""
+    __slots__ = ("symbol", "side", "qty", "intent_type", "limit_price", "reason", "signal_strength", "metadata")
 
-    symbol: str
-    side: "Side"
-    qty: int
-    intent_type: IntentType = IntentType.ORDER
-    limit_price: float | None = None
-    reason: str | None = None
-    signal_strength: float | None = None
-    metadata: dict | None = None
+    def __init__(
+        self,
+        symbol: str,
+        side: "Side",
+        qty: int = 0,
+        intent_type: IntentType = IntentType.ORDER,
+        limit_price: float | None = None,
+        reason: str | None = None,
+        signal_strength: float | None = None,
+        metadata: dict | None = None,
+        *,
+        quantity: int | None = None,
+    ):
+        if quantity is not None and qty == 0:
+            qty = quantity
+        if qty <= 0:
+            raise ValueError(f"qty must be positive, got {qty}")
+        object.__setattr__(self, "symbol", symbol)
+        object.__setattr__(self, "side", side)
+        object.__setattr__(self, "qty", qty)
+        object.__setattr__(self, "intent_type", intent_type)
+        object.__setattr__(self, "limit_price", limit_price)
+        object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "signal_strength", signal_strength)
+        object.__setattr__(self, "metadata", metadata)
 
-    def __post_init__(self):
-        if self.qty <= 0:
-            raise ValueError(f"qty must be positive, got {self.qty}")
+    def __setattr__(self, _name, _value):
+        raise AttributeError("OrderIntent is frozen")
+
+    def __eq__(self, other):
+        if not isinstance(other, OrderIntent):
+            return NotImplemented
+        return all(
+            getattr(self, f) == getattr(other, f)
+            for f in self.__slots__
+        )
+
+    def __hash__(self):
+        return hash(tuple(getattr(self, f) for f in self.__slots__))
 
 
 @dataclass
@@ -51,6 +80,11 @@ class StrategyContext:
 
     def get_position(self, symbol: str) -> int:
         return self.positions.get(symbol, 0)
+
+    @property
+    def portfolio(self) -> dict[str, int]:
+        """Alias for positions (backward compat)."""
+        return self.positions
 
 
 class Strategy(ABC):

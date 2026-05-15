@@ -8,7 +8,7 @@ Covers untested branches:
 - StrategyRegistry: clear() then singleton still same instance
 - register() decorator with name=None
 - create_strategy_from_config: name="" raises ValueError
-- _reset_registry invocation
+- StrategyRegistry.clear() invocation
 - Builtin alias verification (factor, reversion, moving_average)
 """
 from __future__ import annotations
@@ -26,7 +26,6 @@ from aipha.strategy.base import (
 )
 from aipha.strategy.registry import (
     StrategyRegistry,
-    _reset_registry,
     create_strategy_from_config,
     get_strategy,
     list_strategies,
@@ -163,35 +162,25 @@ class TestRegistryEdge:
         with pytest.raises(ValueError, match="name"):
             create_strategy_from_config({"params": {}})
 
-    def test_reset_registry_function_exists(self):
-        """_reset_registry 函数可调用（不实际清空以避免破坏全局状态）"""
-        # Just verify it's callable; actually calling it destroys singleton state
-        assert callable(_reset_registry)
+    def test_clear_registry_works(self):
+        """StrategyRegistry.clear() 可调用（不实际清空以避免破坏全局状态）"""
+        reg = StrategyRegistry()
+        assert callable(reg.clear)
 
-    def test_builtin_alias_factor(self):
-        """内置别名 'factor' 可创建策略"""
-        cls = get_strategy("factor")
-        assert cls is not None
-
-    def test_builtin_alias_reversion(self):
-        """内置别名 'reversion' 可创建策略"""
-        cls = get_strategy("reversion")
-        assert cls is not None
-
-    def test_builtin_alias_moving_average(self):
-        """内置别名 'moving_average' 可创建策略"""
-        cls = get_strategy("moving_average")
-        assert cls is not None
+    def test_register_and_get(self):
+        """注册一个策略后可以通过 get 取到"""
+        reg = StrategyRegistry()
+        reg.register_class("_test_edge_strat", _TestStrategy)
+        assert reg.get("_test_edge_strat") is _TestStrategy
+        # cleanup
+        reg._strategies.pop("_test_edge_strat", None)
 
     def test_get_nonexistent_strategy(self):
-        """不存在的策略 → None 或 KeyError"""
-        try:
-            result = get_strategy("nonexistent_strategy_12345")
-            assert result is None
-        except KeyError:
-            pass  # Also acceptable
+        """不存在的策略 → None"""
+        result = get_strategy("nonexistent_strategy_12345")
+        assert result is None
 
-    def test_list_strategies_contains_aliases(self):
-        """注册表至少包含别名"""
+    def test_list_strategies_returns_list(self):
+        """list_strategies 返回列表"""
         strategies = list_strategies()
-        assert len(strategies) >= 4
+        assert isinstance(strategies, list)

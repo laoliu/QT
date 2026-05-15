@@ -23,8 +23,8 @@ class TrendQualityManagedStrategy(EquityRotationStrategy):
         self._index_history: deque[float] = deque(maxlen=200); self._is_bear: bool = False
     @property
     def config(self) -> TrendQualityManagedConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        idx = getattr(ctx, "index_close", None)
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        idx = getattr(context, "index_close", None)
         if idx: self._index_history.append(idx)
         if len(self._index_history) >= self.config.ma_long:
             h = list(self._index_history)

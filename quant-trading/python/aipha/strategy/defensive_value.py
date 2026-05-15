@@ -64,8 +64,9 @@ class DefensiveValueStrategy(CBRotationStrategy):
             return False
         # 到期年限
         mat_date = candidate.maturity_date
+        now = context.current_time or datetime.now()
         if mat_date:
-            dtm = days_to_maturity(mat_date, datetime.now())
+            dtm = days_to_maturity(mat_date, now)
             years = dtm / 365.25
             if years > cfg.max_years_to_maturity or years < cfg.min_years_to_maturity_val:
                 return False
@@ -75,7 +76,7 @@ class DefensiveValueStrategy(CBRotationStrategy):
         self, candidates: list[CandidateInfo], context: StrategyContext,
     ) -> list[str]:
         cfg = self.config
-        now = datetime.now()
+        now = context.current_time or datetime.now()
 
         ytms: list[float] = []
         premiums: list[float] = []
@@ -89,9 +90,9 @@ class DefensiveValueStrategy(CBRotationStrategy):
             dtm = days_to_maturity(mat, now) if mat else 1000
             maturities.append(float(dtm))
 
-        r_ytm = _rank_scores(ytms, ascending=False)     # 高 YTM 高分
-        r_prem = _rank_scores(premiums, ascending=True)  # 低溢价高分
-        r_mat = _rank_scores(maturities, ascending=True) # 短到期高分
+        r_ytm = _rank_scores(ytms, ascending=True)      # 高 YTM 高分
+        r_prem = _rank_scores(premiums, ascending=False) # 低溢价高分
+        r_mat = _rank_scores(maturities, ascending=False) # 短到期高分
 
         scored: list[tuple[str, float]] = []
         for i, c in enumerate(candidates):

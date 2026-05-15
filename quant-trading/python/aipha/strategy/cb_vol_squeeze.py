@@ -23,8 +23,8 @@ class CBVolSqueezeStrategy(CBRotationStrategy):
         self._close_history: dict[str, deque[float]] = {}; self._bar_count: int = 0
     @property
     def config(self) -> CBVolSqueezeConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        self._bar_count += 1; bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        self._bar_count += 1; # bars provided as argument
         maxlen = self.config.long_window + 5
         for sym, bar in bars.items():
             close = getattr(bar, "close", None)
@@ -45,7 +45,10 @@ class CBVolSqueezeStrategy(CBRotationStrategy):
         return (lv - sv) / lv if lv > 0 else 0.0
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > cfg.max_premium: return False
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False

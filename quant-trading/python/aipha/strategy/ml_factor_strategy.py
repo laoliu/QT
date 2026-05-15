@@ -38,6 +38,9 @@ class MLFactorConfig(EquityRotationConfig):
     ensemble_weights: dict[str, float] = field(default_factory=dict)
     min_train_samples: int = 5000
     retrain_interval_days: int = 60
+    model_objective: str = 'regression'
+    train_years: int = 3
+    forward_days: int = 5
 
 
 class MLFactorStrategy(EquityRotationStrategy):

@@ -24,23 +24,30 @@ class CBClausePlayStrategy(CBRotationStrategy):
         cfg = self.config
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > cfg.max_premium: return False
-        age = getattr(c, "listed_days", None)
-        if age is not None and age < cfg.min_age_days: return False
+        # Age filter: compute from list_date
+        list_date = getattr(c, "list_date", None) or ""
+        if list_date and ctx.current_time:
+            from aipha.strategy.cb_rotation_base import days_since_listed
+            age = days_since_listed(list_date, ctx.current_time)
+            if age < cfg.min_age_days: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores
         cfg = self.config
         price_s = {c.code: -(getattr(c, "close", 200.0) or 200.0) for c in candidates}
         prem_s = {c.code: -(getattr(c, "premium_rate", 50.0) or 50.0) for c in candidates}
-        # 回售价值: cb_value 接近 putback_price 越好
+        # 回售价值: parity 越低于 trigger 越好 (lower ratio = higher putback pressure)
         putback_s: dict[str, float] = {}
         for c in candidates:
             cv = getattr(c, "cb_value", None) or getattr(c, "close", 100.0)
             pp = getattr(c, "putback_price", 100.0) or 100.0
             ratio = cv / pp if pp > 0 else 1.0
-            putback_s[c.code] = -(abs(ratio - cfg.putback_trigger_ratio))
+            putback_s[c.code] = cfg.putback_trigger_ratio - ratio
         mat_s = {c.code: -(getattr(c, "remain_years", 6.0) or 6.0) for c in candidates}
         size_s = {c.code: -(getattr(c, "issue_size", 1e9) or 1e9) for c in candidates}
         rp, rprem, rput, rmat, rsz = _rank_scores(price_s), _rank_scores(prem_s), _rank_scores(putback_s), _rank_scores(mat_s), _rank_scores(size_s)

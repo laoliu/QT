@@ -28,6 +28,7 @@ class TripleLowConfig:
     min_price: float = 0.0
     max_premium: float = 40.0
     min_issue_size: float = 0.0
+    max_issue_size: float = float("inf")
     min_turnover: float = 20.0
     min_days_to_maturity: int = 30
     price_weight: float = 0.33
@@ -36,13 +37,23 @@ class TripleLowConfig:
     low_size_threshold: float = 30000.0
     low_size_bonus: float = 0.1
     stop_loss_pct: float = 0.10
+    trailing_stop_pct: float = 0.0
     force_redeem_threshold: float = 130.0
     force_redeem_days: int = 8
     exclude_called: bool = True
     exclude_st: bool = True
+    exclude_force_redeem_pending: bool = False
     buffer_k: int = 5
     lot_size: int = 10
     equal_weight: bool = True
+    # base class compatibility
+    min_rating: str = ""
+    exclude_unrated: bool = False
+    min_positions: int = 5
+    min_candidates_to_trade: int = 0
+    fallback_max_issue_size: float = 0.0
+    fallback_max_premium: float = 0.0
+    hold_on_empty: bool = True
 
 
 @dataclass
@@ -83,22 +94,23 @@ def calculate_normalized_scores(
 
     results: list[TripleLowScore] = []
     for b in bonds:
-        ps = 1.0 - (b["price"] - p_min) / p_range       # 低价高分
-        prs = 1.0 - (b["premium_rate"] - pr_min) / pr_range  # 低溢价高分
-        cvs = 1.0 - (b.get("cb_value", 100.0) - cv_min) / cv_range  # 低转债价值高分 (接近债底)
+        ps = (b["price"] - p_min) / p_range
+        prs = (b["premium_rate"] - pr_min) / pr_range
+        cvs = (b.get("cb_value", 100.0) - cv_min) / cv_range
         total = price_weight * ps + premium_weight * prs + cb_value_weight * cvs
-        # 小规模加分
-        if low_size_bonus > 0 and b.get("issue_size", float("inf")) < low_size_threshold:
-            total += low_size_bonus
+        # 小规模减分(更优)
+        size = b.get("issue_size", b.get("remain_size", float("inf")))
+        if low_size_bonus > 0 and size < low_size_threshold:
+            total -= low_size_bonus
         results.append(TripleLowScore(
             ts_code=b["ts_code"], name=b.get("name", ""),
             price=b["price"], premium_rate=b["premium_rate"],
             cb_value=b.get("cb_value", 100.0),
-            issue_size=b.get("issue_size", 0.0),
+            issue_size=b.get("issue_size", b.get("remain_size", 0.0)),
             price_score=ps, premium_score=prs, cb_value_score=cvs,
             total_score=total,
         ))
-    results.sort(key=lambda x: x.total_score, reverse=True)
+    results.sort(key=lambda x: x.total_score)
     return results
 
 
@@ -108,21 +120,33 @@ class TripleLowStrategy(CBRotationStrategy):
 
     def __init__(self, config: TripleLowConfig | None = None, **kwargs: object):
         cfg = config or TripleLowConfig()
+        # Apply kwargs to TripleLowConfig
+        for k, v in kwargs.items():
+            if hasattr(cfg, k):
+                object.__setattr__(cfg, k, v)
         # 将 TripleLowConfig 转换为 CBRotationConfig 的字段供父类使用
         cb_cfg = CBRotationConfig(
             top_k=cfg.top_k, rebalance_days=cfg.rebalance_days,
             max_price=cfg.max_price, stop_loss_pct=cfg.stop_loss_pct,
             buffer_k=cfg.buffer_k,
         )
-        super().__init__(config=cb_cfg, **kwargs)
+        super().__init__(config=cb_cfg)
         self._tl_config = cfg
         self._force_redeem_counts: dict[str, int] = {}
         self._positions: dict[str, int] = {}
         self._last_rebalance_date: date | None = None
 
     @property
-    def config(self) -> CBRotationConfig:
-        return self._config
+    def config(self) -> TripleLowConfig:
+        return self._tl_config
+
+    @property
+    def _force_redeem_counter(self) -> dict[str, int]:
+        return self._force_redeem_counts
+
+    @_force_redeem_counter.setter
+    def _force_redeem_counter(self, value):
+        self._force_redeem_counts = value
 
     @property
     def tl_config(self) -> TripleLowConfig:
@@ -136,28 +160,31 @@ class TripleLowStrategy(CBRotationStrategy):
     def _check_stop_loss(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
         intents: list[OrderIntent] = []
         cfg = self._tl_config
-        for code, qty in list(self._positions.items()):
+        positions = context.positions if context.positions else self._positions
+        for code, qty in list(positions.items()):
             if qty <= 0 or code not in bars:
                 continue
             bar = bars[code]
-            cost = getattr(context, "avg_cost", {}).get(code)
-            if cost and cost > 0:
-                ret = (bar.close - cost) / cost
-                if ret < -cfg.stop_loss_pct:
+            entry = self._entry_prices.get(code)
+            if entry and entry > 0:
+                pnl = (bar.low - entry) / entry
+                if pnl < -cfg.stop_loss_pct:
                     intents.append(OrderIntent(
                         symbol=code, intent_type=IntentType.EXIT,
-                        side=Side.SELL, quantity=qty,
+                        side=Side.SELL, qty=qty,
+                        reason=f"止损 {pnl:.2%} low={bar.low:.2f} entry={entry:.2f}",
                     ))
         return intents
 
     def _update_force_redeem_counter(self, bars: dict[str, "Bar"]) -> None:
         cfg = self._tl_config
         for code, bar in bars.items():
-            cb_value = getattr(bar, "cb_value", None)
-            if cb_value and cb_value > cfg.force_redeem_threshold:
+            meta = getattr(bar, "metadata", None) or {}
+            cb_value = meta.get("cb_value", None)
+            if cb_value is not None and cb_value > cfg.force_redeem_threshold:
                 self._force_redeem_counts[code] = self._force_redeem_counts.get(code, 0) + 1
             else:
-                self._force_redeem_counts.pop(code, None)
+                self._force_redeem_counts[code] = 0
 
     def _should_rebalance(self) -> bool:  # type: ignore[override]
         return (self._bar_count - self._last_rebalance_bar) >= self._tl_config.rebalance_days
@@ -166,24 +193,45 @@ class TripleLowStrategy(CBRotationStrategy):
         cfg = self._tl_config
         result: list[dict] = []
         for code, bar in bars.items():
+            meta = getattr(bar, "metadata", None) or {}
+            if not meta:
+                continue
             if bar.close < cfg.min_price or bar.close > cfg.max_price:
                 continue
-            premium = getattr(bar, "premium_rate", None) or 0.0
-            if premium * 100 > cfg.max_premium:
+            cb_over_rate = meta.get("cb_over_rate", 0.0) or 0.0
+            if cb_over_rate > cfg.max_premium:
                 continue
-            turnover = getattr(bar, "turnover", None) or 0.0
-            if turnover < cfg.min_turnover:
+            amount = meta.get("amount", 0.0) or 0.0
+            if amount < cfg.min_turnover:
                 continue
-            # 排除强赎
+            # ST 过滤
+            stk_name = meta.get("stk_short_name", "")
+            if cfg.exclude_st and stk_name and "ST" in stk_name.upper():
+                continue
+            # 到期日过滤
+            mat_date = meta.get("maturity_date", "")
+            if mat_date and cfg.min_days_to_maturity > 0:
+                try:
+                    fmt = "%Y-%m-%d" if "-" in mat_date else "%Y%m%d"
+                    md = datetime.strptime(mat_date[:10], fmt).date()
+                    if (md - current_date).days < cfg.min_days_to_maturity:
+                        continue
+                except (ValueError, TypeError):
+                    pass
+            # 已强赎
+            if cfg.exclude_called and meta.get("is_called", False):
+                continue
+            # 强赎预警计数
             if cfg.exclude_called and self._force_redeem_counts.get(code, 0) >= cfg.force_redeem_days:
                 continue
+            cb_value = meta.get("cb_value", 100.0) or 100.0
             result.append({
                 "ts_code": code,
-                "name": getattr(bar, "name", code),
+                "name": meta.get("stk_short_name", code),
                 "price": bar.close,
-                "premium_rate": premium,
-                "cb_value": getattr(bar, "cb_value", 100.0) or 100.0,
-                "issue_size": getattr(bar, "issue_size", 0.0) or 0.0,
+                "premium_rate": cb_over_rate,
+                "cb_value": cb_value,
+                "issue_size": meta.get("remain_size", 0.0) or 0.0,
             })
         return result
 
@@ -222,3 +270,42 @@ class TripleLowStrategy(CBRotationStrategy):
 
     def get_current_targets(self) -> set[str]:
         return {k for k, v in self._positions.items() if v > 0}
+
+    def _generate_rebalance_intents(
+        self,
+        target_symbols: set[str],
+        scores: dict[str, TripleLowScore],
+        current_positions: dict[str, int],
+        cash: float,
+        bars: dict[str, "Bar"],
+        nav: float,
+    ) -> list[OrderIntent]:
+        cfg = self._tl_config
+        intents: list[OrderIntent] = []
+        current = set(current_positions.keys())
+
+        # SELL positions not in targets
+        for sym in current - target_symbols:
+            qty = current_positions.get(sym, 0)
+            if qty > 0:
+                intents.append(OrderIntent(
+                    symbol=sym, intent_type=IntentType.EXIT,
+                    side=Side.SELL, qty=qty, reason="轮出",
+                ))
+
+        # BUY targets not in positions
+        n_targets = len(target_symbols - current)
+        if n_targets > 0:
+            per_target = nav / max(len(target_symbols), 1)
+            for sym in target_symbols - current:
+                if sym in bars:
+                    price = bars[sym].close
+                    if price > 0:
+                        raw_qty = int(per_target / price)
+                        qty = (raw_qty // cfg.lot_size) * cfg.lot_size
+                        if qty > 0:
+                            intents.append(OrderIntent(
+                                symbol=sym, intent_type=IntentType.ENTRY,
+                                side=Side.BUY, qty=qty, reason="轮入",
+                            ))
+        return intents

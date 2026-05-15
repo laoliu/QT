@@ -20,30 +20,42 @@ class DividendQualityConfig(EquityRotationConfig):
     max_single_weight: float = 0.04
     trailing_stop: float = 0.12
     min_div_yield: float = 0.005   # 最低 0.5%
-    min_roe: float = 0.05
+    min_roe: float = 5.0
+    weight_dividend: float = 0.25
+    weight_fcfy: float = 0.25
+    weight_roe: float = 0.20
+    weight_vol: float = 0.15
+    weight_ep: float = 0.15
+    min_dividend: float = 0.5
 
 
 class DividendQualityStrategy(EquityRotationStrategy):
     name = "dividend_quality"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = DividendQualityConfig()
+    def __init__(self, config: DividendQualityConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or DividendQualityConfig(), **kwargs)
 
     @property
     def config(self) -> DividendQualityConfig:
         return self._config
 
-    def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+    def _apply_hard_filters(self, candidates: list[CandidateInfo]) -> list[CandidateInfo]:
         cfg = self._config
         filtered = []
         for c in candidates:
             m = c.metadata
             dv = m.get("dv_ratio", 0) or 0
             roe = m.get("roe", 0) or 0
-            if dv < cfg.min_div_yield or roe < cfg.min_roe:
-                continue
-            filtered.append(c)
+            if dv >= cfg.min_dividend and roe >= cfg.min_roe:
+                filtered.append(c)
+        if len(filtered) < cfg.top_k:
+            # Fallback: accept anything with dv > 0
+            filtered = [c for c in candidates if (c.metadata.get("dv_ratio", 0) or 0) > 0]
+        return filtered
+
+    def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        cfg = self._config
+        filtered = self._apply_hard_filters(candidates)
 
         if not filtered:
             return []

@@ -24,8 +24,8 @@ class CBHeatMomentumStrategy(CBRotationStrategy):
         self._turnover_history: dict[str, deque[float]] = {}
     @property
     def config(self) -> CBHeatMomentumConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        # bars provided as argument
         for sym, bar in bars.items():
             tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
             if tv is None: continue
@@ -41,7 +41,10 @@ class CBHeatMomentumStrategy(CBRotationStrategy):
         long_avg = sum(recent[-long_w:]) / long_w if len(recent) >= long_w else 0.0
         return (short_avg - long_avg) / long_avg if long_avg > 0 else 0.0
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > self.config.max_premium: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:

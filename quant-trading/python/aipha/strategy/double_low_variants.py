@@ -75,10 +75,14 @@ class _DoubleLowVariantConfigBase(CBRotationConfig):
 
 def _variant_extra_filter(candidate: CandidateInfo, cfg: _DoubleLowVariantConfigBase) -> bool:
     premium = getattr(candidate, "premium_rate", None)
-    if premium is not None and premium * 100 > cfg.max_premium:
+    if premium is None:
         return False
-    turnover = getattr(candidate, "turnover", None) or 0.0
-    return turnover >= cfg.min_turnover
+    if premium * 100 > cfg.max_premium:
+        return False
+    amount = getattr(candidate, "amount", None) or 0.0
+    if amount > 0 and amount < cfg.min_turnover:
+        return False
+    return True
 
 
 # ── Z-Score 变体 ────────────────────────────────────────
@@ -146,11 +150,15 @@ class DoubleLowRankStrategy(CBRotationStrategy):
         cfg = self.config
         prices = [c.price for c in candidates]
         premiums = [(getattr(c, "premium_rate", 0.0) or 0.0) * 100 for c in candidates]
-        r_price = _rank_normalize(prices, ascending=True)   # 低价高分
-        r_prem = _rank_normalize(premiums, ascending=True)   # 低溢价高分
+        r_price = _rank_normalize(prices, ascending=False)   # 低价高分
+        r_prem = _rank_normalize(premiums, ascending=False)   # 低溢价高分
         scored: list[tuple[str, float]] = []
         for i, c in enumerate(candidates):
             s = cfg.price_weight * r_price[i] + cfg.premium_weight * r_prem[i]
+            if cfg.use_cb_value:
+                cb_values = [(getattr(cc, "cb_value", 100.0) or 100.0) for cc in candidates]
+                r_cb = _rank_normalize(cb_values, ascending=False)
+                s += cfg.cb_value_weight * r_cb[i]
             scored.append((c.code, s))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

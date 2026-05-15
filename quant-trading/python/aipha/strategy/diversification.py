@@ -45,14 +45,22 @@ class DiversificationReport:
 
     def summary(self) -> str:
         lines = [
-            f"Diversification Report ({len(self.strategy_names)} strategies)",
-            f"  Avg correlation: {self.avg_pairwise_correlation:.3f}",
-            f"  Diversification ratio: {self.diversification_ratio:.3f}",
-            f"  Redundant pairs: {len(self.redundant_pairs)}",
+            f"分散化分析报告 ({len(self.strategy_names)} 个策略)",
+            "",
+            "相关性矩阵:",
         ]
+        for i, name in enumerate(self.strategy_names):
+            row_vals = " ".join(f"{self.correlation_matrix[i, j]:.2f}" for j in range(len(self.strategy_names)))
+            lines.append(f"  {name}: [{row_vals}]")
+        lines.append("")
+        lines.append(f"平均两两相关性: {self.avg_pairwise_correlation:.3f}")
+        lines.append(f"分散化比率: {self.diversification_ratio:.3f}")
+        lines.append(f"冗余策略对: {len(self.redundant_pairs)}")
         if self.marginal_contributions:
-            best = max(self.marginal_contributions, key=lambda m: m.sharpe_improvement)
-            lines.append(f"  Best marginal add: {best.strategy_name} (+{best.sharpe_improvement:.3f} Sharpe)")
+            lines.append("")
+            lines.append("边际分散化贡献:")
+            for mc in self.marginal_contributions:
+                lines.append(f"  {mc.strategy_name}: Sharpe改善={mc.sharpe_improvement:.3f}, 平均相关={mc.avg_correlation_with_base:.3f}")
         return "\n".join(lines)
 
 
@@ -71,6 +79,8 @@ class DiversificationAnalyzer:
         self._navs: dict[str, dict[date, float]] = {}
 
     def add_strategy(self, name: str, nav: dict[date, float]) -> None:
+        if len(nav) < 2:
+            raise ValueError(f"策略 '{name}' 的净值序列太短（至少需要2个数据点）")
         self._navs[name] = nav
 
     def remove_strategy(self, name: str) -> None:
@@ -99,10 +109,19 @@ class DiversificationAnalyzer:
 
     def compute_correlation_matrix(self) -> tuple[list[str], NDArray]:
         dates = self._get_common_dates()
+        names = list(self._navs.keys())
+        if len(names) == 1:
+            # Single strategy: correlation is trivially 1.0
+            if len(dates) >= 2:
+                return names, np.array([[1.0]])
+            return [], np.array([])
         if len(dates) < 3:
             return [], np.array([])
         names, mat = self._compute_returns_matrix(dates)
-        return names, np.corrcoef(mat)
+        corr = np.corrcoef(mat)
+        if corr.ndim == 0:
+            corr = np.array([[float(corr)]])
+        return names, corr
 
     def compute_pairwise_correlations(self) -> list[StrategyPairCorrelation]:
         names, corr = self.compute_correlation_matrix()
@@ -183,6 +202,60 @@ class DiversificationAnalyzer:
             ))
         return sorted(results, key=lambda m: m.sharpe_improvement, reverse=True)
 
+    def compute_diversification_report(
+        self, base_strategies: list[str] | None = None,
+    ) -> DiversificationReport:
+        """生成完整的分散化分析报告"""
+        names, corr = self.compute_correlation_matrix()
+        pairs = self.compute_pairwise_correlations()
+        dr = self.compute_diversification_ratio()
+
+        # Compute strategy metrics
+        dates = self._get_common_dates()
+        strategy_vols: dict[str, float] = {}
+        strategy_sharpes: dict[str, float] = {}
+        if len(dates) >= 3:
+            all_names, mat = self._compute_returns_matrix(dates)
+            for i, n_ in enumerate(all_names):
+                vol, sharpe = self._compute_strategy_metrics(mat[i])
+                strategy_vols[n_] = vol
+                strategy_sharpes[n_] = sharpe
+        else:
+            for n_ in self.strategy_names:
+                strategy_vols[n_] = 0.0
+                strategy_sharpes[n_] = 0.0
+
+        # Marginal contributions
+        marginal: list[MarginalDiversification] = []
+        if base_strategies:
+            marginal = self.compute_marginal_diversification(base_strategies)
+
+        # Redundant pairs
+        redundant = [p for p in pairs if p.is_redundant]
+
+        # Avg pairwise correlation
+        if pairs:
+            avg_corr = float(np.mean([p.correlation for p in pairs]))
+        else:
+            avg_corr = 0.0
+
+        # Handle empty correlation matrix
+        if corr.size == 0:
+            corr = np.eye(len(self.strategy_names))
+            names = self.strategy_names
+
+        return DiversificationReport(
+            strategy_names=names,
+            correlation_matrix=corr,
+            pairwise_correlations=pairs,
+            avg_pairwise_correlation=avg_corr,
+            diversification_ratio=dr,
+            redundant_pairs=redundant,
+            marginal_contributions=marginal,
+            strategy_volatilities=strategy_vols,
+            strategy_sharpes=strategy_sharpes,
+        )
+
     def select_best_subset(
         self, n: int, base_strategies: list[str] | None = None,
         maximize: str = "sharpe",
@@ -190,6 +263,9 @@ class DiversificationAnalyzer:
         """贪心选择 n 个最互补的策略"""
         selected = list(base_strategies or [])
         remaining = [s for s in self.strategy_names if s not in selected]
+        # Seed with first available strategy if no base given
+        if not selected and remaining and n > 0:
+            selected.append(remaining.pop(0))
         while len(selected) < n and remaining:
             contribs = self.compute_marginal_diversification(selected, remaining)
             if not contribs:

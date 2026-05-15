@@ -21,29 +21,33 @@ class CBMultiAlphaStrategy(CBRotationStrategy):
     name = "cb_multi_alpha"
     def __init__(self, config: CBMultiAlphaConfig | None = None, **kw: object):
         super().__init__(config=config or CBMultiAlphaConfig(), **kw)
-        self._close_history: dict[str, deque[float]] = {}
-        self._turnover_history: dict[str, deque[float]] = {}
-        self._bar_count: int = 0
     @property
     def config(self) -> CBMultiAlphaConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        self._bar_count += 1
-        bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
         maxlen = max(self.config.momentum_lookback, self.config.surge_lookback) + 5
         for sym, bar in bars.items():
             close = getattr(bar, "close", None)
-            tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
+            meta = getattr(bar, "metadata", {}) or {}
+            tv = meta.get("amount", 0.0)
             if close is not None:
                 if sym not in self._close_history: self._close_history[sym] = deque(maxlen=maxlen)
                 self._close_history[sym].append(close)
             if tv is not None:
                 if sym not in self._turnover_history: self._turnover_history[sym] = deque(maxlen=maxlen)
                 self._turnover_history[sym].append(tv)
+    def _should_rebalance(self) -> bool:
+        if self._bar_count <= self.config.warmup_bars:
+            return False
+        return super()._should_rebalance()
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
-        if self._bar_count < cfg.warmup_bars: return False
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > cfg.max_premium: return False
+        if c.symbol not in self._price_history or len(self._price_history[c.symbol]) == 0: return False
+        if c.symbol not in self._amount_history or len(self._amount_history[c.symbol]) == 0: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores

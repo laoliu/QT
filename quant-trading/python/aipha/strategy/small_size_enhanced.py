@@ -35,7 +35,7 @@ class SmallSizeEnhancedStrategy(CBRotationStrategy):
         if sz < cfg.min_issue_size or sz > cfg.max_issue_size: return False
         prem = getattr(c, "premium_rate", None)
         if prem is not None and prem * 100 > cfg.max_premium: return False
-        return (getattr(c, "turnover", None) or 0.0) >= cfg.min_turnover
+        return (getattr(c, "amount", None) or 0.0) >= cfg.min_turnover
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: "StrategyContext") -> list[str]:
         cfg = self.config
         sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]

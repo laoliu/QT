@@ -26,9 +26,8 @@ class NorthboundConfig(EquityRotationConfig):
 class NorthboundEnhancedStrategy(EquityRotationStrategy):
     name = "northbound_enhanced"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = NorthboundConfig()
+    def __init__(self, config: NorthboundConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or NorthboundConfig(), **kwargs)
 
     @property
     def config(self) -> NorthboundConfig:

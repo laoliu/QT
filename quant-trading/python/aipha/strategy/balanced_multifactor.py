@@ -21,7 +21,8 @@ from aipha.factors.equity_factors import (
     compute_volatility_factor,
     compute_value_factor,
 )
-from aipha.strategy.base import StrategyContext
+from aipha.strategy.base import IntentType, OrderIntent, StrategyContext
+from aipha.domain.models import Side
 from aipha.strategy.equity_rotation_base import (
     EquityCandidateInfo,
     EquityRotationConfig,
@@ -83,6 +84,11 @@ class BalancedMultiFactorConfig(EquityRotationConfig):
     regime_bear_delta_quality: float = 0.03
     regime_bear_delta_momentum: float = -0.08
     regime_bear_delta_volatility: float = 0.05
+    min_candidates_to_trade: int = 0
+
+    def __post_init__(self):
+        if getattr(self, "trailing_stop", None) is None:
+            self.trailing_stop = self.trailing_stop_pct
 
 
 class BalancedMultiFactorStrategy(EquityRotationStrategy):
@@ -95,6 +101,81 @@ class BalancedMultiFactorStrategy(EquityRotationStrategy):
     @property
     def config(self) -> BalancedMultiFactorConfig:
         return self._config  # type: ignore[return-value]
+
+    def _extra_filter(self, candidate: EquityCandidateInfo, context: StrategyContext) -> bool:
+        cfg = self.config
+        circ_mv = candidate.metadata.get("circ_mv", 0)
+        if circ_mv < cfg.min_mv or circ_mv > cfg.max_mv:
+            return False
+        if not candidate.metadata.get("is_index_member", True):
+            return False
+        return True
+
+    def on_bar(self, bars: dict["Bar", ...], context: StrategyContext) -> list[OrderIntent]:
+        self._bar_count += 1
+        cfg = self.config
+
+        # 更新价格历史
+        for sym, bar in bars.items():
+            if sym not in self._price_history:
+                from collections import deque
+                self._price_history[sym] = deque(maxlen=120)
+            self._price_history[sym].append(bar.close)
+
+        self._on_bar_update_state(bars, context)
+
+        # 止损检查
+        intents = self._check_stops(bars, context)
+
+        # 调仓条件: 等待 rebalance_days 根 bar 后触发
+        if self._bar_count - self._last_rebalance <= cfg.rebalance_days:
+            return intents
+
+        # 构建并过滤候选
+        candidates = self._filter_universe(bars, context)
+        if not candidates:
+            self._last_rebalance = self._bar_count
+            return intents
+
+        # 打分排序
+        scored = self._score_candidates(candidates, context)
+        top = scored[:cfg.top_k]
+
+        # 等权分配
+        if top:
+            w = min(1.0 / len(top), cfg.max_single_weight)
+            self._current_targets = {sym: w for sym in top}
+        else:
+            self._current_targets = {}
+
+        # 生成目标仓位意图
+        for sym, weight in self._current_targets.items():
+            target_value = context.nav * weight
+            price = bars[sym].close if sym in bars else 0
+            if price <= 0:
+                continue
+            target_qty = int(target_value / price / cfg.lot_size) * cfg.lot_size
+            current = context.get_position(sym)
+            diff = target_qty - current
+            if abs(diff) >= cfg.lot_size:
+                side = Side.BUY if diff > 0 else Side.SELL
+                intents.append(OrderIntent(
+                    symbol=sym, side=side, qty=abs(diff),
+                    intent_type=IntentType.TARGET_POSITION,
+                    reason=f"{self.name}_rebalance",
+                ))
+
+        # 清仓不在目标中的持仓
+        for sym, pos in context.positions.items():
+            if pos > 0 and sym not in self._current_targets:
+                intents.append(OrderIntent(
+                    symbol=sym, side=Side.SELL, qty=pos,
+                    intent_type=IntentType.ORDER,
+                    reason=f"{self.name}_exit",
+                ))
+
+        self._last_rebalance = self._bar_count
+        return intents
 
     def _get_weights(self, context: StrategyContext) -> dict[str, float]:
         cfg = self.config
@@ -109,7 +190,8 @@ class BalancedMultiFactorStrategy(EquityRotationStrategy):
             "size": cfg.weight_size, "str": cfg.weight_str,
         }
         if cfg.regime_adaptive:
-            regime = getattr(context, "market_regime", "NEUTRAL")
+            meta = getattr(context, "metadata", None) or {}
+            regime = meta.get("market_regime", "NEUTRAL")
             if regime == "BULL":
                 w["value"] += cfg.regime_bull_delta_value
                 w["quality"] += cfg.regime_bull_delta_quality
@@ -130,7 +212,7 @@ class BalancedMultiFactorStrategy(EquityRotationStrategy):
     ) -> list[str]:
         cfg = self.config
         weights = self._get_weights(context)
-        price_hist = {c.code: getattr(c, "price_history", []) for c in candidates}
+        price_hist = {c.code: list(self._price_history.get(c.code, [])) for c in candidates}
 
         factors: dict[str, dict[str, float]] = {}
         factor_fns = {

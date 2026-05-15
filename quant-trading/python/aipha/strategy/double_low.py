@@ -24,7 +24,16 @@ class DoubleLowMetrics:
     code: str
     price: float
     premium_rate: float
-    double_low_score: float
+    double_low: float
+
+    @classmethod
+    def from_bar_and_premium(cls, ts_code: str, bond_price: float, premium_rate: float) -> "DoubleLowMetrics":
+        return cls(
+            code=ts_code,
+            price=bond_price,
+            premium_rate=premium_rate,
+            double_low=bond_price + premium_rate,
+        )
 
 
 @dataclass
@@ -52,6 +61,15 @@ class DoubleLowStrategy(CBRotationStrategy):
     @property
     def config(self) -> DoubleLowConfig:
         return self._config  # type: ignore[return-value]
+
+    def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
+        cfg = self.config
+        premium = candidate.cb_over_rate
+        if premium is None:
+            return False
+        if premium > cfg.max_premium:
+            return False
+        return True
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",

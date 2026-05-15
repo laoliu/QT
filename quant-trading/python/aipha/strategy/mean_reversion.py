@@ -27,11 +27,12 @@ class MeanReversionStrategy(Strategy):
 
     @classmethod
     def param_space(cls) -> ParamSpace:
-        return ParamSpace(specs=[
-            ParamSpec("lookback_days", ParamType.INT, low=10, high=60, step=5),
-            ParamSpec("entry_std", ParamType.FLOAT, low=1.0, high=3.0, step=0.5),
-            ParamSpec("exit_std", ParamType.FLOAT, low=0.0, high=1.5, step=0.25),
-            ParamSpec("max_positions", ParamType.INT, low=3, high=20, step=1),
+        return ParamSpace("mean_reversion", [
+            ParamSpec("lookback_days", ParamType.INT, default=20, low=10, high=60, step=5),
+            ParamSpec("entry_std", ParamType.FLOAT, default=2.0, low=1.0, high=3.5, step=0.5, is_critical=True),
+            ParamSpec("exit_std", ParamType.FLOAT, default=0.5, low=0.0, high=1.5, step=0.25, is_critical=True),
+            ParamSpec("max_positions", ParamType.INT, default=10, low=3, high=20, step=1),
+            ParamSpec("position_pct", ParamType.FLOAT, default=0.10, low=0.05, high=0.30, step=0.05),
         ])
 
     def on_start(self) -> None:
@@ -91,6 +92,8 @@ class MeanReversionStrategy(Strategy):
         if prices is None or len(prices) < self.lookback_days:
             return None
         recent = prices[-self.lookback_days:]
-        mean = sum(recent) / len(recent)
-        std = math.sqrt(sum((p - mean) ** 2 for p in recent) / len(recent))
+        # Handle (date, price) tuples
+        values = [v[1] if isinstance(v, (tuple, list)) else v for v in recent]
+        mean = sum(values) / len(values)
+        std = math.sqrt(sum((p - mean) ** 2 for p in values) / len(values))
         return mean, std

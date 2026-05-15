@@ -10,9 +10,11 @@ class IVOLTracker:
     def __init__(self, lookback: int = 20, min_obs: int = 10):
         self.lookback = lookback; self.min_obs = min_obs
         self._returns: dict[str, deque[float]] = {}; self._prev_close: dict[str, float] = {}
+        self._bar_count = 0
     def reset(self) -> None:
-        self._returns.clear(); self._prev_close.clear()
+        self._returns.clear(); self._prev_close.clear(); self._bar_count = 0
     def update(self, bars: dict[str, Any]) -> None:
+        self._bar_count += 1
         for sym, bar in bars.items():
             close = getattr(bar, "close", None)
             if close is None: continue
@@ -28,7 +30,7 @@ class IVOLTracker:
         if len(recent) < 2: return None
         mu = sum(recent) / len(recent)
         var = sum((r - mu) ** 2 for r in recent) / (len(recent) - 1)
-        return math.sqrt(var * 252) if var > 0 else 0.0
+        return -math.sqrt(var * 252) if var > 0 else 0.0
 
 class HighDistanceTracker:
     """追踪距离历史最高价的距离"""
@@ -42,10 +44,13 @@ class HighDistanceTracker:
             if sym not in self._highs: self._highs[sym] = deque(maxlen=self.lookback + 2)
             self._highs[sym].append(high)
     def get_distance(self, symbol: str, current_close: float) -> float | None:
+        if current_close <= 0:
+            return None
         h = self._highs.get(symbol)
-        if not h: return None
+        if not h or len(h) < 20:
+            return None
         peak = max(list(h)[-self.lookback:])
-        return (current_close - peak) / peak if peak > 0 else None
+        return current_close / peak if peak > 0 else None
 
 class SkewnessTracker:
     """追踪收益率偏度"""
@@ -73,11 +78,18 @@ class SkewnessTracker:
         return m3 / (m2 ** 1.5) if m2 > 0 else 0.0
 
 def theta_proxy(close: float, maturity_date: str, now: datetime, par_value: float = 100.0, coupon_rate: float = 0.005) -> float:
+    if close <= 0 or maturity_date is None:
+        return 0.0
     try:
-        mat = datetime.strptime(maturity_date, "%Y-%m-%d") if isinstance(maturity_date, str) else maturity_date
-        years = max((mat - now).days / 365.25, 0.01)
+        if "-" in str(maturity_date):
+            mat = datetime.strptime(str(maturity_date)[:10], "%Y-%m-%d")
+        else:
+            mat = datetime.strptime(str(maturity_date)[:8], "%Y%m%d")
+        years = (mat - now).days / 365.25
     except Exception:
-        years = 1.0
+        return 0.0
+    if years < 0.1:
+        return 0.0
     bond_val = par_value * (1 + coupon_rate * years)
-    time_val = max(close - bond_val, 0.0)
-    return time_val / years if years > 0 else 0.0
+    time_val = close - bond_val
+    return time_val / math.sqrt(years) if years > 0 else 0.0

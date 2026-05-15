@@ -27,8 +27,8 @@ class CBDLEnhanced5FStrategy(CBRotationStrategy):
         self._close_history: dict[str, deque[float]] = {}
     @property
     def config(self) -> CBDLEnhanced5FConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        # bars provided as argument
         for sym, bar in bars.items():
             close = getattr(bar, "close", None)
             if close is None: continue
@@ -45,7 +45,10 @@ class CBDLEnhanced5FStrategy(CBRotationStrategy):
         recent = list(hist)[-self.config.reversal_window:]
         return (recent[0] - recent[-1]) / recent[0] if recent[0] > 0 else 0.0
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > self.config.max_premium: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:

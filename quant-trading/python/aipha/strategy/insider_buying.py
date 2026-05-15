@@ -23,9 +23,8 @@ class InsiderBuyingConfig(EquityRotationConfig):
 class InsiderBuyingStrategy(EquityRotationStrategy):
     name = "insider_buying"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = InsiderBuyingConfig()
+    def __init__(self, config: InsiderBuyingConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or InsiderBuyingConfig(), **kwargs)
 
     @property
     def config(self) -> InsiderBuyingConfig:

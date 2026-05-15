@@ -103,8 +103,10 @@ def compute_debt_factor(candidates: Sequence[Any], metric: str = "debt_to_assets
 
 
 def compute_piotroski_factor(
-    candidates: Sequence[Any], min_dimensions: int = 5,
+    candidates: Sequence[Any], min_dimensions: int = 5, *, min_dims: int | None = None,
 ) -> dict[str, float]:
+    if min_dims is not None:
+        min_dimensions = min_dims
     from aipha.factors.quality_advanced import PiotroskiFScoreFactor, _safe_float
     result: dict[str, float] = {}
     for c in candidates:

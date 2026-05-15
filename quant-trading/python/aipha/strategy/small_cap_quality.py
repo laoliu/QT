@@ -26,9 +26,8 @@ class SmallCapQualityConfig(EquityRotationConfig):
 class SmallCapQualityStrategy(EquityRotationStrategy):
     name = "small_cap_quality"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = SmallCapQualityConfig()
+    def __init__(self, config: SmallCapQualityConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or SmallCapQualityConfig(), **kwargs)
 
     @property
     def config(self) -> SmallCapQualityConfig:

@@ -25,8 +25,8 @@ class SizeStyleRotationStrategy(EquityRotationStrategy):
         self._style_mode: str = "SMALL"; self._index_history: deque[float] = deque(maxlen=200)
     @property
     def config(self) -> SizeStyleRotationConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        lg = getattr(ctx, "large_cap_index", None); sm = getattr(ctx, "small_cap_index", None)
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        lg = getattr(context, "large_cap_index", None); sm = getattr(context, "small_cap_index", None)
         if lg and sm:
             self._index_history.append(sm / lg if lg > 0 else 1.0)
             if len(self._index_history) >= self.config.style_lookback:

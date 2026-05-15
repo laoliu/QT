@@ -12,6 +12,7 @@ class NegativePremiumConfig(CBRotationConfig):
     entry_threshold: float = -2.0; exit_threshold: float = 0.0
     weight_premium: float = 0.50; weight_volume: float = 0.25; weight_days_left: float = 0.25
     min_remaining_days: int = 10; max_price: float = 200.0
+    min_amount: float = 500.0
 
 class NegativePremiumStrategy(CBRotationStrategy):
     name = "negative_premium"
@@ -21,18 +22,32 @@ class NegativePremiumStrategy(CBRotationStrategy):
     def config(self) -> NegativePremiumConfig: return self._config  # type: ignore
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
-        p = getattr(c, "premium_rate", None)
+        p = getattr(c, "cb_over_rate", None)
+        if p is None:
+            p = getattr(c, "premium_rate", None)
+            if p is not None:
+                p = p * 100.0
         if p is None or p > cfg.entry_threshold: return False
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False
+        amt = getattr(c, "amount", 0) or 0
+        if amt < cfg.min_amount: return False
         return True
-    def _custom_exit_check(self, code: str, ctx: StrategyContext) -> bool:
-        pos = ctx.portfolio.get(code)
-        if pos is None: return False
-        current_premium = getattr(pos, "premium_rate", None)
-        if current_premium is not None and current_premium > self.config.exit_threshold:
-            return True
-        return False
+    def _custom_exit_check(self, bars: dict, context: StrategyContext) -> list:
+        from aipha.strategy.base import OrderIntent
+        from aipha.domain.models import Side
+        intents: list = []
+        cfg = self.config
+        for sym, bar in bars.items():
+            if sym not in context.positions:
+                continue
+            p = getattr(bar, "cb_over_rate", None)
+            if p is None and hasattr(bar, "metadata"):
+                p = bar.metadata.get("cb_over_rate")
+            if p is not None and p > cfg.exit_threshold:
+                qty = context.positions[sym]
+                intents.append(OrderIntent(symbol=sym, side=Side.SELL, qty=qty))
+        return intents
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores
         cfg = self.config

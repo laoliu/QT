@@ -78,7 +78,7 @@ class CBFourFactorStrategy(CBRotationStrategy):
         if cfg.use_age_filter:
             listed = getattr(candidate, "list_date", None)
             if listed:
-                age = days_since_listed(listed)
+                age = days_since_listed(listed, now=getattr(context, "current_time", None))
                 if age < cfg.min_age_days:
                     return False
         premium = getattr(candidate, "premium_rate", None)
@@ -87,7 +87,7 @@ class CBFourFactorStrategy(CBRotationStrategy):
         issue_size = getattr(candidate, "issue_size", None) or float("inf")
         if issue_size > cfg.max_issue_size:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
+        turnover = getattr(candidate, "amount", None) or 0.0
         return turnover >= cfg.min_turnover
 
     def _compute_macro_factor(self) -> float:

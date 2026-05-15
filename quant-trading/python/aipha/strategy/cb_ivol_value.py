@@ -17,16 +17,28 @@ class IVOLValueConfig(CBRotationConfig):
     max_price: float = 135.0; min_turnover: float = 50.0; min_days_to_maturity: int = 60
     exclude_st: bool = True; stop_loss_pct: float = 0.12; buffer_k: int = 3; lot_size: int = 10
 
+class _IVOLTracker:
+    def __init__(self):
+        self._bar_count = 0
+    def reset(self):
+        self._bar_count = 0
+
 class CBIVOLValueStrategy(CBRotationStrategy):
     name = "cb_ivol_value"
     def __init__(self, config: IVOLValueConfig | None = None, **kw: object):
         super().__init__(config=config or IVOLValueConfig(), **kw)
         self._returns: dict[str, deque[float]] = {}
         self._highs: dict[str, deque[float]] = {}
+        self._ivol_tracker = _IVOLTracker()
     @property
     def config(self) -> IVOLValueConfig: return self._config  # type: ignore
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        bars = getattr(ctx, "bars", {})
+    def _on_start_extra(self) -> None:
+        self._returns.clear()
+        self._highs.clear()
+        self._ivol_tracker.reset()
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        # bars provided as argument
+        self._ivol_tracker._bar_count += 1
         maxlen = max(self.config.ivol_lookback, self.config.high_distance_lookback, self.config.skewness_lookback) + 5
         for sym, bar in bars.items():
             close = getattr(bar, "close", None); high = getattr(bar, "high", None)

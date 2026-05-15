@@ -32,7 +32,7 @@ _RATING_SCORE: dict[str, int] = {
 
 
 def _get_rating_score(rating: str) -> int:
-    return _RATING_SCORE.get(rating.strip().upper(), 50) if rating else 50
+    return _RATING_SCORE.get(rating.strip().upper(), -1) if rating else -1
 
 
 @dataclass
@@ -72,20 +72,40 @@ class DoubleLowPlusStrategy(CBRotationStrategy):
         self._price_history: dict[str, deque[float]] = defaultdict(
             lambda: deque(maxlen=200)
         )
+        self._effective_max_age = self.config.max_age_days
 
     @property
     def config(self) -> DoubleLowPlusConfig:
         return self._config  # type: ignore[return-value]
 
     def _on_start_extra(self) -> None:
-        pass
+        self._price_history.clear()
+        self._effective_max_age = self.config.max_age_days
+
+    def _relax_filters_one_step(self) -> bool:
+        cfg = self.config
+        if cfg.fallback_max_age_days <= 0:
+            return False
+        if self._effective_max_age < cfg.fallback_max_age_days:
+            self._effective_max_age = min(
+                self._effective_max_age + 90, cfg.fallback_max_age_days,
+            )
+            return True
+        return False
+
+    def _maybe_tighten_filters(self) -> None:
+        cfg = self.config
+        if self._effective_max_age > cfg.max_age_days:
+            self._effective_max_age = max(
+                self._effective_max_age - 30, cfg.max_age_days,
+            )
 
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
         for code, bar in bars.items():
             self._price_history[code].append(bar.close)
 
     def _should_rebalance(self) -> bool:
-        return self._bar_count % self.config.rebalance_days == 0
+        return self._bar_count > 1 and (self._bar_count - 1) % self.config.rebalance_days == 0
 
     def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
         cfg = self.config
@@ -95,14 +115,14 @@ class DoubleLowPlusStrategy(CBRotationStrategy):
         premium = getattr(candidate, "premium_rate", None)
         if premium is not None and premium * 100 > cfg.max_premium:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
+        turnover = getattr(candidate, "amount", None) or 0.0
         if turnover < cfg.min_turnover:
             return False
         if cfg.use_age_filter:
             listed = getattr(candidate, "list_date", None)
             if listed:
-                age = days_since_listed(listed)
-                if age < cfg.min_age_days or age > cfg.max_age_days:
+                age = days_since_listed(listed, now=getattr(context, "current_time", None))
+                if age < cfg.min_age_days or age > self._effective_max_age:
                     return False
         return True
 
@@ -116,7 +136,7 @@ class DoubleLowPlusStrategy(CBRotationStrategy):
         std = math.sqrt(sum((p - mean) ** 2 for p in prices) / lb)
         if std < 1e-9:
             return None
-        return (close - mean) / std
+        return (mean - close) / std
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",
@@ -127,21 +147,22 @@ class DoubleLowPlusStrategy(CBRotationStrategy):
         premiums = [(getattr(c, "premium_rate", 0.0) or 0.0) * 100 for c in candidates]
         sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]
         ages = []
+        now = getattr(context, "current_time", None)
         for c in candidates:
             listed = getattr(c, "list_date", None)
-            ages.append(float(days_since_listed(listed)) if listed else 100.0)
+            ages.append(float(days_since_listed(listed, now=now)) if listed else 365.0)
         bb_devs = []
         for c in candidates:
             d = self._compute_bb_deviation(c.code, c.price)
             bb_devs.append(d if d is not None else 0.0)
         ratings = [float(_get_rating_score(getattr(c, "rating", "") or "")) for c in candidates]
 
-        r_price = _rank_scores(prices, ascending=True)
-        r_prem = _rank_scores(premiums, ascending=True)
-        r_size = _rank_scores(sizes, ascending=True)
-        r_age = _rank_scores(ages, ascending=True)
-        r_bb = _rank_scores(bb_devs, ascending=True)  # 低偏离高分
-        r_rating = _rank_scores(ratings, ascending=False)  # 高评级高分
+        r_price = _rank_scores(prices, ascending=False)
+        r_prem = _rank_scores(premiums, ascending=False)
+        r_size = _rank_scores(sizes, ascending=False)
+        r_age = _rank_scores(ages, ascending=False)
+        r_bb = _rank_scores(bb_devs, ascending=False)  # 低偏离高分
+        r_rating = _rank_scores(ratings, ascending=True)  # 高评级高分
 
         scored: list[tuple[str, float]] = []
         for i, code in enumerate(codes):

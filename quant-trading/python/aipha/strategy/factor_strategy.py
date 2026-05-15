@@ -25,8 +25,10 @@ class FactorStrategyConfig:
     lookback_days: int = 60
 
     def __post_init__(self) -> None:
+        if self.top_k is not None and self.top_pct is not None:
+            raise ValueError("Cannot specify both top_k and top_pct")
         if self.top_k is None and self.top_pct is None:
-            self.top_k = 10
+            raise ValueError("Must specify either top_k or top_pct")
 
 
 class FactorBasedStrategy(Strategy):
@@ -98,6 +100,8 @@ class FactorBasedStrategy(Strategy):
         return None
 
     def _should_rebalance(self) -> bool:
+        if self._last_rebalance_bar == 0:
+            return True
         return (self._bar_count - self._last_rebalance_bar) >= self._config.rebalance_days
 
     def _update_price_history(self, bars: dict[str, Bar]) -> None:
@@ -126,12 +130,13 @@ class FactorBasedStrategy(Strategy):
         self, context: StrategyContext, symbol: str, current_date: date,
     ) -> Optional[FactorData]:
         prices = self._price_history.get(symbol, [])
-        if len(prices) < 2:
+        if not prices:
             return None
         return FactorData(
             symbol=symbol,
-            close_prices=prices,
-            timestamp=current_date,
+            trade_date=current_date,
+            close=prices[-1],
+            returns=[(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices))] if len(prices) > 1 else None,
             fundamentals=getattr(context, "fundamentals", {}).get(symbol) if hasattr(context, "fundamentals") else None,
         )
 
@@ -155,7 +160,7 @@ class FactorBasedStrategy(Strategy):
         n_factors = len(factor_results)
         combined = [
             FactorResult(symbol=sym, factor_name="COMBINED", value=s / n_factors,
-                         timestamp=None)
+                         trade_date=None)
             for sym, s in scores.items()
             if counts.get(sym, 0) >= n_factors
         ]
@@ -191,17 +196,49 @@ class FactorBasedStrategy(Strategy):
         current = set(context.positions.keys())
         targets = set(target_weights.keys())
 
+        # SELL positions not in targets
         for sym in current - targets:
-            intents.append(OrderIntent(
-                symbol=sym, intent_type=IntentType.EXIT,
-                side=Side.SELL, reason="factor_out",
-            ))
+            qty = context.positions.get(sym, 0)
+            if qty > 0:
+                intents.append(OrderIntent(
+                    symbol=sym, intent_type=IntentType.EXIT,
+                    side=Side.SELL, qty=qty, reason="factor_out",
+                ))
+
+        # BUY targets not in positions
         for sym in targets - current:
-            intents.append(OrderIntent(
-                symbol=sym, intent_type=IntentType.ENTRY,
-                side=Side.BUY, reason="factor_in",
-                metadata={"target_weight": target_weights[sym]},
-            ))
+            if sym in bars:
+                target_value = context.nav * target_weights[sym]
+                price = bars[sym].close
+                if price > 0:
+                    qty = int(target_value / price / 100) * 100
+                    if qty > 0:
+                        intents.append(OrderIntent(
+                            symbol=sym, intent_type=IntentType.ENTRY,
+                            side=Side.BUY, qty=qty, reason="factor_in",
+                            metadata={"target_weight": target_weights[sym]},
+                        ))
+
+        # Adjust existing positions that are also in targets
+        for sym in current & targets:
+            if sym in bars:
+                price = bars[sym].close
+                if price > 0:
+                    target_qty = int(context.nav * target_weights[sym] / price / 100) * 100
+                    cur_qty = context.positions.get(sym, 0)
+                    delta = target_qty - cur_qty
+                    if delta > 0:
+                        intents.append(OrderIntent(
+                            symbol=sym, intent_type=IntentType.ENTRY,
+                            side=Side.BUY, qty=delta, reason="factor_in",
+                            metadata={"target_weight": target_weights[sym]},
+                        ))
+                    elif delta < 0:
+                        intents.append(OrderIntent(
+                            symbol=sym, intent_type=IntentType.EXIT,
+                            side=Side.SELL, qty=abs(delta), reason="factor_out",
+                        ))
+
         return intents
 
     @classmethod
@@ -211,4 +248,6 @@ class FactorBasedStrategy(Strategy):
             ParamSpec("top_k", ParamType.INT, 10, low=5, high=50, step=5, is_critical=True),
             ParamSpec("rebalance_days", ParamType.INT, 20, low=5, high=60, step=5, is_critical=True),
             ParamSpec("lookback_days", ParamType.INT, 60, low=20, high=120, step=20),
+            ParamSpec("weight_method", ParamType.CHOICE, default="equal",
+                      choices=("equal", "factor_score", "min_variance", "risk_parity", "max_sharpe")),
         ])

@@ -28,9 +28,8 @@ class VolManagedValueConfig(EquityRotationConfig):
 class VolManagedValueStrategy(EquityRotationStrategy):
     name = "vol_managed_value"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = VolManagedValueConfig()
+    def __init__(self, config: VolManagedValueConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or VolManagedValueConfig(), **kwargs)
         self._portfolio_returns: list[float] = []
 
     @property

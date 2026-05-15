@@ -23,21 +23,49 @@ def rating_score(rating: str) -> float:
     return _RATING_SCORES.get(rating.strip().upper(), 0.5) if rating else 0.5
 
 
-def delta_exposure(candidate: "CandidateInfo") -> float:
-    """简易 delta 暴露: 基于转换价值/面值"""
+def delta_exposure(candidate_or_prem=None, close=None, stock_close=None) -> float:
+    """简易 delta 暴露: 基于转换价值/面值.
+    
+    Accepts either:
+      - delta_exposure(candidate: CandidateInfo)
+      - delta_exposure(premium_rate, close, stock_close)
+    """
+    if close is not None:
+        # Called with (prem, close, stock_close)
+        prem = candidate_or_prem or 0.0
+        sc = stock_close or close
+        cb_value = sc * (1 + prem / 100.0) if prem else close
+        return max(0.0, min(1.0, (cb_value - 85.0) / 100.0))
+    candidate = candidate_or_prem
     cb_value = getattr(candidate, "cb_value", None)
     if cb_value is None or cb_value <= 0:
         return 0.5
     return max(0.0, min(1.0, (cb_value - 85.0) / 100.0))
 
 
-def enhanced_ytm(close: float, maturity_date: str, now: datetime) -> float:
-    """增强到期收益率 (简化)"""
+def enhanced_ytm(close: float, maturity_date_or_years=None, now: datetime | None = None) -> float:
+    """增强到期收益率 (简化).
+    
+    Accepts either:
+      - enhanced_ytm(close, maturity_date_str, now)
+      - enhanced_ytm(close, remain_years_float)
+    """
     if close <= 0:
         return 0.0
     try:
-        mat = datetime.strptime(maturity_date, "%Y-%m-%d") if isinstance(maturity_date, str) else maturity_date
-        years = (mat - now).days / 365.25
+        if isinstance(maturity_date_or_years, (int, float)):
+            years = float(maturity_date_or_years)
+        elif isinstance(maturity_date_or_years, str):
+            s = maturity_date_or_years.strip()
+            if "-" in s:
+                mat = datetime.strptime(s[:10], "%Y-%m-%d")
+            else:
+                mat = datetime.strptime(s[:8], "%Y%m%d")
+            if now is None:
+                now = datetime.now()
+            years = (mat - now).days / 365.25
+        else:
+            return 0.0
         if years <= 0:
             return 0.0
         return (100.0 / close) ** (1.0 / years) - 1.0
@@ -92,9 +120,11 @@ def compute_pool_stats(
 
 def turnover_activity(candidate: "CandidateInfo") -> float:
     """换手率活跃度因子 [0, 1]"""
-    turnover = getattr(candidate, "turnover", None) or 0.0
+    amount = getattr(candidate, "amount", None) or 0.0
+    issue_size = getattr(candidate, "issue_size", None) or 1.0
+    turnover = amount / issue_size if issue_size > 0 else 0.0
     # 归一化到 [0, 1] 范围
-    return min(1.0, turnover / 500.0)
+    return min(1.0, turnover / 0.5)
 
 
 def rank_fusion(

@@ -54,11 +54,13 @@ class MultiFactorStrategy(CBRotationStrategy):
 
     def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
         cfg = self.config
-        premium = getattr(candidate, "premium_rate", None)
-        if premium is not None and premium * 100 > cfg.max_premium:
-            return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
-        return turnover >= cfg.min_turnover
+        p = getattr(candidate, "cb_over_rate", None)
+        if p is None:
+            p = getattr(candidate, "premium_rate", None)
+            if p is not None: p = p * 100.0
+        if p is None: return False
+        if p > cfg.max_premium: return False
+        return True
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",

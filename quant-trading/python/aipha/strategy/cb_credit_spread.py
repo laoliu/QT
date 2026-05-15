@@ -6,7 +6,7 @@ from aipha.strategy.base import StrategyContext
 from aipha.strategy.cb_rotation_base import CBRotationConfig, CBRotationStrategy, CandidateInfo
 logger = logging.getLogger(__name__)
 
-RATING_SCORE_MAP: dict[str, float] = {"AAA": 8.0, "AA+": 7.0, "AA": 6.0, "AA-": 5.0, "A+": 4.0, "A": 3.0, "A-": 2.5, "BBB+": 2.0, "BBB": 1.5, "BBB-": 1.0, "BB+": 0.5, "BB": 0.0}
+RATING_SCORE_MAP: dict[str, float] = {"AAA": 8.0, "AA+": 7.0, "AA": 6.0, "AA-": 5.0, "A+": 4.0, "A": 3.0, "A-": 2.5, "BBB+": 2.0, "BBB": 1.0, "BBB-": 0.5, "BB+": 0.25, "BB": 0.0}
 DEFAULT_RATING_SCORE: float = 2.0
 def rating_to_score(rating: str) -> float:
     return RATING_SCORE_MAP.get(rating.strip().upper(), DEFAULT_RATING_SCORE) if rating else DEFAULT_RATING_SCORE
@@ -28,14 +28,22 @@ class CBCreditSpreadStrategy(CBRotationStrategy):
     @property
     def config(self) -> CreditSpreadCBConfig: return self._config  # type: ignore
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
+        from aipha.strategy.cb_rotation_base import days_since_listed
         cfg = self.config
         price = getattr(c, "close", None)
         if price is not None and price > cfg.max_price: return False
-        prem = getattr(c, "premium_rate", None)
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is None:
+            prem = getattr(c, "premium_rate", None)
+            if prem is not None: prem = prem * 100.0
         if prem is not None and prem > cfg.max_premium: return False
         if cfg.min_rating:
             r = getattr(c, "rating", "")
             if rating_to_score(r) < rating_to_score(cfg.min_rating): return False
+        if cfg.use_age_filter:
+            now = getattr(ctx, "current_time", None) or __import__("datetime").datetime.now()
+            age = days_since_listed(c.list_date, now)
+            if age < cfg.min_age_days: return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores
@@ -57,12 +65,12 @@ class CBCreditSpreadStrategy(CBRotationStrategy):
             ytm_v.append((cfg.face_value / price) ** (1.0 / ry) - 1.0 if price > 0 else 0.0)
             rat_v.append(rating_to_score(c.rating))
             bf_v.append(0.0)  # bond_floor not available
-            price_v.append(-price)
-            prem_v.append(-(c.cb_over_rate or 50.0))
-            size_v.append(-(c.issue_size or 1e9))
-        r_ytm = _rank_scores(ytm_v, ascending=False)
-        r_rat = _rank_scores(rat_v, ascending=False)
-        r_bf = _rank_scores(bf_v, ascending=False)
+            price_v.append(price)
+            prem_v.append(c.cb_over_rate or 50.0)
+            size_v.append(c.issue_size or 1e9)
+        r_ytm = _rank_scores(ytm_v, ascending=True)
+        r_rat = _rank_scores(rat_v, ascending=True)
+        r_bf = _rank_scores(bf_v, ascending=True)
         r_price = _rank_scores(price_v, ascending=False)
         r_prem = _rank_scores(prem_v, ascending=False)
         r_size = _rank_scores(size_v, ascending=False)

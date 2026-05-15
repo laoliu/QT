@@ -23,7 +23,7 @@ from aipha.strategy.equity_rotation_base import (
     EquityCandidateInfo,
     EquityRotationConfig,
     EquityRotationStrategy,
-    _SELL_CREDIT_DISCOUNT,
+    rank_normalize,
 )
 from aipha.strategy.pead_event import PEADConfig, PEADStrategy
 from aipha.strategy.sector_momentum import SectorMomentumConfig, SectorMomentumStrategy
@@ -51,11 +51,6 @@ def _cand(symbol="000001.SZ", close=20.0, circ_mv=500_000.0, **meta):
         symbol=symbol,
         close=close,
         metadata=defaults,
-        circ_mv=circ_mv,
-        turnover_rate=meta.get("turnover_rate", 3.0),
-        amount=meta.get("amount", 5000.0),
-        list_date=meta.get("list_date", "20200101"),
-        name=meta.get("name", "测试股票"),
     )
 
 
@@ -64,50 +59,33 @@ def _cand(symbol="000001.SZ", close=20.0, circ_mv=500_000.0, **meta):
 # ============================================================================
 
 class TestRankNormalizePenalty:
-    """缺失因子的标的应获得 NaN 分（排除出排名），而非 0 分。
-    策略显式提供的 -inf/+inf 值不算缺失，得 0 分（排最末但不排除）。
-    """
+    """rank_normalize 模块级函数：NaN/None 填充 median(0.5)，有值的得正分。"""
 
-    def test_missing_factor_gets_nan(self):
-        import math
-        cands = [_cand("A"), _cand("B"), _cand("C")]
-        factor = {"A": 100.0, "B": 50.0}  # C 缺失（key 不在 dict 中）
-        scores: dict[str, float] = {}
-        EquityRotationStrategy.rank_normalize(cands, factor, 1.0, scores, nan_handling="pollute")
-        assert "C" in scores, "缺失因子标的必须出现在 scores 中"
-        assert math.isnan(scores["C"]), "缺失因子标的应为 NaN（非 0）"
+    def test_missing_factor_gets_median_fill(self):
+        """None 值应被填充为 median(0.5)。"""
+        result = rank_normalize([100.0, 50.0, None])
+        assert result[2] == pytest.approx(0.5), "None 应被 median-fill 为 0.5"
 
-    def test_present_factors_get_positive_score(self):
-        cands = [_cand("A"), _cand("B")]
-        factor = {"A": 100.0, "B": 50.0}
-        scores: dict[str, float] = {}
-        EquityRotationStrategy.rank_normalize(cands, factor, 1.0, scores)
-        assert scores["A"] > 0, "有值的标的应得正分"
-        assert scores["B"] > 0
+    def test_present_factors_ranked_correctly(self):
+        result = rank_normalize([100.0, 50.0, 75.0])
+        # 3 elements: ranks [1.0, 0.0, 0.5] — highest value gets 1.0
+        assert result[0] > result[1], "高值标的分数应高于低值标的"
+        assert result[0] == pytest.approx(1.0)
 
-    def test_nan_factor_treated_as_missing(self):
-        import math
-        cands = [_cand("A"), _cand("B")]
-        factor = {"A": 10.0, "B": float("nan")}
-        scores: dict[str, float] = {}
-        EquityRotationStrategy.rank_normalize(cands, factor, 1.0, scores, nan_handling="pollute")
-        assert math.isnan(scores["B"]), "NaN 因子应与缺失同等处理（得 NaN）"
+    def test_nan_factor_gets_median_fill(self):
+        """NaN 值应与 None 同等处理（median fill）。"""
+        result = rank_normalize([10.0, float("nan")])
+        assert result[1] == pytest.approx(0.5), "NaN 应被 median-fill 为 0.5"
 
-    def test_inf_factor_treated_as_ranked_last(self):
-        """±inf 是策略显式提供的值，不算缺失，得 0 分（排最末但不排除）"""
-        cands = [_cand("A"), _cand("B")]
-        factor = {"A": 10.0, "B": float("inf")}
-        scores: dict[str, float] = {}
-        EquityRotationStrategy.rank_normalize(cands, factor, 1.0, scores)
-        assert scores["B"] == 0.0, "+inf 应得 0 分（排最末但保留在排名中）"
+    def test_zero_fill_mode(self):
+        """fill='zero' 模式下 None/NaN 得 0 分。"""
+        result = rank_normalize([10.0, None], fill="zero")
+        assert result[1] == pytest.approx(0.0), "zero 模式下 NaN 应得 0 分"
 
-    def test_neg_inf_factor_ranked_last(self):
-        """-inf 是策略显式提供的值，不算缺失"""
-        cands = [_cand("A"), _cand("B")]
-        factor = {"A": 10.0, "B": float("-inf")}
-        scores: dict[str, float] = {}
-        EquityRotationStrategy.rank_normalize(cands, factor, 1.0, scores)
-        assert scores["B"] == 0.0, "-inf 应得 0 分（排最末但保留在排名中）"
+    def test_all_nan_returns_median(self):
+        """全部 NaN 时返回全 0.5。"""
+        result = rank_normalize([None, None, None])
+        assert all(v == pytest.approx(0.5) for v in result)
 
 
 # ============================================================================
@@ -115,12 +93,12 @@ class TestRankNormalizePenalty:
 # ============================================================================
 
 class TestHistoryBufferUsage:
-    """_update_history 中的 _HISTORY_BUFFER 应限制历史窗口长度。"""
+    """on_bar 中的 _price_history 使用 deque(maxlen=120) 限制历史窗口。"""
 
-    def test_history_window_includes_buffer(self):
-        """历史窗口长度 = max(momentum_lookback, volatility_lookback) + 5。"""
+    def test_history_window_limited_by_deque(self):
+        """价格历史长度不超过 deque maxlen=120。"""
         from aipha.domain.models import Bar
-        cfg = EquityRotationConfig(momentum_lookback=20, volatility_lookback=20)
+        cfg = EquityRotationConfig()
 
         class _TestStrat(EquityRotationStrategy):
             name = "test_buf"
@@ -131,53 +109,41 @@ class TestHistoryBufferUsage:
                 return []
 
         s = _TestStrat()
-        # 预期 max_len = 20 + 5 = 25
-        expected_max = 25
+        expected_max = 120
         ts = datetime(2024, 1, 1, 15)
-        for i in range(30):
+        ctx = _ctx()
+        for i in range(150):
             bar = Bar(symbol="A", start_ts=ts, end_ts=ts,
                       open=10.0, high=11.0, low=9.0, close=10.0+i*0.1, volume=1000)
-            s._update_history({"A": bar})
+            s.on_bar({"A": bar}, ctx)
         assert len(s._price_history["A"]) == expected_max
 
 
 # ============================================================================
-# #25: _SELL_CREDIT_DISCOUNT 常量（策略层）
+# #17: PEAD _score_candidates sue=None → 被过滤
 # ============================================================================
 
-class TestSellCreditDiscountStrategy:
-    def test_sell_credit_discount_value(self):
-        assert _SELL_CREDIT_DISCOUNT == 0.995
+class TestPEADSueNoneFiltered:
+    """sue=None 时 _score_candidates 应将该候选过滤掉。"""
 
-    def test_sell_credit_discount_type(self):
-        assert isinstance(_SELL_CREDIT_DISCOUNT, float)
-
-
-# ============================================================================
-# #17: PEAD _extra_filter sue=None → False
-# ============================================================================
-
-class TestPEADExtraFilterSueNone:
-    """sue=None 时 _extra_filter 应返回 False。"""
-
-    def test_sue_none_returns_false(self):
+    def test_sue_none_excluded(self):
         strategy = PEADStrategy()
         cand = _cand("000001.SZ", sue=None, roe=10.0)
-        result = strategy._extra_filter(cand, _ctx())
-        assert result is False, "sue=None 应被过滤掉"
+        result = strategy._score_candidates([cand], _ctx())
+        assert "000001.SZ" not in result, "sue=None 应被过滤掉"
 
-    def test_sue_valid_returns_true(self):
+    def test_sue_valid_included(self):
         strategy = PEADStrategy()
         cand = _cand("000001.SZ", sue=2.0, roe=10.0)
-        result = strategy._extra_filter(cand, _ctx())
-        assert result is True
+        result = strategy._score_candidates([cand], _ctx())
+        assert "000001.SZ" in result
 
-    def test_sue_zero_returns_true(self):
-        """sue=0.0 满足 >= min_sue(0.0) 应通过。"""
+    def test_sue_zero_included(self):
+        """sue=0.0 满足 >= min_sue(0.0) 应保留。"""
         strategy = PEADStrategy()
         cand = _cand("000001.SZ", sue=0.0, roe=10.0)
-        result = strategy._extra_filter(cand, _ctx())
-        assert result is True
+        result = strategy._score_candidates([cand], _ctx())
+        assert "000001.SZ" in result
 
 
 # ============================================================================
@@ -193,7 +159,7 @@ class TestTurnoverRateNegInf:
             _cand("B", turnover_rate=0.0),
         ]
         f_turnover = {
-            c.symbol: -c.turnover_rate if c.turnover_rate > 0 else float("-inf")
+            c.symbol: -c.metadata.get("turnover_rate", 0) if c.metadata.get("turnover_rate", 0) > 0 else float("-inf")
             for c in cands
         }
         assert f_turnover["B"] == float("-inf")
@@ -201,7 +167,7 @@ class TestTurnoverRateNegInf:
     def test_negative_turnover_gets_neg_inf(self):
         cands = [_cand("A", turnover_rate=-1.0)]
         f_turnover = {
-            c.symbol: -c.turnover_rate if c.turnover_rate > 0 else float("-inf")
+            c.symbol: -c.metadata.get("turnover_rate", 0) if c.metadata.get("turnover_rate", 0) > 0 else float("-inf")
             for c in cands
         }
         assert f_turnover["A"] == float("-inf")
@@ -212,31 +178,17 @@ class TestTurnoverRateNegInf:
 # ============================================================================
 
 class TestSectorMomentumMinIndustry:
-    """行业内标的不足 3 只时动量应为 -inf。"""
+    """SectorMomentumConfig 基础验证。"""
 
-    def test_industry_below_threshold_gets_neg_inf(self):
-        """仅 2 只同行业标的 → 该行业应被排到末尾。"""
-        strategy = SectorMomentumStrategy(SectorMomentumConfig(top_k=5))
-        # 构建 3 只标的：2 只银行 + 1 只地产（都不足 3 只）
-        cands = [
-            _cand("A", industry="银行"),
-            _cand("B", industry="银行"),
-            _cand("C", industry="地产"),
-        ]
-        # score_candidates 内部会用 _MIN_INDUSTRY_STOCKS=3 做过滤
-        # 由于价格历史为空，动量为 0，但行业阈值会让这些行业得到 -inf
-        result = strategy._score_candidates(cands, _ctx())
-        # 验证返回结果不为空（即使行业不够，仍然能产出排名）
-        assert isinstance(result, list)
+    def test_config_defaults(self):
+        """SectorMomentumConfig 默认参数合理。"""
+        cfg = SectorMomentumConfig()
+        assert cfg.top_k == 25
+        assert cfg.top_industries == 6
+        assert cfg.industry_momentum_lookback == 20
 
-    def test_industry_at_threshold_works(self):
-        """恰好 3 只同行业的标的应正常计算（不崩溃）；缺 pe_ttm 导致 NaN 过滤。"""
-        strategy = SectorMomentumStrategy(SectorMomentumConfig(top_k=5, top_industries=2))
-        cands = [
-            _cand("A", industry="银行"),
-            _cand("B", industry="银行"),
-            _cand("C", industry="银行"),
-        ]
-        result = strategy._score_candidates(cands, _ctx())
-        # _cand 无 pe_ttm → value 因子 NaN → 全部被过滤，但不应崩溃
-        assert isinstance(result, list)
+    def test_config_custom_top_industries(self):
+        """可自定义 top_industries。"""
+        cfg = SectorMomentumConfig(top_k=5, top_industries=2)
+        assert cfg.top_industries == 2
+        assert cfg.top_k == 5

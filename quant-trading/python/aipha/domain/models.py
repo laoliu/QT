@@ -49,7 +49,7 @@ class OrderType(str, Enum):
     BEST_FIVE_THEN_LIMIT = "BEST_FIVE_THEN_LIMIT"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Bar:
     """OHLCV bar。
 
@@ -73,6 +73,11 @@ class Bar:
     is_limit_up: bool | None = None
     is_limit_down: bool | None = None
     metadata: dict | None = None
+
+    @property
+    def date(self) -> datetime:
+        """Backward-compatible alias for start_ts."""
+        return self.start_ts
 
 
 @dataclass(frozen=True, slots=True)

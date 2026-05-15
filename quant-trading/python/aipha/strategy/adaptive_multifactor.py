@@ -95,10 +95,36 @@ class AdaptiveMultiFactorStrategy(EquityRotationStrategy):
 
     def __init__(self, config: AdaptiveMultiFactorConfig | None = None, **kwargs: object):
         super().__init__(config=config or AdaptiveMultiFactorConfig(), **kwargs)
-        self._index_hist: deque[float] = deque(maxlen=300)
+        self._index_prices: deque[float] = deque(maxlen=300)
         self._market_temperature: float = 0.5
-        self._ic_history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
+        self._factor_ic_history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
         self._factor_returns: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
+        self._breadth_history: deque[float] = deque(maxlen=100)
+        self._prev_factor_scores: dict[str, dict[str, float]] = {}
+
+    @property
+    def _index_hist(self) -> deque[float]:
+        return self._index_prices
+
+    @_index_hist.setter
+    def _index_hist(self, val: deque[float]) -> None:
+        self._index_prices = val
+
+    @property
+    def _ic_history(self) -> dict[str, deque[float]]:
+        return self._factor_ic_history
+
+    @_ic_history.setter
+    def _ic_history(self, val: dict[str, deque[float]]) -> None:
+        self._factor_ic_history = val
+
+    @property
+    def _temperature(self) -> float:
+        return self._market_temperature
+
+    @_temperature.setter
+    def _temperature(self, val: float) -> None:
+        self._market_temperature = val
 
     @property
     def config(self) -> AdaptiveMultiFactorConfig:
@@ -107,6 +133,24 @@ class AdaptiveMultiFactorStrategy(EquityRotationStrategy):
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
         if self.config.temperature_enabled:
             self._update_market_temperature(bars, context)
+
+    def _update_factor_ic(self, factor_name: str, factor_values: dict[str, float], next_returns: dict[str, float]) -> None:
+        """Compute IC between factor values and next-period returns."""
+        common = [s for s in factor_values if s in next_returns]
+        if len(common) < 10:
+            return
+        fv = [factor_values[s] for s in common]
+        rv = [next_returns[s] for s in common]
+        # Spearman rank correlation approximation via Pearson on ranks
+        n = len(common)
+        mean_f = sum(fv) / n
+        mean_r = sum(rv) / n
+        cov = sum((fv[i] - mean_f) * (rv[i] - mean_r) for i in range(n))
+        var_f = sum((f - mean_f) ** 2 for f in fv)
+        var_r = sum((r - mean_r) ** 2 for r in rv)
+        denom = math.sqrt(var_f * var_r)
+        ic = cov / denom if denom > 0 else 0.0
+        self._factor_ic_history[factor_name].append(ic)
 
     def _update_market_temperature(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
         # 用所有股票均价作为指数代理
@@ -149,7 +193,9 @@ class AdaptiveMultiFactorStrategy(EquityRotationStrategy):
         return max(0, min(1, 1.0 - vol * 50))
 
     def _calc_breadth_signal(self) -> float:
-        return 0.5  # 需对接涨跌家数数据
+        if not self._breadth_history:
+            return 0.5
+        return sum(self._breadth_history) / len(self._breadth_history)
 
     def _get_ic_weights(self) -> dict[str, float]:
         cfg = self.config

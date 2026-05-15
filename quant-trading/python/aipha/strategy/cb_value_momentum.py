@@ -41,6 +41,9 @@ class CBValueMomentumStrategy(CBRotationStrategy):
         self._price_history: dict[str, deque[float]] = defaultdict(
             lambda: deque(maxlen=self.config.lookback_days + 5)
         )
+        self._cb_value_history: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=self.config.lookback_days + 5)
+        )
 
     @property
     def config(self) -> CBValueMomentumConfig:
@@ -48,18 +51,33 @@ class CBValueMomentumStrategy(CBRotationStrategy):
 
     def _on_start_extra(self) -> None:
         self._price_history.clear()
+        self._cb_value_history.clear()
 
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
         for code, bar in bars.items():
             self._price_history[code].append(bar.close)
+            cv = getattr(bar, "cb_value", None)
+            if cv is None and hasattr(bar, "metadata"):
+                cv = bar.metadata.get("cb_value")
+            if cv is not None:
+                self._cb_value_history[code].append(cv)
 
     def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
         cfg = self.config
-        premium = getattr(candidate, "premium_rate", None)
-        if premium is not None and premium * 100 > cfg.max_premium:
+        p = getattr(candidate, "cb_over_rate", None)
+        if p is None:
+            p = getattr(candidate, "premium_rate", None)
+            if p is not None: p = p * 100.0
+        if p is None: return False
+        if p > cfg.max_premium: return False
+        # Need enough history for momentum calc
+        sym = candidate.code if hasattr(candidate, 'code') else candidate.symbol
+        hist = self._cb_value_history.get(sym) if hasattr(self, "_cb_value_history") else None
+        if hist is None:
+            hist = self._price_history.get(sym)
+        if not hist or len(hist) <= cfg.lookback_days:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
-        return turnover >= cfg.min_turnover
+        return True
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",
@@ -69,17 +87,25 @@ class CBValueMomentumStrategy(CBRotationStrategy):
         scored: list[tuple[str, float]] = []
         for c in candidates:
             # 价值分 (溢价率越低越好)
-            premium = (getattr(c, "premium_rate", 0.0) or 0.0)
-            value_score = max(0, 1.0 - premium)
+            p = getattr(c, "cb_over_rate", None)
+            if p is None:
+                p = getattr(c, "premium_rate", None)
+                if p is not None: p = p * 100.0
+            premium_pct = (p or 0.0) / 100.0
+            value_score = max(0, 1.0 - premium_pct)
 
-            # 动量分
-            hist = self._price_history.get(c.code)
+            # 动量分 (基于 cb_value 历史)
+            hist = self._cb_value_history.get(c.code) if hasattr(self, "_cb_value_history") else None
+            if hist is None:
+                hist = self._price_history.get(c.code)
             lb = cfg.lookback_days
             momentum_score = 0.0
-            if hist and len(hist) >= lb:
-                old = hist[-lb]
+            if hist and len(hist) > lb:
+                old = hist[0]
                 if old > 0:
                     momentum_score = (hist[-1] - old) / old
+                else:
+                    continue  # old=0 → skip to avoid divide-by-zero
 
             total = cfg.value_weight * value_score + cfg.momentum_weight * momentum_score
             scored.append((c.code, total))

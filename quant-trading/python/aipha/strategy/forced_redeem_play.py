@@ -46,9 +46,10 @@ class ForcedRedeemPlayStrategy(CBRotationStrategy):
     def _custom_exit_check(
         self, bars: dict[str, "Bar"], context: StrategyContext,
     ) -> list[OrderIntent]:
-        """强赎触发后立即卖出"""
+        """强赎触发后立即卖出 + 获利了结"""
         intents: list[OrderIntent] = []
         positions = getattr(context, "positions", {})
+        cfg = self.config
         for code, qty in positions.items():
             if qty <= 0 or code not in bars:
                 continue
@@ -60,6 +61,17 @@ class ForcedRedeemPlayStrategy(CBRotationStrategy):
                     symbol=code, intent_type="EXIT",
                     side=Side.SELL, quantity=qty,
                 ))
+                continue
+            # 获利了结: cb_value 超过上限
+            cb_value = getattr(bar, "cb_value", None)
+            if cb_value is None and hasattr(bar, "metadata"):
+                cb_value = bar.metadata.get("cb_value")
+            if cb_value is not None and cb_value > cfg.upper_cb_value:
+                intents.append(OrderIntent(
+                    symbol=code, intent_type="EXIT",
+                    side=Side.SELL, quantity=qty,
+                    reason="强赎获利",
+                ))
         return intents
 
     def _extra_filter(self, candidate: CandidateInfo, context: StrategyContext) -> bool:
@@ -69,11 +81,13 @@ class ForcedRedeemPlayStrategy(CBRotationStrategy):
             return False
         if cb_value < cfg.lower_cb_value or cb_value > cfg.upper_cb_value:
             return False
-        premium = getattr(candidate, "premium_rate", None)
-        if premium is not None and premium * 100 > cfg.max_premium:
+        p = getattr(candidate, "cb_over_rate", None)
+        if p is None:
+            p = getattr(candidate, "premium_rate", None)
+            if p is not None: p = p * 100.0
+        if p is not None and p > cfg.max_premium:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
-        return turnover >= cfg.min_turnover
+        return True
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: StrategyContext,
@@ -82,10 +96,14 @@ class ForcedRedeemPlayStrategy(CBRotationStrategy):
         scored: list[tuple[str, float]] = []
         for c in candidates:
             cb_value = getattr(c, "cb_value", 100.0)
-            premium = (getattr(c, "premium_rate", 0.0) or 0.0) * 100
+            p = getattr(c, "cb_over_rate", None)
+            if p is None:
+                p = getattr(c, "premium_rate", None)
+                if p is not None: p = p * 100.0
+            premium_pct = p or 0.0
             # 越接近强赎触发价 (130) 且溢价率越低, 得分越高
             proximity = cb_value / 130.0  # 越接近 1 越好
-            score = proximity * 0.6 - premium * 0.4  # 高接近度 + 低溢价率
+            score = proximity * 0.6 - premium_pct / 100.0 * 0.4  # normalize premium to [0,1]
             scored.append((c.code, score))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

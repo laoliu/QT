@@ -24,9 +24,8 @@ class TurnaroundConfig(EquityRotationConfig):
 class TurnaroundPlayStrategy(EquityRotationStrategy):
     name = "turnaround_play"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = TurnaroundConfig()
+    def __init__(self, config: TurnaroundConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or TurnaroundConfig(), **kwargs)
 
     @property
     def config(self) -> TurnaroundConfig:

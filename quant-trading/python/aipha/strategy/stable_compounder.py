@@ -22,9 +22,8 @@ class StableCompounderConfig(EquityRotationConfig):
 class StableCompounderStrategy(EquityRotationStrategy):
     name = "stable_compounder"
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._config = StableCompounderConfig()
+    def __init__(self, config: StableCompounderConfig | None = None, **kwargs: object) -> None:
+        super().__init__(config=config or StableCompounderConfig(), **kwargs)
 
     @property
     def config(self) -> StableCompounderConfig:

@@ -77,10 +77,16 @@ class QualityGrowthStrategy(EquityRotationStrategy):
         if roe is not None and roe < cfg.min_roe:
             return False
         pe = getattr(candidate, "pe_ttm", None)
-        if pe is not None and pe > cfg.max_pe:
+        if pe is not None and (pe <= 0 or pe > cfg.max_pe):
             return False
         debt = getattr(candidate, "debt_to_assets", None)
         if debt is not None and debt > cfg.max_debt_to_assets:
+            return False
+        revenue = getattr(candidate, "revenue_yoy", None)
+        if revenue is not None and revenue < cfg.min_revenue_growth:
+            return False
+        profit = getattr(candidate, "dt_netprofit_yoy", None)
+        if profit is not None and profit < cfg.min_profit_growth:
             return False
         return True
 

@@ -69,6 +69,7 @@ class CBIntradayBase(Strategy):
         self._config = config or CBIntradayConfig()
         self._states: dict[str, IntradayState] = {}
         self._current_date: datetime | None = None
+        self._prev_close: dict[str, float] = {}
 
     @property
     def config(self) -> CBIntradayConfig:
@@ -80,12 +81,21 @@ class CBIntradayBase(Strategy):
     ) -> IntradaySignal:
         ...
 
+    @staticmethod
+    def _calc_qty(price: float, nav: float, config: CBIntradayConfig) -> int:
+        """Calculate position quantity aligned to lot size."""
+        if price <= 0:
+            return 0
+        raw = nav * config.max_position_pct / price
+        lot = config.lot_size or 10
+        return int(raw // lot) * lot
+
     def on_bar(self, bars: dict[str, "Bar"], context: StrategyContext) -> list[OrderIntent]:
         intents: list[OrderIntent] = []
         for sym, bar in bars.items():
             if self._config.symbols and sym not in self._config.symbols:
                 continue
-            now = getattr(bar, "datetime", datetime.now())
+            now = getattr(bar, "timestamp", None) or datetime.now()
             self._maybe_reset_daily(now)
             state = self._get_or_create_state(sym, now)
             state.update_vwap(bar.close, getattr(bar, "volume", 0))
@@ -101,16 +111,20 @@ class CBIntradayBase(Strategy):
 
             signal = self.on_minute_bar(bar, state, context)
             if signal == IntradaySignal.BUY and state.qty == 0:
+                qty = self._calc_qty(bar.close, context.nav, self._config)
+                if qty <= 0:
+                    continue
                 intents.append(OrderIntent(
                     symbol=sym, intent_type=IntentType.ENTRY,
-                    side=Side.BUY, reason="intraday_buy",
+                    side=Side.BUY, qty=qty, reason="intraday_buy",
                 ))
                 state.entry_price = bar.close
+                state.qty = qty
                 state.trade_count += 1
             elif signal == IntradaySignal.SELL and state.qty > 0:
                 intents.append(OrderIntent(
                     symbol=sym, intent_type=IntentType.EXIT,
-                    side=Side.SELL, reason="intraday_sell",
+                    side=Side.SELL, qty=state.qty, reason="intraday_sell",
                 ))
                 state.pnl += (bar.close - state.entry_price) * state.qty
                 state.qty = 0
@@ -134,10 +148,11 @@ class CBIntradayBase(Strategy):
         self, symbol: str, bar: "Bar", state: IntradayState,
     ) -> list[OrderIntent]:
         if state.qty > 0:
+            qty = state.qty
             state.pnl += (bar.close - state.entry_price) * state.qty
             state.qty = 0
             return [OrderIntent(
                 symbol=symbol, intent_type=IntentType.EXIT,
-                side=Side.SELL, reason="flat_eod",
+                side=Side.SELL, qty=qty, reason="flat_eod",
             )]
         return []

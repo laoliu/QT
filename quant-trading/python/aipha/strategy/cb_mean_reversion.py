@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CBMeanReversionConfig(CBRotationConfig):
-    top_k: int = 20
+    top_k: int = 15
     rebalance_days: int = 5
     max_price: float = 140.0
     lookback: int = 20
@@ -50,7 +50,8 @@ class CBMeanReversionStrategy(CBRotationStrategy):
         for code, bar in bars.items():
             self._price_history[code].append(bar.close)
 
-    def _bb_deviation(self, code: str) -> float | None:
+    def _bb_stats(self, code: str) -> tuple[float, float] | None:
+        """Return (mean, std) from price history, or None if insufficient data."""
         hist = self._price_history.get(code)
         lb = self.config.lookback
         if hist is None or len(hist) < lb:
@@ -58,9 +59,20 @@ class CBMeanReversionStrategy(CBRotationStrategy):
         prices = list(hist)[-lb:]
         mean = sum(prices) / lb
         std = math.sqrt(sum((p - mean) ** 2 for p in prices) / lb)
-        if std < 1e-9:
-            return None
-        return (prices[-1] - mean) / std  # z-score
+        return (mean, std)
+
+    def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
+        cfg = self.config
+        stats = self._bb_stats(candidate.symbol)
+        if stats is None:
+            return False
+        mean, std = stats
+        if std < 0.01:
+            return False
+        lower_band = mean - cfg.bb_k * std
+        if candidate.close >= lower_band:
+            return False
+        return True
 
     def _score_candidates(
         self, candidates: list[CandidateInfo], context: "StrategyContext",
@@ -68,9 +80,17 @@ class CBMeanReversionStrategy(CBRotationStrategy):
         cfg = self.config
         scored: list[tuple[str, float]] = []
         for c in candidates:
-            z = self._bb_deviation(c.symbol)
-            if z is not None and z <= cfg.min_deviation:
-                # 越低越好 → 取负值做降序
-                scored.append((c.symbol, -z))
+            stats = self._bb_stats(c.symbol)
+            if stats is None:
+                continue
+            mean, std = stats
+            if std < 0.01:
+                continue
+            lower_band = mean - cfg.bb_k * std
+            if c.close >= lower_band:
+                continue
+            # deviation: how far below lower band (higher = more oversold)
+            deviation = (lower_band - c.close) / std
+            scored.append((c.symbol, deviation))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

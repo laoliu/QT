@@ -24,10 +24,10 @@ class MomentumStrategy(Strategy):
 
     @classmethod
     def param_space(cls) -> ParamSpace:
-        return ParamSpace(specs=[
-            ParamSpec("lookback_days", ParamType.INT, low=5, high=60, step=5),
-            ParamSpec("top_k", ParamType.INT, low=3, high=20, step=1),
-            ParamSpec("rebalance_days", ParamType.INT, low=1, high=20, step=1),
+        return ParamSpace("momentum", [
+            ParamSpec("lookback_days", ParamType.INT, default=20, low=5, high=60, step=5, is_critical=True),
+            ParamSpec("top_k", ParamType.INT, default=5, low=3, high=20, step=1, is_critical=True),
+            ParamSpec("rebalance_days", ParamType.INT, default=5, low=1, high=20, step=1),
         ])
 
     def on_start(self) -> None:
@@ -40,20 +40,24 @@ class MomentumStrategy(Strategy):
 
     def on_bar(self, bars: dict[str, Bar], context: StrategyContext) -> list[OrderIntent]:
         self._bar_count += 1
+        max_len = self.lookback_days + 10
         # 更新价格历史
         for sym, bar in bars.items():
             self._price_history.setdefault(sym, []).append(bar.close)
+            # Trim to avoid unbounded growth
+            if len(self._price_history[sym]) > max_len:
+                self._price_history[sym] = self._price_history[sym][-max_len:]
 
         current_date = next(iter(bars.values())).date if bars else None
         if current_date and not self._should_rebalance(current_date):
             return []
 
-        if current_date:
-            self._last_rebalance = current_date
-
         scores = self._calculate_momentum_scores()
         if not scores:
             return []
+
+        if current_date:
+            self._last_rebalance = current_date
 
         sorted_syms = sorted(scores.keys(), key=lambda s: scores[s], reverse=True)
         target = sorted_syms[:self.top_k]

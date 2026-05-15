@@ -59,27 +59,38 @@ class CBStockQualityStrategy(CBRotationStrategy):
     ):
         super().__init__(config=config or StockQualityCBConfig(), **kwargs)
         self._stock_bridge = stock_bridge
-        self._stk_price_hist: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=200))
+        self._stk_price_history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=200))
+        self._current_fundamentals: dict[str, Any] = {}
 
     @property
     def config(self) -> StockQualityCBConfig:
         return self._config  # type: ignore[return-value]
 
     def _on_start_extra(self) -> None:
-        self._stk_price_hist.clear()
+        self._stk_price_history.clear()
+        self._current_fundamentals.clear()
 
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
         for code, bar in bars.items():
-            stk = getattr(bar, "stk_code", None)
-            stk_close = getattr(bar, "stk_close", None)
-            if stk and stk_close:
-                self._stk_price_hist[stk].append(float(stk_close))
+            meta = getattr(bar, "metadata", None) or {}
+            stk = meta.get("stk_code")
+            stk_close = meta.get("cb_value")
+            if stk and stk_close is not None:
+                self._stk_price_history[stk].append(float(stk_close))
+                # Fetch fundamentals from bridge
+                if self._stock_bridge and stk not in self._current_fundamentals:
+                    try:
+                        from datetime import date as _date
+                        fund = self._stock_bridge.get_fundamentals(stk, _date.today())
+                        self._current_fundamentals[stk] = fund
+                    except Exception:
+                        pass
 
     def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
         cfg = self.config
         if cfg.use_age_filter:
             listed = getattr(candidate, "list_date", None)
-            if listed and days_since_listed(listed) < cfg.min_age_days:
+            if listed and days_since_listed(listed, context.current_time) < cfg.min_age_days:
                 return False
         premium = getattr(candidate, "premium_rate", None)
         if premium is not None and premium * 100 > cfg.max_premium:
@@ -87,12 +98,12 @@ class CBStockQualityStrategy(CBRotationStrategy):
         issue_size = getattr(candidate, "issue_size", None) or float("inf")
         if issue_size > cfg.max_issue_size:
             return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
+        turnover = getattr(candidate, "amount", None) or 0.0
         return turnover >= cfg.min_turnover
 
     def _compute_stk_vol(self, stk_code: str) -> float | None:
         import math
-        hist = self._stk_price_hist.get(stk_code)
+        hist = self._stk_price_history.get(stk_code)
         if hist is None or len(hist) < 20:
             return None
         prices = list(hist)[-self.config.vol_lookback:]
@@ -115,12 +126,18 @@ class CBStockQualityStrategy(CBRotationStrategy):
         roes, eps, vols = [], [], []
 
         for c in candidates:
-            stk = getattr(c, "stk_code", None)
-            # 尝试从 stock_bridge 获取基本面
+            stk = c.metadata.get("stk_code") if c.metadata else None
+            # 尝试从 _current_fundamentals 获取基本面
             roe = cfg.default_roe
             ep = cfg.default_ep
             vol = 0.3  # 默认中等波动
-            if self._stock_bridge and stk:
+            if stk and stk in self._current_fundamentals:
+                fund = self._current_fundamentals[stk]
+                if fund.roe is not None:
+                    roe = fund.roe
+                if fund.ep is not None:
+                    ep = fund.ep
+            elif self._stock_bridge and stk:
                 try:
                     from datetime import date as _date
                     fund = self._stock_bridge.get_fundamentals(stk, _date.today())
@@ -139,12 +156,12 @@ class CBStockQualityStrategy(CBRotationStrategy):
             eps.append(ep)
             vols.append(vol)
 
-        r_price = _rank_scores(prices, ascending=True)
-        r_prem = _rank_scores(premiums, ascending=True)
-        r_roe = _rank_scores(roes, ascending=False)    # 高 ROE 高分
-        r_ep = _rank_scores(eps, ascending=False)      # 高 EP 高分
-        r_vol = _rank_scores(vols, ascending=True)     # 低波动高分
-        r_size = _rank_scores(sizes, ascending=True)
+        r_price = _rank_scores(prices, ascending=False)   # 低价高分
+        r_prem = _rank_scores(premiums, ascending=False)  # 低溢价高分
+        r_roe = _rank_scores(roes, ascending=True)        # 高 ROE 高分
+        r_ep = _rank_scores(eps, ascending=True)          # 高 EP 高分
+        r_vol = _rank_scores(vols, ascending=False)       # 低波动高分
+        r_size = _rank_scores(sizes, ascending=False)     # 小规模高分
 
         scored: list[tuple[str, float]] = []
         for i, c in enumerate(candidates):

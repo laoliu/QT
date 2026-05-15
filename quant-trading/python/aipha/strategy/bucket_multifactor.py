@@ -27,11 +27,16 @@ class BucketMultiFactorConfig(EquityRotationConfig):
     volatility_lookback: int = 60; str_lookback: int = 5; value_metric: str = "pe_ttm"
     quality_metric: str = "roe"
 
+    def get_buckets(self) -> list[BucketSpec]:
+        if self.bucket_specs:
+            return [BucketSpec(**s) for s in self.bucket_specs]
+        return list(_DEFAULT_BUCKETS)
+
 class BucketMultiFactorStrategy(EquityRotationStrategy):
     name = "bucket_multifactor"
     def __init__(self, config: BucketMultiFactorConfig | None = None, **kw: object):
         super().__init__(config=config or BucketMultiFactorConfig(), **kw)
-        self._buckets = _DEFAULT_BUCKETS
+        self._buckets = self._config.get_buckets()
     @property
     def config(self) -> BucketMultiFactorConfig: return self._config  # type: ignore
     def _score_bucket(self, cands: list[EquityCandidateInfo], fw: dict[str, float], ctx: StrategyContext) -> list[str]:
@@ -49,5 +54,5 @@ class BucketMultiFactorStrategy(EquityRotationStrategy):
             bucket_cands = [c for c in candidates if bucket.mv_min <= (getattr(c, "circ_mv", 0) or 0) < bucket.mv_max]
             if not bucket_cands: continue
             ranked = self._score_bucket(bucket_cands, bucket.factor_weights, ctx)
-            result.extend(ranked[:bucket.top_k])
+            result.extend(ranked)
         return result[:self.config.top_k]

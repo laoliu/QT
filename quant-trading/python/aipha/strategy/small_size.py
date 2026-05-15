@@ -27,11 +27,11 @@ class SmallSizeStrategy(CBRotationStrategy):
         sz = getattr(c, "issue_size", None) or float("inf")
         cfg = self.config
         if sz < cfg.min_issue_size or sz > cfg.max_issue_size: return False
-        t = getattr(c, "turnover", None) or 0.0
+        t = getattr(c, "amount", None) or 0.0
         return t >= cfg.min_turnover
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: "StrategyContext") -> list[str]:
         sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]
-        r = _rank_scores(sizes, ascending=True)
+        r = _rank_scores(sizes, ascending=False)
         scored = sorted(zip([c.code for c in candidates], r), key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:self.config.top_k]]
 
@@ -51,7 +51,47 @@ class SmallSizeEnsembleStrategy(CBRotationStrategy):
     @property
     def config(self) -> SmallSizeEnsembleConfig: return self._config  # type: ignore
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: "StrategyContext") -> list[str]:
-        sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]
-        r = _rank_scores(sizes, ascending=True)
-        scored = sorted(zip([c.code for c in candidates], r), key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored[:self.config.top_k]]
+        cfg = self.config
+        if cfg.aggregation not in ("reciprocal_rank", "borda"):
+            raise ValueError(f"unsupported aggregation: {cfg.aggregation}")
+        variants = cfg.variants or []
+        weights = cfg.weights or [1.0] * max(len(variants), 1)
+        if variants and len(weights) != len(variants):
+            raise ValueError(f"weights length {len(weights)} != variants length {len(variants)}")
+        if not candidates:
+            return []
+        if not variants:
+            # fallback: basic small-size ranking
+            valid = [c for c in candidates if c.close > 0]
+            valid.sort(key=lambda c: (getattr(c, "issue_size", float("inf")) or float("inf"), c.symbol))
+            return [c.code for c in valid[:cfg.top_k]]
+        # variant voting
+        votes: dict[str, float] = {}
+        size_map: dict[str, float] = {}
+        for c in candidates:
+            size_map[c.code] = getattr(c, "issue_size", float("inf")) or float("inf")
+        for vi, vspec in enumerate(variants):
+            w = weights[vi]
+            v_max_price = vspec.get("max_price", cfg.max_price) if isinstance(vspec, dict) else cfg.max_price
+            v_max_issue = vspec.get("max_issue_size", cfg.max_issue_size) if isinstance(vspec, dict) else cfg.max_issue_size
+            v_min_issue = vspec.get("min_issue_size", cfg.min_issue_size) if isinstance(vspec, dict) else cfg.min_issue_size
+            v_min_turnover = vspec.get("min_turnover", 0.0) if isinstance(vspec, dict) else 0.0
+            v_top_k = vspec.get("top_k", cfg.top_k) if isinstance(vspec, dict) else cfg.top_k
+            # filter
+            filtered = []
+            for c in candidates:
+                if c.close <= 0: continue
+                if c.close > v_max_price: continue
+                sz = getattr(c, "issue_size", float("inf")) or float("inf")
+                if sz < v_min_issue or sz > v_max_issue: continue
+                amt = getattr(c, "amount", 0.0) or 0.0
+                if v_min_turnover > 0 and amt < v_min_turnover: continue
+                filtered.append(c)
+            # sort by issue_size ascending (smallest first = best)
+            filtered.sort(key=lambda c: (getattr(c, "issue_size", float("inf")) or float("inf"), c.symbol))
+            for rank, c in enumerate(filtered[:v_top_k]):
+                score = w / (rank + 1) if cfg.aggregation == "reciprocal_rank" else w * (v_top_k - rank)
+                votes[c.code] = votes.get(c.code, 0.0) + score
+        # sort by votes descending, tiebreak by issue_size ascending
+        result = sorted(votes.keys(), key=lambda k: (-votes[k], size_map.get(k, float("inf")), k))
+        return result[:cfg.top_k]

@@ -27,16 +27,27 @@ class VolBreakoutStrategy(CBRotationStrategy):
             h, l, pc = data[i][0], data[i][1], data[i - 1][2] if i - 1 >= -len(data) else data[i][2]
             trs.append(max(h - l, abs(h - pc), abs(l - pc)))
         return sum(trs) / len(trs) if trs else 0.0
-    def _on_bar_update_state(self, ctx: StrategyContext) -> None:
-        self._bar_count += 1; bars = getattr(ctx, "bars", {})
+    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
+        self._bar_count += 1; # bars provided as argument
         maxlen = self.config.atr_long + self.config.breakout_lookback + 5
         for sym, bar in bars.items():
             h = getattr(bar, "high", 0); l = getattr(bar, "low", 0); c = getattr(bar, "close", 0)
             if sym not in self._bar_data: self._bar_data[sym] = deque(maxlen=maxlen)
             self._bar_data[sym].append((h, l, c))
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
+        cfg = self.config
         price = getattr(c, "close", None)
-        if price is not None and price > self.config.max_price: return False
+        if price is not None and price > cfg.max_price: return False
+        sym = c.code if hasattr(c, 'code') else c.symbol
+        data = self._bar_data.get(sym)
+        if not data or len(data) < cfg.atr_long + 1:
+            return False
+        data_list = list(data)
+        atr_s = self._calc_atr(data_list, cfg.atr_short)
+        atr_l = self._calc_atr(data_list, cfg.atr_long)
+        squeeze = atr_s / atr_l if atr_l > 0 else 1.0
+        if squeeze >= cfg.squeeze_threshold:
+            return False
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         cfg = self.config; scores: dict[str, float] = {}

@@ -189,10 +189,23 @@ class StrategyPortfolio:
 
     def summary(self) -> str:
         result = self.compute()
-        lines = [f"Portfolio: ret={result.annualized_return:.2%} sharpe={result.sharpe:.2f} "
-                 f"dd={result.max_drawdown:.2%}"]
+        lines = ["多策略组合报告"]
+        lines.append("")
+        lines.append("组合整体表现")
+        lines.append(f"  ret={result.annualized_return:.2%} sharpe={result.sharpe:.2f} "
+                     f"dd={result.max_drawdown:.2%}")
+        lines.append("")
+        lines.append("各策略表现")
         for m in result.strategy_metrics:
             lines.append(f"  {m.name}: ret={m.annualized_return:.2%} sharpe={m.sharpe:.2f}")
+        lines.append("")
+        lines.append("权重配置")
+        for n, w in result.weights.items():
+            lines.append(f"  {n}: {w:.2%}")
+        if result.correlation:
+            lines.append("")
+            lines.append("策略相关性")
+            lines.append(f"  平均相关性: {result.correlation.avg_correlation:.3f}")
         return "\n".join(lines)
 
 
@@ -207,7 +220,11 @@ class RiskParityAllocator:
         if not names:
             return {}
         vols = {n: float(np.std(r, ddof=1)) for n, r in returns.items()}
-        inv_vol = {n: 1.0 / max(v, 1e-10) for n, v in vols.items()}
+        # If any strategy has zero (or near-zero) volatility, fall back to equal weight
+        if any(v < 1e-10 for v in vols.values()):
+            n = len(names)
+            return {name: 1.0 / n for name in names}
+        inv_vol = {n: 1.0 / v for n, v in vols.items()}
         total = sum(inv_vol.values())
         return {n: v / total for n, v in inv_vol.items()}
 

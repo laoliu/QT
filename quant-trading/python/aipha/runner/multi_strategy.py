@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, date
+from decimal import Decimal
 from typing import Any, Optional
 
 from aipha.domain.models import Bar
@@ -25,6 +26,21 @@ class StrategySlot:
 
 
 @dataclass
+class StrategyAllocation:
+    """轻量分配记录，供 PortfolioConfig 模式使用"""
+    strategy: Strategy
+    weight: float
+
+
+@dataclass
+class PortfolioConfig:
+    """Portfolio-style config for MultiStrategyRunner (no gateway required)."""
+    total_capital: Decimal = Decimal("1000000")
+    rebalance_interval: int = 0
+    lot_size: int = 100
+
+
+@dataclass
 class MultiStrategyConfig:
     initial_capital: float = 1_000_000
     rebalance_interval: int = 0  # 0 = 不自动再平衡
@@ -42,27 +58,33 @@ class MultiStrategyRunner:
 
     def __init__(
         self,
-        config: MultiStrategyConfig,
-        gateway: TradingGateway,
+        config: MultiStrategyConfig | PortfolioConfig,
+        gateway: TradingGateway | None = None,
     ):
         self.config = config
         self.gateway = gateway
         self._slots: dict[str, StrategySlot] = {}
-        self._total_nav: float = config.initial_capital
+        self._allocations: list[StrategyAllocation] = []
+        if isinstance(config, PortfolioConfig):
+            self._total_nav: float = float(config.total_capital)
+        else:
+            self._total_nav = config.initial_capital
         self._bars_processed: int = 0
 
-    def add_strategy(self, strategy: Strategy, allocation: float) -> None:
+    def add_strategy(self, strategy: Strategy, allocation: float = 0.0, *, weight: float = 0.0) -> None:
+        effective = weight if weight else allocation
         if strategy.name in self._slots:
             raise ValueError(f"策略已存在: {strategy.name}")
-        total_alloc = sum(s.allocation for s in self._slots.values()) + allocation
+        total_alloc = sum(s.allocation for s in self._slots.values()) + effective
         if total_alloc > 1.0 + 1e-9:
             raise ValueError(f"总分配比例超过100%: {total_alloc:.2%}")
         self._slots[strategy.name] = StrategySlot(
             strategy=strategy,
-            allocation=allocation,
-            nav=self.config.initial_capital * allocation,
+            allocation=effective,
+            nav=self._total_nav * effective,
         )
-        logger.info("添加策略 %s, 分配 %.1f%%", strategy.name, allocation * 100)
+        self._allocations.append(StrategyAllocation(strategy=strategy, weight=effective))
+        logger.info("添加策略 %s, 分配 %.1f%%", strategy.name, effective * 100)
 
     def remove_strategy(self, name: str) -> bool:
         return self._slots.pop(name, None) is not None

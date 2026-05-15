@@ -36,14 +36,6 @@ class AStockMultiFactorConfig(EquityRotationConfig):
     ep_pe_metric: str = "pe_ttm"
     roe_metric: str = "roe"
 
-    def __post_init__(self) -> None:
-        total = self.weight_ep + self.weight_roe + self.weight_mom + self.weight_ivol
-        if total > 0:
-            self.weight_ep /= total
-            self.weight_roe /= total
-            self.weight_mom /= total
-            self.weight_ivol /= total
-
 
 class AStockMultiFactorStrategy(EquityRotationStrategy):
     """A 股四因子: EP + ROE + 动量 + 低特质波动"""

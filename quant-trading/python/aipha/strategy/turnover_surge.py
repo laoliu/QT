@@ -16,22 +16,20 @@ class TurnoverSurgeStrategy(CBRotationStrategy):
     name = "turnover_surge"
     def __init__(self, config: TurnoverSurgeConfig | None = None, **kw: object):
         super().__init__(config=config or TurnoverSurgeConfig(), **kw)
-        self._turnover_history: dict[str, deque[float]] = {}
-        self._close_history: dict[str, deque[float]] = {}
     @property
     def config(self) -> TurnoverSurgeConfig: return self._config  # type: ignore
     def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
-        # bars provided as argument
         maxlen = self.config.lookback_days + 5
         for sym, bar in bars.items():
-            tv = getattr(bar, "turnover", None) or getattr(bar, "amount", 0.0)
+            meta = getattr(bar, "metadata", None) or {}
+            tv = meta.get("amount", 0.0)
             close = getattr(bar, "close", None)
-            if tv is not None:
-                if sym not in self._turnover_history: self._turnover_history[sym] = deque(maxlen=maxlen)
-                self._turnover_history[sym].append(tv)
+            if sym not in self._turnover_history: self._turnover_history[sym] = deque(maxlen=maxlen)
+            self._turnover_history[sym].append(tv)
             if close is not None:
                 if sym not in self._close_history: self._close_history[sym] = deque(maxlen=maxlen)
                 self._close_history[sym].append(close)
+                self._prev_close[sym] = close
     def _extra_filter(self, c: CandidateInfo, ctx: StrategyContext) -> bool:
         cfg = self.config
         price = getattr(c, "close", None)
@@ -53,7 +51,9 @@ class TurnoverSurgeStrategy(CBRotationStrategy):
         surge_ratio: dict[str, float] = {}
         for c in candidates:
             th = self._turnover_history.get(c.code)
-            if not th: surge_ratio[c.code] = 0.0; continue
+            if not th:
+                surge_ratio[c.code] = (c.metadata or {}).get("_surge_ratio", 0.0)
+                continue
             tvs = list(th); avg = sum(tvs[:-1]) / max(len(tvs) - 1, 1)
             surge_ratio[c.code] = tvs[-1] / avg if avg > 0 else 0.0
         return sorted(surge_ratio, key=surge_ratio.get, reverse=True)[:self.config.top_k]  # type: ignore

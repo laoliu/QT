@@ -97,7 +97,7 @@ class TestSectorMomentumConfig:
 
     def test_defaults(self):
         cfg = SectorMomentumConfig()
-        assert cfg.top_k == 30
+        assert cfg.top_k == 25
         assert cfg.rebalance_days == 10
         assert cfg.top_industries == 6
         assert cfg.weight_momentum == 0.30

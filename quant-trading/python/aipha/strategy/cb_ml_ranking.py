@@ -7,7 +7,7 @@ from aipha.strategy.base import StrategyContext
 from aipha.strategy.cb_rotation_base import CBRotationConfig, CBRotationStrategy, CandidateInfo
 logger = logging.getLogger(__name__)
 
-RATING_NUM: dict[str, float] = {"AAA": 8, "AA+": 7, "AA": 6, "AA-": 5, "A+": 4, "A": 3, "A-": 2.5, "BBB+": 2, "BBB": 1.5, "BBB-": 1, "BB+": 0.5, "BB": 0}
+RATING_NUM: dict[str, float] = {"AAA": 6.0, "AA+": 5.0, "AA": 4.0, "AA-": 3.5, "A+": 3.0, "A": 2.5, "A-": 2.0, "BBB+": 1.5, "BBB": 1.0, "BBB-": 0.5, "BB+": 0.3, "BB": 0.0}
 
 @dataclass
 class CBMLRankingConfig(CBRotationConfig):
@@ -22,6 +22,9 @@ class CBMLRankingStrategy(CBRotationStrategy):
         self._model: Any = None
     @property
     def config(self) -> CBMLRankingConfig: return self._config  # type: ignore
+    @property
+    def _fallback_mode(self) -> bool:
+        return self._model is None
     def _load_model(self) -> None:
         cfg = self.config
         if not cfg.model_path: return
@@ -41,11 +44,23 @@ class CBMLRankingStrategy(CBRotationStrategy):
         return True
     @staticmethod
     def _rating_to_score(rating: str) -> float:
-        return RATING_NUM.get(rating.strip().upper(), 2.0) if rating else 2.0
+        return RATING_NUM.get(rating.strip().upper(), 3.0) if rating else 3.0
     def _build_features(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[dict[str, float]]:
         feats = []
         for c in candidates:
-            feats.append({"close": getattr(c, "close", 100.0) or 100.0, "premium_rate": getattr(c, "premium_rate", 0.0) or 0.0, "remain_years": getattr(c, "remain_years", 1.0) or 1.0, "issue_size": getattr(c, "issue_size", 5000.0) or 5000.0, "volume": getattr(c, "volume", 0.0) or 0.0, "rating": self._rating_to_score(getattr(c, "rating", "")), "ytm": getattr(c, "ytm_to_maturity", 0.0) or 0.0})
+            prem = getattr(c, "cb_over_rate", 0.0) or 0.0
+            close = getattr(c, "close", 100.0) or 100.0
+            feats.append({
+                "close": close,
+                "premium_rate": getattr(c, "premium_rate", 0.0) or 0.0,
+                "remain_years": getattr(c, "remain_years", 1.0) or 1.0,
+                "issue_size": getattr(c, "issue_size", 5000.0) or 5000.0,
+                "volume": getattr(c, "volume", 0.0) or 0.0,
+                "rating": self._rating_to_score(getattr(c, "rating", "")),
+                "ytm": getattr(c, "ytm_to_maturity", 0.0) or 0.0,
+                "iv_bias": prem / 100.0 - 0.1 if prem else 0.0,
+                "gamma_convexity": max(0.0, (110.0 - close) / 110.0),
+            })
         return feats
     def _fallback_score(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores

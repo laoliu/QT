@@ -30,10 +30,13 @@ class SmallSizeStrategy(CBRotationStrategy):
         t = getattr(c, "amount", None) or 0.0
         return t >= cfg.min_turnover
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: "StrategyContext") -> list[str]:
+        cfg = self.config
+        if cfg.min_tradable_candidates > 0 and len(candidates) < cfg.min_tradable_candidates:
+            return []
         sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]
         r = _rank_scores(sizes, ascending=False)
-        scored = sorted(zip([c.code for c in candidates], r), key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored[:self.config.top_k]]
+        scored = sorted(zip([c.code for c in candidates], r), key=lambda x: (-x[1], x[0]))
+        return [s[0] for s in scored[:cfg.top_k]]
 
 @dataclass
 class SmallSizeEnsembleConfig(SmallSizeConfig):

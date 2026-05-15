@@ -65,11 +65,47 @@ class NewSmallEnsembleStrategy(CBRotationStrategy):
         age = getattr(c, "listed_days", None)
         if age is not None and (age < cfg.min_age_days or age > cfg.max_age_days): return False
         return True
+    def _compute_age(self, c: CandidateInfo, ctx: StrategyContext) -> int | None:
+        from datetime import datetime
+        ld = getattr(c, "list_date", "") or ""
+        if not ld or not ctx or not ctx.current_time:
+            return None
+        try:
+            if len(ld) == 8:
+                ld_dt = datetime.strptime(ld, "%Y%m%d")
+            else:
+                ld_dt = datetime.fromisoformat(ld)
+            return (ctx.current_time - ld_dt).days
+        except Exception:
+            return None
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
-        from aipha.strategy.cb_ultra import _rank_scores
-        size = {c.code: -(getattr(c, "issue_size", 1e9) or 1e9) for c in candidates}
-        price = {c.code: -(getattr(c, "close", 200.0) or 200.0) for c in candidates}
-        prem = {c.code: -(getattr(c, "premium_rate", 50.0) or 50.0) for c in candidates}
-        rs, rp, rpm = _rank_scores(size), _rank_scores(price), _rank_scores(prem)
-        composite = {c.code: rs.get(c.code, 0) + rp.get(c.code, 0) + rpm.get(c.code, 0) for c in candidates}
-        return sorted(composite, key=composite.get, reverse=True)[:self.config.top_k]  # type: ignore
+        cfg = self.config
+        variants = cfg.variants
+        weights = cfg.weights
+        if weights and variants and len(weights) != len(variants):
+            raise ValueError(f"weights length ({len(weights)}) != variants length ({len(variants)})")
+        if not variants:
+            # Degenerate: sort by issue_size ascending
+            size = {c.code: getattr(c, "issue_size", 1e9) or 1e9 for c in candidates}
+            return sorted(size, key=size.get)[:cfg.top_k]  # type: ignore
+        # Variant-based reciprocal rank fusion
+        scores: dict[str, float] = {}
+        for vi, var in enumerate(variants):
+            v_max_age = var.get("max_age_days", cfg.max_age_days)
+            v_min_age = var.get("min_age_days", cfg.min_age_days)
+            v_top_k = var.get("top_k", cfg.top_k)
+            # Filter candidates for this variant
+            filtered = []
+            for c in candidates:
+                age = self._compute_age(c, ctx)
+                if age is not None:
+                    if age < v_min_age or age > v_max_age:
+                        continue
+                filtered.append(c)
+            # Score within variant: sort by issue_size ascending
+            filtered.sort(key=lambda c: getattr(c, "issue_size", 1e9) or 1e9)
+            filtered = filtered[:v_top_k]
+            w = weights[vi] if weights else 1.0
+            for rank, c in enumerate(filtered, 1):
+                scores[c.code] = scores.get(c.code, 0.0) + w * (1.0 / rank)
+        return sorted(scores, key=scores.get, reverse=True)[:cfg.top_k]  # type: ignore

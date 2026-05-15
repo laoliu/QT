@@ -20,7 +20,15 @@ class AltFactorStrategy(EquityRotationStrategy):
         super().__init__(config=config or AltFactorConfig(), **kw)
     @property
     def config(self) -> AltFactorConfig: return self._config  # type: ignore
-    def _score_candidates(self, candidates: list[EquityCandidateInfo], ctx: StrategyContext) -> list[str]:
+    @classmethod
+    def param_space(cls) -> dict:
+        return {
+            "top_k": [10, 20, 30, 50],
+            "rebalance_days": [5, 10, 20],
+            "rank_normalize": [True, False],
+            "min_factor_coverage": [0.1, 0.2, 0.3, 0.5],
+        }
+    def _score_candidates(self, candidates: list[EquityCandidateInfo], ctx: StrategyContext) -> list[tuple[str, float]]:
         cfg = self.config; fw = cfg.factor_weights
         composite: dict[str, float] = {}
         for c in candidates:
@@ -30,10 +38,16 @@ class AltFactorStrategy(EquityRotationStrategy):
                 if val is not None:
                     score += w * val; coverage += 1
             total_factors = len(fw) or 1
-            if coverage / total_factors < cfg.min_factor_coverage: continue
-            composite[c.code] = score
+            if coverage / total_factors < cfg.min_factor_coverage:
+                composite[c.code] = 0.0
+            else:
+                composite[c.code] = score
         if cfg.rank_normalize and composite:
-            ranked = sorted(composite, key=composite.get, reverse=True)  # type: ignore
-            n = len(ranked)
-            composite = {code: 1.0 - i / n for i, code in enumerate(ranked)}
-        return sorted(composite, key=composite.get, reverse=True)[:cfg.top_k]  # type: ignore
+            non_zero = {k: v for k, v in composite.items() if v != 0.0}
+            if non_zero and len(set(non_zero.values())) > 1:
+                ranked = sorted(non_zero, key=non_zero.get, reverse=True)  # type: ignore
+                n = len(ranked)
+                for i, code in enumerate(ranked):
+                    composite[code] = 1.0 - i / n
+        result = sorted(composite.items(), key=lambda x: x[1], reverse=True)[:cfg.top_k]
+        return result

@@ -25,7 +25,7 @@ def _industry_rank_scores(candidates: list[EquityCandidateInfo], lookback: int) 
 
 @dataclass
 class SectorMomentumConfig(EquityRotationConfig):
-    top_k: int = 30; rebalance_days: int = 10; min_price: float = 5.0; max_price: float = 500.0
+    top_k: int = 25; rebalance_days: int = 10; min_price: float = 5.0; max_price: float = 500.0
     min_turnover: float = 3000.0; min_listed_days: int = 250; stop_loss_pct: float = 0.12
     trailing_stop_pct: float = 0.08; buffer_k: int = 8; max_single_pct: float = 0.06
     min_mv: float = 1_000_000.0; max_mv: float = float("inf"); inverse_vol_weighting: bool = True

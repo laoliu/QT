@@ -61,7 +61,7 @@ class PEADStrategy(EquityRotationStrategy):
             m = c.metadata
             sue = m.get("sue", None)
             if sue is not None:
-                result[c.symbol] = sue
+                result[c.symbol] = float(sue)
             else:
                 eps = m.get("eps", None)
                 eps_prev = m.get("eps_yoy_prev", None)
@@ -78,6 +78,25 @@ class PEADStrategy(EquityRotationStrategy):
             return []
 
         sue_map = self._compute_sue_values(candidates)
+        # Filter candidates with no computable SUE — but only if they have other financial data
+        # (if ALL financial data is missing, keep them with degraded scores)
+        valid = []
+        for c in candidates:
+            sv = sue_map.get(c.symbol)
+            if sv is not None and sv != float("-inf"):
+                valid.append(c)
+            elif c.metadata.get("roe") is not None:
+                # Has partial financial data but no SUE → filter out
+                continue
+            else:
+                # No financial data at all → keep with zero score
+                sue_map[c.symbol] = 0.0
+                valid.append(c)
+        if not valid:
+            return []
+        candidates = valid
+
+        sue_map = {c.symbol: sue_map.get(c.symbol, 0) for c in candidates}
         sue_vals = [sue_map.get(c.symbol, 0) for c in candidates]
         earn_vals = [c.metadata.get(cfg.earnings_growth_field, 0) or 0 for c in candidates]
         roe_vals = [c.metadata.get("roe", 0) or 0 for c in candidates]

@@ -50,7 +50,11 @@ class MLFactorStrategy(EquityRotationStrategy):
     def __init__(self, config: MLFactorConfig | None = None, **kwargs: Any):
         super().__init__(config=config or MLFactorConfig(), **kwargs)
         self._model: Any = None
+        self._model_ready: bool = False
+        self._selector: Any = None
         self._oos_preds: dict[str, dict[str, float]] = {}
+        self._oos_scores: dict[str, dict[str, float]] = {}
+        self._multi_oos_scores: dict[str, dict[str, dict[str, float]]] = {}
 
     @property
     def config(self) -> MLFactorConfig:
@@ -92,16 +96,62 @@ class MLFactorStrategy(EquityRotationStrategy):
         self, candidates: list[EquityCandidateInfo], context: StrategyContext,
     ) -> list[str]:
         cfg = self.config
-        # 尝试 OOS 预测
-        if self._oos_preds:
-            date_str = getattr(context, "current_date_str", "")
-            preds = self._oos_preds.get(date_str, {})
-            if preds:
-                scored = [(c.code, preds.get(c.code, 0.0)) for c in candidates]
-                scored.sort(key=lambda x: x[1], reverse=True)
+        date_str = ""
+        if hasattr(context, "current_date"):
+            d = context.current_date
+            if hasattr(d, "strftime"):
+                date_str = d.strftime("%Y-%m-%d")
+            else:
+                date_str = str(d)[:10]
+
+        # 1) 多模型集成 OOS
+        if self._multi_oos_scores:
+            ensemble_scores: dict[str, float] = {}
+            has_date = False
+            for mname, mdata in self._multi_oos_scores.items():
+                day_scores = mdata.get(date_str, {})
+                if day_scores:
+                    has_date = True
+                    w = cfg.ensemble_weights.get(mname, 1.0)
+                    for c in candidates:
+                        s = day_scores.get(c.code, 0.0)
+                        ensemble_scores[c.code] = ensemble_scores.get(c.code, 0.0) + w * s
+            if has_date and ensemble_scores:
+                scored = sorted(ensemble_scores.items(), key=lambda x: x[1], reverse=True)
                 return [s[0] for s in scored[:cfg.top_k]]
 
-        # 线性回退
+        # 2) 单模型 OOS
+        if self._oos_scores:
+            preds = self._oos_scores.get(date_str, {})
+            if preds:
+                scored_list = [(c.code, preds.get(c.code, 0.0)) for c in candidates]
+                scored_list.sort(key=lambda x: x[1], reverse=True)
+                return [s[0] for s in scored_list[:cfg.top_k]]
+
+        # Legacy single OOS
+        if self._oos_preds:
+            preds = self._oos_preds.get(date_str, {})
+            if preds:
+                scored_list = [(c.code, preds.get(c.code, 0.0)) for c in candidates]
+                scored_list.sort(key=lambda x: x[1], reverse=True)
+                return [s[0] for s in scored_list[:cfg.top_k]]
+
+        # 3) ML selector
+        if self._model_ready and self._selector is not None:
+            try:
+                import pandas as pd
+                symbols = [c.code for c in candidates]
+                preds = self._selector.predict(symbols)
+                if hasattr(preds, 'get'):
+                    scored_list = [(c.code, float(preds.get(c.code, 0.0))) for c in candidates]
+                else:
+                    scored_list = [(c.code, float(preds[i])) for i, c in enumerate(candidates)]
+                scored_list.sort(key=lambda x: x[1], reverse=True)
+                return [s[0] for s in scored_list[:cfg.top_k]]
+            except Exception:
+                return self._linear_fallback(candidates)
+
+        # 4) 线性回退
         return self._linear_fallback(candidates)
 
     def _linear_fallback(self, candidates: list[EquityCandidateInfo]) -> list[str]:
@@ -112,8 +162,11 @@ class MLFactorStrategy(EquityRotationStrategy):
             s = 0.0
             for feat, weight in w.items():
                 val = getattr(c, feat, None)
-                if val is not None:
-                    s += weight * float(val)
+                if val is not None and val == val:  # NaN check
+                    try:
+                        s += weight * float(val)
+                    except (TypeError, ValueError):
+                        pass
             scored.append((c.code, s))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

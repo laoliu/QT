@@ -33,21 +33,16 @@ class SmallSizeEnhancedStrategy(CBRotationStrategy):
         cfg = self.config
         sz = getattr(c, "issue_size", None) or float("inf")
         if sz < cfg.min_issue_size or sz > cfg.max_issue_size: return False
-        prem = getattr(c, "premium_rate", None)
-        if prem is not None and prem * 100 > cfg.max_premium: return False
+        prem = getattr(c, "cb_over_rate", None)
+        if prem is not None and prem > cfg.max_premium: return False
         return (getattr(c, "amount", None) or 0.0) >= cfg.min_turnover
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: "StrategyContext") -> list[str]:
         cfg = self.config
         sizes = [getattr(c, "issue_size", 10000.0) or 10000.0 for c in candidates]
-        prems = [(getattr(c, "premium_rate", 0.0) or 0.0) * 100 for c in candidates]
-        moms = []
-        for c in candidates:
-            h = self._hist.get(c.code)
-            if h and len(h) >= 20:
-                old = h[-20]; moms.append((h[-1] - old) / old if old > 0 else 0.0)
-            else: moms.append(0.0)
-        r_sz = _rank_scores(sizes, ascending=True)
-        r_pr = _rank_scores(prems, ascending=True)
+        prems = [getattr(c, "cb_over_rate", 0.0) or 0.0 for c in candidates]
+        moms = [getattr(c, "close", 100.0) or 100.0 for c in candidates]
+        r_sz = _rank_scores(sizes, ascending=False)
+        r_pr = _rank_scores(prems, ascending=False)
         r_mm = _rank_scores(moms, ascending=False)
         scored = [(candidates[i].code, cfg.size_weight * r_sz[i] + cfg.premium_weight * r_pr[i] + cfg.momentum_weight * r_mm[i]) for i in range(len(candidates))]
         scored.sort(key=lambda x: x[1], reverse=True)

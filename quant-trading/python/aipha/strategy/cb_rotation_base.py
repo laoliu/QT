@@ -104,7 +104,9 @@ class CBRotationStrategy(Strategy):
         """打分并返回最终选中的 symbol 列表 (已排序)"""
         ...
 
-    def __init__(self) -> None:
+    def __init__(self, config: CBRotationConfig | None = None, **kwargs: object) -> None:
+        if config is not None:
+            self._config = config
         self._bar_count = 0
         self._last_rebalance_bar = 0
         self._entry_prices: dict[str, float] = {}
@@ -154,21 +156,24 @@ class CBRotationStrategy(Strategy):
             bar = bars.get(sym)
             if bar is None:
                 continue
+            pos = context.positions.get(sym, 0)
+            if pos <= 0:
+                continue
             entry = self._entry_prices.get(sym)
             if entry and entry > 0:
                 pnl = (bar.close - entry) / entry
                 if pnl < -cfg.stop_loss_pct:
                     intents.append(OrderIntent(
-                        symbol=sym, intent_type=IntentType.EXIT,
-                        side=Side.SELL, reason=f"stop_loss {pnl:.2%}",
+                        symbol=sym, intent_type=IntentType.ORDER,
+                        side=Side.SELL, qty=pos, reason=f"stop_loss {pnl:.2%}",
                     ))
             if cfg.trailing_stop_pct > 0:
                 peak = self._peak_prices.get(sym, bar.close)
                 drop = (peak - bar.close) / peak if peak > 0 else 0
                 if drop > cfg.trailing_stop_pct:
                     intents.append(OrderIntent(
-                        symbol=sym, intent_type=IntentType.EXIT,
-                        side=Side.SELL, reason=f"trailing_stop {drop:.2%}",
+                        symbol=sym, intent_type=IntentType.ORDER,
+                        side=Side.SELL, qty=pos, reason=f"trailing_stop {drop:.2%}",
                     ))
         return intents
 
@@ -181,10 +186,12 @@ class CBRotationStrategy(Strategy):
             if bar and bar.close >= self.config.force_redeem_threshold:
                 meta = getattr(bar, "metadata", {}) or {}
                 if meta.get("force_redeem_triggered"):
-                    intents.append(OrderIntent(
-                        symbol=sym, intent_type=IntentType.EXIT,
-                        side=Side.SELL, reason="force_redeem",
-                    ))
+                    pos = context.positions.get(sym, 0)
+                    if pos > 0:
+                        intents.append(OrderIntent(
+                            symbol=sym, intent_type=IntentType.ORDER,
+                            side=Side.SELL, qty=pos, reason="force_redeem",
+                        ))
         return intents
 
     def _filter_candidates(
@@ -197,7 +204,7 @@ class CBRotationStrategy(Strategy):
             meta = getattr(bar, "metadata", {}) or {}
             ci = CandidateInfo(
                 symbol=sym, close=bar.close, metadata=meta,
-                amount=getattr(bar, "amount", 0),
+                amount=getattr(bar, "amount", meta.get("amount", 0)),
                 issue_size=meta.get("issue_size", float("inf")),
                 cb_over_rate=meta.get("cb_over_rate"),
                 cb_value=meta.get("cb_value"),
@@ -249,23 +256,49 @@ class CBRotationStrategy(Strategy):
         bars: dict[str, "Bar"],
     ) -> list[OrderIntent]:
         cfg = self.config
-        targets = set(ranked_targets[:cfg.top_k])
+        targets = ranked_targets[:cfg.top_k]
+        target_set = set(targets)
         current = set(context.positions.keys())
         buffer = set(ranked_targets[:cfg.top_k + cfg.buffer_k])
+        lot = 10  # 可转债 10 张 1 手
 
         intents: list[OrderIntent] = []
-        # 卖出不在目标中的
+
+        # 1) 先卖出不在 buffer 中的持仓
         for sym in current - buffer:
-            intents.append(OrderIntent(
-                symbol=sym, intent_type=IntentType.EXIT,
-                side=Side.SELL, reason="rotation_out",
-            ))
-        # 买入新目标
-        for sym in targets - current:
-            intents.append(OrderIntent(
-                symbol=sym, intent_type=IntentType.ENTRY,
-                side=Side.BUY, reason="rotation_in",
-            ))
+            pos = context.positions.get(sym, 0)
+            if pos > 0:
+                intents.append(OrderIntent(
+                    symbol=sym, intent_type=IntentType.ORDER,
+                    side=Side.SELL, qty=pos, reason="rotation_out",
+                ))
+
+        # 2) 基于 NAV 等权计算每只目标仓位
+        n_targets = max(len(targets), 1)
+        target_value_per = context.nav * 0.95 / n_targets
+
+        for sym in targets:
+            bar = bars.get(sym)
+            if not bar or bar.close <= 0:
+                continue
+            target_qty = int(target_value_per / bar.close / lot) * lot
+            current_qty = context.positions.get(sym, 0)
+            diff = target_qty - current_qty
+            if diff >= lot:
+                intents.append(OrderIntent(
+                    symbol=sym, intent_type=IntentType.ORDER,
+                    side=Side.BUY, qty=diff, reason="rotation_in",
+                ))
+                if sym not in self._entry_prices:
+                    self._entry_prices[sym] = bar.close
+                    self._peak_prices[sym] = bar.close
+            elif diff <= -lot:
+                sell_qty = (abs(diff) // lot) * lot
+                if sell_qty >= lot:
+                    intents.append(OrderIntent(
+                        symbol=sym, intent_type=IntentType.ORDER,
+                        side=Side.SELL, qty=sell_qty, reason="rebalance_trim",
+                    ))
         return intents
 
     # ── 子类可覆盖的钩子 ──────────────────────────────────

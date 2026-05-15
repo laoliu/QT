@@ -19,7 +19,7 @@ class CreditSpreadCBConfig(CBRotationConfig):
     max_premium: float = 100.0; min_rating: str = ""
     weight_ytm: float = 0.25; weight_rating: float = 0.15; weight_bond_floor: float = 0.15
     weight_price: float = 0.20; weight_premium: float = 0.15; weight_issue_size: float = 0.10
-    ytm_mode: str = "enhanced"
+    ytm_mode: str = "enhanced"; face_value: float = 100.0
 
 class CBCreditSpreadStrategy(CBRotationStrategy):
     name = "cb_credit_spread"
@@ -39,13 +39,38 @@ class CBCreditSpreadStrategy(CBRotationStrategy):
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores
+        from aipha.strategy.cb_rotation_base import days_to_maturity
         cfg = self.config
-        ytm_s = {c.code: getattr(c, "ytm_to_maturity", 0.0) or 0.0 for c in candidates}
-        rat_s = {c.code: rating_to_score(getattr(c, "rating", "")) for c in candidates}
-        bf_s = {c.code: getattr(c, "bond_floor", 0.0) or 0.0 for c in candidates}
-        price_s = {c.code: -(getattr(c, "close", 200.0) or 200.0) for c in candidates}
-        prem_s = {c.code: -(getattr(c, "premium_rate", 50.0) or 50.0) for c in candidates}
-        size_s = {c.code: -(getattr(c, "issue_size", 1e9) or 1e9) for c in candidates}
-        ry, rr, rb, rp, rpm, rs = _rank_scores(ytm_s), _rank_scores(rat_s), _rank_scores(bf_s), _rank_scores(price_s), _rank_scores(prem_s), _rank_scores(size_s)
-        composite = {c.code: cfg.weight_ytm * ry.get(c.code, 0) + cfg.weight_rating * rr.get(c.code, 0) + cfg.weight_bond_floor * rb.get(c.code, 0) + cfg.weight_price * rp.get(c.code, 0) + cfg.weight_premium * rpm.get(c.code, 0) + cfg.weight_issue_size * rs.get(c.code, 0) for c in candidates}
-        return sorted(composite, key=composite.get, reverse=True)[:cfg.top_k]  # type: ignore
+        now = __import__("datetime").datetime.now()
+        ytm_v: list[float] = []
+        rat_v: list[float] = []
+        bf_v: list[float] = []
+        price_v: list[float] = []
+        prem_v: list[float] = []
+        size_v: list[float] = []
+        for c in candidates:
+            price = c.close or 100.0
+            mat = c.maturity_date
+            ry = days_to_maturity(mat, now) / 365.25 if mat else 1.0
+            if ry <= 0:
+                ry = 1.0
+            ytm_v.append((cfg.face_value / price) ** (1.0 / ry) - 1.0 if price > 0 else 0.0)
+            rat_v.append(rating_to_score(c.rating))
+            bf_v.append(0.0)  # bond_floor not available
+            price_v.append(-price)
+            prem_v.append(-(c.cb_over_rate or 50.0))
+            size_v.append(-(c.issue_size or 1e9))
+        r_ytm = _rank_scores(ytm_v, ascending=False)
+        r_rat = _rank_scores(rat_v, ascending=False)
+        r_bf = _rank_scores(bf_v, ascending=False)
+        r_price = _rank_scores(price_v, ascending=False)
+        r_prem = _rank_scores(prem_v, ascending=False)
+        r_size = _rank_scores(size_v, ascending=False)
+        scored: list[tuple[str, float]] = []
+        for i, c in enumerate(candidates):
+            s = (cfg.weight_ytm * r_ytm[i] + cfg.weight_rating * r_rat[i]
+                 + cfg.weight_bond_floor * r_bf[i] + cfg.weight_price * r_price[i]
+                 + cfg.weight_premium * r_prem[i] + cfg.weight_issue_size * r_size[i])
+            scored.append((c.symbol, s))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [s[0] for s in scored[:cfg.top_k]]

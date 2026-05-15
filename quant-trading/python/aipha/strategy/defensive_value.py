@@ -56,19 +56,16 @@ class DefensiveValueStrategy(CBRotationStrategy):
 
     def _extra_filter(self, candidate: CandidateInfo, context: StrategyContext) -> bool:
         cfg = self.config
-        issue_size = getattr(candidate, "issue_size", None) or float("inf")
+        issue_size = candidate.issue_size
         if issue_size < cfg.min_issue_size or issue_size > cfg.max_issue_size:
             return False
-        premium = getattr(candidate, "premium_rate", None)
-        if premium is not None and premium * 100 > cfg.max_premium:
-            return False
-        turnover = getattr(candidate, "turnover", None) or 0.0
-        if turnover < cfg.min_turnover:
+        premium = candidate.cb_over_rate
+        if premium is not None and premium > cfg.max_premium:
             return False
         # 到期年限
-        mat_date = getattr(candidate, "maturity_date", None)
+        mat_date = candidate.maturity_date
         if mat_date:
-            dtm = days_to_maturity(mat_date)
+            dtm = days_to_maturity(mat_date, datetime.now())
             years = dtm / 365.25
             if years > cfg.max_years_to_maturity or years < cfg.min_years_to_maturity_val:
                 return False
@@ -85,11 +82,11 @@ class DefensiveValueStrategy(CBRotationStrategy):
         maturities: list[float] = []
 
         for c in candidates:
-            mat = getattr(c, "maturity_date", None)
-            ytm = enhanced_ytm(c.price, mat, now) if mat else 0.0
+            mat = c.maturity_date
+            ytm = enhanced_ytm(c.close, mat, now) if mat else 0.0
             ytms.append(ytm)
-            premiums.append((getattr(c, "premium_rate", 0.0) or 0.0) * 100)
-            dtm = days_to_maturity(mat) if mat else 1000
+            premiums.append(c.cb_over_rate or 0.0)
+            dtm = days_to_maturity(mat, now) if mat else 1000
             maturities.append(float(dtm))
 
         r_ytm = _rank_scores(ytms, ascending=False)     # 高 YTM 高分
@@ -101,6 +98,6 @@ class DefensiveValueStrategy(CBRotationStrategy):
             s = (cfg.ytm_weight * r_ytm[i]
                  + cfg.premium_weight * r_prem[i]
                  + cfg.maturity_weight * r_mat[i])
-            scored.append((c.code, s))
+            scored.append((c.symbol, s))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

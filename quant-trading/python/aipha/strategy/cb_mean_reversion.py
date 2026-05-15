@@ -68,9 +68,9 @@ class CBMeanReversionStrategy(CBRotationStrategy):
         cfg = self.config
         scored: list[tuple[str, float]] = []
         for c in candidates:
-            z = self._bb_deviation(c.code)
+            z = self._bb_deviation(c.symbol)
             if z is not None and z <= cfg.min_deviation:
                 # 越低越好 → 取负值做降序
-                scored.append((c.code, -z))
+                scored.append((c.symbol, -z))
         scored.sort(key=lambda x: x[1], reverse=True)
         return [s[0] for s in scored[:cfg.top_k]]

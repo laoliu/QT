@@ -121,6 +121,10 @@ class TripleLowStrategy(CBRotationStrategy):
         self._last_rebalance_date: date | None = None
 
     @property
+    def config(self) -> CBRotationConfig:
+        return self._config
+
+    @property
     def tl_config(self) -> TripleLowConfig:
         return self._tl_config
 
@@ -155,10 +159,8 @@ class TripleLowStrategy(CBRotationStrategy):
             else:
                 self._force_redeem_counts.pop(code, None)
 
-    def _should_rebalance(self, current_date: date) -> bool:  # type: ignore[override]
-        if self._last_rebalance_date is None:
-            return True
-        return (current_date - self._last_rebalance_date).days >= self._tl_config.rebalance_days
+    def _should_rebalance(self) -> bool:  # type: ignore[override]
+        return (self._bar_count - self._last_rebalance_bar) >= self._tl_config.rebalance_days
 
     def _filter_bonds(self, bars: dict[str, "Bar"], current_date: date) -> list[dict]:
         cfg = self._tl_config
@@ -199,11 +201,11 @@ class TripleLowStrategy(CBRotationStrategy):
         bonds = []
         for c in candidates:
             bonds.append({
-                "ts_code": c.code, "name": getattr(c, "name", c.code),
-                "price": c.price,
-                "premium_rate": getattr(c, "premium_rate", 0.0) or 0.0,
-                "cb_value": getattr(c, "cb_value", 100.0) or 100.0,
-                "issue_size": getattr(c, "issue_size", 0.0) or 0.0,
+                "ts_code": c.symbol, "name": getattr(c, "stk_short_name", c.symbol),
+                "price": c.close,
+                "premium_rate": (c.cb_over_rate or 0.0),
+                "cb_value": (c.cb_value or 100.0),
+                "issue_size": (c.issue_size or 0.0),
             })
         scores = calculate_normalized_scores(
             bonds, cfg.price_weight, cfg.premium_weight, cfg.cb_value_weight,

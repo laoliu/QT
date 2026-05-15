@@ -29,13 +29,24 @@ class YTMPlusStrategy(CBRotationStrategy):
         return True
     def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
         from aipha.strategy.cb_ultra import _rank_scores
+        from aipha.strategy.cb_rotation_base import days_to_maturity
         cfg = self.config
-        ytm = {}
+        ytm_vals: list[float] = []
+        prem_vals: list[float] = []
+        now = __import__("datetime").datetime.now()
         for c in candidates:
-            price = getattr(c, "close", 100.0) or 100.0
-            ry = getattr(c, "remain_years", 1.0) or 1.0
-            ytm[c.code] = (cfg.face_value / price) ** (1.0 / ry) - 1.0 if price > 0 and ry > 0 else 0.0
-        prem = {c.code: -(getattr(c, "premium_rate", 50.0) or 50.0) for c in candidates}
-        ry, rp = _rank_scores(ytm), _rank_scores(prem)
-        composite = {c.code: cfg.ytm_weight * ry.get(c.code, 0) + cfg.premium_weight * rp.get(c.code, 0) for c in candidates}
-        return sorted(composite, key=composite.get, reverse=True)[:cfg.top_k]  # type: ignore
+            price = c.close or 100.0
+            mat = c.maturity_date
+            ry = days_to_maturity(mat, now) / 365.25 if mat else 1.0
+            if ry <= 0:
+                ry = 1.0
+            ytm_vals.append((cfg.face_value / price) ** (1.0 / ry) - 1.0 if price > 0 else 0.0)
+            prem_vals.append(-(c.cb_over_rate or 50.0))
+        r_ytm = _rank_scores(ytm_vals, ascending=False)
+        r_prem = _rank_scores(prem_vals, ascending=False)
+        scored: list[tuple[str, float]] = []
+        for i, c in enumerate(candidates):
+            s = cfg.ytm_weight * r_ytm[i] + cfg.premium_weight * r_prem[i]
+            scored.append((c.symbol, s))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [s[0] for s in scored[:cfg.top_k]]

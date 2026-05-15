@@ -101,6 +101,7 @@ th{color:var(--text-dim);font-weight:500;font-size:12px}
     <a href="/quant/admin/ui">🏠 首页</a>
     <a href="/quant/admin/portfolio-combo">⚙️ 组合构建器</a>
     <a href="/quant/admin/strategy-fitness">🎯 策略适配</a>
+    <a href="javascript:void(0)" onclick="clearCache()" style="font-size:12px;opacity:.7">🗑️ 清除缓存</a>
   </div>
 </header>
 <div class="container">
@@ -430,6 +431,74 @@ var portfolioReturns=null;
 var s1Timer=null;
 var s2Timer=null;
 
+// ── Local Cache ──
+var CACHE_KEY='portfolio_workflow_cache';
+function saveCache(){
+  try{
+    var data={
+      ts:Date.now(),
+      currentStep:currentStep,
+      globalRanking:globalRanking,
+      globalBatchId:globalBatchId,
+      selectedStrats:selectedStrats,
+      comboResult:comboResult,
+      portfolioReturns:portfolioReturns,
+      // Save form values
+      s1:{universe:gv('s1-universe'),days:gv('s1-days'),cash:gv('s1-cash')},
+      s2:{method:gv('s2-method'),rebalance:gv('s2-rebalance'),cash:gv('s2-cash'),vol:gv('s2-vol'),rf:gv('s2-rf'),days:gv('s2-days'),slippage:gv('s2-slippage')}
+    };
+    localStorage.setItem(CACHE_KEY,JSON.stringify(data));
+  }catch(e){console.warn('saveCache failed:',e)}
+}
+function gv(id){var el=document.getElementById(id);return el?el.value:''}
+function sv(id,v){var el=document.getElementById(id);if(el&&v!=null&&v!=='')el.value=v}
+function loadCache(){
+  try{
+    var raw=localStorage.getItem(CACHE_KEY);
+    if(!raw)return;
+    var data=JSON.parse(raw);
+    // Expire after 7 days
+    if(Date.now()-data.ts>7*86400000){localStorage.removeItem(CACHE_KEY);return}
+    // Restore form values
+    if(data.s1){sv('s1-universe',data.s1.universe);sv('s1-days',data.s1.days);sv('s1-cash',data.s1.cash)}
+    if(data.s2){sv('s2-method',data.s2.method);sv('s2-rebalance',data.s2.rebalance);sv('s2-cash',data.s2.cash);sv('s2-vol',data.s2.vol);sv('s2-rf',data.s2.rf);sv('s2-days',data.s2.days);sv('s2-slippage',data.s2.slippage)}
+    // Restore state
+    if(data.globalRanking&&data.globalRanking.length>0){
+      globalRanking=data.globalRanking;
+      globalBatchId=data.globalBatchId||'';
+      renderStep1Results();
+    }
+    if(data.selectedStrats&&data.selectedStrats.length>0){
+      selectedStrats=data.selectedStrats;
+    }
+    if(data.comboResult){
+      comboResult=data.comboResult;
+      portfolioReturns=data.portfolioReturns||null;
+      renderStep3(comboResult);
+    }
+    // Restore step (go to last reached step)
+    if(data.currentStep>1){
+      // Restore step-2 checkbox selections after rendering strat list
+      if(globalRanking.length>0&&data.selectedStrats&&data.selectedStrats.length>0){
+        setTimeout(function(){
+          var selNames=data.selectedStrats.map(function(s){return s.name});
+          document.querySelectorAll('#s2-strat-list input[type=checkbox]').forEach(function(cb){
+            cb.checked=selNames.indexOf(cb.value)>=0;
+          });
+          updateWeightTable();
+        },50);
+      }
+      goStep(data.currentStep);
+    }
+    if(comboResult)renderStep4Summary();
+    toast('📦 已从本地缓存恢复工作流状态');
+  }catch(e){console.warn('loadCache failed:',e)}
+}
+function clearCache(){
+  localStorage.removeItem(CACHE_KEY);
+  toast('🗑️ 本地缓存已清除');
+}
+
 // ── Stepper ──
 function goStep(n){
   document.querySelectorAll('.step').forEach(function(el,i){
@@ -567,6 +636,7 @@ function step1LoadResults(batchId){
     globalRanking=d.strategies.sort(function(a,b){return(b.total_score||0)-(a.total_score||0)});
     renderStep1Results();
     toast('✅ 已加载全局排名 ('+globalRanking.length+' 个策略)'+(globalBatchId?' ['+globalBatchId+']':''));
+    saveCache();
   });
 }
 
@@ -597,6 +667,7 @@ function renderStep1Results(){
 function step1Done(){
   if(!globalRanking.length){toast('请先完成策略分析');return}
   goStep(2);
+  saveCache();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -984,6 +1055,7 @@ function step2HandleRealResult(d,cfg){
   portfolioReturns=portReturns;
   renderStep3(result);
   goStep(3);
+  saveCache();
   toast('✅ 组合回测完成 (真实数据)');
 }
 
@@ -1020,6 +1092,7 @@ function step2Combine(equityCurves){
     portfolioReturns=d.portfolio_returns||null;
     renderStep3(d);
     goStep(3);
+    saveCache();
     toast('✅ 组合构建完成');
   }).catch(function(e){
     document.getElementById('s2-run-btn').disabled=false;
@@ -1190,6 +1263,7 @@ function step3Done(){
   if(!comboResult){toast('请先完成组合构建');return}
   renderStep4Summary();
   goStep(4);
+  saveCache();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1323,6 +1397,9 @@ function onStep4ModeChange(){
     warn.style.display='none';
   }
 }
+
+// ── Init: restore from local cache ──
+loadCache();
 </script>
 </body>
 </html>`;

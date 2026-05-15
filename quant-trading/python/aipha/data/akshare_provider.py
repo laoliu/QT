@@ -55,6 +55,9 @@ class AKShareBarProvider:
         backoff_factor: float | None = None,
         rate_limiter: RateLimiter | None = None,
     ):
+        if cache_dir is None:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "akshare")
         self.cache_dir = cache_dir
         self.adjust = adjust
 

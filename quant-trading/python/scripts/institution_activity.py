@@ -830,7 +830,9 @@ def _fetch_management_change_events(
     return events
 
 
-_FUND_HOLD_CACHE_DIR = os.path.join(_PYTHON_ROOT, "cache")
+_FUND_HOLD_CACHE_DIR = os.path.join(
+    os.environ.get("QTDATA_DIR", "G:/qtdata"), "cache", "institution"
+) if os.path.isdir(os.path.join(os.environ.get("QTDATA_DIR", "G:/qtdata"), "cache")) else os.path.join(_PYTHON_ROOT, "cache")
 
 
 def _latest_report_quarter(ref_date: datetime) -> str:

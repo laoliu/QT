@@ -73,7 +73,7 @@ def load_forecast_months(cache_dir: str | Path, months: list[str]) -> pd.DataFra
 
 def compute_analyst_revision_factor(
     candidates: Sequence[Any],
-    cache_dir: str = "data/cache/alternative",
+    cache_dir: str = "",
     trade_date: str = "",
     lookback_months: int = 3,
     min_analysts: int = 2,
@@ -82,6 +82,9 @@ def compute_analyst_revision_factor(
 
     正值 = 近期上调多于下调, 看多
     """
+    if not cache_dir:
+        from aipha.config import get_cache_dir
+        cache_dir = str(get_cache_dir() / "alternative")
     months = _get_months_before(trade_date, lookback_months)
     if not months:
         return {}
@@ -112,11 +115,14 @@ _TYPE_SCORES: dict[str, float] = {
 
 def compute_forecast_surprise_factor(
     candidates: Sequence[Any],
-    cache_dir: str = "data/cache/advanced",
+    cache_dir: str = "",
     trade_date: str = "",
     lookback_months: int = 6,
 ) -> dict[str, float]:
     """业绩预告超预期因子"""
+    if not cache_dir:
+        from aipha.config import get_cache_dir
+        cache_dir = str(get_cache_dir() / "advanced")
     months = _get_months_before(trade_date, lookback_months)
     data = load_forecast_months(cache_dir, months)
     if data.empty:
@@ -137,13 +143,16 @@ def compute_forecast_surprise_factor(
 
 def compute_holder_change_factor(
     candidates: Sequence[Any],
-    cache_dir: str = "data/cache/reference/stk_holdernumber",
+    cache_dir: str = "",
     trade_date: str = "",
 ) -> dict[str, float]:
     """股东人数变化因子
 
     负值 = 股东人数减少 = 筹码集中 = 看多
     """
+    if not cache_dir:
+        from aipha.config import get_cache_dir
+        cache_dir = str(get_cache_dir() / "reference" / "stk_holdernumber")
     result: dict[str, float] = {}
     for c in candidates:
         code = getattr(c, "code", str(c))

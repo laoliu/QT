@@ -47,9 +47,12 @@ class AKShareCBDataAdapter:
 
     def __init__(
         self,
-        cache_dir: str = "data/cache/cb_akshare",
+        cache_dir: str = "",
         cb_basic_path: Optional[str] = None,
     ):
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "cb_akshare")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._cb_basic_path = cb_basic_path

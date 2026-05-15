@@ -66,9 +66,12 @@ class CBDataAdapter:
 
     def __init__(
         self,
-        cache_dir: str = "data/cache/cb_tushare",
+        cache_dir: str = "",
         token: Optional[str] = None,
     ):
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "cb_tushare")
         self.provider = TuShareCBProvider(token=token, cache_dir=cache_dir)
         # 强赎公告数据（在 load() 中延迟加载）
         self._force_redeem_data: Optional[pd.DataFrame] = None

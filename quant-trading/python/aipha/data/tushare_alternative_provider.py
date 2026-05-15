@@ -38,9 +38,14 @@ class TuShareAlternativeProvider:
     def __init__(
         self,
         token: Optional[str] = None,
-        cache_dir: str = "data/cache/alternative",
+        cache_dir: str = "",
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
+
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "alternative")
+
         self._gw = get_tushare_gateway(token=token)
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)

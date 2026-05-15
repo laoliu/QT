@@ -56,7 +56,8 @@ os.environ["NO_PROXY"] = "*"
 
 
 # ── Output paths ──────────────────────────────────────────────────────────────
-_CACHE_DIR = _PYTHON_ROOT / "cache"
+_QTDATA_CACHE = Path(os.environ.get("QTDATA_DIR", "G:/qtdata")) / "cache" / "st_restructuring"
+_CACHE_DIR = _QTDATA_CACHE if _QTDATA_CACHE.parent.exists() else _PYTHON_ROOT / "cache"
 _LOG_DIR = _PROJECT_ROOT / "logs"
 _REPORT_FILE = _CACHE_DIR / "st_restructuring_report.json"
 _ALERT_FILE = _CACHE_DIR / "st_restructuring_alerts.json"

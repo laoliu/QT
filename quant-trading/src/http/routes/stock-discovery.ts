@@ -181,6 +181,8 @@ export function registerStockDiscoveryRoutes(deps: AdminRouteDeps): void {
           elapsed_seconds: number;
           generated_at: string;
           error?: string;
+          is_offline?: boolean;
+          is_sina_fallback?: boolean;
         }>("scripts/stock_discovery.py", payload, config, {
           timeoutMs: 360_000,
         });

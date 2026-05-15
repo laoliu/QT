@@ -31,9 +31,13 @@ class TuShareETFProvider:
     def __init__(
         self,
         token: str | None = None,
-        cache_dir: str = "data/cache/etf_tushare",
+        cache_dir: str = "",
     ) -> None:
         from aipha.data.tushare_gateway import get_tushare_gateway
+
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "etf_tushare")
 
         self._gateway = get_tushare_gateway(token=token)
         self._cache_dir = Path(cache_dir)

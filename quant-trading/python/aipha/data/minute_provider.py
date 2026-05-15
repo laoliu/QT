@@ -44,7 +44,7 @@ class MinuteProviderConfig:
         lunch_end: 午休结束
     """
 
-    cache_dir: str = "data/cache/minute"
+    cache_dir: str = ""
     freq: BarFrequency = BarFrequency.MIN_1
     market_open: time = time(9, 30)
     market_close: time = time(15, 0)
@@ -115,7 +115,11 @@ class MinuteDataCache:
     def __init__(self, config: MinuteProviderConfig | None = None) -> None:
         self._config = config or MinuteProviderConfig()
         self._cache: dict[tuple[str, date, BarFrequency], list[Bar]] = {}
-        self._cache_dir = Path(self._config.cache_dir)
+        cache_dir = self._config.cache_dir
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "minute")
+        self._cache_dir = Path(cache_dir)
 
     @property
     def size(self) -> int:

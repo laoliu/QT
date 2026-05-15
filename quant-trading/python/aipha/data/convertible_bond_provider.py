@@ -59,6 +59,10 @@ class ConvertibleBondProvider:
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
 
+        if cache_dir is None:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "cb")
+
         self._gateway = get_tushare_gateway(token=token)
         self.token = self._gateway._token  # 向后兼容
         self.cache_dir = cache_dir

@@ -50,10 +50,13 @@ class CBStockBridge:
 
     def __init__(
         self,
-        cache_dir: str = "data/cache",
+        cache_dir: str = "",
         pit_provider: Any | None = None,
         equity_provider: Any | None = None,
     ) -> None:
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir())
         self._cache_dir = cache_dir
         self._equity = equity_provider
         self._pit = pit_provider

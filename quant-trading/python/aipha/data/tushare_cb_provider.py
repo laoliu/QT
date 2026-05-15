@@ -37,9 +37,13 @@ class TuShareCBProvider:
     def __init__(
         self,
         token: Optional[str] = None,
-        cache_dir: str = "data/cache/cb_tushare",
+        cache_dir: str = "",
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
+
+        if not cache_dir:
+            from aipha.config import get_cache_dir
+            cache_dir = str(get_cache_dir() / "cb_tushare")
 
         load_dotenv()
         self._gateway = get_tushare_gateway(token=token)

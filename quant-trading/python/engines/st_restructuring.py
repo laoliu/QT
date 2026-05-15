@@ -53,7 +53,8 @@ os.environ["NO_PROXY"] = "*"
 
 # ── Data directory for cache & state ──────────────────────────────────────────
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-_CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "cache")
+_QTDATA_CACHE = os.path.join(os.environ.get("QTDATA_DIR", "G:/qtdata"), "cache", "st_restructuring")
+_CACHE_DIR = _QTDATA_CACHE if os.path.isdir(os.path.join(os.environ.get("QTDATA_DIR", "G:/qtdata"), "cache")) else os.path.join(os.path.dirname(__file__), "..", "cache")
 _STATE_FILE = os.path.join(_CACHE_DIR, "st_restructuring_state.json")
 
 # ── Stage definitions ─────────────────────────────────────────────────────────

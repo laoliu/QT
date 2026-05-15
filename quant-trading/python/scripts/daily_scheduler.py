@@ -49,7 +49,11 @@ from aipha.portfolio.compliance_engine import ComplianceEngine
 # ---------------------------------------------------------------------------
 
 AUDIT_LOG_DIR = _REPO_ROOT / "logs" / "audit"
-DATA_CACHE_DIR = _REPO_ROOT / "data" / "cache"
+try:
+    from aipha.config import get_cache_dir
+    DATA_CACHE_DIR = get_cache_dir()
+except Exception:
+    DATA_CACHE_DIR = _REPO_ROOT / "data" / "cache"
 COMPLIANCE_CONFIG = _REPO_ROOT / "configs" / "algo_trading_compliance.yml"
 
 # 每日 IC 数据文件（由回测引擎写出）

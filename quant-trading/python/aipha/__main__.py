@@ -418,7 +418,6 @@ def cmd_check_data(args):
 
             provider = TuShareProBarProvider(
                 token=token,
-                cache_dir="data/cache/tushare",
                 adjust="qfq",
             )
 
@@ -452,7 +451,7 @@ def cmd_check_data(args):
             from aipha.data.akshare_provider import AKShareBarProvider
 
             provider = AKShareBarProvider(
-                cache_dir="data/cache/akshare", adjust="qfq",
+                adjust="qfq",
             )
 
             for sym in symbols:

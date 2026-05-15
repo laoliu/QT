@@ -18,7 +18,11 @@ from aipha.factors.technical import TechnicalFactorCalculator, bollinger_bands, 
 
 router = APIRouter(prefix="/data", tags=["data"])
 
-_CACHE_DIR = Path(os.environ.get("AIPHA_CACHE_DIR", "data/cache"))
+try:
+    from aipha.config import get_cache_dir as _get_cache_dir
+    _CACHE_DIR = _get_cache_dir()
+except Exception:
+    _CACHE_DIR = Path(os.environ.get("AIPHA_CACHE_DIR", "data/cache"))
 _ANN_DIR = Path("data/annotations")
 _MONTHLY_CACHE_RE = re.compile(r"^(?P<symbol>[A-Z0-9.]+)_(?P<month>\d{6})_daily_")
 _CB_DAILY_RE = re.compile(r"^cb_daily_(?P<date>\d{8})$")

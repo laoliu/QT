@@ -111,10 +111,11 @@ def _setup_xtquant_path(qmt_path: str = "") -> str:
     if not path:
         return ""  # 依赖系统已安装 xtquant
 
-    # 添加 site-packages 到 sys.path
+    # 添加 site-packages 到 sys.path（append 而非 insert，避免 QMT 自带的
+    # 旧版 numpy 覆盖系统兼容版本——QMT 内置 numpy 1.19 不兼容 Python 3.13+）
     site_pkg = os.path.join(path, "bin.x64", "Lib", "site-packages")
     if os.path.isdir(site_pkg) and site_pkg not in sys.path:
-        sys.path.insert(0, site_pkg)
+        sys.path.append(site_pkg)
         logger.info("已添加 xtquant 路径: %s", site_pkg)
 
     # 返回 userdata_mini 路径

@@ -54,11 +54,19 @@ class CBRankerConfig:
         rebalance_days: 持仓期（与策略调仓一致）
     """
     feature_cols: list[str] = field(default_factory=lambda: [
+        # Price/valuation (existing)
         "close", "cb_over_rate", "cb_value", "issue_size",
         "rating_score", "ytm", "delta",
+        # CB-specific factors (existing)
         "iv_bias", "gamma_convexity", "credit_spread",
         "liquidity_activity", "maturity_convexity",
         "amount", "turnover_rate", "days_listed",
+        # TS-1 fundamental factors (Phase 3)
+        "roe", "or_yoy", "netprofit_yoy", "ocf_to_or",
+        # BSM IV factors (Phase 3 / C4)
+        "iv", "iv_prem", "pricing_bias",
+        # Northbound flow (Phase 3 / B)
+        "hk_ratio", "hk_chg_5d",
     ])
     label_col: str = "fwd_return_rank"
     group_col: str = "trade_date"

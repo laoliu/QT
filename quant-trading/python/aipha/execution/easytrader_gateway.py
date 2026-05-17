@@ -457,16 +457,22 @@ class EasytraderGateway(BrokerGateway):
             return order.order_id
 
         try:
+            if order.limit_price is None or order.limit_price <= 0:
+                raise ValueError(
+                    f"limit_price 必须为正数 (symbol={order.symbol}, "
+                    f"limit_price={order.limit_price})。"
+                    f"禁止发送 price=0 给券商 API — 行为未定义。"
+                )
             if order.side == "BUY":
                 result = self._user.buy(
                     security=order.symbol,
-                    price=order.limit_price or 0,
+                    price=order.limit_price,
                     amount=order.qty,
                 )
             else:
                 result = self._user.sell(
                     security=order.symbol,
-                    price=order.limit_price or 0,
+                    price=order.limit_price,
                     amount=order.qty,
                 )
 

@@ -1,202 +1,268 @@
-"""价值质量策略 — Magic Formula A股版
+"""A 股价值质量复合策略
 
-两层复合打分:
-  - 价值复合 (PE 60% + PB 40%) × 0.30
-  - 质量复合 (ROE 50% + 毛利率 30% + 低杠杆 20%) × 0.30
-  - 动量 × 0.20
-  - 低波 × 0.10
-  - 小市值 × 0.10
+核心 Alpha：低估值 + 高盈利质量 + 动量确认。
+经典"Magic Formula"（Joel Greenblatt）的 A 股适配版。
+
+Alpha 来源：
+1. **价值复合** — 低 PE_TTM + 低 PB 双重估值锚
+2. **质量复合** — 高 ROE + 高毛利率 + 低负债率三维质量锚
+3. **动量确认** — 排除"下跌中的便宜股"（价值陷阱）
+4. **低波动** — 风险调整后收益更优
+5. **小市值** — 指数成分内的相对小市值标的有超额
+
+额外安全机制：
+- ROE >= 8% 硬性门槛（排除低盈利能力公司）
+- PE_TTM > 0 且 < 80（排除亏损和过高估值）
+- Debt-to-Assets < 70%（排除高杠杆风险）
+
+对齐 copilot-instructions.md：
+- 策略层只输出 OrderIntent
+- 所有假设写入 configs/backtest/value_quality.yml
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import logging
+import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from aipha.strategy.equity_rotation_base import (
-    EquityRotationConfig, EquityRotationStrategy, CandidateInfo,
-    rank_normalize, StrategyContext,
+from aipha.factors.equity_factors import (
+    compute_accruals_quality_factor,
+    compute_debt_factor,
+    compute_momentum_factor,
+    compute_piotroski_factor,
+    compute_quality_factor,
+    compute_size_factor,
+    compute_value_factor,
+    compute_valuation_percentile_factor,
+    compute_volatility_factor,
 )
+from aipha.strategy.base import StrategyContext
+from aipha.strategy.equity_rotation_base import (
+    EquityCandidateInfo,
+    EquityRotationConfig,
+    EquityRotationStrategy,
+)
+from aipha.strategy.registry import StrategyRegistry
+
+if TYPE_CHECKING:
+    from aipha.domain.models import Bar
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 配置
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class ValueQualityConfig(EquityRotationConfig):
+    """价值质量复合策略配置。
+
+    继承 EquityRotationConfig，添加价值质量特有字段。
+    """
+
+    # 覆盖默认值
     top_k: int = 30
-    rebalance_days: int = 20
-    stop_loss_pct: float = 0.18
-    min_roe: float = 8.0
-    max_pe: float = 80.0
-    max_debt_to_assets: float = 70.0
-    weight_value: float = 0.30
-    weight_quality: float = 0.30
-    weight_momentum: float = 0.20
-    weight_volatility: float = 0.10
-    weight_size: float = 0.10
-    # Sub-weights for value composite
-    value_pe_weight: float = 0.60
-    value_pb_weight: float = 0.40
-    # Sub-weights for quality composite
+    rebalance_days: int = 20     # 月度调仓，降低换手
+    min_price: float = 5.0
+    max_price: float = 200.0
+    min_turnover: float = 1000.0
+    min_listed_days: int = 120
+    stop_loss_pct: float = 0.18    # 价值股回撤容忍度稍高
+    buffer_k: int = 10
+    max_single_pct: float = 0.05
+    min_mv: float = 200_000.0     # 20 亿以上
+
+    # 复合因子权重
+    weight_quality: float = 0.30       # 质量复合
+    weight_value: float = 0.30         # 价值复合
+    weight_momentum: float = 0.20      # 动量确认
+    weight_volatility: float = 0.10    # 低波动
+    weight_size: float = 0.10          # 小市值
+
+    # 质量复合内部权重
     quality_roe_weight: float = 0.50
     quality_margin_weight: float = 0.30
     quality_debt_weight: float = 0.20
-    # Enhanced factor slots
-    weight_piotroski: float = 0.0
-    weight_valuation_pct: float = 0.0
-    weight_accruals: float = 0.0
+
+    # 价值复合内部权重
+    value_pe_weight: float = 0.60
+    value_pb_weight: float = 0.40
+
+    # 硬性过滤门槛
+    min_roe: float = 8.0          # ROE >= 8%
+    max_pe: float = 80.0          # PE < 80
+    max_debt_to_assets: float = 70.0  # 负债率 < 70%
+
+    # ---------- 新增基本面因子权重（默认 0.0，向后兼容） ----------
+    weight_piotroski: float = 0.0          # Piotroski F-Score
+    weight_valuation_pct: float = 0.0      # 估值历史百分位
+    weight_accruals: float = 0.0           # 应计盈余质量
+
+    # 新增因子参数
     piotroski_min_dims: int = 5
-    momentum_lookback: int = 60
+    valuation_min_history: int = 20
+
+    # 动量参数
+    momentum_lookback: int = 20
     volatility_lookback: int = 60
 
 
+# ---------------------------------------------------------------------------
+# 策略实现
+# ---------------------------------------------------------------------------
+
+
+@StrategyRegistry().register("value_quality")
 class ValueQualityStrategy(EquityRotationStrategy):
+    """A 股价值质量复合策略
+
+    在指数成分股中选择低估值 + 高质量的标的，
+    辅以动量确认和低波动偏好，构建高 Alpha 组合。
+    """
+
     name = "value_quality"
 
-    def __init__(self, config: ValueQualityConfig | None = None, **kwargs: object) -> None:
-        super().__init__(config=config or ValueQualityConfig(), **kwargs)
+    def __init__(self, config: ValueQualityConfig | None = None, **kwargs):
+        """初始化价值质量策略。
+
+        Args:
+            config: 策略配置，None 时使用默认值或从 kwargs 构造。
+        """
+        super().__init__()
+        self._config = config or ValueQualityConfig(**kwargs)
 
     @property
     def config(self) -> ValueQualityConfig:
+        """返回策略配置。"""
         return self._config
 
-    def _extra_filter(self, candidate: CandidateInfo, context: StrategyContext) -> bool:
+    def _extra_filter(
+        self,
+        candidate: EquityCandidateInfo,
+        context: StrategyContext,
+    ) -> bool:
+        """价值质量硬性过滤：排除低 ROE、高估值、高杠杆标的。
+
+        Args:
+            candidate: 候选股票信息。
+            context: 策略上下文。
+
+        Returns:
+            True 表示通过过滤，False 表示被剔除。
+        """
         cfg = self._config
-        m = candidate.metadata
-        roe = m.get("roe", None)
-        pe = m.get("pe_ttm", None)
-        debt = m.get("debt_to_assets", None)
+        meta = candidate.metadata
+
+        # ROE 下限
+        roe = meta.get("roe")
         if roe is not None and roe < cfg.min_roe:
             return False
-        if pe is not None and (pe <= 0 or pe > cfg.max_pe):
+
+        # PE 范围：排除亏损和严重高估
+        pe = meta.get("pe_ttm")
+        if pe is not None:
+            if pe <= 0 or pe > cfg.max_pe:
+                return False
+
+        # 负债率上限
+        dta = meta.get("debt_to_assets")
+        if dta is not None and dta > cfg.max_debt_to_assets:
             return False
-        if debt is not None and debt > cfg.max_debt_to_assets:
-            return False
+
         return True
 
-    def _calc_piotroski(self, c: CandidateInfo) -> float | None:
-        m = c.metadata
-        dims = 0
-        score = 0
-        roa = m.get("roa", None)
-        if roa is not None:
-            dims += 1
-            if roa > 0:
-                score += 1
-        roa_prev = m.get("roa_prev", None)
-        if roa is not None and roa_prev is not None:
-            dims += 1
-            if roa > roa_prev:
-                score += 1
-        cfps = m.get("cfps", None)
-        if cfps is not None:
-            dims += 1
-            if cfps > 0:
-                score += 1
-        eps = m.get("eps", None)
-        if cfps is not None and eps is not None:
-            dims += 1
-            if cfps > eps:
-                score += 1
-        debt = m.get("debt_to_assets", None)
-        debt_prev = m.get("debt_to_assets_prev", None)
-        if debt is not None and debt_prev is not None:
-            dims += 1
-            if debt < debt_prev:
-                score += 1
-        cr = m.get("current_ratio", None)
-        cr_prev = m.get("current_ratio_prev", None)
-        if cr is not None and cr_prev is not None:
-            dims += 1
-            if cr > cr_prev:
-                score += 1
-        if dims < self._config.piotroski_min_dims:
-            return None
-        return score / dims if dims > 0 else None
+    def _score_candidates(
+        self,
+        candidates: list[EquityCandidateInfo],
+        context: StrategyContext,
+    ) -> list[str]:
+        """价值+质量复合打分。
 
-    def _calc_valuation_pct(self, c: CandidateInfo) -> float | None:
-        m = c.metadata
-        pe_history = m.get("pe_history", None)
-        pe = m.get("pe_ttm", None)
-        if pe_history and pe is not None and len(pe_history) > 0:
-            below = sum(1 for h in pe_history if h < pe)
-            return below / len(pe_history)
-        return None
+        采用两个复合因子（ValueComposite + QualityComposite）
+        加动量确认、低波动和小市值偏好。
 
-    def _calc_accruals(self, c: CandidateInfo) -> float | None:
-        m = c.metadata
-        net_profit = m.get("net_profit", None)
-        ocf = m.get("ocf", None)
-        total_assets = m.get("total_assets", None)
-        if net_profit is not None and ocf is not None and total_assets and total_assets > 0:
-            return (net_profit - ocf) / total_assets
-        return None
+        Args:
+            candidates: 经过基础过滤和额外过滤的候选列表。
+            context: 策略上下文。
 
-    def _score_candidates(self, candidates: list[CandidateInfo], ctx: StrategyContext) -> list[str]:
+        Returns:
+            按综合得分降序排列的 symbol 列表。
+        """
         cfg = self._config
         if not candidates:
             return []
 
-        # 价值复合
-        ep_vals = []
-        bp_vals = []
-        for c in candidates:
-            pe = c.metadata.get("pe_ttm", None)
-            ep_vals.append(1.0 / pe if pe and pe > 0 else None)
-            pb = c.metadata.get("pb", None)
-            bp_vals.append(1.0 / pb if pb and pb > 0 else None)
+        scores: dict[str, float] = {}
 
-        ep_r = rank_normalize(ep_vals)
-        bp_r = rank_normalize(bp_vals)
-        value_composite = [cfg.value_pe_weight * ep_r[i] + cfg.value_pb_weight * bp_r[i]
-                           for i in range(len(candidates))]
+        # ---------- 价值复合因子 ----------
+        # 分别计算 PE 和 PB 排名，再加权合并
+        f_pe = compute_value_factor(candidates, metric="pe_ttm")
+        f_pb = compute_value_factor(candidates, metric="pb")
 
-        # 质量复合
-        roe_vals = [c.metadata.get("roe", None) for c in candidates]
-        gm_vals = [c.metadata.get("grossprofit_margin", None) for c in candidates]
-        low_debt = []
-        for c in candidates:
-            d = c.metadata.get("debt_to_assets", None)
-            low_debt.append(1.0 - d if d is not None else None)
-        roe_r = rank_normalize(roe_vals)
-        gm_r = rank_normalize(gm_vals)
-        ld_r = rank_normalize(low_debt)
-        quality_composite = [cfg.quality_roe_weight * roe_r[i]
-                             + cfg.quality_margin_weight * gm_r[i]
-                             + cfg.quality_debt_weight * ld_r[i]
-                             for i in range(len(candidates))]
+        # 用价值复合权重打分
+        value_scores: dict[str, float] = {}
+        self.rank_normalize(candidates, f_pe, cfg.value_pe_weight, value_scores)
+        self.rank_normalize(candidates, f_pb, cfg.value_pb_weight, value_scores)
 
-        mom_vals = [self._calc_momentum(c.symbol, cfg.momentum_lookback, 5) for c in candidates]
-        vol_vals = [self._calc_volatility(c.symbol, cfg.volatility_lookback) for c in candidates]
-        size_vals = [-(c.metadata.get("total_mv", c.metadata.get("circ_mv", 1e18)))
-                     for c in candidates]
+        # 将价值复合分注入总分
+        for sym, vs in value_scores.items():
+            scores[sym] = scores.get(sym, 0.0) + vs * cfg.weight_value
 
-        mom_r = rank_normalize(mom_vals)
-        vol_r = rank_normalize([-v if v else 0 for v in vol_vals])
-        size_r = rank_normalize(size_vals)
+        # ---------- 质量复合因子 ----------
+        f_roe = compute_quality_factor(candidates, metric="roe")
+        f_margin = compute_quality_factor(candidates, metric="grossprofit_margin")
+        f_debt = compute_debt_factor(candidates, metric="debt_to_assets")
 
-        # Enhanced factor slots
-        pio_vals = None
-        vp_vals = None
-        acc_vals = None
+        quality_scores: dict[str, float] = {}
+        self.rank_normalize(candidates, f_roe, cfg.quality_roe_weight, quality_scores)
+        self.rank_normalize(candidates, f_margin, cfg.quality_margin_weight, quality_scores)
+        self.rank_normalize(candidates, f_debt, cfg.quality_debt_weight, quality_scores)
+
+        for sym, qs in quality_scores.items():
+            scores[sym] = scores.get(sym, 0.0) + qs * cfg.weight_quality
+
+        # ---------- 动量因子 ----------
+        f_mom = compute_momentum_factor(
+            self._price_history, candidates,
+            lookback=cfg.momentum_lookback,
+            skip_recent=cfg.momentum_skip_recent,
+            multi_period=cfg.momentum_multi_period,
+        )
+        self.rank_normalize(candidates, f_mom, cfg.weight_momentum, scores)
+
+        # ---------- 低波动因子 ----------
+        f_vol = compute_volatility_factor(
+            self._price_history, candidates,
+            lookback=cfg.volatility_lookback,
+        )
+        self.rank_normalize(candidates, f_vol, cfg.weight_volatility, scores)
+
+        # ---------- 小市值因子 ----------
+        f_size = compute_size_factor(candidates)
+        self.rank_normalize(candidates, f_size, cfg.weight_size, scores)
+
+        # ---------- Piotroski F-Score（可选） ----------
         if cfg.weight_piotroski > 0:
-            pio_vals = [self._calc_piotroski(c) for c in candidates]
+            f_pio = compute_piotroski_factor(
+                candidates, min_dimensions=cfg.piotroski_min_dims,
+            )
+            self.rank_normalize(candidates, f_pio, cfg.weight_piotroski, scores)
+
+        # ---------- 估值历史百分位（可选） ----------
         if cfg.weight_valuation_pct > 0:
-            vp_vals = [self._calc_valuation_pct(c) for c in candidates]
+            f_vpct = compute_valuation_percentile_factor(
+                candidates, metric="pe_ttm",
+                min_history=cfg.valuation_min_history,
+            )
+            self.rank_normalize(candidates, f_vpct, cfg.weight_valuation_pct, scores)
+
+        # ---------- 应计盈余质量（可选） ----------
         if cfg.weight_accruals > 0:
-            acc_vals = [self._calc_accruals(c) for c in candidates]
+            f_acc = compute_accruals_quality_factor(candidates)
+            self.rank_normalize(candidates, f_acc, cfg.weight_accruals, scores)
 
-        pio_r = rank_normalize(pio_vals) if pio_vals else [0.5] * len(candidates)
-        vp_r = rank_normalize(vp_vals) if vp_vals else [0.5] * len(candidates)
-        acc_r = rank_normalize([-v if v is not None else 0 for v in acc_vals]) if acc_vals else [0.5] * len(candidates)
-
-        scored = []
-        for i, c in enumerate(candidates):
-            s = (cfg.weight_value * value_composite[i]
-                 + cfg.weight_quality * quality_composite[i]
-                 + cfg.weight_momentum * mom_r[i]
-                 + cfg.weight_volatility * vol_r[i]
-                 + cfg.weight_size * size_r[i]
-                 + cfg.weight_piotroski * pio_r[i]
-                 + cfg.weight_valuation_pct * (1.0 - vp_r[i])
-                 + cfg.weight_accruals * acc_r[i])
-            scored.append((c.symbol, s))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored]
+        return self.rank_sort(scores)

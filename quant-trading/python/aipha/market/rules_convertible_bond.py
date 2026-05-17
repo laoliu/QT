@@ -10,14 +10,16 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 from aipha.domain.models import Bar, Order, Side
 from aipha.market.base import PrecheckDecision
+from aipha.market.price_limits import is_at_limit_down, is_at_limit_up
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class CBRejectReason(str, Enum):
     FIRST_DAY_LIMIT = "FIRST_DAY_LIMIT"  # 首日涨跌停
     PRICE_LIMIT = "PRICE_LIMIT"  # 涨跌停限制（2022新规）
     TEMPORARY_HALT = "TEMPORARY_HALT"  # 临时停牌（2022新规）
+    DATA_MISSING = "DATA_MISSING"  # 关键数据缺失（§13.3）
 
 
 # 向后兼容别名 —— 已有测试导入 CBPrecheckDecision
@@ -85,6 +88,10 @@ class MarketRulesConvertibleBond:
     # 滑点默认值（§13.1 权威源）
     slippage_bps_default: float = 5.0  # CB 默认滑点 5bps
 
+    # 成交量约束（§P0 容量修正）
+    max_participation_rate: float = 0.05  # CB 最大参与率 5%
+    opening_volume_fraction: float = 0.15  # 开盘集合竞价占全天量约 15%
+
     # 首日涨跌停/临停参数
     first_day_up_halt_pct: Decimal = Decimal("0.20")   # 首日涨20%临停
     first_day_down_halt_pct: Decimal = Decimal("0.30")  # 首日跌30%临停
@@ -93,6 +100,31 @@ class MarketRulesConvertibleBond:
     new_rule_date: date = date(2022, 8, 1)
     price_limit_pct: Decimal = Decimal("0.20")  # ±20% 涨跌停
     temp_halt_pct: Decimal = Decimal("0.30")  # ±30% 临时停牌
+
+    # -- Layer 2: .env → 环境变量覆盖映射（§13.1 三层配置机制） --
+    _ENV_MAP: ClassVar[dict[str, tuple[str, type]]] = {
+        "commission_rate": ("CB_COMMISSION_RATE", Decimal),
+        "commission_min": ("CB_COMMISSION_MIN", Decimal),
+        "stamp_tax_rate": ("CB_STAMP_TAX_SELL", Decimal),
+        "slippage_bps_default": ("CB_SLIPPAGE_BPS", float),
+        "lot_size": ("CB_LOT_SIZE", int),
+    }
+
+    def __post_init__(self) -> None:
+        """Layer 2 覆盖：若 .env 设置了对应环境变量且字段值 == Layer 1 默认值，则用 .env 值替换。"""
+        import dataclasses as _dc
+        _defaults = {
+            f.name: f.default for f in _dc.fields(self)
+            if f.default is not _dc.MISSING
+        }
+        for attr, (env_key, conv) in self._ENV_MAP.items():
+            env_val = os.environ.get(env_key)
+            if env_val is None:
+                continue
+            # 仅当字段值 == Layer 1 代码默认值时才覆盖（显式传入的 Layer 3 优先）
+            if attr in _defaults and getattr(self, attr) != _defaults[attr]:
+                continue
+            object.__setattr__(self, attr, conv(env_val))
 
     def precheck_order(
         self,
@@ -160,16 +192,17 @@ class MarketRulesConvertibleBond:
             if prev_close is None or prev_close <= 0:
                 logger.warning(
                     "CB prev_close 缺失或无效 (symbol=%s, date=%s), "
-                    "涨跌停检查被跳过 — §13.3 安全关键参数",
+                    "涨跌停检查无法执行 — 订单被拒绝 §13.3",
                     bar.symbol, trade_date,
                 )
-                # §13.3: 不静默放行，标记为未校验并附带 warning
+                # §13.3: prev_close 缺失禁止静默放行
                 return PrecheckDecision(
-                    allowed=True,
+                    allowed=False,
+                    reason=CBRejectReason.DATA_MISSING,
                     warning=(
                         f"prev_close 缺失 (symbol={bar.symbol}, "
-                        f"date={trade_date}), 涨跌停检查未执行 — "
-                        "订单放行但标记为未校验"
+                        f"date={trade_date}), 涨跌停检查无法执行 — "
+                        "订单被拒绝（§13.3 安全关键参数）"
                     ),
                 )
             else:
@@ -179,14 +212,14 @@ class MarketRulesConvertibleBond:
                 halt_down = prev_close * (1 - float(self.temp_halt_pct))
 
                 # 涨停价检查（close 已达涨停，买单被拒）
-                if order.side == Side.BUY and bar.close >= limit_up * 0.999:
+                if order.side == Side.BUY and is_at_limit_up(bar.close, limit_up):
                     return PrecheckDecision(
                         allowed=False,
                         reason=CBRejectReason.PRICE_LIMIT,
                         warning=f"涨停 {bar.close:.2f} ≥ {limit_up:.2f} (前收{prev_close:.2f}×{1+float(self.price_limit_pct):.0%})",
                     )
                 # 跌停价检查（close 已达跌停，卖单被拒）
-                if order.side == Side.SELL and bar.close <= limit_down * 1.001:
+                if order.side == Side.SELL and is_at_limit_down(bar.close, limit_down):
                     return PrecheckDecision(
                         allowed=False,
                         reason=CBRejectReason.PRICE_LIMIT,

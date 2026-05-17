@@ -1,153 +1,182 @@
-"""策略容量估算 — 基于流动性约束的最大可容纳资金"""
+"""
+策略容量约束
+
+保守估算策略的可行容量，识别容量瓶颈标的，
+当总容量低于最低要求时标注为容量受限并发出阻塞警告。
+
+容量估算公式（保守）：
+    单标的容量（元） = 日均成交额（元） × max_participation_rate
+    策略总容量     = Σ(单标的容量) 的加权/调和估计
+
+参见：copilot-instructions.md §3.2 原则 D、R52 P15-A5。
+
+使用示例：
+    limit = CapacityLimit(max_participation=0.10, min_capacity_cny=500_000)
+    estimate = limit.estimate_capacity(
+        holdings={"000001.SZ": 50000.0},         # 持仓市值（元）
+        avg_volumes={"000001.SZ": 1_000_000.0},  # 日均成交额（元）
+    )
+    result = limit.check(holdings, avg_volumes)
+    bottlenecks = limit.get_bottleneck_assets(n=3)
+"""
+
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-
-import pandas as pd
-
-logger = logging.getLogger(__name__)
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
 class AssetCapacityInfo:
+    """单标的容量信息"""
+
     symbol: str
-    avg_daily_volume: float       # 日均成交额（元）
-    avg_daily_shares: float       # 日均成交量（股）
-    estimated_capacity: float     # 单票估算容量（元）
-    participation_rate: float     # 实际参与率
-    is_bottleneck: bool           # 是否为瓶颈
+    position_value_cny: float     # 当前持仓市值（元）
+    avg_daily_volume_cny: float   # 日均成交额（元）
+    available_capacity_cny: float # 该标的可容纳的最大持仓（元）
+    participation_rate: float     # 当前持仓占日成交额的比例
+    is_bottleneck: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "position_value_cny": round(self.position_value_cny, 2),
+            "avg_daily_volume_cny": round(self.avg_daily_volume_cny, 2),
+            "available_capacity_cny": round(self.available_capacity_cny, 2),
+            "participation_rate": round(self.participation_rate, 4),
+            "is_bottleneck": self.is_bottleneck,
+        }
 
 
 @dataclass
 class CapacityEstimate:
-    strategy_name: str
-    total_capacity: float                    # 策略总容量（元）
-    bottleneck_assets: list[AssetCapacityInfo]  # 瓶颈标的
-    asset_details: list[AssetCapacityInfo]   # 所有标的详情
-    utilization: float                       # 当前资金 / 总容量
+    """策略容量估算结果"""
+
+    total_capacity_cny: float         # 策略总可容纳规模（元）
+    is_capacity_limited: bool         # 是否低于最低容量要求
+    min_capacity_cny: float           # 配置的最低容量要求
+    bottleneck_assets: list[AssetCapacityInfo]  # 容量最受限的标的
+    asset_details: list[AssetCapacityInfo]      # 所有标的详情
 
     def to_dict(self) -> dict:
         return {
-            "strategy": self.strategy_name,
-            "total_capacity_yuan": round(self.total_capacity, 0),
-            "total_capacity_wan": round(self.total_capacity / 1e4, 2),
-            "bottleneck_count": len(self.bottleneck_assets),
-            "bottlenecks": [a.symbol for a in self.bottleneck_assets],
-            "utilization": round(self.utilization, 4),
+            "total_capacity_cny": round(self.total_capacity_cny, 2),
+            "is_capacity_limited": self.is_capacity_limited,
+            "min_capacity_cny": self.min_capacity_cny,
+            "bottleneck_assets": [a.to_dict() for a in self.bottleneck_assets],
         }
 
 
-class CapacityLimit:
-    """策略容量估算器。
+@dataclass(frozen=True)
+class CapacityCheckResult:
+    """容量约束检查结果（用于质量门禁）"""
 
-    方法：
-    1. 计算每只股票的日均成交额
-    2. 假设最大参与率 (max_participation)，得到单票容量
-    3. 按权重加权得到策略总容量
-    4. 识别瓶颈标的（容量最小的 N 只）
-    """
+    passed: bool
+    total_capacity_cny: float
+    min_capacity_cny: float
+    is_capacity_limited: bool
+    bottleneck_symbols: list[str] = field(default_factory=list)
+    message: str = ""
+
+
+class CapacityLimit:
+    """策略容量约束"""
 
     def __init__(
         self,
-        max_participation: float = 0.05,   # 最大参与率 5%
-        slippage_bps_per_pct: float = 5.0, # 每 1% 参与率的冲击成本 (bps)
-        bottleneck_percentile: float = 0.20,  # 最小20%视为瓶颈
+        max_participation: float = 0.10,
+        min_capacity_cny: float = 500_000.0,
     ) -> None:
-        self._max_participation = max_participation
-        self._slippage_bps_per_pct = slippage_bps_per_pct
-        self._bottleneck_pct = bottleneck_percentile
+        if not (0 < max_participation <= 1.0):
+            raise ValueError(f"max_participation must be in (0, 1], got {max_participation}")
+        if min_capacity_cny < 0:
+            raise ValueError(f"min_capacity_cny must be >= 0, got {min_capacity_cny}")
+        self.max_participation = max_participation
+        self.min_capacity_cny = min_capacity_cny
 
-    def estimate(
+    def estimate_capacity(
         self,
-        strategy_name: str,
-        weights: dict[str, float],
-        volume_data: pd.DataFrame,
-        current_capital: float = 0.0,
+        holdings: dict[str, float],
+        avg_volumes: dict[str, float],
     ) -> CapacityEstimate:
-        """估算策略容量。
+        """估算策略容量
 
         Args:
-            strategy_name: 策略名称
-            weights: {symbol: weight} 目标权重
-            volume_data: DataFrame 列包含 'symbol', 'volume'(股数), 'amount'(金额)
-            current_capital: 当前使用资金
+            holdings: {symbol: position_value_cny} 当前持仓市值（元）
+            avg_volumes: {symbol: daily_avg_volume_cny} 日均成交额（元）
         """
-        asset_infos: list[AssetCapacityInfo] = []
-
-        for symbol, w in weights.items():
-            if abs(w) < 1e-8:
-                continue
-            sym_data = volume_data[volume_data["symbol"] == symbol]
-            if sym_data.empty:
-                logger.warning(f"No volume data for {symbol}")
-                continue
-
-            avg_amount = float(sym_data["amount"].mean()) if "amount" in sym_data.columns else 0.0
-            avg_shares = float(sym_data["volume"].mean()) if "volume" in sym_data.columns else 0.0
-
-            # 单票最大可交易金额 = 日均成交额 × 最大参与率
-            max_trade_amount = avg_amount * self._max_participation
-            # 策略中该票所需金额 = 总资金 × 权重
-            # 反推：总资金上限 = max_trade_amount / |weight|
-            if abs(w) > 1e-8:
-                asset_capacity = max_trade_amount / abs(w)
-            else:
-                asset_capacity = float("inf")
-
-            participation = (current_capital * abs(w) / avg_amount) if avg_amount > 0 else 0.0
-
-            info = AssetCapacityInfo(
-                symbol=symbol,
-                avg_daily_volume=avg_amount,
-                avg_daily_shares=avg_shares,
-                estimated_capacity=asset_capacity,
-                participation_rate=participation,
-                is_bottleneck=False,
-            )
-            asset_infos.append(info)
-
-        if not asset_infos:
+        if not holdings:
             return CapacityEstimate(
-                strategy_name=strategy_name,
-                total_capacity=0.0,
+                total_capacity_cny=0.0,
+                is_capacity_limited=True,
+                min_capacity_cny=self.min_capacity_cny,
                 bottleneck_assets=[],
                 asset_details=[],
-                utilization=0.0,
             )
 
-        # 策略总容量 = 所有标的容量的最小值（木桶原理）
-        capacities = [a.estimated_capacity for a in asset_infos]
-        total_capacity = min(capacities)
+        details: list[AssetCapacityInfo] = []
+        for symbol, pos_value in holdings.items():
+            avg_vol = avg_volumes.get(symbol, 0.0)
+            available = avg_vol * self.max_participation
+            participation = pos_value / avg_vol if avg_vol > 0 else float("inf")
+            details.append(AssetCapacityInfo(
+                symbol=symbol,
+                position_value_cny=pos_value,
+                avg_daily_volume_cny=avg_vol,
+                available_capacity_cny=available,
+                participation_rate=participation,
+            ))
 
-        # 识别瓶颈标的
-        sorted_infos = sorted(asset_infos, key=lambda x: x.estimated_capacity)
-        n_bottleneck = max(1, int(len(sorted_infos) * self._bottleneck_pct))
-        for info in sorted_infos[:n_bottleneck]:
-            info.is_bottleneck = True
+        # 总容量 = 各标的可容纳容量之和（等权持仓假设可叠加）
+        total_capacity = sum(d.available_capacity_cny for d in details)
+        is_limited = total_capacity < self.min_capacity_cny
 
-        bottlenecks = [a for a in asset_infos if a.is_bottleneck]
-        utilization = current_capital / total_capacity if total_capacity > 0 else 0.0
+        # 标记瓶颈（容量最小的 top-3）
+        sorted_by_cap = sorted(details, key=lambda x: x.available_capacity_cny)
+        bottleneck_n = min(3, len(sorted_by_cap))
+        bottleneck_set = {a.symbol for a in sorted_by_cap[:bottleneck_n]}
+        for d in details:
+            d.is_bottleneck = d.symbol in bottleneck_set
 
         return CapacityEstimate(
-            strategy_name=strategy_name,
-            total_capacity=total_capacity,
-            bottleneck_assets=bottlenecks,
-            asset_details=asset_infos,
-            utilization=utilization,
+            total_capacity_cny=total_capacity,
+            is_capacity_limited=is_limited,
+            min_capacity_cny=self.min_capacity_cny,
+            bottleneck_assets=sorted_by_cap[:bottleneck_n],
+            asset_details=details,
         )
 
-    def check_trade_feasibility(
+    def check(
         self,
-        symbol: str,
-        trade_amount: float,
-        avg_daily_amount: float,
-    ) -> tuple[bool, float]:
-        """检查单笔交易是否可行。返回 (可行性, 预估冲击成本bps)。"""
-        if avg_daily_amount <= 0:
-            return False, 0.0
+        holdings: dict[str, float],
+        avg_volumes: dict[str, float],
+    ) -> CapacityCheckResult:
+        """返回可用于质量门禁的检查结果"""
+        est = self.estimate_capacity(holdings, avg_volumes)
+        bottleneck_symbols = [a.symbol for a in est.bottleneck_assets]
+        msg = ""
+        if est.is_capacity_limited:
+            msg = (
+                f"Strategy capacity {est.total_capacity_cny:,.0f} CNY "
+                f"< minimum {self.min_capacity_cny:,.0f} CNY. "
+                f"Bottlenecks: {bottleneck_symbols}"
+            )
+        return CapacityCheckResult(
+            passed=not est.is_capacity_limited,
+            total_capacity_cny=est.total_capacity_cny,
+            min_capacity_cny=self.min_capacity_cny,
+            is_capacity_limited=est.is_capacity_limited,
+            bottleneck_symbols=bottleneck_symbols,
+            message=msg,
+        )
 
-        participation = abs(trade_amount) / avg_daily_amount
-        impact_bps = participation * 100 * self._slippage_bps_per_pct
-        feasible = participation <= self._max_participation
-        return feasible, impact_bps
+    def get_bottleneck_assets(
+        self,
+        holdings: dict[str, float],
+        avg_volumes: dict[str, float],
+        n: int = 3,
+    ) -> list[AssetCapacityInfo]:
+        """返回容量瓶颈 top-n 标的"""
+        est = self.estimate_capacity(holdings, avg_volumes)
+        sorted_all = sorted(est.asset_details, key=lambda x: x.available_capacity_cny)
+        return sorted_all[:n]

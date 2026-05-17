@@ -27,8 +27,16 @@ from decimal import Decimal
 from typing import Any, Callable
 
 from aipha.domain.models import Side
+from aipha.execution.trading_ops import (
+    FallbackPolicy,
+    FeeParams,
+    calc_nav,
+    calc_trade_cost,
+    get_fee_params,
+)
 from aipha.market.rules_cn_equity import MarketRulesCNEquity
 from aipha.market.rules_convertible_bond import MarketRulesConvertibleBond
+from aipha.market.rules_etf import MarketRulesETF
 from aipha.strategy.base import OrderIntent, Strategy, StrategyContext
 
 logger = logging.getLogger(__name__)
@@ -36,20 +44,25 @@ logger = logging.getLogger(__name__)
 # §13.1: 从 MarketRules* 权威源派生交易规则，禁止独立维护副本
 _EQUITY_RULES = MarketRulesCNEquity()
 _CB_RULES = MarketRulesConvertibleBond()
+_ETF_RULES = MarketRulesETF()
+
+
+def _rules_dict(rules: object) -> dict[str, int | float]:
+    """从 MarketRules 实例提取标准字段字典。"""
+    return {
+        "lot_size": int(rules.lot_size),
+        "t_plus_n": int(rules.t_plus),
+        "stamp_tax_sell_rate": float(rules.stamp_tax_rate),
+        "transfer_fee_rate": float(getattr(rules, "transfer_fee_rate", 0)),
+    }
+
 
 MARKET_RULES: dict[str, dict[str, int | float]] = {
-    "convertible_bond": {
-        "lot_size": _CB_RULES.lot_size,
-        "t_plus_n": _CB_RULES.t_plus,
-        "stamp_tax_sell_rate": float(_CB_RULES.stamp_tax_rate),
-    },
-    "a_stock": {
-        "lot_size": _EQUITY_RULES.lot_size,
-        "t_plus_n": _EQUITY_RULES.t_plus,
-        "stamp_tax_sell_rate": float(_EQUITY_RULES.stamp_tax_rate),
-    },
-    "etf": {"lot_size": 100, "t_plus_n": 1, "stamp_tax_sell_rate": 0.0},
-    "bond": {"lot_size": 100, "t_plus_n": 1, "stamp_tax_sell_rate": 0.0},
+    "convertible_bond": _rules_dict(_CB_RULES),
+    "a_stock": _rules_dict(_EQUITY_RULES),
+    "etf": _rules_dict(_ETF_RULES),
+    # bond: 暂复用 ETF 规则（无独立 MarketRulesBond 类，T+1 免印花税）
+    "bond": _rules_dict(_ETF_RULES),
 }
 
 
@@ -70,6 +83,7 @@ class PillarState:
     prev_nav: float             # 前一日 NAV（真实 NAV = cash + 持仓市值）
     positions: dict[str, int] = field(default_factory=dict)
     buy_dates: dict[str, date] = field(default_factory=dict)  # T+1 强制
+    avg_costs: dict[str, float] = field(default_factory=dict)  # 持仓均价（缺价回退用）
     lot_size: int = 100
     t_plus_n: int = 1
 
@@ -309,20 +323,34 @@ class PillarOrchestrator(Strategy):
         trade_value = qty * price
         fill_date = market_date or date.today()
 
-        # R92 P0-B: Gateway FeeModel 全局 stamp_tax=0（CB 默认），
-        # A股卖出需补充印花税（2023-08-28 起千分之0.5）
-        # §13.2 偏差说明: 此处内联计算而非调用 FeeModel.calc()，
-        # 因为 on_fill 回调接收的是 Gateway 预计算的 commission，
-        # FeeModel.calc() API 需要 Fill 对象（接口不匹配）。
-        # 费率来源为 §13.1 MarketRules（stamp_tax_sell_rate），保持一致。
+        # §13.7 / §13.2: 委托 trading_ops.calc_trade_cost() 计算完整交易成本
+        # 忽略 gateway 预计算的 commission 参数（可能不含印花税/过户费）
         pcfg = self._pillar_configs.get(pillar)
         mtype = pcfg.market_type if pcfg else "a_stock"
-        rules = MARKET_RULES.get(mtype, MARKET_RULES["a_stock"])
-        stamp_tax_rate = rules.get("stamp_tax_sell_rate", 0.0)
+        _MARKET_TO_ASSET = {
+            "a_stock": "cn_equity",
+            "convertible_bond": "convertible_bond",
+            "etf": "etf",
+            "bond": "etf",  # bond 复用 ETF 费率
+        }
+        asset_type = _MARKET_TO_ASSET.get(mtype, "cn_equity")
+        fee_params = get_fee_params(asset_type)
+        side_str = "buy" if getattr(side, "name", str(side)) == "BUY" else "sell"
+        td_str = fill_date.strftime("%Y%m%d") if fill_date else None
+        total_cost = calc_trade_cost(
+            trade_value, side_str, fee_params, trade_date=td_str,
+        )
 
-        if getattr(side, "name", str(side)) == "BUY":
-            state.positions[symbol] = current_qty + qty
-            state.cash -= trade_value + commission
+        if side_str == "buy":
+            # 更新加权平均成本
+            old_cost = state.avg_costs.get(symbol, 0.0)
+            new_total_qty = current_qty + qty
+            if new_total_qty > 0:
+                state.avg_costs[symbol] = (
+                    old_cost * current_qty + price * qty
+                ) / new_total_qty
+            state.positions[symbol] = new_total_qty
+            state.cash -= trade_value + total_cost
             state.buy_dates[symbol] = fill_date
             self._last_prices[symbol] = price
         else:
@@ -330,14 +358,18 @@ class PillarOrchestrator(Strategy):
             actual_sell = min(qty, current_qty)
             remaining = current_qty - actual_sell
             actual_value = actual_sell * price
-            # A股卖出补充印花税
-            stamp_tax = actual_value * stamp_tax_rate
+            # 若实际卖出量 < 原始 qty，需按实际金额重算费用
+            if actual_sell != qty:
+                total_cost = calc_trade_cost(
+                    actual_value, "sell", fee_params, trade_date=td_str,
+                )
             if remaining > 0:
                 state.positions[symbol] = remaining
             else:
                 state.positions.pop(symbol, None)
                 state.buy_dates.pop(symbol, None)
-            state.cash += actual_value - commission - stamp_tax
+                state.avg_costs.pop(symbol, None)
+            state.cash += actual_value - total_cost
             self._last_prices[symbol] = price
 
         # 同步到子策略
@@ -449,19 +481,36 @@ class PillarOrchestrator(Strategy):
         return (qty // lot_size) * lot_size
 
     def _positions_value(self, state: PillarState) -> float:
-        """估算 pillar 持仓市值（使用最后成交价，无价格时 CB 用面值）。"""
-        total = 0.0
-        for sym, qty in state.positions.items():
-            last_px = self._last_prices.get(sym)
-            if last_px and last_px > 0:
-                total += qty * last_px
-            elif state.lot_size == 10:
-                total += qty * 100.0  # CB 面值回退
-            else:
-                # P2-1 修复: 无价格时用持仓均价估值，而非 0
-                avg_cost = state.avg_costs.get(sym, 0.0) if hasattr(state, 'avg_costs') else 0.0
-                total += qty * avg_cost
-        return total
+        """估算 pillar 持仓市值 — 委托 trading_ops.calc_nav() (§13.11)。
+
+        CB pillar (lot_size=10) 缺价时用面值 100 回退；
+        其他 pillar 缺价时用均价回退。
+        """
+        if not state.positions:
+            return 0.0
+        pos_list = [
+            {
+                "code": sym,
+                "shares": qty,
+                "avg_cost": state.avg_costs.get(sym, 0.0),
+            }
+            for sym, qty in state.positions.items()
+        ]
+        fallback = FallbackPolicy.FACE_VALUE if state.lot_size == 10 else FallbackPolicy.AVG_COST
+        result = calc_nav(
+            cash=0.0,  # 仅计算持仓市值
+            positions=pos_list,
+            prices=self._last_prices,
+            fallback=fallback,
+            last_prices=self._last_prices,
+        )
+        if result.unpriced_codes:
+            for sym in result.unpriced_codes:
+                logger.warning(
+                    "Pillar '%s' %s 缺行情, fallback=%s",
+                    state.name, sym, fallback.value,
+                )
+        return result.position_value
 
     def _compute_nav(self, state: PillarState) -> float:
         """计算 pillar 真实 NAV = cash + 持仓市值。

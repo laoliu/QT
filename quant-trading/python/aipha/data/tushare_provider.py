@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 FrequencyType = Literal["1min", "5min", "15min", "30min", "60min", "daily"]
 
+_ETF_QFQ_JUMP_THRESHOLD = 1.25
+_ETF_QFQ_SAFE_DAILY_MOVE = 0.05
+
 
 class TuShareProBarProvider:
     """TuShare Pro 数据提供者
@@ -63,10 +66,6 @@ class TuShareProBarProvider:
         asset: str = "E",
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
-
-        if cache_dir is None:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "tushare")
 
         self._gateway = get_tushare_gateway(token=token)
         self.token = self._gateway._token  # 向后兼容
@@ -185,6 +184,7 @@ class TuShareProBarProvider:
         months = list(self._iter_months(start, end))
         _consec_api_fails = 0  # 连续 API 失败计数
         _MAX_CONSEC_API_FAILS = 3  # 连续失败熔断阈值
+        seen_real_data = False
 
         for y, m in months:
             cache_path = self._monthly_cache_path(symbol, y, m, frequency)
@@ -192,11 +192,20 @@ class TuShareProBarProvider:
                 df_month = self._safe_read_parquet(cache_path)
                 if df_month is not None and not df_month.empty:
                     all_dfs.append(df_month)
+                    seen_real_data = True
                     _consec_api_fails = 0  # 有缓存数据，重置计数
                     continue
                 elif df_month is not None and df_month.empty:
-                    # 空文件 = 该月确认无数据（股票未上市等），跳过不重试
-                    continue
+                    # ETF / 基金在已有历史数据后出现空月，优先视为异常缓存并重试 API。
+                    if not (self.asset == "FD" and seen_real_data):
+                        # 空文件 = 该月确认无数据（股票未上市等），跳过不重试
+                        continue
+                    logger.warning(
+                        "检测到疑似异常空缓存 %s %04d%02d，已有历史数据，改为重试 API",
+                        symbol,
+                        y,
+                        m,
+                    )
                 # df_month is None → 文件损坏，走下面的 API 下载路径
 
             # 如果连续 API 失败已触发熔断，跳过剩余月份的 API 调用
@@ -216,8 +225,8 @@ class TuShareProBarProvider:
                 df_month = self._fetch_from_api(symbol, dl_start, dl_end, frequency)
             except Exception as e:
                 _consec_api_fails += 1
-                # API 调用失败（网络超时/TuShare 限流/空响应等）：
-                # 保存空缓存标记，避免下次重复调用同一个失败的月份
+                # API 调用失败（网络超时/TuShare 限流等）不写入空缓存，
+                # 否则会把临时故障固化为“永久无数据”。
                 if _consec_api_fails >= _MAX_CONSEC_API_FAILS:
                     logger.warning(
                         f"API 连续 {_consec_api_fails} 月失败 ({symbol})，"
@@ -226,17 +235,26 @@ class TuShareProBarProvider:
                 else:
                     logger.debug(
                         f"API 获取 {symbol} {y:04d}{m:02d} 失败: {e}，"
-                        f"保存空缓存标记"
+                        f"本轮跳过且保留后续重试机会"
                     )
-                self._save_to_cache(pd.DataFrame(), cache_path)
                 continue
             if not df_month.empty:
                 self._save_to_cache(df_month, cache_path)
                 all_dfs.append(df_month)
+                seen_real_data = True
                 _consec_api_fails = 0  # 成功获取数据，重置计数
             else:
-                # 保存空 DataFrame 作为"该月无数据"标记，避免下次重复调用 API
-                self._save_to_cache(df_month, cache_path)
+                # 上市前无数据可以缓存为空；已有历史数据后的空月视为异常，保留重试机会。
+                if not (self.asset == "FD" and seen_real_data):
+                    self._save_to_cache(df_month, cache_path)
+                else:
+                    logger.warning(
+                        "ETF %s %04d%02d API 返回空数据，但该标的已有历史行情；"
+                        "不写空缓存，等待后续重试",
+                        symbol,
+                        y,
+                        m,
+                    )
 
         if not all_dfs:
             return []
@@ -252,6 +270,8 @@ class TuShareProBarProvider:
                 & (merged["trade_date"] <= end_str)
             ]
             merged = merged.sort_values("trade_date").reset_index(drop=True)
+
+        merged = self._normalize_etf_qfq_discontinuities(merged, symbol, frequency)
 
         self._check_data_quality(merged, symbol, start, end, frequency)
         return [self._convert_to_bar(row) for _, row in merged.iterrows()]
@@ -407,6 +427,65 @@ class TuShareProBarProvider:
             is_limit_up=is_limit_up,
             is_limit_down=is_limit_down,
         )
+
+    def _normalize_etf_qfq_discontinuities(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        frequency: FrequencyType,
+    ) -> pd.DataFrame:
+        """修正 ETF qfq 价格序列中的份额折算断层。
+
+        TuShare `pro_bar(asset="FD", adj="qfq")` 在部分 ETF 上会出现前复权
+        价格未跨份额折算连续衔接的问题，表现为：
+        - 当日 `pct_chg` 很小；
+        - 但 `pre_close` 与上一交易日 `close` 存在 25%+ 的台阶跳变。
+
+        这类场景会让回测引擎在“持仓不变”的情况下错误放大 NAV。
+        处理方法：将断层日前的历史价格整体按比例重标定，使相邻交易日连续。
+        """
+        if df.empty or frequency != "daily":
+            return df
+        if self.asset != "FD" or self.adjust != "qfq":
+            return df
+
+        required_cols = {"trade_date", "close", "pre_close"}
+        if not required_cols.issubset(df.columns):
+            return df
+
+        normalized = df.sort_values("trade_date").reset_index(drop=True).copy()
+        price_cols = [c for c in ["pre_close", "open", "high", "low", "close", "change"] if c in normalized.columns]
+        value_cols = [c for c in ["amount"] if c in normalized.columns]
+
+        for idx in range(1, len(normalized)):
+            prev_close = float(normalized.at[idx - 1, "close"])
+            current_pre_close = float(normalized.at[idx, "pre_close"])
+            if prev_close <= 0 or current_pre_close <= 0:
+                continue
+
+            jump_ratio = current_pre_close / prev_close
+            if 1 / _ETF_QFQ_JUMP_THRESHOLD <= jump_ratio <= _ETF_QFQ_JUMP_THRESHOLD:
+                continue
+
+            pct_chg = normalized.at[idx, "pct_chg"] if "pct_chg" in normalized.columns else None
+            if pct_chg is not None and pd.notna(pct_chg):
+                if abs(float(pct_chg)) > _ETF_QFQ_SAFE_DAILY_MOVE * 100:
+                    continue
+
+            trade_date = normalized.at[idx, "trade_date"]
+            logger.warning(
+                "检测到 ETF qfq 断层 %s @ %s: prev_close=%.4f pre_close=%.4f ratio=%.4f，回溯重标定历史价格",
+                symbol,
+                trade_date,
+                prev_close,
+                current_pre_close,
+                jump_ratio,
+            )
+            normalized.loc[: idx - 1, price_cols] = normalized.loc[: idx - 1, price_cols] * jump_ratio
+            if value_cols:
+                normalized.loc[: idx - 1, value_cols] = normalized.loc[: idx - 1, value_cols] * jump_ratio
+
+        return normalized
 
     def _calculate_vwap(self, row: pd.Series) -> float | None:
         """计算 VWAP（成交额加权平均价）"""

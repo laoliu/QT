@@ -1,4 +1,16 @@
-"""合规配置 — 从 YAML 加载算法交易合规参数"""
+"""
+aipha/utils/compliance_config.py
+——————————————————————————————————
+加载 configs/algo_trading_compliance.yml，提供便捷访问接口。
+
+使用方式
+--------
+>>> cfg = load_compliance_config()
+>>> cfg.max_participation_rate
+0.1
+>>> cfg.max_cancel_rate
+0.8
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,44 +19,89 @@ from typing import Any
 
 import yaml
 
+# 默认配置文件路径（相对于项目根目录）
 _DEFAULT_CONFIG_PATH = Path(__file__).parents[3] / "configs" / "algo_trading_compliance.yml"
 
 
 @dataclass(frozen=True)
 class ComplianceConfig:
-    version: str = "1.0"
-    max_cancel_rate: float = 0.50
-    max_order_rate_per_second: float = 5.0
-    cancel_rate_alert_threshold: float = 0.40
-    max_participation_rate: float = 0.10
-    crowding_overlap_max_jaccard: float = 0.30
-    crowding_high_participation_rate: float = 0.05
-    t1_discount_factor: float = 0.90
-    flag_limit_hit_threshold: float = 0.80
-    min_tradeable_universe_fraction: float = 0.60
-    require_registration: bool = False
-    registration_status: str = "unregistered"
-    cb_lot_size: int = 10
-    cb_t_plus_n: int = 0
-    cb_force_redeem_max_exposure: float = 0.05
-    _raw: dict = field(default_factory=dict, repr=False, compare=False)
+    """程序化交易合规配置（不可变）。"""
 
-    @property
-    def raw(self) -> dict:
-        return self._raw
+    version: str
+    max_cancel_rate: float
+    max_order_rate_per_second: int
+    cancel_rate_alert_threshold: float
+    max_participation_rate: float
+    crowding_overlap_max_jaccard: float
+    crowding_high_participation_rate: float
+    t1_discount_factor: float
+    flag_limit_hit_threshold: float
+    min_tradeable_universe_fraction: float
+    require_registration: bool
+    registration_status: str
+    # CB 特有
+    cb_lot_size: int
+    cb_t_plus_n: int
+    cb_force_redeem_max_exposure: float
+    # 完整原始 dict，供扩展访问
+    _raw: dict[str, Any] = field(repr=False, hash=False, compare=False)
+
+    def raw(self) -> dict[str, Any]:
+        """返回完整原始配置字典（只读视图）。"""
+        return dict(self._raw)
 
 
 def load_compliance_config(path: str | Path | None = None) -> ComplianceConfig:
-    """加载合规配置
+    """
+    加载并解析 algo_trading_compliance.yml。
 
     Parameters
     ----------
-    path : YAML 文件路径; None 使用默认路径
+    path : str | Path | None
+        配置文件路径。None 时使用默认路径。
+
+    Returns
+    -------
+    ComplianceConfig
+
+    Raises
+    ------
+    FileNotFoundError
+        配置文件不存在时。
+    ValueError
+        缺失必要字段时。
     """
-    p = Path(path) if path else _DEFAULT_CONFIG_PATH
-    if not p.exists():
-        return ComplianceConfig()
-    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    field_names = {f.name for f in ComplianceConfig.__dataclass_fields__.values() if f.name != "_raw"}
-    kwargs = {k: v for k, v in raw.items() if k in field_names}
-    return ComplianceConfig(**kwargs, _raw=raw)
+    cfg_path = Path(path) if path is not None else _DEFAULT_CONFIG_PATH
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"Compliance config not found: {cfg_path}")
+
+    with open(cfg_path, encoding="utf-8") as f:
+        raw: dict[str, Any] = yaml.safe_load(f)
+
+    try:
+        order = raw["order_limits"]
+        part = raw["participation"]
+        sig = raw["signal_quality"]
+        rep = raw["reporting"]
+        cb = raw["convertible_bond"]
+    except KeyError as exc:
+        raise ValueError(f"Compliance config missing section: {exc}") from exc
+
+    return ComplianceConfig(
+        version=str(raw.get("version", "unknown")),
+        max_cancel_rate=float(order["max_cancel_rate"]),
+        max_order_rate_per_second=int(order["max_order_rate_per_second"]),
+        cancel_rate_alert_threshold=float(order["cancel_rate_alert_threshold"]),
+        max_participation_rate=float(part["max_participation_rate"]),
+        crowding_overlap_max_jaccard=float(part["crowding_overlap_max_jaccard"]),
+        crowding_high_participation_rate=float(part["crowding_high_participation_rate"]),
+        t1_discount_factor=float(sig["t1_discount_factor"]),
+        flag_limit_hit_threshold=float(sig["flag_limit_hit_threshold"]),
+        min_tradeable_universe_fraction=float(sig["min_tradeable_universe_fraction"]),
+        require_registration=bool(rep["require_registration"]),
+        registration_status=str(rep["registration_status"]),
+        cb_lot_size=int(cb["lot_size"]),
+        cb_t_plus_n=int(cb["t_plus_n"]),
+        cb_force_redeem_max_exposure=float(cb["force_redeem_max_exposure"]),
+        _raw=raw,
+    )

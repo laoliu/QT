@@ -1,105 +1,202 @@
-"""因子衰减监控 — Rolling IC 自动检测因子有效性退化"""
+"""因子衰减半衰期监控 — HalflifeDecayMonitor。
+
+在 DecayMonitor 基础上增加 AR(1) 半衰期估算与趋势预警：
+- 半衰期（Half-life）：因子 IC 自相关的衰减速度
+  公式：τ₁/₂ = -log(2) / log(|ρ₁|)
+  其中 ρ₁ = AR(1) 自回归系数
+- 近3年滚动 ICIR 不低于全量期 ICIR 40%（知识库原则B Alpha衰减检验）
+
+理论基础：
+- McLean & Pontiff (2016) — Alpha 衰减与市场竞争
+- Hamilton (1994) — AR(1) 时间序列回归
+- 知识库 Q1 衰减公式
+"""
+
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from enum import Enum
+from typing import Optional
 
 import numpy as np
-import pandas as pd
+
+from aipha.factors.decay_monitor import DecayMonitor, DecayUpdateResult, MonitorStatus
+
+logger = logging.getLogger(__name__)
 
 
-class DecayLevel(str, Enum):
-    HEALTHY = "HEALTHY"
-    WARNING = "WARNING"
-    DECAYED = "DECAYED"
-
+# ---------------------------------------------------------------------------
+# 数据结构
+# ---------------------------------------------------------------------------
 
 @dataclass
-class FactorHealth:
+class HalflifeSnapshot:
+    """半衰期估算快照。"""
     factor_name: str
-    current_ic: float
-    ic_ma: float
-    ic_trend: float       # 斜率
-    level: DecayLevel
-    half_life: float | None  # IC 半衰期 (天)
+    halflife_days: Optional[float]      # 半衰期（交易日），None=无法估算
+    ar1_coeff: Optional[float]          # AR(1) 系数 ρ₁
+    n_obs: int                          # 用于估算的观测数
+    is_decaying: bool                   # True = 半衰期 < 252 天（年内衰减）
+    decay_alert: bool                   # True = 近期 ICIR < 全量 ICIR * 0.40
+    recent_icir: float                  # 近 N 期滚动 ICIR
+    full_icir: float                    # 全量 ICIR（全窗口）
 
 
-class FactorDecayMonitor:
-    """持续追踪因子 IC，检测衰减。
+# ---------------------------------------------------------------------------
+# 主类
+# ---------------------------------------------------------------------------
 
-    Parameters
-    ----------
-    ic_warning : float
-        IC 低于此阈值触发 WARNING
-    ic_decay : float
-        IC 低于此阈值触发 DECAYED
-    trend_window : int
-        计算 IC 趋势的滚动窗口
+class HalflifeDecayMonitor(DecayMonitor):
+    """带半衰期估算的因子衰减监控器。
+
+    继承 DecayMonitor 所有功能，新增：
+    - ``estimate_halflife()`` — AR(1) 半衰期估算
+    - ``get_halflife_snapshot()`` — 完整快照
+    - ``is_alpha_decaying()`` — 知识库原则B Alpha衰减检验（近3年 vs 全量）
+
+    Usage::
+
+        monitor = HalflifeDecayMonitor("ep_ratio", window=60, icir_threshold=0.3)
+        for date, ic in ic_series:
+            result = monitor.update(date, ic)
+        snapshot = monitor.get_halflife_snapshot(recent_n=20)
+        print(f"Half-life: {snapshot.halflife_days:.1f} days")
     """
 
     def __init__(
         self,
-        ic_warning: float = 0.02,
-        ic_decay: float = 0.005,
-        trend_window: int = 60,
+        factor_name: str,
+        window: int = 60,
+        icir_threshold: float = 0.3,
+        min_obs_for_halflife: int = 10,
     ) -> None:
-        self.ic_warning = ic_warning
-        self.ic_decay = ic_decay
-        self.trend_window = trend_window
-        self._ic_history: dict[str, list[float]] = {}
+        super().__init__(factor_name, window, icir_threshold)
+        self._min_obs_for_halflife = min_obs_for_halflife
+        # 全量 IC 历史（不受 window 限制，用于 Alpha 衰减检验）
+        self._all_ic: list[float] = []
 
-    def update(self, factor_name: str, ic_value: float) -> FactorHealth:
-        """更新一个因子的 IC 值并返回健康状态。"""
-        if factor_name not in self._ic_history:
-            self._ic_history[factor_name] = []
-        self._ic_history[factor_name].append(ic_value)
+    def update(self, date: str, ic_value: float) -> DecayUpdateResult:
+        """接收新 IC 值，同时更新全量历史。"""
+        result = super().update(date, ic_value)
+        self._all_ic.append(ic_value)
+        return result
 
-        hist = self._ic_history[factor_name]
-        n = min(len(hist), self.trend_window)
-        recent = hist[-n:]
+    def estimate_halflife(self) -> Optional[float]:
+        """估算因子 IC 的半衰期（交易日）。
 
-        ic_ma = float(np.mean(recent))
-        ic_abs = abs(ic_ma)
+        使用 AR(1) 模型：IC_{t+1} = ρ₁ × IC_t + ε
+        半衰期 τ₁/₂ = -log(2) / log(|ρ₁|)
 
-        # 趋势斜率
-        if n >= 5:
-            t = np.arange(n, dtype=float)
-            slope = float(np.polyfit(t, recent, 1)[0])
-        else:
-            slope = 0.0
+        满足 |ρ₁| < 1 时才有意义（平稳过程）。
 
-        # 半衰期估计
-        half_life = None
-        if slope < 0 and ic_abs > 0:
-            half_life = ic_abs / abs(slope) * 0.693
+        Returns:
+            半衰期（交易日），数据不足或非平稳时返回 None
+        """
+        rho = self.get_ar1_coeff()
+        if rho is None:
+            return None
+        abs_rho = abs(rho)
+        if abs_rho <= 0.0 or abs_rho >= 1.0:
+            # abs_rho=0 → 立即衰减到0，abs_rho>=1 → 非平稳
+            return None
+        halflife = -np.log(2) / np.log(abs_rho)
+        return float(halflife)
 
-        # 分级
-        if ic_abs < self.ic_decay:
-            level = DecayLevel.DECAYED
-        elif ic_abs < self.ic_warning:
-            level = DecayLevel.WARNING
-        else:
-            level = DecayLevel.HEALTHY
+    def get_ar1_coeff(self) -> Optional[float]:
+        """估算 AR(1) 自回归系数 ρ₁。
 
-        return FactorHealth(
-            factor_name=factor_name,
-            current_ic=ic_value,
-            ic_ma=ic_ma,
-            ic_trend=slope,
-            level=level,
-            half_life=half_life,
+        使用 OLS：IC_t+1 = ρ₁ × IC_t + ε
+        需要至少 min_obs_for_halflife + 1 个观测值。
+
+        Returns:
+            ρ₁ 估计值，不足时返回 None
+        """
+        ic_list = self._all_ic
+        n = len(ic_list)
+        if n < self._min_obs_for_halflife + 1:
+            return None
+        x = np.array(ic_list[:-1])  # IC_{t}
+        y = np.array(ic_list[1:])   # IC_{t+1}
+        # OLS: ρ₁ = cov(x, y) / var(x)
+        x_mean = np.mean(x)
+        y_mean = np.mean(y)
+        cov_xy = np.mean((x - x_mean) * (y - y_mean))
+        var_x = np.mean((x - x_mean) ** 2)
+        if var_x < 1e-12:
+            return None
+        return float(cov_xy / var_x)
+
+    def is_alpha_decaying(self, recent_n: int = 20) -> bool:
+        """知识库原则B Alpha衰减检验。
+
+        近 recent_n 期滚动 ICIR < 全量 ICIR × 0.40 则视为衰减。
+
+        Returns:
+            True = 衰减预警
+        """
+        all_ic = self._all_ic
+        n_total = len(all_ic)
+        if n_total < recent_n + 2:
+            return False
+
+        # 全量 ICIR
+        full_icir = self._compute_icir_from(all_ic)
+        if np.isnan(full_icir) or abs(full_icir) < 1e-9:
+            return False
+
+        # 近期 ICIR
+        recent_ic = all_ic[-recent_n:]
+        recent_icir = self._compute_icir_from(recent_ic)
+        if np.isnan(recent_icir):
+            return False
+
+        # 知识库原则B：近3年滚动SR不低于全量SR的40%
+        decay_ratio = abs(recent_icir) / abs(full_icir)
+        return decay_ratio < 0.40
+
+    def get_halflife_snapshot(self, recent_n: int = 20) -> HalflifeSnapshot:
+        """获取完整半衰期快照。
+
+        Args:
+            recent_n: 近期 ICIR 的滚动窗口
+
+        Returns:
+            HalflifeSnapshot
+        """
+        halflife = self.estimate_halflife()
+        ar1 = self.get_ar1_coeff()
+        all_ic = self._all_ic
+
+        # 全量 ICIR
+        full_icir = self._compute_icir_from(all_ic)
+
+        # 近期 ICIR
+        recent_ic = all_ic[-recent_n:] if len(all_ic) >= recent_n else all_ic
+        recent_icir = self._compute_icir_from(recent_ic) if len(recent_ic) >= 2 else float("nan")
+
+        return HalflifeSnapshot(
+            factor_name=self.factor_name,
+            halflife_days=halflife,
+            ar1_coeff=ar1,
+            n_obs=len(all_ic),
+            is_decaying=(halflife is not None and halflife < 252),
+            decay_alert=self.is_alpha_decaying(recent_n),
+            recent_icir=recent_icir,
+            full_icir=full_icir,
         )
 
-    def batch_update(self, ic_dict: dict[str, float]) -> dict[str, FactorHealth]:
-        return {name: self.update(name, ic) for name, ic in ic_dict.items()}
+    # ---------------------------------------------------------------------------
+    # 内部辅助
+    # ---------------------------------------------------------------------------
 
-    def decayed_factors(self) -> list[str]:
-        """返回已衰减的因子列表。"""
-        result = []
-        for name, hist in self._ic_history.items():
-            if hist:
-                n = min(len(hist), self.trend_window)
-                ic_ma = abs(float(np.mean(hist[-n:])))
-                if ic_ma < self.ic_decay:
-                    result.append(name)
-        return result
+    @staticmethod
+    def _compute_icir_from(ic_list: list[float]) -> float:
+        """从 IC 列表计算 ICIR，不受窗口限制。"""
+        arr = np.asarray(ic_list, dtype=float)
+        arr = arr[np.isfinite(arr)]
+        if len(arr) < 2:
+            return float("nan")
+        std = np.std(arr, ddof=1)
+        if std < 1e-12:
+            return float("nan")
+        return float(np.mean(arr) / std)

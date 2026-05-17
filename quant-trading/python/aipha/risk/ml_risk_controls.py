@@ -1,152 +1,350 @@
-"""ML 风险控制 — MDD 梯度控制器 + 波动率目标缩放器"""
+"""ML 策略公共风控模块 — 回测/模拟/实盘共享。
+
+解决 R80 P0#1: risk_controlled_replay.py 与 PaperEngine 代码双轨问题。
+将 MDD 梯度减仓、波动率动态仓位、行业中性约束抽取为可复用组件，
+使回测脚本与模拟盘引擎共享同一套风控逻辑。
+
+Usage:
+    from aipha.risk.ml_risk_controls import (
+        MddGradientDeleverager,
+        LinearMddController,
+        VolTargetScaler,
+        IndustryConstraint,
+    )
+"""
+
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
+import pandas as pd
 
-logger = logging.getLogger(__name__)
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 
 
-# ── MDD 梯度控制器 ──────────────────────────────────────────────────
-
-class MddState(Enum):
-    NORMAL = "normal"
-    CAUTION = "caution"       # MDD 接近阈值
-    REDUCTION = "reduction"   # 主动减仓
-    LOCKDOWN = "lockdown"     # 完全锁仓
+# ============================================================================
+# Rolling Sharpe 降权触发器（B1: R88 工作项）
+# ============================================================================
 
 
 @dataclass
-class MddConfig:
-    caution_mdd: float = 0.05       # 5% 回撤进入警戒
-    reduction_mdd: float = 0.10     # 10% 回撤开始减仓
-    lockdown_mdd: float = 0.15      # 15% 回撤完全锁仓
-    caution_scale: float = 0.80     # 警戒时仓位缩放
-    reduction_base: float = 0.50    # 减仓基准缩放
-    linear_slope: float = 5.0       # 线性减仓斜率
-    min_scale: float = 0.10         # 最小仓位缩放
+class SharpeDownweightTrigger:
+    """Rolling SR 降权触发器。
 
+    当 ML 策略的 rolling ``lookback`` 日 Sharpe Ratio 低于 ``sr_threshold``
+    时，自动将 ML 权重从 ``normal_weight`` 降至 ``reduced_weight``。
 
-class LinearMddController:
-    """基于当前回撤的线性仓位缩放控制器。
+    设计动机（R88 B1）：
+      ML 策略（CSI2000-LGB）短期失效时应自动降低组合风险暴露，
+      避免持续亏损放大组合 drawdown。
 
-    在 caution ~ lockdown 区间内，仓位缩放线性递减：
-      scale = max(min_scale, base - slope * (mdd - caution_mdd))
+    用法::
+
+        trigger = SharpeDownweightTrigger(
+            lookback=60,
+            sr_threshold=0.0,
+            normal_weight=0.30,
+            reduced_weight=0.20,
+        )
+        weight, info = trigger.evaluate(ml_nav_series)
     """
 
-    def __init__(self, config: MddConfig | None = None) -> None:
-        self._cfg = config or MddConfig()
-        self._peak_nav = 0.0
-        self._state = MddState.NORMAL
+    lookback: int = 60
+    sr_threshold: float = 0.0
+    normal_weight: float = 0.30
+    reduced_weight: float = 0.20
+    annualization: int = TRADING_DAYS_PER_YEAR
+
+    def compute_rolling_sr(self, nav_series: pd.Series) -> float:
+        """计算 rolling Sharpe Ratio（最近 ``lookback`` 个交易日）。
+
+        Returns:
+            Sharpe Ratio 值；数据不足时返回 NaN。
+        """
+        if len(nav_series) < self.lookback + 1:
+            return float("nan")
+        rets = nav_series.pct_change().dropna().iloc[-self.lookback :]
+        if len(rets) < 2:
+            return float("nan")
+        mean_ret = float(rets.mean())
+        std_ret = float(rets.std())
+        if std_ret <= 0:
+            return 0.0
+        return mean_ret / std_ret * np.sqrt(self.annualization)
+
+    def evaluate(
+        self, nav_series: pd.Series
+    ) -> tuple[float, dict[str, Any]]:
+        """评估当前是否触发降权。
+
+        Args:
+            nav_series: ML 策略的净值序列（日频）。
+
+        Returns:
+            (weight, diagnostic_info) 元组。
+        """
+        sr = self.compute_rolling_sr(nav_series)
+        triggered = not np.isnan(sr) and sr < self.sr_threshold
+        weight = self.reduced_weight if triggered else self.normal_weight
+        return weight, {
+            "rolling_sr_60d": round(sr, 4) if not np.isnan(sr) else None,
+            "sr_threshold": self.sr_threshold,
+            "triggered": triggered,
+            "weight": weight,
+            "normal_weight": self.normal_weight,
+            "reduced_weight": self.reduced_weight,
+        }
+
+
+# ============================================================================
+# MDD 梯度减仓
+# ============================================================================
+
+# V3 平衡版 5 级默认配置
+DEFAULT_MDD_LEVELS: list[tuple[float, float]] = [
+    (0.10, 1.0),   # MDD < 10%: 满仓
+    (0.15, 0.80),  # MDD 10-15%: 80% 仓位
+    (0.20, 0.55),  # MDD 15-20%: 55% 仓位
+    (0.25, 0.30),  # MDD 20-25%: 30% 仓位
+    (1.00, 0.10),  # MDD > 25%: 10% 仓位（不清仓）
+]
+
+
+@dataclass
+class MddGradientDeleverager:
+    """MDD 梯度减仓器。"""
+
+    levels: list[tuple[float, float]] = field(
+        default_factory=lambda: list(DEFAULT_MDD_LEVELS)
+    )
+
+    def get_scale(self, current_mdd: float) -> float:
+        """根据当前 MDD 返回仓位缩放比例 (0~1)。"""
+        for threshold, scale in self.levels:
+            if current_mdd < threshold:
+                return scale
+        return 0.0
+
+    def compute_mdd(self, nav_series: pd.Series) -> float:
+        """计算当前 MDD。"""
+        if len(nav_series) < 2:
+            return 0.0
+        peak = nav_series.cummax()
+        return float((peak.iloc[-1] - nav_series.iloc[-1]) / peak.iloc[-1])
+
+
+@dataclass
+class LinearMddController:
+    """线性 MDD 控制器（含冷却期状态机）。
+
+    与 MddGradientDeleverager（阶梯式）互补，提供线性插值减仓。
+    fusion_mdd_replay 等脚本的唯一 MDD 来源（§4.3.1）。
+
+    状态机: normal → reducing → exited(cooldown) → normal
+    """
+
+    mdd_reduce: float = 0.12
+    mdd_exit: float = 0.22
+    cooldown_periods: int = 3
+
+    _state: str = field(default="normal", init=False, repr=False)
+    _cooldown_count: int = field(default=0, init=False, repr=False)
+    _peak_nav: float = field(default=0.0, init=False, repr=False)
+
+    def reset(self, initial_nav: float = 0.0) -> None:
+        self._state = "normal"
+        self._cooldown_count = 0
+        self._peak_nav = initial_nav
+
+    def update(self, nav: float) -> tuple[float, str]:
+        """返回 (scale 0~1, state_name)。"""
+        if self._peak_nav <= 0:
+            self._peak_nav = nav
+        self._peak_nav = max(self._peak_nav, nav)
+        dd = ((self._peak_nav - nav) / self._peak_nav
+              if self._peak_nav > 0 else 0.0)
+
+        if self._state == "exited":
+            self._cooldown_count += 1
+            if self._cooldown_count >= self.cooldown_periods:
+                self._peak_nav = nav
+                self._state = "normal"
+                self._cooldown_count = 0
+                return 1.0, "recovered"
+            return 0.0, "exited"
+
+        if dd >= self.mdd_exit:
+            self._state = "exited"
+            self._cooldown_count = 0
+            return 0.0, "exited"
+
+        if dd >= self.mdd_reduce:
+            self._state = "reducing"
+            scale = (self.mdd_exit - dd) / (self.mdd_exit - self.mdd_reduce)
+            return max(0.0, float(scale)), "reducing"
+
+        self._state = "normal"
+        return 1.0, "normal"
 
     @property
-    def state(self) -> MddState:
+    def state(self) -> str:
         return self._state
 
-    def update(self, nav: float) -> float:
-        """更新净值并返回仓位缩放系数 [0, 1]。"""
-        cfg = self._cfg
-        if nav > self._peak_nav:
-            self._peak_nav = nav
 
-        mdd = (self._peak_nav - nav) / self._peak_nav if self._peak_nav > 0 else 0.0
+# ============================================================================
+# MDD 纯告警检查器（Paper / Live 共享）
+# ============================================================================
 
-        if mdd >= cfg.lockdown_mdd:
-            self._state = MddState.LOCKDOWN
-            return 0.0
-        elif mdd >= cfg.reduction_mdd:
-            self._state = MddState.REDUCTION
-            # 线性递减
-            excess = mdd - cfg.reduction_mdd
-            scale = cfg.reduction_base - cfg.linear_slope * excess
-            return max(cfg.min_scale, min(1.0, scale))
-        elif mdd >= cfg.caution_mdd:
-            self._state = MddState.CAUTION
-            return cfg.caution_scale
-        else:
-            self._state = MddState.NORMAL
-            return 1.0
-
-    def reset(self) -> None:
-        self._peak_nav = 0.0
-        self._state = MddState.NORMAL
-
-
-# ── 波动率目标缩放器 ────────────────────────────────────────────────
 
 @dataclass
-class VolTargetConfig:
-    target_vol: float = 0.15       # 年化目标波动率
-    lookback: int = 20             # 回看窗口（交易日）
-    vol_floor: float = 0.05        # 波动率下限（防止杠杆过大）
-    vol_cap: float = 0.60          # 波动率上限
-    max_leverage: float = 2.0      # 最大杠杆
-    annualize_factor: float = 252.0
+class MddAlertChecker:
+    """MDD 纯告警 + 安全阀（不降权）。
+
+    Paper / Live 的 MDD 告警唯一实现（§4.3.1 / §13.8 扩展）。
+    与 MddGradientDeleverager（回测降权）互补：
+      - green : MDD < alert_threshold
+      - alert : alert_threshold <= MDD < halt_threshold
+      - halt  : MDD >= halt_threshold（暂停调仓）
+    """
+
+    alert_threshold: float = 0.15
+    halt_threshold: float = 0.30
+
+    def check(self, nav: float, peak_nav: float) -> str:
+        """返回 'green' / 'alert' / 'halt'。"""
+        if peak_nav <= 0:
+            return "green"
+        dd = 1.0 - nav / peak_nav
+        if dd >= self.halt_threshold:
+            return "halt"
+        if dd >= self.alert_threshold:
+            return "alert"
+        return "green"
+
+    def check_with_detail(
+        self, nav: float, peak_nav: float,
+    ) -> dict[str, Any]:
+        """返回包含 MDD 数值和状态的详细字典。"""
+        dd = (1.0 - nav / peak_nav) if peak_nav > 0 else 0.0
+        status = self.check(nav, peak_nav)
+        return {
+            "mdd": dd,
+            "status": status,
+            "alert_threshold": self.alert_threshold,
+            "halt_threshold": self.halt_threshold,
+        }
 
 
+# ============================================================================
+# 波动率目标仓位
+# ============================================================================
+
+
+@dataclass
 class VolTargetScaler:
-    """波动率目标缩放器。
+    """波动率目标仓位缩放器。
 
-    思路: scale = target_vol / realized_vol
-    确保组合波动率始终接近目标值。
+    支持两种调用模式：
+    - 批量式：``get_scale(nav_series)`` — 传入完整 NAV 序列
+    - 增量式：``update(daily_return)`` + ``get_current_scale()`` — bar-by-bar 喂入
     """
 
-    def __init__(self, config: VolTargetConfig | None = None) -> None:
-        self._cfg = config or VolTargetConfig()
-        self._returns: list[float] = []
-
-    def add_return(self, daily_return: float) -> None:
-        self._returns.append(daily_return)
-
-    def get_scale(self) -> float:
-        """计算当前缩放比例。"""
-        cfg = self._cfg
-        lookback = cfg.lookback
-
-        if len(self._returns) < lookback:
-            return 1.0  # 数据不足时不缩放
-
-        recent = np.array(self._returns[-lookback:])
-        realized_vol = float(np.std(recent, ddof=1)) * np.sqrt(cfg.annualize_factor)
-
-        # 限制波动率范围
-        realized_vol = max(cfg.vol_floor, min(cfg.vol_cap, realized_vol))
-
-        scale = cfg.target_vol / realized_vol
-        scale = min(scale, cfg.max_leverage)
-        return max(0.0, scale)
-
-    def reset(self) -> None:
-        self._returns.clear()
-
-
-# ── 综合 ML 风险控制叠加器 ──────────────────────────────────────────
-
-class MLRiskOverlay:
-    """将 MDD 控制和波动率目标叠加到仓位上。
-
-    最终缩放 = min(mdd_scale, vol_scale)
-    """
+    vol_target: float = 0.20
+    lookback: int = 60
+    min_scale: float = 0.2
+    max_scale: float = 1.5
+    annualization: int = TRADING_DAYS_PER_YEAR
 
     def __init__(
         self,
-        mdd_config: MddConfig | None = None,
-        vol_config: VolTargetConfig | None = None,
+        vol_target: float = 0.20,
+        lookback: int = 60,
+        min_scale: float = 0.2,
+        max_scale: float = 1.5,
     ) -> None:
-        self.mdd_ctrl = LinearMddController(mdd_config)
-        self.vol_scaler = VolTargetScaler(vol_config)
+        self.vol_target = vol_target
+        self.lookback = lookback
+        self.min_scale = min_scale
+        self.max_scale = max_scale
+        self.annualization = TRADING_DAYS_PER_YEAR
+        # 增量式状态
+        self._returns: list[float] = []
+        self._current_scale: float = 1.0
 
-    def update(self, nav: float, daily_return: float) -> float:
-        """每日更新，返回最终仓位缩放系数。"""
-        mdd_scale = self.mdd_ctrl.update(nav)
-        self.vol_scaler.add_return(daily_return)
-        vol_scale = self.vol_scaler.get_scale()
-        final = min(mdd_scale, vol_scale)
-        return final
+    def get_scale(self, nav_series: pd.Series) -> float:
+        """波动率目标仓位缩放: vol_target / realized_vol。"""
+        if len(nav_series) < self.lookback:
+            return 1.0
+        rets = nav_series.pct_change().dropna().iloc[-self.lookback:]
+        realized_vol = rets.std() * np.sqrt(self.annualization)
+        if realized_vol <= 0:
+            return 1.0
+        scale = self.vol_target / realized_vol
+        return float(np.clip(scale, self.min_scale, self.max_scale))
+
+    # -- 增量式 API（兼容 VolatilityTargeter 接口）--------------------------
+
+    def update(self, daily_return: float) -> float:
+        """喂入日收益率，返回当前缩放因子。"""
+        self._returns.append(daily_return)
+        n = len(self._returns)
+        min_obs = max(5, self.lookback // 2)
+        if n < min_obs:
+            self._current_scale = 1.0
+            return 1.0
+        recent = self._returns[-self.lookback:] if n >= self.lookback else self._returns
+        daily_vol = float(np.std(recent, ddof=1))
+        realized_vol = daily_vol * np.sqrt(self.annualization)
+        if realized_vol < 1e-10:
+            scale = self.max_scale
+        else:
+            scale = self.vol_target / realized_vol
+        scale = float(np.clip(scale, self.min_scale, self.max_scale))
+        self._current_scale = scale
+        return scale
+
+    def get_current_scale(self) -> float:
+        """获取当前缩放因子（增量模式）。"""
+        return self._current_scale
 
     def reset(self) -> None:
-        self.mdd_ctrl.reset()
-        self.vol_scaler.reset()
+        """重置增量状态。"""
+        self._returns.clear()
+        self._current_scale = 1.0
+
+
+# ============================================================================
+# 行业中性约束
+# ============================================================================
+
+
+@dataclass
+class IndustryConstraint:
+    """行业中性约束：单行业不超 max_pct。"""
+
+    max_pct: float = 0.15
+
+    def apply(
+        self,
+        candidates: list[str],
+        industry_map: dict[str, str],
+        top_k: int,
+    ) -> tuple[list[str], int]:
+        """过滤候选标的，返回 (过滤后列表, 被阻断数量)。"""
+        max_per_industry = max(1, int(top_k * self.max_pct))
+        industry_count: dict[str, int] = {}
+        filtered: list[str] = []
+        blocked = 0
+        for sym in candidates:
+            ind = industry_map.get(sym, "未知")
+            cnt = industry_count.get(ind, 0)
+            if cnt >= max_per_industry:
+                blocked += 1
+                continue
+            industry_count[ind] = cnt + 1
+            filtered.append(sym)
+            if len(filtered) >= top_k:
+                break
+        return filtered, blocked

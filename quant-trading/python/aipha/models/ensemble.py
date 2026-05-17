@@ -1,109 +1,200 @@
-"""多模型 Ensemble — rank_average / weighted_average / stacking。"""
+"""多模型集成预测框架
+
+支持 LightGBM + XGBoost + ElasticNet 三模型集成，
+通过 rank-average / weighted-average / stacking 合成最终预测。
+
+集成方法：
+1. rank_average: 每个模型预测做截面 rank → 求平均 rank（最稳健）
+2. weighted_average: 按指定权重加权预测值（需预测量纲一致或先归一化）
+3. stacking: 用 Ridge 做二层堆叠（需额外 OOS 预测做训练）
+
+理论基础：
+- Breiman (1996): Bagging reduces variance; model diversity → better ensemble
+- Gu, Kelly, Xiu (2020): Ensemble of heterogeneous models best for financial prediction
+- 异质模型集成 > 同质集成（树 + 线性 + 非参数互补）
+
+对齐 copilot-instructions.md § P2 多模型集成要求。
+"""
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+EnsembleMethod = Literal["rank_average", "weighted_average", "stacking"]
+
 
 @dataclass
 class EnsembleConfig:
-    method: str = "rank_average"  # rank_average | weighted_average | stacking
-    weights: dict[str, float] = field(default_factory=dict)
+    """集成配置。"""
+
+    method: EnsembleMethod = "rank_average"
+    model_configs: list[dict[str, Any]] = field(default_factory=list)
+    weights: list[float] = field(default_factory=list)
+    stacking_alpha: float = 1.0
 
 
 class MultiModelEnsemble:
-    """多模型融合器
+    """多模型集成预测器。"""
 
-    支持三种方法:
-    - rank_average: 截面排名平均（最稳健）
-    - weighted_average: 加权平均
-    - stacking: Ridge 堆叠
-    """
+    def __init__(self, config: EnsembleConfig) -> None:
+        self._config = config
+        self._selectors: list[Any] = []
+        self._stacking_model: Any = None
 
-    def __init__(self, config: EnsembleConfig | None = None):
-        self._config = config or EnsembleConfig()
-        self._stacking_model = None
+    # --- 公开接口 ---
 
-    def combine(
-        self,
-        predictions: dict[str, pd.Series],
-        symbols: list[str] | None = None,
-    ) -> pd.Series:
-        """融合多模型预测。
+    def fit(
+        self, panel: pd.DataFrame, label_col: str = "fwd_return_rank",
+    ) -> dict[str, Any]:
+        """训练所有子模型并返回汇总 WF 结果。
 
-        Args:
-            predictions: {model_name: pd.Series(symbol -> score)}
+        每个子模型独立做 Walk-Forward 训练，集成层汇总 OOS 预测。
         """
-        if not predictions:
-            return pd.Series(dtype=float)
+        from aipha.models.ml_stock_selector import (
+            MLSelectorConfig,
+            MLStockSelector,
+        )
 
-        df = pd.DataFrame(predictions)
-        if symbols:
-            df = df.reindex(symbols)
+        cfg = self._config
+        self._selectors.clear()
+        all_summaries: list[dict[str, Any]] = []
 
-        method = self._config.method
+        for i, mcfg in enumerate(cfg.model_configs):
+            sel_cfg = MLSelectorConfig(**mcfg)
+            selector = MLStockSelector(sel_cfg)
+            logger.info(
+                "Ensemble fit sub-model %d/%d: %s",
+                i + 1, len(cfg.model_configs), sel_cfg.model_type,
+            )
+            oos_df = selector.walk_forward_train(panel)
+            summary = selector.get_wf_summary()
+            summary["sub_model_idx"] = i
+            summary["sub_model_type"] = sel_cfg.model_type
+            all_summaries.append(summary)
+            self._selectors.append(selector)
 
-        if method == "rank_average":
-            return self._rank_average(df)
-        elif method == "weighted_average":
-            return self._weighted_average(df)
-        elif method == "stacking":
-            return self._stacking_predict(df)
+        # 合成集成汇总
+        ensemble_summary: dict[str, Any] = {
+            "n_sub_models": len(self._selectors),
+            "method": cfg.method,
+            "sub_summaries": all_summaries,
+        }
+        if all_summaries:
+            srs = [s.get("overall_oos_ic", 0) for s in all_summaries]
+            ensemble_summary["mean_sub_oos_ic"] = float(np.nanmean(srs))
+        return ensemble_summary
+
+    def predict(self, df: pd.DataFrame) -> pd.Series:
+        """集成预测：返回 symbol → score。
+
+        根据 config.method 选择合成方式。
+        """
+        if not self._selectors:
+            raise RuntimeError("No models fitted. Call fit() first.")
+
+        preds: list[np.ndarray] = []
+        for sel in self._selectors:
+            scores = sel.predict(df)
+            preds.append(scores.values)
+
+        cfg = self._config
+        if cfg.method == "rank_average":
+            combined = self._rank_average(preds)
+        elif cfg.method == "weighted_average":
+            combined = self._weighted_average(preds)
+        elif cfg.method == "stacking":
+            X_stack = np.column_stack(preds)
+            if self._stacking_model is None:
+                combined = self._rank_average(preds)
+            else:
+                combined = self._stacking_model.predict(X_stack)
         else:
-            return self._rank_average(df)
+            combined = self._rank_average(preds)
 
-    def _rank_average(self, df: pd.DataFrame) -> pd.Series:
-        """截面排名平均 — 最稳健方法。"""
-        ranked = df.rank(pct=True)
-        return ranked.mean(axis=1).rename("ensemble_score")
+        idx = self._selectors[0].predict(df).index
+        return pd.Series(combined, index=idx, name="ensemble_score")
 
-    def _weighted_average(self, df: pd.DataFrame) -> pd.Series:
-        """加权平均。"""
-        weights = self._config.weights
-        if not weights:
-            return df.mean(axis=1).rename("ensemble_score")
-        w = np.array([weights.get(col, 1.0) for col in df.columns])
-        w = w / w.sum()
-        return (df * w).sum(axis=1).rename("ensemble_score")
+    def save(self, path: Path) -> None:
+        """保存所有子模型。"""
+        import joblib
 
-    def _stacking_predict(self, df: pd.DataFrame) -> pd.Series:
-        """Stacking 预测（需要先 fit_stacking）。"""
-        if self._stacking_model is not None:
-            from sklearn.linear_model import Ridge
-            preds = self._stacking_model.predict(df.fillna(0).values)
-            return pd.Series(preds, index=df.index, name="ensemble_score")
-        # 降级到 rank_average
-        return self._rank_average(df)
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        for i, sel in enumerate(self._selectors):
+            sub_dir = path / f"sub_{i}"
+            sel.save(sub_dir)
+        joblib.dump(
+            {
+                "config": self._config,
+                "stacking_model": self._stacking_model,
+            },
+            path / "ensemble_meta.pkl",
+        )
+        logger.info("Saved ensemble (%d sub-models) to %s", len(self._selectors), path)
 
-    def fit_stacking(
-        self,
-        oos_predictions: dict[str, pd.Series],
-        labels: pd.Series,
+    def load(self, path: Path) -> None:
+        """加载所有子模型。"""
+        import joblib
+        from aipha.models.ml_stock_selector import (
+            MLSelectorConfig,
+            MLStockSelector,
+        )
+
+        path = Path(path)
+        meta = joblib.load(path / "ensemble_meta.pkl")
+        self._config = meta["config"]
+        self._stacking_model = meta.get("stacking_model")
+        self._selectors.clear()
+        sub_dirs = sorted(path.glob("sub_*"))
+        for sd in sub_dirs:
+            sel = MLStockSelector(MLSelectorConfig())
+            sel.load(sd)
+            self._selectors.append(sel)
+        logger.info("Loaded ensemble (%d sub-models) from %s", len(self._selectors), path)
+
+    # --- 内部方法 ---
+
+    def _rank_average(self, preds: list[np.ndarray]) -> np.ndarray:
+        """截面 rank 平均：最稳健的集成方法。"""
+        from scipy.stats import rankdata
+
+        n = len(preds[0])
+        rank_sum = np.zeros(n)
+        for p in preds:
+            rank_sum += rankdata(p, method="average")
+        return rank_sum / len(preds)
+
+    def _weighted_average(self, preds: list[np.ndarray]) -> np.ndarray:
+        """加权平均（需预测量纲一致）。"""
+        cfg = self._config
+        weights = cfg.weights
+        if len(weights) != len(preds):
+            weights = [1.0 / len(preds)] * len(preds)
+        total_w = sum(weights)
+        result = np.zeros(len(preds[0]))
+        for w, p in zip(weights, preds):
+            result += (w / total_w) * p
+        return result
+
+    def _fit_stacking(
+        self, oos_preds: list[np.ndarray], y: np.ndarray,
     ) -> None:
-        """训练 Stacking meta-learner (Ridge)。"""
+        """训练 stacking 二层模型（Ridge 回归）。"""
         from sklearn.linear_model import Ridge
 
-        df = pd.DataFrame(oos_predictions)
-        common = df.dropna().index.intersection(labels.dropna().index)
-        X = df.loc[common].values
-        y = labels.loc[common].values
-
-        self._stacking_model = Ridge(alpha=1.0)
-        self._stacking_model.fit(X, y)
-        logger.info("Stacking meta-learner 训练完成: %d 样本, %d 模型", len(common), X.shape[1])
-
-    def get_top_n(
-        self,
-        predictions: dict[str, pd.Series],
-        n: int = 30,
-        ascending: bool = False,
-    ) -> list[str]:
-        """返回排名前 N 的股票。"""
-        scores = self.combine(predictions)
-        return scores.sort_values(ascending=ascending).head(n).index.tolist()
+        X = np.column_stack(oos_preds)
+        model = Ridge(alpha=self._config.stacking_alpha)
+        model.fit(X, y)
+        self._stacking_model = model
+        logger.info(
+            "Stacking model fitted: %d features, alpha=%.2f",
+            X.shape[1], self._config.stacking_alpha,
+        )

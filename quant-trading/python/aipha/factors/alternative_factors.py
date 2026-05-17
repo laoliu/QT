@@ -311,10 +311,11 @@ def merge_alternative_factors(
     flow_factors: Optional[pd.DataFrame] = None,
     analyst_factors: Optional[pd.DataFrame] = None,
     margin_factors: Optional[pd.DataFrame] = None,
+    northbound_factors: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """合并所有替代因子到主数据表。
 
-    将 chips/flow/analyst 因子 left join 到 prices_df。
+    将 chips/flow/analyst/margin/northbound 因子 left join 到 prices_df。
     同时填充需要 close 价格的因子 (price_vs_cost, target_premium)。
     """
     result = prices_df.copy()
@@ -371,6 +372,16 @@ def merge_alternative_factors(
         logger.info(
             "合并融资融券因子: %d 列",
             len(margin_factors.columns) - 2,
+        )
+
+    if northbound_factors is not None and not northbound_factors.empty:
+        result = result.merge(
+            northbound_factors, on=["symbol", "datetime"], how="left",
+        )
+        merged_count += 1
+        logger.info(
+            "合并北向因子: %d 列",
+            len(northbound_factors.columns) - 2,
         )
 
     logger.info("替代因子合并完成: %d 数据源, 总行数 %d", merged_count, len(result))

@@ -28,6 +28,7 @@ from aipha.utils.metrics import (
     compute_sharpe_ratio as _compute_sharpe,
     compute_max_drawdown as _compute_mdd,
 )
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def yearly_breakdown(
     risk_free_rate: float = 0.02,
     bull_threshold: float = 0.10,
     bear_threshold: float = -0.10,
-    trading_days_per_year: int = 252,
+    trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> list[YearlyMetrics]:
     """将 NAV 序列按自然年拆解，返回逐年指标。
 

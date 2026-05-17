@@ -1,107 +1,165 @@
-"""基准收益注册表 — 快速获取常用宽基指数收益序列"""
+"""
+基准注册表
+
+统一管理回测/评估所用的基准（沪深300、中证500、中证1000、等权 CB 等）。
+所有策略比较必须通过此注册表选取基准，禁止在代码中硬编码基准代码。
+
+使用示例：
+    registry = get_default_registry()
+    info = registry.get("hs300")        # {'name': 'hs300', 'ts_code': '399300.SZ', ...}
+    returns = registry.get_returns("hs300", "2022-01-01", "2024-12-31")
+"""
+
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Callable, Optional
+from typing import Optional
 
-import numpy as np
+import pandas as pd
 
-logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# 预置基准配置
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BENCHMARKS: list[dict] = [
+    {
+        "name": "hs300",
+        "ts_code": "399300.SZ",
+        "description": "沪深300指数",
+        "asset_type": "index",
+    },
+    {
+        "name": "csi500",
+        "ts_code": "000905.SH",
+        "description": "中证500指数",
+        "asset_type": "index",
+    },
+    {
+        "name": "csi1000",
+        "ts_code": "000852.SH",
+        "description": "中证1000指数",
+        "asset_type": "index",
+    },
+    {
+        "name": "equal_weight_cb",
+        "ts_code": None,
+        "description": "可转债等权指数（内部计算）",
+        "asset_type": "cb_custom",
+    },
+]
 
 
 @dataclass
 class BenchmarkInfo:
+    """单个基准的元信息"""
+
     name: str
-    code: str
-    description: str = ""
-    provider: Optional[Callable[[str, date, date], dict[date, float]]] = field(default=None, repr=False)
+    ts_code: Optional[str]
+    description: str
+    asset_type: str   # "index" / "etf" / "cb_custom"
+    extra: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "ts_code": self.ts_code,
+            "description": self.description,
+            "asset_type": self.asset_type,
+        }
 
 
 class BenchmarkRegistry:
-    _benchmarks: dict[str, BenchmarkInfo] = {}
+    """基准注册表：注册、查询、获取收益率序列"""
 
-    @classmethod
-    def register(cls, key: str, info: BenchmarkInfo):
-        cls._benchmarks[key] = info
+    def __init__(self) -> None:
+        self._store: dict[str, BenchmarkInfo] = {}
 
-    @classmethod
-    def list(cls) -> list[str]:
-        return list(cls._benchmarks.keys())
+    def register(
+        self,
+        name: str,
+        ts_code: Optional[str],
+        description: str = "",
+        asset_type: str = "index",
+        extra: Optional[dict] = None,
+    ) -> None:
+        """注册一个基准"""
+        if not name:
+            raise ValueError("name must not be empty")
+        self._store[name] = BenchmarkInfo(
+            name=name,
+            ts_code=ts_code,
+            description=description,
+            asset_type=asset_type,
+            extra=extra or {},
+        )
 
-    @classmethod
-    def get_info(cls, key: str) -> BenchmarkInfo:
-        if key not in cls._benchmarks:
-            raise KeyError(f"未注册的基准: {key}, 可用: {cls.list()}")
-        return cls._benchmarks[key]
+    def get(self, name: str) -> BenchmarkInfo:
+        """查询基准元信息，不存在则抛出 KeyError"""
+        if name not in self._store:
+            available = list(self._store.keys())
+            raise KeyError(f"Benchmark '{name}' not found. Available: {available}")
+        return self._store[name]
 
-    @classmethod
-    def get_returns(cls, key: str, start: date, end: date) -> dict[date, float]:
-        info = cls.get_info(key)
-        if info.provider is None:
-            raise RuntimeError(f"基准 {key} 未设置数据源")
-        return info.provider(info.code, start, end)
+    def list_all(self) -> list[BenchmarkInfo]:
+        """列出所有已注册基准"""
+        return list(self._store.values())
 
+    def get_returns(
+        self,
+        name: str,
+        start_date: str,
+        end_date: str,
+        adjust: str = "qfq",
+    ) -> pd.Series:
+        """获取基准的日收益率序列（通过 TuShareGateway 拉取）
 
-def _make_equal_weight_benchmark(code: str, start: date, end: date) -> dict[date, float]:
-    """等权基准: 每日收益 = 0, NAV 恒为 1"""
-    from datetime import timedelta
-    nav = {}
-    cur = start
-    while cur <= end:
-        if cur.weekday() < 5:
-            nav[cur] = 1.0
-        cur += timedelta(days=1)
-    return nav
+        Returns:
+            pd.Series，index 为交易日期（str），values 为日对数收益率
+        """
+        info = self.get(name)
 
+        if info.asset_type == "cb_custom":
+            # CB 等权指数由调用方注入，此处返回空 Series 占位
+            return pd.Series(dtype=float, name=name)
 
-def _make_tushare_provider(src: str = "tushare"):
-    """工厂: 返回基于数据源的基准提供器"""
-    def provider(code: str, start: date, end: date) -> dict[date, float]:
-        try:
-            import tushare as ts
-            pro = ts.pro_api()
-            df = pro.index_daily(
-                ts_code=code,
-                start_date=start.strftime("%Y%m%d"),
-                end_date=end.strftime("%Y%m%d"),
-                fields="trade_date,close",
-            )
-            if df is None or df.empty:
-                logger.warning("TuShare 未获取到 %s 数据, 回退至等权", code)
-                return _make_equal_weight_benchmark(code, start, end)
-            df = df.sort_values("trade_date")
-            nav = {}
-            for _, row in df.iterrows():
-                d = date(int(row["trade_date"][:4]), int(row["trade_date"][4:6]), int(row["trade_date"][6:8]))
-                nav[d] = float(row["close"])
-            # 归一化
-            first = nav[min(nav)]
-            return {d: v / first for d, v in nav.items()}
-        except Exception as e:
-            logger.warning("获取基准 %s 失败: %s, 回退至等权", code, e)
-            return _make_equal_weight_benchmark(code, start, end)
-    return provider
+        if info.ts_code is None:
+            raise ValueError(f"Benchmark '{name}' has no ts_code, cannot fetch returns")
 
+        from aipha.data.tushare_gateway import get_tushare_gateway
 
-# 预注册常用基准
-_default_benchmarks = [
-    ("hs300", BenchmarkInfo("沪深300", "399300.SZ", "沪深300指数")),
-    ("csi500", BenchmarkInfo("中证500", "000905.SH", "中证500指数")),
-    ("csi1000", BenchmarkInfo("中证1000", "000852.SH", "中证1000指数")),
-    ("equal_weight_cb", BenchmarkInfo("等权基准", "", "等权基准(NAV=1)")),
-]
+        gw = get_tushare_gateway()
+        df = gw.pro.index_daily(
+            ts_code=info.ts_code,
+            start_date=start_date.replace("-", ""),
+            end_date=end_date.replace("-", ""),
+            fields="trade_date,close",
+        )
+        if df is None or df.empty:
+            return pd.Series(dtype=float, name=name)
 
+        df = df.sort_values("trade_date").reset_index(drop=True)
+        df["trade_date"] = df["trade_date"].str[:4] + "-" + df["trade_date"].str[4:6] + "-" + df["trade_date"].str[6:]
+        closes = df.set_index("trade_date")["close"]
+        log_returns = closes.pct_change().dropna()
+        log_returns.name = name
+        return log_returns
 
-def _register_defaults():
-    ts_provider = _make_tushare_provider()
-    for key, info in _default_benchmarks:
-        if key == "equal_weight_cb":
-            info.provider = _make_equal_weight_benchmark
-        else:
-            info.provider = ts_provider
-        BenchmarkRegistry.register(key, info)
+    def __contains__(self, name: str) -> bool:
+        return name in self._store
+
+    def __len__(self) -> int:
+        return len(self._store)
 
 
-_register_defaults()
+def get_default_registry() -> BenchmarkRegistry:
+    """返回预注册了四个标准基准的默认注册表"""
+    registry = BenchmarkRegistry()
+    for b in _DEFAULT_BENCHMARKS:
+        registry.register(
+            name=b["name"],
+            ts_code=b["ts_code"],
+            description=b["description"],
+            asset_type=b["asset_type"],
+        )
+    return registry

@@ -23,6 +23,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
 logger = logging.getLogger(__name__)
 
 
@@ -133,7 +135,7 @@ class MLModelSwitcher:
         std_r = float(np.std(arr, ddof=1))
         if std_r <= 0:
             return 0.0
-        return mean_r / std_r * (244 ** 0.5)
+        return mean_r / std_r * (TRADING_DAYS_PER_YEAR ** 0.5)
 
     def _check_transition(self, sr: float) -> None:
         """NORMAL 状态下检查是否触发切换。"""

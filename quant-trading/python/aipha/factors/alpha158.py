@@ -1,13 +1,25 @@
-"""Alpha158 因子库 — 基于 Qlib 的 158 个量价因子
+"""
+Alpha158 因子库
 
-统一接口批量计算，适配 ML 模型训练。
-参考: Microsoft Qlib Alpha158 Dataset
+"Alpha158" 是 Microsoft Qlib 定义的标准量价因子集名称，包含恰好 158 个
+基于 OHLCV 的技术因子（K线形态 + 价格相对 + 时序特征）。"158" 是该因子集
+的固定身份标识（如同 "Alpha101" 指 WorldQuant 101 Alphas），不是版本号，
+不会递增为 159/160。扩展因子应新建独立因子集（如 Qlib Alpha360）。
+
+统一接口支持全市场截面批量计算，适配 ML 模型训练。
+
+参考：
+- Microsoft Qlib Alpha158 Dataset (github.com/microsoft/qlib)
+- vnpy AlphaLab Alpha158 实现
+- Kakushadze, Z. (2016). "101 Formulaic Alphas" → 对应本项目 alpha101.py
 
 所有因子基于 OHLCV 数据，无需基本面字段。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -19,14 +31,25 @@ from aipha.factors.operators import (
     ts_min,
     ts_max,
     ts_sum,
+    ts_slope,
+    ts_rsquare,
+    ts_resi,
+    ts_quantile,
     ts_rank,
     ts_argmax,
     ts_argmin,
     ts_corr,
+    ts_log,
+    ts_abs,
+    ts_greater,
+    safe_div,
 )
 
+
+# Alpha158 标准窗口
 WINDOWS: list[int] = [5, 10, 20, 30, 60]
 
+# 因子元数据
 ALPHA158_CATEGORIES = {
     "candlestick": "K线形态特征",
     "price_relative": "价格相对特征",
@@ -50,6 +73,7 @@ ALPHA158_CATEGORIES = {
 
 @dataclass
 class Alpha158Config:
+    """Alpha158 计算配置。"""
     windows: list[int] = field(default_factory=lambda: [5, 10, 20, 30, 60])
     include_candlestick: bool = True
     include_price_relative: bool = True
@@ -57,15 +81,17 @@ class Alpha158Config:
     eps: float = 1e-12
 
 
-def _safe_div(a: pd.Series, b: pd.Series, eps: float = 1e-12) -> pd.Series:
-    return a / b.replace(0, eps)
-
-
 class Alpha158:
     """Alpha158 因子计算器。
 
-    输入: DataFrame 含 datetime, symbol, open, high, low, close, volume
-    输出: 原始列 + 158 个因子列
+    计算 Qlib 标准的 158 个量价因子，输入标准 OHLCV 面板数据。
+
+    用法::
+
+        calculator = Alpha158()
+        result_df = calculator.compute(df)  # df 含 datetime, symbol, open, high, low, close, volume
+
+    返回的 DataFrame 包含原始列 + 158 个因子列。
     """
 
     def __init__(self, config: Alpha158Config | None = None) -> None:
@@ -74,230 +100,296 @@ class Alpha158:
 
     @property
     def factor_names(self) -> list[str]:
+        """返回所有因子名称列表。"""
         if not self._factor_names:
             self._build_factor_names()
         return self._factor_names
 
     @property
     def factor_count(self) -> int:
+        """因子总数。"""
         return len(self.factor_names)
 
     def _build_factor_names(self) -> None:
+        """构建因子名称列表。"""
         names: list[str] = []
         cfg = self.config
+
         if cfg.include_candlestick:
-            names.extend(["kmid", "klen", "kmid2", "kup", "kup2", "klow", "klow2", "ksft", "ksft2"])
+            names.extend([
+                "kmid", "klen", "kmid_2", "kup", "kup_2",
+                "klow", "klow_2", "ksft", "ksft_2",
+            ])
+
         if cfg.include_price_relative:
             names.extend(["open_0", "high_0", "low_0", "vwap_0"])
+
         if cfg.include_time_series:
-            for category in ["roc", "ma", "std", "beta", "rsqr", "resi",
-                             "max", "min", "qtlu", "qtld", "rank", "rsv",
-                             "imax", "imin", "imxd", "corr", "cord",
-                             "cntp", "cntn", "cntd", "sump", "sumn",
-                             "sumd", "vma", "vstd", "wvma", "vsump",
-                             "vsumn", "vsumd"]:
-                for w in cfg.windows:
-                    names.append(f"{category}_{w}")
+            for w in cfg.windows:
+                names.append(f"roc_{w}")
+            for w in cfg.windows:
+                names.append(f"ma_{w}")
+            for w in cfg.windows:
+                names.append(f"std_{w}")
+            for w in cfg.windows:
+                names.append(f"beta_{w}")
+            for w in cfg.windows:
+                names.append(f"rsqr_{w}")
+            for w in cfg.windows:
+                names.append(f"resi_{w}")
+            for w in cfg.windows:
+                names.append(f"max_{w}")
+            for w in cfg.windows:
+                names.append(f"min_{w}")
+            for w in cfg.windows:
+                names.append(f"qtlu_{w}")
+            for w in cfg.windows:
+                names.append(f"qtld_{w}")
+            for w in cfg.windows:
+                names.append(f"rank_{w}")
+            for w in cfg.windows:
+                names.append(f"rsv_{w}")
+            for w in cfg.windows:
+                names.append(f"imax_{w}")
+            for w in cfg.windows:
+                names.append(f"imin_{w}")
+            for w in cfg.windows:
+                names.append(f"imxd_{w}")
+            for w in cfg.windows:
+                names.append(f"corr_{w}")
+            for w in cfg.windows:
+                names.append(f"cord_{w}")
+            for w in cfg.windows:
+                names.append(f"cntp_{w}")
+            for w in cfg.windows:
+                names.append(f"cntn_{w}")
+            for w in cfg.windows:
+                names.append(f"cntd_{w}")
+            for w in cfg.windows:
+                names.append(f"sump_{w}")
+            for w in cfg.windows:
+                names.append(f"sumn_{w}")
+            for w in cfg.windows:
+                names.append(f"sumd_{w}")
+            for w in cfg.windows:
+                names.append(f"vma_{w}")
+            for w in cfg.windows:
+                names.append(f"vstd_{w}")
+            for w in cfg.windows:
+                names.append(f"wvma_{w}")
+            for w in cfg.windows:
+                names.append(f"vsump_{w}")
+            for w in cfg.windows:
+                names.append(f"vsumn_{w}")
+            for w in cfg.windows:
+                names.append(f"vsumd_{w}")
+
         self._factor_names = names
 
     def compute(self, df: pd.DataFrame) -> pd.DataFrame:
-        """批量计算所有 Alpha158 因子。"""
-        if "symbol" in df.columns:
-            g = df.groupby("symbol", group_keys=False)
-        else:
-            g = None
+        """计算全部 Alpha158 因子。
 
+        Args:
+            df: 输入面板数据，需包含列：
+                - datetime: 日期
+                - symbol: 标的代码
+                - open, high, low, close, volume: OHLCV 数据
+                可选列：
+                - vwap: 成交均价（缺失时用 (high+low+close)/3 估算）
+
+        Returns:
+            添加了 158 个因子列的 DataFrame（保留原始列）。
+        """
         result = df.copy()
-        cfg = self.config
-        eps = cfg.eps
+        result = result.sort_values(["symbol", "datetime"]).reset_index(drop=True)
 
-        o = df["open"]
-        h = df["high"]
-        lo = df["low"]
-        c = df["close"]
-        v = df["volume"].astype(float)
+        grp = result["symbol"]
+        eps = self.config.eps
 
-        # ── K线形态 (9 factors) ──
-        if cfg.include_candlestick:
-            result["kmid"] = _safe_div(c - o, o, eps)
-            result["klen"] = _safe_div(h - lo, o, eps)
-            result["kmid2"] = _safe_div(c - o, h - lo + eps)
-            result["kup"] = _safe_div(h - np.maximum(o, c), o, eps)
-            result["kup2"] = _safe_div(h - np.maximum(o, c), h - lo + eps)
-            result["klow"] = _safe_div(np.minimum(o, c) - lo, o, eps)
-            result["klow2"] = _safe_div(np.minimum(o, c) - lo, h - lo + eps)
-            result["ksft"] = _safe_div(2 * c - h - lo, o, eps)
-            result["ksft2"] = _safe_div(2 * c - h - lo, h - lo + eps)
+        # 基础字段
+        o = result["open"]
+        h = result["high"]
+        lo = result["low"]
+        c = result["close"]
+        v = result["volume"].astype(float)
 
-        # ── 价格相对 (4 factors) ──
-        if cfg.include_price_relative:
-            result["open_0"] = _safe_div(o, c, eps) - 1.0
-            result["high_0"] = _safe_div(h, c, eps) - 1.0
-            result["low_0"] = _safe_div(lo, c, eps) - 1.0
-            vwap = (h + lo + c) / 3.0
-            result["vwap_0"] = _safe_div(vwap, c, eps) - 1.0
+        if "vwap" in result.columns:
+            vwap = result["vwap"]
+        else:
+            vwap = (h + lo + c) / 3
 
-        # ── 时序特征 (145 factors, 29 categories × 5 windows) ──
-        if cfg.include_time_series:
-            dt = df["datetime"] if "datetime" in df.columns else None
-            grp = df["symbol"] if "symbol" in df.columns else None
+        # 使用 dict 收集所有因子，最后一次性 concat，避免 DataFrame 碎片化
+        factors: dict[str, pd.Series] = {}
 
-            for w in cfg.windows:
-                # ROC: 变化率
-                delayed = c.groupby(grp).shift(w) if grp is not None else c.shift(w)
-                result[f"roc_{w}"] = _safe_div(c - delayed, delayed, eps)
+        # =====================================================================
+        # 1. K线形态特征 (9 个)
+        # =====================================================================
+        if self.config.include_candlestick:
+            factors["kmid"] = (c - o) / (o + eps)
+            factors["klen"] = (h - lo) / (o + eps)
+            hl_range = h - lo + eps
+            factors["kmid_2"] = (c - o) / hl_range
+            max_oc = ts_greater(o, c)
+            min_oc = ts_less_series(o, c)
+            factors["kup"] = (h - max_oc) / (o + eps)
+            factors["kup_2"] = (h - max_oc) / hl_range
+            factors["klow"] = (min_oc - lo) / (o + eps)
+            factors["klow_2"] = (min_oc - lo) / hl_range
+            factors["ksft"] = (c * 2 - h - lo) / (o + eps)
+            factors["ksft_2"] = (c * 2 - h - lo) / hl_range
 
-                # MA: 均线偏离
-                ma = c.groupby(grp).rolling(w).mean().droplevel(0) if grp is not None else c.rolling(w).mean()
-                result[f"ma_{w}"] = _safe_div(ma, c, eps) - 1.0
+        # =====================================================================
+        # 2. 价格相对特征 (4 个)
+        # =====================================================================
+        if self.config.include_price_relative:
+            factors["open_0"] = o / (c + eps)
+            factors["high_0"] = h / (c + eps)
+            factors["low_0"] = lo / (c + eps)
+            factors["vwap_0"] = vwap / (c + eps)
 
-                # STD: 波动率
-                std = c.groupby(grp).rolling(w).std().droplevel(0) if grp is not None else c.rolling(w).std()
-                result[f"std_{w}"] = _safe_div(std, c, eps)
+        # =====================================================================
+        # 3. 时序特征 (29 类 × 5 窗口 = 145 个)
+        # =====================================================================
+        if self.config.include_time_series:
+            for w in self.config.windows:
+                # 价格变化率
+                factors[f"roc_{w}"] = ts_delay(c, w, grp) / (c + eps)
 
-                # Beta: 趋势斜率 (线性回归斜率 / close)
-                result[f"beta_{w}"] = self._rolling_slope(c, w, grp) / (c + eps)
+                # 均线偏离
+                factors[f"ma_{w}"] = ts_mean(c, w, grp) / (c + eps)
 
-                # R²: 拟合优度
-                result[f"rsqr_{w}"] = self._rolling_rsquare(c, w, grp)
+                # 波动率
+                factors[f"std_{w}"] = ts_std(c, w, grp) / (c + eps)
 
-                # Resi: 回归残差
-                result[f"resi_{w}"] = self._rolling_residual(c, w, grp) / (c + eps)
+                # 趋势斜率
+                factors[f"beta_{w}"] = ts_slope(c, w, grp) / (c + eps)
 
-                # Max/Min: 极值偏离
-                rmax = c.groupby(grp).rolling(w).max().droplevel(0) if grp is not None else c.rolling(w).max()
-                rmin = c.groupby(grp).rolling(w).min().droplevel(0) if grp is not None else c.rolling(w).min()
-                result[f"max_{w}"] = _safe_div(rmax, c, eps) - 1.0
-                result[f"min_{w}"] = _safe_div(rmin, c, eps) - 1.0
+                # 拟合优度
+                factors[f"rsqr_{w}"] = ts_rsquare(c, w, grp)
 
-                # Quantile: 分位数
-                result[f"qtlu_{w}"] = self._rolling_quantile(c, w, 0.8, grp) / (c + eps) - 1.0
-                result[f"qtld_{w}"] = self._rolling_quantile(c, w, 0.2, grp) / (c + eps) - 1.0
+                # 回归残差
+                factors[f"resi_{w}"] = ts_resi(c, w, grp) / (c + eps)
 
-                # Rank: 时序排名
-                result[f"rank_{w}"] = self._rolling_rank(c, w, grp)
+                # 最高价偏离
+                factors[f"max_{w}"] = ts_max(h, w, grp) / (c + eps)
 
-                # RSV: (close - min) / (max - min)
-                result[f"rsv_{w}"] = _safe_div(c - rmin, rmax - rmin, eps)
+                # 最低价偏离
+                factors[f"min_{w}"] = ts_min(lo, w, grp) / (c + eps)
 
-                # Argmax/Argmin: 极值位置
-                result[f"imax_{w}"] = self._rolling_argmax(c, w, grp) / w
-                result[f"imin_{w}"] = self._rolling_argmin(c, w, grp) / w
-                result[f"imxd_{w}"] = result[f"imax_{w}"] - result[f"imin_{w}"]
+                # 上分位数
+                factors[f"qtlu_{w}"] = ts_quantile(c, w, 0.8, grp) / (c + eps)
 
-                # Corr: 量价相关
-                result[f"corr_{w}"] = self._rolling_corr(c, np.log1p(v), w, grp)
-                result[f"cord_{w}"] = self._rolling_corr(
-                    _safe_div(c - delayed, delayed, eps), np.log1p(v), w, grp
-                )
+                # 下分位数
+                factors[f"qtld_{w}"] = ts_quantile(c, w, 0.2, grp) / (c + eps)
 
-                # 涨跌频率和幅度
-                ret = _safe_div(c - delayed.shift(-w + 1) if grp is None else c.groupby(grp).diff(), c.shift(1), eps)
-                pos = (ret > 0).astype(float)
-                neg = (ret < 0).astype(float)
+                # 时序排名
+                factors[f"rank_{w}"] = ts_rank(c, w, grp)
 
-                cntp = pos.groupby(grp).rolling(w).mean().droplevel(0) if grp is not None else pos.rolling(w).mean()
-                cntn = neg.groupby(grp).rolling(w).mean().droplevel(0) if grp is not None else neg.rolling(w).mean()
-                result[f"cntp_{w}"] = cntp
-                result[f"cntn_{w}"] = cntn
-                result[f"cntd_{w}"] = cntp - cntn
+                # RSV
+                min_low = ts_min(lo, w, grp)
+                max_high = ts_max(h, w, grp)
+                factors[f"rsv_{w}"] = (c - min_low) / (max_high - min_low + eps)
 
-                ret_pos = ret.clip(lower=0)
-                ret_neg = ret.clip(upper=0)
-                sump = ret_pos.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else ret_pos.rolling(w).sum()
-                sumn = ret_neg.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else ret_neg.rolling(w).sum()
-                result[f"sump_{w}"] = _safe_div(sump, c, eps)
-                result[f"sumn_{w}"] = _safe_div(sumn, c, eps)
-                result[f"sumd_{w}"] = result[f"sump_{w}"] - result[f"sumn_{w}"]
+                # 极值位置
+                factors[f"imax_{w}"] = ts_argmax(h, w, grp) / w
+                factors[f"imin_{w}"] = ts_argmin(lo, w, grp) / w
+                factors[f"imxd_{w}"] = (
+                    ts_argmax(h, w, grp) - ts_argmin(lo, w, grp)
+                ) / w
 
-                # 成交量特征
-                vma = v.groupby(grp).rolling(w).mean().droplevel(0) if grp is not None else v.rolling(w).mean()
-                vstd = v.groupby(grp).rolling(w).std().droplevel(0) if grp is not None else v.rolling(w).std()
-                result[f"vma_{w}"] = _safe_div(vma, v + 1, eps)
-                result[f"vstd_{w}"] = _safe_div(vstd, v + 1, eps)
+                # 量价相关
+                factors[f"corr_{w}"] = ts_corr(c, ts_log(v + 1), w, grp)
 
-                # 加权成交量
-                wv = np.abs(ret) * v
-                wvma = wv.groupby(grp).rolling(w).mean().droplevel(0) if grp is not None else wv.rolling(w).mean()
-                result[f"wvma_{w}"] = _safe_div(wvma, v + 1, eps)
+                # 收益-量变化相关
+                ret = c / (ts_delay(c, 1, grp) + eps)
+                vol_chg = v / (ts_delay(v, 1, grp) + eps)
+                factors[f"cord_{w}"] = ts_corr(ret, ts_log(vol_chg + 1), w, grp)
 
-                # 成交量方向
-                v_pos = (v * pos)
-                v_neg = (v * neg)
-                vsump = v_pos.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else v_pos.rolling(w).sum()
-                vsumn = v_neg.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else v_neg.rolling(w).sum()
-                result[f"vsump_{w}"] = _safe_div(vsump, v.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else v.rolling(w).sum() + 1, eps)
-                result[f"vsumn_{w}"] = _safe_div(vsumn, v.groupby(grp).rolling(w).sum().droplevel(0) if grp is not None else v.rolling(w).sum() + 1, eps)
-                result[f"vsumd_{w}"] = result[f"vsump_{w}"] - result[f"vsumn_{w}"]
+                # 涨跌频率
+                close_delta = c - ts_delay(c, 1, grp)
+                up = (close_delta > 0).astype(float)
+                down = (close_delta < 0).astype(float)
+
+                cntp = ts_mean(up, w, grp)
+                cntn = ts_mean(down, w, grp)
+                factors[f"cntp_{w}"] = cntp
+                factors[f"cntn_{w}"] = cntn
+                factors[f"cntd_{w}"] = cntp - cntn
+
+                # 涨跌幅度
+                abs_delta = close_delta.abs()
+                up_delta = ts_greater(close_delta, 0.0)
+                down_delta = ts_greater(-close_delta, 0.0)
+                sum_abs = ts_sum(abs_delta, w, grp) + eps
+
+                sump = ts_sum(up_delta, w, grp) / sum_abs
+                sumn = ts_sum(down_delta, w, grp) / sum_abs
+                factors[f"sump_{w}"] = sump
+                factors[f"sumn_{w}"] = sumn
+                factors[f"sumd_{w}"] = sump - sumn
+
+                # 成交量结构
+                factors[f"vma_{w}"] = ts_mean(v, w, grp) / (v + eps)
+                factors[f"vstd_{w}"] = ts_std(v, w, grp) / (v + eps)
+
+                # 加权量波动
+                abs_ret = (c / (ts_delay(c, 1, grp) + eps) - 1).abs()
+                weighted_vol = abs_ret * v
+                wvma_mean = ts_mean(weighted_vol, w, grp) + eps
+                wvma_std = ts_std(weighted_vol, w, grp)
+                factors[f"wvma_{w}"] = wvma_std / wvma_mean
+
+                # 量的涨跌幅度
+                vol_delta = v - ts_delay(v, 1, grp)
+                abs_vol_delta = vol_delta.abs()
+                sum_abs_vol = ts_sum(abs_vol_delta, w, grp) + eps
+
+                vsump = ts_sum(ts_greater(vol_delta, 0.0), w, grp) / sum_abs_vol
+                vsumn = ts_sum(ts_greater(-vol_delta, 0.0), w, grp) / sum_abs_vol
+                factors[f"vsump_{w}"] = vsump
+                factors[f"vsumn_{w}"] = vsumn
+                factors[f"vsumd_{w}"] = vsump - vsumn
+
+        # 将因子字典转为 DataFrame 一次性 concat，避免逐列赋值的碎片化警告
+        if factors:
+            factors_df = pd.DataFrame(factors, index=result.index)
+            result = pd.concat([result, factors_df], axis=1, copy=False)
+            del factors, factors_df
 
         return result
 
-    # ── 辅助函数 ──
 
-    def _rolling_slope(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        """窗口线性回归斜率"""
-        def slope_fn(x):
-            n = len(x)
-            if n < 2:
-                return np.nan
-            t = np.arange(n, dtype=float)
-            return np.polyfit(t, x, 1)[0]
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(slope_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(slope_fn, raw=True)
+def ts_less_series(s1: pd.Series, s2: pd.Series) -> pd.Series:
+    """逐元素取较小值。"""
+    return pd.concat([s1, s2], axis=1).min(axis=1)
 
-    def _rolling_rsquare(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        def rsq_fn(x):
-            n = len(x)
-            if n < 2:
-                return np.nan
-            t = np.arange(n, dtype=float)
-            corr = np.corrcoef(t, x)[0, 1]
-            return corr ** 2 if np.isfinite(corr) else np.nan
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(rsq_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(rsq_fn, raw=True)
 
-    def _rolling_residual(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        def resi_fn(x):
-            n = len(x)
-            if n < 2:
-                return np.nan
-            t = np.arange(n, dtype=float)
-            coeffs = np.polyfit(t, x, 1)
-            pred = coeffs[0] * (n - 1) + coeffs[1]
-            return x[-1] - pred
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(resi_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(resi_fn, raw=True)
+def compute_alpha158(
+    df: pd.DataFrame,
+    windows: list[int] | None = None,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """便捷函数：计算 Alpha158 因子。
 
-    def _rolling_quantile(self, s: pd.Series, w: int, q: float, grp: pd.Series | None) -> pd.Series:
-        if grp is not None:
-            return s.groupby(grp).rolling(w).quantile(q).droplevel(0)
-        return s.rolling(w).quantile(q)
+    Args:
+        df: 面板数据（需包含 datetime, symbol, open, high, low, close, volume）
+        windows: 滚动窗口列表，默认 [5, 10, 20, 30, 60]
+        **kwargs: 传递给 Alpha158Config
 
-    def _rolling_rank(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        def rank_fn(x):
-            return (x[-1] > x).sum() / max(len(x) - 1, 1)
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(rank_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(rank_fn, raw=True)
+    Returns:
+        添加了 158 个因子列的 DataFrame
+    """
+    config = Alpha158Config(**kwargs)
+    if windows:
+        config.windows = windows
+    calculator = Alpha158(config)
+    return calculator.compute(df)
 
-    def _rolling_argmax(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        def argmax_fn(x):
-            return float(np.argmax(x))
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(argmax_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(argmax_fn, raw=True)
 
-    def _rolling_argmin(self, s: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        def argmin_fn(x):
-            return float(np.argmin(x))
-        if grp is not None:
-            return s.groupby(grp).rolling(w).apply(argmin_fn, raw=True).droplevel(0)
-        return s.rolling(w).apply(argmin_fn, raw=True)
-
-    def _rolling_corr(self, a: pd.Series, b: pd.Series, w: int, grp: pd.Series | None) -> pd.Series:
-        if grp is not None:
-            return a.groupby(grp).rolling(w).corr(b).droplevel(0)
-        return a.rolling(w).corr(b)
+def get_alpha158_factor_names(windows: list[int] | None = None) -> list[str]:
+    """返回所有 Alpha158 因子名称。"""
+    config = Alpha158Config()
+    if windows:
+        config.windows = windows
+    calc = Alpha158(config)
+    return calc.factor_names

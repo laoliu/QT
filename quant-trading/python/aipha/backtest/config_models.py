@@ -102,6 +102,8 @@ class CostConfig:
         slippage_bps: 滑点（基点），当 slippage_model="fixed" 时使用
         slippage_model: 滑点模型名称 ("fixed" | "linear_impact" | "square_root_impact")
         slippage_params: 非 fixed 模型的额外参数
+        t_plus_n_discount: T+1 信号衰减折扣系数 (0.85-1.0)。A 股日频策略 SR 须乘此值。
+            CB/ETF T+0 策略设为 1.0（无折扣）。
     """
 
     commission_rate: float = 8.54e-05  # §13.1 → MarketRulesCNEquity 万0.854
@@ -112,6 +114,7 @@ class CostConfig:
     slippage_bps: float = 10.0  # A 股默认 10bps（大盘最低合理值）
     slippage_model: str = "fixed"  # "fixed" | "linear_impact" | "square_root_impact"
     slippage_params: dict[str, Any] = field(default_factory=dict)
+    t_plus_n_discount: float = 1.0  # 默认无折扣; A 股日频设 0.90（原则D [CN]）
 
 
 @dataclass
@@ -121,10 +124,14 @@ class FillModelConfig:
     Attributes:
         name: 成交模型名称 (next_bar_open, next_bar_close, vwap, 等)
         volume_constraint: 成交量参与约束配置（可选）
+        retry_unfilled_bars: 未成交订单最大重试天数（0=禁用，即未成交立即取消）
     """
 
     name: str = "next_bar_open"
     volume_constraint: dict[str, Any] | None = None  # {max_participation_rate, lot_size}
+    retry_unfilled_bars: int = 0  # 未成交重试天数（0=禁用）
+    retry_sell_always: bool = True  # 卖单无条件重试（不受价格偏离限制）
+    retry_max_chase_pct: float = 0.0  # 买单追涨上限（0=不限制）
 
 
 @dataclass
@@ -156,7 +163,7 @@ class RiskConfig:
 
     enabled: bool = True
     max_position_weight: float = 0.10  # CB k≤10 策略需调大（如 0.25）
-    max_drawdown: float = 0.20  # CB 集中策略需调大（如 0.50），否则触发反馈循环
+    max_drawdown: float = 1.0  # §4.3.2: 默认禁用渐进减仓（死亡螺旋风险）
     drawdown_scale_factor_floor: float = 0.0  # 线性减仓最小缩放比例（CB 轮转策略建议 0.3~0.5）
     drawdown_allow_rotation: bool = False  # 有持仓时允许跳过减仓区间缩减（CB 轮转策略推荐开启）
     drawdown_peak_reset_days: int = 0  # 全仓现金 N 天后重置 peak_nav（0 = 禁用，A股建议 20~30）
@@ -191,6 +198,9 @@ class RiskConfig:
     force_redeem_enabled: bool = False
     force_redeem_max_weight: float = 0.30
     force_redeem_cb_value_threshold: float = 125.0
+    # 价格偏离防护 (§14.1 Fat-finger 铁律: 价格偏离 MA5 ≥ 20% 阻止)
+    price_deviation_enabled: bool = False
+    price_deviation_max_pct: float = 0.20
     # 行业中性约束
     industry_neutral_enabled: bool = False
     industry_max_deviation: float = 0.05
@@ -202,6 +212,60 @@ class RiskConfig:
     degradation_position_scale_degraded: float = 0.0
     # 额外配置（position_sizing 等扩展字段，通过 YAML 透传）
     extra: dict = field(default_factory=dict)
+
+    def validate_drawdown_safety(self, top_k: int | None = None) -> None:
+        """§4.3.2 DrawdownLimit 安全验证.
+
+        当 max_drawdown < 1.0（启用渐进减仓）时，检查防护参数组合，
+        避免 CB 集中持仓策略触发死亡螺旋（AR 从 40% 暴跌至 2.6%）。
+        详见 docs/known_limitations.md §13。
+
+        缺少防护参数时自动注入安全默认值并 log warning，
+        保证存量配置向后兼容。
+
+        Args:
+            top_k: 策略持仓数量上限。若 ≤10 且 max_drawdown<0.40,
+                额外触发死亡螺旋高危警告 (§4.3.2 规则 9, R163 强化)。
+
+        此方法由 parse_config() / config_runner 在加载 YAML 后调用。
+        """
+        import logging as _log
+
+        _logger = _log.getLogger(__name__)
+
+        if self.max_drawdown >= 1.0:
+            return
+
+        # R163: 集中持仓 + 低 max_drawdown 死亡螺旋高危警告
+        if top_k is not None and top_k <= 10 and self.max_drawdown < 0.40:
+            _logger.warning(
+                "§4.3.2 规则 9 [死亡螺旋高危]: top_k=%d <= 10 且 "
+                "max_drawdown=%.2f < 0.40, 此组合在历史回测中导致 "
+                "AR 从 40%% 暴跌至 2.6%% (CB new_small 案例, see "
+                "docs/known_limitations.md §13). 强烈建议: "
+                "(a) max_drawdown=1.0 改用 mdd_alert_threshold 告警, 或 "
+                "(b) 扩大 top_k > 10 分散持仓.",
+                top_k, self.max_drawdown,
+            )
+
+        patched: list[str] = []
+
+        if not self.drawdown_allow_rotation:
+            self.drawdown_allow_rotation = True
+            patched.append("drawdown_allow_rotation → True")
+        if self.drawdown_scale_factor_floor < 0.5:
+            self.drawdown_scale_factor_floor = 0.5
+            patched.append("drawdown_scale_factor_floor → 0.5")
+        if self.drawdown_peak_reset_days < 60:
+            self.drawdown_peak_reset_days = 60
+            patched.append("drawdown_peak_reset_days → 60")
+
+        if patched:
+            _logger.warning(
+                "§4.3.2: max_drawdown=%.2f < 1.0, 自动注入防护参数: %s",
+                self.max_drawdown,
+                "; ".join(patched),
+            )
 
 
 @dataclass
@@ -218,22 +282,6 @@ class PortfolioConfig:
 
     method: str = "equal"
     params: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TickBacktestConfig:
-    """Tick 回测专用配置
-
-    当 data.frequency = "tick" 时使用。
-    """
-
-    enabled: bool = False
-    tick_source: str = "auto"
-    tick_cache_dir: str | None = None
-    bridge_url: str = "http://127.0.0.1:58088"
-    fill_mode: str = "bbo"
-    aggregate_interval: int = 60
-    feature_buffer_size: int = 256
 
 
 @dataclass
@@ -263,7 +311,6 @@ class BacktestRunConfig:
     fill_model: FillModelConfig = field(default_factory=FillModelConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
-    tick: TickBacktestConfig = field(default_factory=TickBacktestConfig)
     description: str = ""
     initial_capital: float = 1_000_000.0
     lot_size: int = 100  # §13.1 → MarketRulesCNEquity
@@ -271,6 +318,8 @@ class BacktestRunConfig:
     random_seed: int | None = None
     output_dir: str = "output"
     quality_gates_path: str | None = None
+    missing_quote_writeoff_enabled: bool = False
+    missing_quote_writeoff_days: int = 20
 
 
 @dataclass

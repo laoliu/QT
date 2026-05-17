@@ -1,114 +1,112 @@
-"""可转债价值动量复合策略"""
+"""可转债转股价值动量策略
+
+Alpha 来源：
+1. 原 cb_momentum（价格动量 -8.78%）使用转债价格变化 → 受债底干扰
+   低价区转债价格受债性抑制，涨幅受限，"假动量"多
+2. 转股价值（cb_value）动量更纯粹反映正股驱动力
+3. cb_value 上升 = 正股走强 → 转债跟涨概率大
+4. 叠加低溢价率过滤确保转债能有效跟随正股
+
+策略逻辑：
+1. 维护每只转债的 cb_value 历史窗口（deque）
+2. 计算 lookback_days 期间 cb_value 变化率
+3. 筛选溢价率 < max_premium（确保股性充足）
+4. 按 cb_value 动量降序排列，持有 top_k 只
+5. 需要 warmup（lookback_days 个 bar 后才交易）
+"""
+
 from __future__ import annotations
 
 import logging
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from aipha.strategy.base import StrategyContext
 from aipha.strategy.cb_rotation_base import (
     CBRotationConfig,
     CBRotationStrategy,
     CandidateInfo,
 )
+from aipha.strategy.registry import StrategyRegistry
 
 if TYPE_CHECKING:
     from aipha.domain.models import Bar
-    from aipha.strategy.base import StrategyContext
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CBValueMomentumConfig(CBRotationConfig):
+    """转股价值动量策略配置"""
+
     top_k: int = 10
     lookback_days: int = 20
+
+    # 溢价率上限（确保转债有股性，能跟随正股）
     max_premium: float = 30.0
     max_price: float = 150.0
     stop_loss_pct: float = 0.10
-    rebalance_days: int = 5
-    min_turnover: float = 20.0
-    value_weight: float = 0.5
-    momentum_weight: float = 0.5
 
 
+@StrategyRegistry().register("cb_value_momentum")
 class CBValueMomentumStrategy(CBRotationStrategy):
-    """价值动量复合 — 低溢价率 (价值) + 近期涨幅 (动量) 加权"""
+    """转股价值动量策略
+
+    追踪正股驱动最强的转债：cb_value 上涨最快 + 低溢价率。
+    比纯价格动量更纯粹，避免"低价债假动量"问题。
+    """
+
     name = "cb_value_momentum"
 
-    def __init__(self, config: CBValueMomentumConfig | None = None, **kwargs: object):
-        super().__init__(config=config or CBValueMomentumConfig(), **kwargs)
-        self._price_history: dict[str, deque[float]] = defaultdict(
-            lambda: deque(maxlen=self.config.lookback_days + 5)
-        )
-        self._cb_value_history: dict[str, deque[float]] = defaultdict(
-            lambda: deque(maxlen=self.config.lookback_days + 5)
-        )
+    def __init__(self, config: CBValueMomentumConfig | None = None, **kwargs):
+        super().__init__()
+        self._config = config or CBValueMomentumConfig(**kwargs)
+        self._cb_value_history: dict[str, deque[float]] = {}
 
     @property
     def config(self) -> CBValueMomentumConfig:
-        return self._config  # type: ignore[return-value]
+        """策略配置。"""
+        return self._config
 
     def _on_start_extra(self) -> None:
-        self._price_history.clear()
         self._cb_value_history.clear()
 
-    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
-        for code, bar in bars.items():
-            self._price_history[code].append(bar.close)
-            cv = getattr(bar, "cb_value", None)
-            if cv is None and hasattr(bar, "metadata"):
-                cv = bar.metadata.get("cb_value")
-            if cv is not None:
-                self._cb_value_history[code].append(cv)
+    def _on_bar_update_state(
+        self, bars: dict[str, Bar], context: StrategyContext,
+    ) -> None:
+        max_len = self._config.lookback_days + 1
+        for symbol, bar in bars.items():
+            meta = bar.metadata or {}
+            cv = meta.get("cb_value")
+            if cv is not None and cv > 0:
+                if symbol not in self._cb_value_history:
+                    self._cb_value_history[symbol] = deque(maxlen=max_len)
+                self._cb_value_history[symbol].append(cv)
 
-    def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
-        cfg = self.config
-        p = getattr(candidate, "cb_over_rate", None)
-        if p is None:
-            p = getattr(candidate, "premium_rate", None)
-            if p is not None: p = p * 100.0
-        if p is None: return False
-        if p > cfg.max_premium: return False
-        # Need enough history for momentum calc
-        sym = candidate.code if hasattr(candidate, 'code') else candidate.symbol
-        hist = self._cb_value_history.get(sym) if hasattr(self, "_cb_value_history") else None
-        if hist is None:
-            hist = self._price_history.get(sym)
-        if not hist or len(hist) <= cfg.lookback_days:
+    def _extra_filter(self, candidate: CandidateInfo, context: StrategyContext) -> bool:
+        """需要足够的 cb_value 历史，且溢价率低于上限。"""
+        cfg = self._config
+        if candidate.cb_over_rate is None or candidate.cb_over_rate > cfg.max_premium:
+            return False
+        hist = self._cb_value_history.get(candidate.symbol)
+        if not hist or len(hist) < cfg.lookback_days + 1:
             return False
         return True
 
     def _score_candidates(
-        self, candidates: list[CandidateInfo], context: "StrategyContext",
+        self, candidates: list[CandidateInfo], context: StrategyContext,
     ) -> list[str]:
-        cfg = self.config
-
+        """按 cb_value 动量降序（最强优先），取 top_k。"""
+        cfg = self._config
         scored: list[tuple[str, float]] = []
         for c in candidates:
-            # 价值分 (溢价率越低越好)
-            p = getattr(c, "cb_over_rate", None)
-            if p is None:
-                p = getattr(c, "premium_rate", None)
-                if p is not None: p = p * 100.0
-            premium_pct = (p or 0.0) / 100.0
-            value_score = max(0, 1.0 - premium_pct)
-
-            # 动量分 (基于 cb_value 历史)
-            hist = self._cb_value_history.get(c.code) if hasattr(self, "_cb_value_history") else None
-            if hist is None:
-                hist = self._price_history.get(c.code)
-            lb = cfg.lookback_days
-            momentum_score = 0.0
-            if hist and len(hist) > lb:
-                old = hist[0]
-                if old > 0:
-                    momentum_score = (hist[-1] - old) / old
-                else:
-                    continue  # old=0 → skip to avoid divide-by-zero
-
-            total = cfg.value_weight * value_score + cfg.momentum_weight * momentum_score
-            scored.append((c.code, total))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored[:cfg.top_k]]
+            hist = self._cb_value_history[c.symbol]
+            old_cv = hist[0]
+            new_cv = hist[-1]
+            if old_cv <= 0:
+                continue
+            momentum = (new_cv - old_cv) / old_cv
+            scored.append((c.symbol, momentum))
+        scored.sort(key=lambda x: (-x[1], x[0]))
+        return [s for s, _ in scored[: cfg.top_k]]

@@ -1,118 +1,183 @@
-"""容量估算 — 基于 ADV 估计策略可承载资金量"""
+"""策略容量估算工具。
+
+基于 ADV（日均成交额/量）约束估算策略可承载的最大 AUM，
+帮助评估策略在真实市场中的可执行性。
+
+核心思路：
+    策略持仓的每只标的，交易量不应超过 ADV 的一定比例
+    （默认 max_participation_rate = 10%），否则市场冲击显著。
+    最大 AUM = Σ_i (adv_i * participation_rate) / weight_i
+
+设计原则：
+    - 纯计算函数，不依赖数据源（调用方传入 ADV 数据）
+    - 可插拔：通过参数控制参与率上限、权重计算方式
+    - 与回测流程解耦，可在回测前/后独立调用
+
+Example::
+
+    from aipha.execution.capacity import estimate_capacity
+
+    result = estimate_capacity(
+        target_weights={"600000.SH": 0.1, "000001.SZ": 0.1, ...},
+        adv_map={"600000.SH": 5e8, "000001.SZ": 3e8, ...},
+        max_participation_rate=0.10,
+    )
+    print(f"预估容量: {result.max_aum:,.0f}")
+    print(f"瓶颈标的: {result.bottleneck_symbol}")
+"""
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
-
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CapacityResult:
-    estimated_capacity: float
-    bottleneck_symbol: Optional[str] = None
-    bottleneck_adv: float = 0.0
-    details: dict[str, float] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
+    """容量估算结果。
 
-    def summary(self) -> str:
-        cap_str = f"{self.estimated_capacity / 1e4:.1f}万" if self.estimated_capacity < 1e8 else f"{self.estimated_capacity / 1e8:.2f}亿"
-        lines = [f"策略容量估算: {cap_str}"]
-        if self.bottleneck_symbol:
-            lines.append(f"瓶颈: {self.bottleneck_symbol} (ADV={self.bottleneck_adv / 1e4:.0f}万)")
-        for w in self.warnings:
-            lines.append(f"⚠ {w}")
-        return "\n".join(lines)
+    Attributes:
+        max_aum: 估算的最大可承载 AUM（元）
+        bottleneck_symbol: 约束最紧的标的代码
+        bottleneck_aum: 瓶颈标的对应的最大 AUM
+        per_symbol_capacity: 每只标的允许的最大 AUM 字典
+        n_symbols: 参与估算的标的数
+        avg_adv: 平均 ADV（元）
+        max_participation_rate: 使用的最大参与率
+    """
+
+    max_aum: float
+    bottleneck_symbol: str
+    bottleneck_aum: float
+    per_symbol_capacity: dict[str, float] = field(default_factory=dict)
+    n_symbols: int = 0
+    avg_adv: float = 0.0
+    max_participation_rate: float = 0.10
 
 
 def estimate_capacity(
-    positions: dict[str, float],
-    adv_data: dict[str, float],
-    max_adv_pct: float = 0.05,
-    min_adv: float = 1e6,
-    price_data: Optional[dict[str, float]] = None,
+    target_weights: dict[str, float],
+    adv_map: dict[str, float],
+    max_participation_rate: float = 0.10,
 ) -> CapacityResult:
-    """估计策略容量
+    """估算策略容量。
 
-    Parameters
-    ----------
-    positions : dict
-        symbol → 权重 (0~1之和=1)
-    adv_data : dict
-        symbol → 平均日成交额 (元)
-    max_adv_pct : float
-        最大可吃掉的 ADV 比例
-    min_adv : float
-        最低 ADV 门槛
-    price_data : dict, optional
-        symbol → 最新价 (用于细化)
+    对于每只标的 i:
+        可交易金额 = adv_i * max_participation_rate
+        该标的允许的 AUM = 可交易金额 / weight_i
+
+    最终容量 = min(各标的允许的 AUM)，即瓶颈标的决定整体容量。
+
+    Args:
+        target_weights: 目标权重字典 ``{symbol: weight}``，权重为占
+            总 AUM 的比例（0~1），不要求归一化。权重 ≤ 0 的标的将被跳过。
+        adv_map: 日均成交额字典 ``{symbol: adv_value}``（单位：元）。
+            缺失标的视为 ADV=0（容量为 0）。
+        max_participation_rate: 最大市场参与率（0~1），默认 10%。
+
+    Returns:
+        CapacityResult
+
+    Raises:
+        ValueError: max_participation_rate 不在 (0, 1] 范围内
     """
-    if not positions or not adv_data:
-        return CapacityResult(estimated_capacity=0, warnings=["无持仓或成交额数据"])
+    if not (0 < max_participation_rate <= 1.0):
+        raise ValueError(
+            f"max_participation_rate 必须在 (0, 1] 范围内，当前: {max_participation_rate}"
+        )
 
-    warnings = []
-    details = {}
-    symbol_caps = {}
+    per_symbol: dict[str, float] = {}
+    bottleneck_sym = ""
+    bottleneck_aum = float("inf")
+    adv_values: list[float] = []
 
-    for sym, weight in positions.items():
+    for symbol, weight in target_weights.items():
         if weight <= 0:
             continue
-        adv = adv_data.get(sym, 0)
-        if adv < min_adv:
-            warnings.append(f"{sym}: ADV={adv / 1e4:.0f}万 低于门槛{min_adv / 1e4:.0f}万")
-            adv = min_adv
 
-        tradable_amount = adv * max_adv_pct
-        if weight > 0:
-            cap = tradable_amount / weight
-        else:
-            cap = float("inf")
+        adv = adv_map.get(symbol, 0.0)
+        adv_values.append(adv)
 
-        symbol_caps[sym] = cap
-        details[sym] = tradable_amount
+        if adv <= 0:
+            # ADV = 0 → 容量 = 0
+            per_symbol[symbol] = 0.0
+            if 0.0 < bottleneck_aum:
+                bottleneck_aum = 0.0
+                bottleneck_sym = symbol
+            continue
 
-    if not symbol_caps:
-        return CapacityResult(estimated_capacity=0, warnings=["无有效持仓"])
+        tradeable = adv * max_participation_rate
+        capacity = tradeable / weight
+        per_symbol[symbol] = capacity
 
-    bottleneck = min(symbol_caps, key=symbol_caps.get)  # type: ignore
-    estimated = symbol_caps[bottleneck]
+        if capacity < bottleneck_aum:
+            bottleneck_aum = capacity
+            bottleneck_sym = symbol
+
+    if not per_symbol:
+        return CapacityResult(
+            max_aum=0.0,
+            bottleneck_symbol="",
+            bottleneck_aum=0.0,
+            per_symbol_capacity={},
+            n_symbols=0,
+            avg_adv=0.0,
+            max_participation_rate=max_participation_rate,
+        )
+
+    avg_adv = sum(adv_values) / len(adv_values) if adv_values else 0.0
 
     return CapacityResult(
-        estimated_capacity=estimated,
-        bottleneck_symbol=bottleneck,
-        bottleneck_adv=adv_data.get(bottleneck, 0),
-        details=details,
-        warnings=warnings,
+        max_aum=bottleneck_aum,
+        bottleneck_symbol=bottleneck_sym,
+        bottleneck_aum=bottleneck_aum,
+        per_symbol_capacity=per_symbol,
+        n_symbols=len(per_symbol),
+        avg_adv=avg_adv,
+        max_participation_rate=max_participation_rate,
     )
 
 
-def estimate_portfolio_capacity(
-    weights: dict[str, float],
-    volume_data: dict[str, list[float]],
-    price_data: dict[str, list[float]],
-    max_participation: float = 0.05,
-    lookback: int = 20,
+def estimate_capacity_from_positions(
+    positions: dict[str, int],
+    prices: dict[str, float],
+    adv_map: dict[str, float],
+    total_nav: float,
+    max_participation_rate: float = 0.10,
 ) -> CapacityResult:
-    """基于历史成交量估算投组容量
+    """从实际持仓快照估算容量。
 
-    Parameters
-    ----------
-    weights : symbol → 权重
-    volume_data : symbol → 日成交量列表 (最近N日)
-    price_data : symbol → 日收盘价列表 (最近N日)
-    max_participation : 最大参与率
-    lookback : 回看天数
+    将持仓股数 * 价格转为权重后调用 :func:`estimate_capacity`。
+
+    Args:
+        positions: 持仓 ``{symbol: qty}``
+        prices: 当前价格 ``{symbol: price}``
+        adv_map: 日均成交额 ``{symbol: adv}``
+        total_nav: 总净值
+        max_participation_rate: 最大参与率
+
+    Returns:
+        CapacityResult
     """
-    adv = {}
-    for sym in weights:
-        if sym in volume_data and sym in price_data:
-            vols = volume_data[sym][-lookback:]
-            prices = price_data[sym][-lookback:]
-            if vols and prices:
-                amounts = [v * p for v, p in zip(vols, prices)]
-                adv[sym] = float(np.mean(amounts))
+    if total_nav <= 0:
+        return CapacityResult(
+            max_aum=0.0,
+            bottleneck_symbol="",
+            bottleneck_aum=0.0,
+            per_symbol_capacity={},
+            n_symbols=0,
+            avg_adv=0.0,
+            max_participation_rate=max_participation_rate,
+        )
 
-    return estimate_capacity(weights, adv, max_adv_pct=max_participation)
+    weights: dict[str, float] = {}
+    for symbol, qty in positions.items():
+        if qty <= 0:
+            continue
+        price = prices.get(symbol, 0.0)
+        if price <= 0:
+            continue
+        weights[symbol] = (qty * price) / total_nav
+
+    return estimate_capacity(weights, adv_map, max_participation_rate)

@@ -1,4 +1,14 @@
-"""市场规则定义 — A 股 + 可转债。"""
+"""市场规则定义 — A 股 + 可转债。
+
+.. deprecated::
+    本模块是早期实现，**零活跃引用** (2026-04-24 审计确认)。
+    权威源已拆分为独立模块 (§13.1):
+      - ``aipha.market.rules_cn_equity.MarketRulesCNEquity``
+      - ``aipha.market.rules_convertible_bond.MarketRulesConvertibleBond``
+      - ``aipha.market.rules_etf.MarketRulesETF``
+    本模块中 ``MarketRulesCB`` 的费率参数与权威源不一致
+    (commission_rate 低 41%, commission_min 低 80%)，**禁止在新代码中使用**。
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,99 +1,159 @@
-"""股票池策略 — 预定义指数成分 / 自定义条件组合
+"""
+UniversePolicy 模块
 
-支持:
-  - 指数成分股 (沪深300/中证500/中证1000/全A)
-  - 自定义条件组合 (市值范围 + 行业 + 基本面)
-  - 动态更新 (跟随指数调整)
+股票池策略：定义可交易标的集合的过滤规则。
+
+设计原则（遵循 copilot-instructions.md）：
+1. 任一策略/回测必须显式指定 UniversePolicy
+2. 支持"自动剔除 + 手动剔除"两套入口
+3. 报告输出剔除统计
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import date
 from enum import Enum
 from typing import Any
 
-from aipha.universe.exclusions import UniverseExclusions, ExclusionConfig
+
+class ExclusionReason(str, Enum):
+    """剔除原因枚举"""
+
+    ST = "ST"  # ST/*ST
+    DELISTED = "DELISTED"  # 退市整理/终止上市/暂停上市
+    SUSPENDED = "SUSPENDED"  # 长期停牌
+    MANUAL = "MANUAL"  # 手动黑名单
+    FORCE_REDEEM = "FORCE_REDEEM"  # 已公告强赎（CB）
+    NEAR_MATURITY = "NEAR_MATURITY"  # 近到期（CB）
+    NOT_INDEX_MEMBER = "NOT_INDEX_MEMBER"  # 非指数成分股
 
 
-class UniverseType(str, Enum):
-    CSI300 = "CSI300"
-    CSI500 = "CSI500"
-    CSI1000 = "CSI1000"
-    ALL_A = "ALL_A"
-    HSI = "HSI"
-    HSCEI = "HSCEI"
-    HSTECH = "HSTECH"
-    ALL_HK = "ALL_HK"
-    CUSTOM = "CUSTOM"
+@dataclass(frozen=True, slots=True)
+class ExclusionRecord:
+    """剔除记录
+
+    Attributes:
+        ts_code: 股票代码
+        name: 股票名称
+        reason: 剔除原因
+        effective_date: 生效日期
+        detail: 详细说明
+    """
+
+    ts_code: str
+    name: str
+    reason: ExclusionReason
+    effective_date: date
+    detail: str = ""
 
 
 @dataclass
-class PolicyConfig:
-    universe_type: UniverseType = UniverseType.ALL_A
-    exclusion: ExclusionConfig = field(default_factory=ExclusionConfig)
-    # 自定义条件
-    custom_filters: list[dict] = field(default_factory=list)
-    # 行业白名单 (空 = 不限)
-    include_industries: set[str] = field(default_factory=set)
-    # 市值范围 (用于 CUSTOM)
-    mv_range: tuple[float, float] = (0, float("inf"))
+class FilterResult:
+    """过滤结果
+
+    Attributes:
+        tradable: 可交易股票列表
+        excluded: 被剔除的记录列表
+        total_count: 输入总数
+        trade_date: 交易日期
+    """
+
+    tradable: list[dict[str, Any]]
+    excluded: list[ExclusionRecord]
+    total_count: int
+    trade_date: date
+
+    @property
+    def tradable_count(self) -> int:
+        """可交易数量"""
+        return len(self.tradable)
+
+    @property
+    def excluded_count(self) -> int:
+        """剔除数量"""
+        return len(self.excluded)
+
+    def get_exclusion_stats(self) -> dict[ExclusionReason, int]:
+        """按原因统计剔除数量"""
+        stats: dict[ExclusionReason, int] = {}
+        for record in self.excluded:
+            stats[record.reason] = stats.get(record.reason, 0) + 1
+        return stats
 
 
-class UniversePolicy:
-    """股票池管理器 — 组合排除规则 + 成分约束。"""
+class ExclusionRule(ABC):
+    """剔除规则抽象基类"""
 
-    def __init__(self, config: PolicyConfig | None = None) -> None:
-        self.config = config or PolicyConfig()
-        self._exclusions = UniverseExclusions(self.config.exclusion)
-        self._index_members: set[str] = set()
+    @abstractmethod
+    def filter(
+        self, stocks: list[dict[str, Any]], trade_date: date
+    ) -> list[ExclusionRecord]:
+        """
+        对股票列表应用剔除规则
 
-    def set_index_members(self, symbols: set[str]) -> None:
-        """设置指数成分股列表 (外部提供)。"""
-        self._index_members = symbols
+        Args:
+            stocks: 股票信息列表
+            trade_date: 交易日期
 
-    def build_universe(self, all_stocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """从全量股票中构建最终股票池。"""
-        cfg = self.config
+        Returns:
+            被剔除的记录列表
+        """
+        raise NotImplementedError
 
-        # 1. 成分过滤
-        if cfg.universe_type != UniverseType.ALL_A and self._index_members:
-            filtered = [s for s in all_stocks if s.get("symbol") in self._index_members]
-        else:
-            filtered = all_stocks
 
-        # 2. 市值范围 (CUSTOM 模式)
-        if cfg.universe_type == UniverseType.CUSTOM:
-            lo, hi = cfg.mv_range
-            filtered = [s for s in filtered if lo <= (s.get("total_mv", 0) or 0) <= hi]
+class UniversePolicy(ABC):
+    """股票池策略抽象基类"""
 
-        # 3. 行业白名单
-        if cfg.include_industries:
-            filtered = [
-                s for s in filtered
-                if s.get("industry", "") in cfg.include_industries
-            ]
+    @abstractmethod
+    def filter(
+        self, stocks: list[dict[str, Any]], trade_date: date
+    ) -> FilterResult:
+        """
+        过滤股票池
 
-        # 4. 自定义过滤
-        for cond in cfg.custom_filters:
-            col = cond.get("field")
-            op = cond.get("op", ">=")
-            val = cond.get("value", 0)
-            if col:
-                new = []
-                for s in filtered:
-                    v = s.get(col)
-                    if v is None:
-                        continue
-                    if op == ">=" and v >= val:
-                        new.append(s)
-                    elif op == "<=" and v <= val:
-                        new.append(s)
-                    elif op == ">" and v > val:
-                        new.append(s)
-                    elif op == "<" and v < val:
-                        new.append(s)
-                    elif op == "==" and v == val:
-                        new.append(s)
-                filtered = new
+        Args:
+            stocks: 全量股票信息列表
+            trade_date: 交易日期
 
-        # 5. 排除规则
-        return self._exclusions.filter(filtered)
+        Returns:
+            过滤结果
+        """
+        raise NotImplementedError
+
+
+@dataclass
+class CompositeUniversePolicy(UniversePolicy):
+    """组合策略：依次应用多个剔除规则
+
+    Attributes:
+        rules: 剔除规则列表（按顺序应用）
+    """
+
+    rules: list[ExclusionRule] = field(default_factory=list)
+
+    def filter(
+        self, stocks: list[dict[str, Any]], trade_date: date
+    ) -> FilterResult:
+        """应用所有规则过滤股票池"""
+        excluded_codes: set[str] = set()
+        excluded_records: list[ExclusionRecord] = []
+
+        # 依次应用每个规则
+        for rule in self.rules:
+            records = rule.filter(stocks, trade_date)
+            for record in records:
+                # 避免重复剔除
+                if record.ts_code not in excluded_codes:
+                    excluded_codes.add(record.ts_code)
+                    excluded_records.append(record)
+
+        # 筛选可交易股票
+        tradable = [s for s in stocks if s["ts_code"] not in excluded_codes]
+
+        return FilterResult(
+            tradable=tradable,
+            excluded=excluded_records,
+            total_count=len(stocks),
+            trade_date=trade_date,
+        )

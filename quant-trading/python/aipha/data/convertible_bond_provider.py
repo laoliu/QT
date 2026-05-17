@@ -59,10 +59,6 @@ class ConvertibleBondProvider:
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
 
-        if cache_dir is None:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "cb")
-
         self._gateway = get_tushare_gateway(token=token)
         self.token = self._gateway._token  # 向后兼容
         self.cache_dir = cache_dir
@@ -424,7 +420,7 @@ class ConvertibleBondProvider:
                 low=float(row["low"]),
                 close=float(row["close"]),
                 volume=float(row.get("vol", 0)) * 10,  # 手→张 (§4.2 统一单位)
-                amount=float(row.get("amount", 0)) * 1000,  # 单位转换
+                amount=float(row.get("amount", 0)),  # TuShare cb_daily amount 已是万元
                 vwap=None,
                 is_suspended=(
                     float(row.get("vol", 0)) <= 0

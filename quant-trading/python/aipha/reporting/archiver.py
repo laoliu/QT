@@ -35,6 +35,8 @@ from typing import Any, Optional
 
 import yaml
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
 logger = logging.getLogger(__name__)
 
 
@@ -273,7 +275,7 @@ class ExperimentArchiver:
         total_return = (final - initial) / initial if initial > 0 else 0
 
         n_days = len(snapshots)
-        n_years = n_days / 252.0
+        n_years = n_days / float(TRADING_DAYS_PER_YEAR)
 
         annual_return = (
             (1 + total_return) ** (1 / n_years) - 1
@@ -297,7 +299,7 @@ class ExperimentArchiver:
             avg_ret = sum(returns) / len(returns)
             std_ret = (sum((r - avg_ret) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5
             sharpe = (
-                (avg_ret * 252 - 0.02) / (std_ret * 252**0.5)
+                (avg_ret * TRADING_DAYS_PER_YEAR - 0.02) / (std_ret * TRADING_DAYS_PER_YEAR**0.5)
                 if std_ret > 0
                 else 0
             )

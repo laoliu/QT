@@ -177,8 +177,23 @@ def run_quality_gates(
     max_dd_limit: float = 0.30,
     min_trades: int = 20,
     min_days: int = 252,
+    *,
+    n_trials: int | None = None,
+    skewness: float = 0.0,
+    kurtosis: float = 3.0,
+    returns_matrix: np.ndarray | None = None,
+    dsr_threshold: float = 0.95,
+    pbo_threshold: float = 0.50,
 ) -> QualityReport:
-    """执行质量门禁检查。"""
+    """执行质量门禁检查。
+
+    扩展参数 (可选, 传入时自动启用对应门禁):
+        n_trials: 策略试错数 → 启用 DSR 门禁
+        skewness/kurtosis: 收益率分布参数
+        returns_matrix: (n_obs, n_strategies) → 启用 PBO 门禁
+        dsr_threshold: DSR 通过阈值 (默认 0.95, 即 t_adj > ~1.65)
+        pbo_threshold: PBO 通过阈值 (默认 0.50)
+    """
     gates = [
         QualityGate(
             name="最低夏普比率",
@@ -209,6 +224,35 @@ def run_quality_gates(
             message="通过" if n_days >= min_days else f"交易日 {n_days} < {min_days}",
         ),
     ]
+
+    # DSR 门禁 (仅在 n_trials 提供时启用)
+    if n_trials is not None and n_trials > 1:
+        dsr_value = deflated_sharpe_ratio(
+            sharpe=sharpe,
+            n_trials=n_trials,
+            n_obs=n_days,
+            skewness=skewness,
+            kurtosis=kurtosis,
+        )
+        gates.append(QualityGate(
+            name="DSR (Deflated Sharpe Ratio)",
+            passed=dsr_value >= dsr_threshold,
+            value=dsr_value,
+            threshold=dsr_threshold,
+            message="通过" if dsr_value >= dsr_threshold else f"DSR {dsr_value:.3f} < {dsr_threshold}",
+        ))
+
+    # PBO 门禁 (仅在 returns_matrix 提供时启用)
+    if returns_matrix is not None and returns_matrix.ndim == 2 and returns_matrix.shape[1] >= 2:
+        pbo_value = probability_of_backtest_overfitting(returns_matrix)
+        gates.append(QualityGate(
+            name="PBO (过拟合概率)",
+            passed=pbo_value < pbo_threshold,
+            value=pbo_value,
+            threshold=pbo_threshold,
+            message="通过" if pbo_value < pbo_threshold else f"PBO {pbo_value:.2f} ≥ {pbo_threshold}",
+        ))
+
     return QualityReport(gates=gates)
 
 

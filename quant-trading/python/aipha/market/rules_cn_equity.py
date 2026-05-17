@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from aipha.domain.models import Bar, Order, OrderType, Side
 from aipha.market.base import PrecheckDecision  # noqa: F401 — re-export for backward compat
@@ -24,6 +25,7 @@ class RejectReason(str, Enum):
     PRICE_OUT_OF_RANGE = "PRICE_OUT_OF_RANGE"
     EXCEEDS_MAX_ORDER_QTY = "EXCEEDS_MAX_ORDER_QTY"
     T_PLUS_1_VIOLATION = "T_PLUS_1_VIOLATION"
+    DATA_MISSING = "DATA_MISSING"
 
 
 # 缓存 HaltChecker 实例（无状态，可复用）
@@ -55,6 +57,35 @@ class MarketRulesCNEquity:
     # 滑点默认值（§13.1 权威源）
     slippage_bps_default: float = 10.0  # A 股默认滑点 10bps
 
+    # 成交量约束（§P0 容量修正）
+    max_participation_rate: float = 0.10  # A 股最大参与率 10%
+    opening_volume_fraction: float = 0.15  # 开盘集合竞价占全天量约 15%
+
+    # -- Layer 2: .env → 环境变量覆盖映射（§13.1 三层配置机制） --
+    _ENV_MAP: ClassVar[dict[str, tuple[str, type]]] = {
+        "commission_rate": ("COMMISSION_RATE", Decimal),
+        "commission_min": ("COMMISSION_MIN", Decimal),
+        "stamp_tax_rate": ("STAMP_TAX_SELL", Decimal),
+        "transfer_fee_rate": ("TRANSFER_FEE", Decimal),
+        "slippage_bps_default": ("SLIPPAGE_SPREAD_BPS", float),
+        "lot_size": ("LOT_SIZE", int),
+    }
+
+    def __post_init__(self) -> None:
+        """Layer 2 覆盖：若 .env 设置了对应环境变量且字段值 == Layer 1 默认值，则用 .env 值替换。"""
+        import dataclasses as _dc
+        _defaults = {
+            f.name: f.default for f in _dc.fields(self)
+            if f.default is not _dc.MISSING
+        }
+        for attr, (env_key, conv) in self._ENV_MAP.items():
+            env_val = os.environ.get(env_key)
+            if env_val is None:
+                continue
+            if attr in _defaults and getattr(self, attr) != _defaults[attr]:
+                continue
+            object.__setattr__(self, attr, conv(env_val))
+
     def precheck_order(self, *, order: Order, bar: Bar, **kwargs: Any) -> PrecheckDecision:
         """对订单进行 A 股市场规则预检查（手数、涨跌停、停牌、价格范围等）。"""
         # 有效 lot_size — 科创板为 200（仅当用户未自定义 lot_size 时）
@@ -85,19 +116,20 @@ class MarketRulesCNEquity:
             if order.limit_price is None:
                 raise ValueError("limit_price must be set for LIMIT orders")
 
-            # §13.3: prev_close 缺失时记录 warning 并标记订单为未校验
+            # §13.3: prev_close 缺失时拒绝订单（禁止静默放行）
             if not bar.prev_close or bar.prev_close <= 0:
                 logger.warning(
                     "A股 prev_close 缺失或无效 (symbol=%s, prev_close=%s), "
-                    "涨跌停检查被跳过 — §13.3 安全关键参数",
+                    "涨跌停检查无法执行 — 订单被拒绝 §13.3",
                     bar.symbol,
                     bar.prev_close,
                 )
                 return PrecheckDecision(
-                    allowed=True,
+                    allowed=False,
+                    reason=RejectReason.DATA_MISSING,
                     warning=(
                         f"prev_close 缺失 (symbol={bar.symbol}), "
-                        "涨跌停检查未执行 — 订单放行但标记为未校验"
+                        "涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）"
                     ),
                 )
 

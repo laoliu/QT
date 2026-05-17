@@ -1,96 +1,114 @@
-"""可转债均值回归策略 — 布林带偏离度排序"""
+"""可转债均值回归策略（布林带 + 面值锚定）
+
+Alpha 来源：
+1. 可转债天然有面值锚定（100元），价格偏离均值后有回归倾向
+2. 低价区间下行空间有限（债底保护），但上行弹性完整
+3. 布林带下轨买入 = 均值回归 + 过度悲观修正
+
+策略逻辑：
+1. 内部维护每只转债的 N 日价格历史（MA + std）
+2. 计算布林带: lower = MA - k*std
+3. 当价格 < lower → 超卖信号 → 买入候选
+4. 按 (lower - close) / std 降序排列（偏离越大越优先）
+5. 等权持有 top_k 只
+"""
+
 from __future__ import annotations
 
 import logging
-import math
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from aipha.strategy.base import StrategyContext
 from aipha.strategy.cb_rotation_base import (
     CBRotationConfig,
     CBRotationStrategy,
     CandidateInfo,
 )
+from aipha.strategy.registry import StrategyRegistry
 
 if TYPE_CHECKING:
     from aipha.domain.models import Bar
-    from aipha.strategy.base import StrategyContext
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class CBMeanReversionConfig(CBRotationConfig):
+    """CB均值回归策略配置"""
+
     top_k: int = 15
-    rebalance_days: int = 5
-    max_price: float = 140.0
+    rebalance_days: int = 3
     lookback: int = 20
-    bb_k: float = 2.0
-    min_deviation: float = -2.0
-    stop_loss_pct: float = 0.10
-    trailing_stop_pct: float = 0.08
+    bb_k: float = 2.0          # 布林带倍数
 
 
+@StrategyRegistry().register("cb_mean_reversion")
 class CBMeanReversionStrategy(CBRotationStrategy):
-    """可转债均值回归 — 低于布林带下轨越多, 得分越高"""
+    """可转债均值回归策略
+
+    在波动率收窄后价格跌破布林带下轨时买入超卖转债。
+    按偏离程度降序排列，持有偏离最大的 top_k 只。
+    """
+
     name = "cb_mean_reversion"
 
-    def __init__(self, config: CBMeanReversionConfig | None = None, **kwargs: object):
-        super().__init__(config=config or CBMeanReversionConfig(), **kwargs)
-        self._price_history: dict[str, deque[float]] = defaultdict(
-            lambda: deque(maxlen=self.config.lookback + 10)
-        )
+    def __init__(self, config: CBMeanReversionConfig | None = None, **kwargs):
+        super().__init__()
+        self._config = config or CBMeanReversionConfig(**kwargs)
+        self._price_history: dict[str, deque] = {}
 
     @property
     def config(self) -> CBMeanReversionConfig:
-        return self._config  # type: ignore[return-value]
+        """当前策略配置对象。"""
+        return self._config
 
-    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: "StrategyContext") -> None:
-        for code, bar in bars.items():
-            self._price_history[code].append(bar.close)
+    def _on_start_extra(self) -> None:
+        self._price_history.clear()
 
-    def _bb_stats(self, code: str) -> tuple[float, float] | None:
-        """Return (mean, std) from price history, or None if insufficient data."""
-        hist = self._price_history.get(code)
-        lb = self.config.lookback
-        if hist is None or len(hist) < lb:
-            return None
-        prices = list(hist)[-lb:]
-        mean = sum(prices) / lb
-        std = math.sqrt(sum((p - mean) ** 2 for p in prices) / lb)
-        return (mean, std)
+    def _on_bar_update_state(
+        self, bars: dict[str, Bar], context: StrategyContext,
+    ) -> None:
+        for symbol, bar in bars.items():
+            if bar.close > 0:
+                if symbol not in self._price_history:
+                    self._price_history[symbol] = deque(maxlen=self._config.lookback)
+                self._price_history[symbol].append(bar.close)
 
-    def _extra_filter(self, candidate: CandidateInfo, context: "StrategyContext") -> bool:
-        cfg = self.config
-        stats = self._bb_stats(candidate.symbol)
-        if stats is None:
+    def _should_rebalance(self) -> bool:
+        if self._bar_count < self._config.lookback:
             return False
-        mean, std = stats
+        return (self._bar_count - 1) % self._config.rebalance_days == 0
+
+    def _extra_filter(self, candidate: CandidateInfo, context: StrategyContext) -> bool:
+        """需要足够历史，且价格低于布林带下轨。"""
+        cfg = self._config
+        hist = self._price_history.get(candidate.symbol)
+        if hist is None or len(hist) < cfg.lookback:
+            return False
+        prices = list(hist)
+        ma = sum(prices) / len(prices)
+        variance = sum((p - ma) ** 2 for p in prices) / len(prices)
+        std = variance ** 0.5
         if std < 0.01:
             return False
-        lower_band = mean - cfg.bb_k * std
-        if candidate.close >= lower_band:
-            return False
-        return True
+        lower = ma - cfg.bb_k * std
+        return candidate.close < lower
 
     def _score_candidates(
-        self, candidates: list[CandidateInfo], context: "StrategyContext",
+        self, candidates: list[CandidateInfo], context: StrategyContext,
     ) -> list[str]:
-        cfg = self.config
+        """按偏离程度降序（最超卖优先），取 top_k。"""
+        cfg = self._config
         scored: list[tuple[str, float]] = []
         for c in candidates:
-            stats = self._bb_stats(c.symbol)
-            if stats is None:
-                continue
-            mean, std = stats
-            if std < 0.01:
-                continue
-            lower_band = mean - cfg.bb_k * std
-            if c.close >= lower_band:
-                continue
-            # deviation: how far below lower band (higher = more oversold)
-            deviation = (lower_band - c.close) / std
+            prices = list(self._price_history[c.symbol])
+            ma = sum(prices) / len(prices)
+            variance = sum((p - ma) ** 2 for p in prices) / len(prices)
+            std = variance ** 0.5
+            lower = ma - cfg.bb_k * std
+            deviation = (lower - c.close) / std
             scored.append((c.symbol, deviation))
         scored.sort(key=lambda x: x[1], reverse=True)
-        return [s[0] for s in scored[:cfg.top_k]]
+        return [s for s, _ in scored[: cfg.top_k]]

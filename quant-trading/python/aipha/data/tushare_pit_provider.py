@@ -269,6 +269,33 @@ class TuSharePITProvider(PITFinancialProvider):
         return {n: indicator.indicators.get(n) for n in names}
 
     # ------------------------------------------------------------------
+    # TS-1 Stage 2: cashflow PIT (R156)
+    # ------------------------------------------------------------------
+
+    def get_cashflow_pit(
+        self,
+        symbol: str,
+        query_date: date,
+        fields: list[str] | None = None,
+    ) -> dict[str, Decimal | None]:
+        """PIT-aligned cashflow statement for FCF / accrual factors.
+
+        Returns dict with mapped field names (see _STATEMENT_FIELD_MAP):
+          cash_from_operations, cash_from_investing, cash_from_financing,
+          capex, c_fr_sale_sg, c_paid_goods_s
+
+        If *fields* is given, only those keys are returned.
+        """
+        stmt = self.get_statement_pit(symbol, query_date, "cashflow")
+        if stmt is None:
+            return {} if fields is None else {f: None for f in fields}
+
+        data = stmt.data  # dict[str, Decimal]
+        if fields is not None:
+            return {f: data.get(f) for f in fields}
+        return dict(data)
+
+    # ------------------------------------------------------------------
     # 内部数据加载
     # ------------------------------------------------------------------
 
@@ -299,6 +326,11 @@ class TuSharePITProvider(PITFinancialProvider):
                 "eps", "bps", "cfps",
                 "current_ratio", "quick_ratio",
                 "debt_to_assets",
+                # TS-1 Stage 1 expansion (R156)
+                "or_yoy", "netprofit_yoy", "assets_yoy",
+                "ar_turn", "inv_turn", "roic", "ocf_to_or",
+                "basic_eps_yoy", "q_sales_yoy", "q_roe",
+                "ocfps", "assets_turn",
             ]:
                 val = _to_decimal(row.get(field_name))
                 if val is not None:
@@ -389,6 +421,19 @@ _FINA_FIELD_MAP: dict[str, str] = {
     "current_ratio": "current_ratio",
     "quick_ratio": "quick_ratio",
     "debt_to_assets": "debt_to_assets",
+    # TS-1 Stage 1 expansion (R156)
+    "or_yoy": "or_yoy",
+    "netprofit_yoy": "netprofit_yoy",
+    "assets_yoy": "assets_yoy",
+    "ar_turn": "ar_turn",
+    "inv_turn": "inv_turn",
+    "roic": "roic",
+    "ocf_to_or": "ocf_to_or",
+    "basic_eps_yoy": "basic_eps_yoy",
+    "q_sales_yoy": "q_sales_yoy",
+    "q_roe": "q_roe",
+    "ocfps": "ocfps",
+    "assets_turn": "assets_turn",
 }
 
 _STATEMENT_FIELD_MAP: dict[str, str] = {
@@ -418,4 +463,6 @@ _STATEMENT_FIELD_MAP: dict[str, str] = {
     "n_cash_flows_fnc_act": FinancialFields.CASH_FROM_FINANCING,
     "c_fr_sale_sg": "c_fr_sale_sg",
     "c_paid_goods_s": "c_paid_goods_s",
+    # TS-1 Stage 2 (R156): capex for FCF
+    "c_pay_acq_const_fiolta": "capex",
 }

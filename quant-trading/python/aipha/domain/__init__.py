@@ -1,12 +1,14 @@
-"""领域模型 (orders, fills, bars)."""
-
-from aipha.domain.models import Bar, Fill, Order, OrderState, OrderType, Side
+"""Domain models (orders, fills, bars)."""
 
 __all__ = [
+    # models.py
     "Side",
-    "OrderState",
     "OrderType",
     "Bar",
     "Order",
     "Fill",
+    # convertible_bond.py
+    "ConvertibleBond",
+    "ConvertibleBondBar",
+    "BondStatus",
 ]

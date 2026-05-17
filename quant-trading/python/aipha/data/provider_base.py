@@ -4,6 +4,7 @@
 确保所有数据提供者（TuShare / AkShare / 本地文件等）遵循统一的
 加载与可复现性契约。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ class BarProvider(Protocol):
     - 给定 (symbol, start, end, frequency, adjust, snapshot) 后确定性返回结果
     - 提供 ``DataFingerprint`` 以支持可复现性
 
-    当前实现：``QTAKShareAdapter``、``QTTuShareAdapter``。
+    当前实现：``TuShareProBarProvider``、``SyntheticBarProvider``。
     """
 
     def fingerprint(self) -> DataFingerprint:

@@ -1,107 +1,110 @@
-"""缓存工具 — Parquet / JSON 持久化缓存。"""
+"""
+数据缓存工具模块
+
+提供统一的缓存新鲜度检测（TTL）和安全读写工具，供所有 Provider 复用。
+
+设计原则
+--------
+- **历史行情**（已过去的月份）：永不过期（不可变数据）。
+- **元数据** (stock_basic, cb_basic)：7 天 TTL。
+- **当月/最新快照** (daily_basic 当月, index_members_latest)：1 天 TTL。
+- **财务报表** (fina_indicator, income, balancesheet, cashflow)：30 天 TTL。
+- Provider 可通过 ``ttl_seconds`` 参数覆盖默认值。
+"""
+
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
-from typing import Any
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-TTL_NEVER = 0
+# ============================================================================
+# 默认 TTL 常量（单位：秒）
+# ============================================================================
+
+TTL_NEVER = 0          # 0 表示永不过期
 TTL_1_DAY = 86_400
 TTL_7_DAYS = 604_800
 TTL_30_DAYS = 2_592_000
 
 
-@dataclass
+@dataclass(frozen=True)
 class CacheTTLPolicy:
-    daily: int = TTL_1_DAY
-    weekly: int = TTL_7_DAYS
-    monthly: int = TTL_30_DAYS
+    """缓存 TTL 策略配置。
+
+    Attributes:
+        historical_bar: 历史月度行情缓存 TTL（默认永不过期）。
+        current_month_bar: 当月行情缓存 TTL（默认 1 天）。
+        metadata: 元数据 (stock_basic 等) TTL（默认 7 天）。
+        daily_snapshot: 当月 daily_basic 等快照 TTL（默认 1 天）。
+        financial: 财务报表 TTL（默认 30 天）。
+        index_members: 指数成分最新 TTL（默认 1 天）。
+    """
+
+    historical_bar: int = TTL_NEVER
+    current_month_bar: int = TTL_1_DAY
+    metadata: int = TTL_7_DAYS
+    daily_snapshot: int = TTL_1_DAY
     financial: int = TTL_30_DAYS
-    default: int = TTL_1_DAY
+    index_members: int = TTL_1_DAY
+
+    @classmethod
+    def from_dict(cls, d: dict) -> CacheTTLPolicy:
+        """从配置字典构建。"""
+        return cls(**{k: int(v) for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
+# 全局默认策略实例
 DEFAULT_TTL_POLICY = CacheTTLPolicy()
 
 
+# ============================================================================
+# 核心工具函数
+# ============================================================================
+
+
 def is_cache_fresh(path: Path, ttl_seconds: int = 0) -> bool:
-    """检测缓存文件是否仍在有效期内。"""
+    """检测缓存文件是否仍在有效期内。
+
+    Args:
+        path: 缓存文件路径（必须已存在）。
+        ttl_seconds: 有效期（秒）。``0`` 表示永不过期。
+
+    Returns:
+        ``True`` 表示缓存仍可使用，``False`` 表示已过期需刷新。
+    """
     if ttl_seconds <= 0:
-        return True
+        return True  # 永不过期
+
     if not path.exists():
         return False
+
     mtime = path.stat().st_mtime
     age = time.time() - mtime
     if age > ttl_seconds:
-        logger.debug("缓存过期: %s (age=%.0fs, ttl=%ds)", path.name, age, ttl_seconds)
+        logger.debug(
+            "缓存过期: %s (age=%.0fs, ttl=%ds)",
+            path.name, age, ttl_seconds,
+        )
         return False
     return True
 
 
-def cache_key(provider: str, symbol: str, start: date, end: date, frequency: str, adjust: str) -> str:
-    """生成缓存 key（确定性 hash）。"""
-    raw = f"{provider}|{symbol}|{start.isoformat()}|{end.isoformat()}|{frequency}|{adjust}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
+def safe_read_parquet(path: Path) -> pd.DataFrame | None:
+    """安全读取 Parquet 文件，损坏文件自动删除并返回 None。
 
-
-def cache_path(cache_dir: str | Path, key: str, fmt: str = "parquet") -> Path:
-    """返回缓存文件路径。"""
-    d = Path(cache_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    return d / f"{key}.{fmt}"
-
-
-def save_json_cache(path: Path, data: Any) -> None:
-    """保存 JSON 缓存。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, default=str)
-    logger.debug("缓存已保存: %s", path)
-
-
-def load_json_cache(path: Path) -> Any | None:
-    """加载 JSON 缓存，不存在返回 None。"""
-    if not path.exists():
-        return None
+    在写入过程中断电/崩溃的情况下 Parquet 文件可能损坏，
+    此方法捕获所有反序列化异常，删除损坏文件并记录警告，
+    让调用方回退到 API 重新下载。
+    """
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.warning("读取缓存失败 %s: %s", path, e)
-        return None
-
-
-def save_parquet_cache(path: Path, df: Any) -> None:
-    """保存 Parquet 缓存（需要 pandas）。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False)
-    logger.debug("Parquet 缓存已保存: %s", path)
-
-
-def load_parquet_cache(path: Path) -> Any | None:
-    """加载 Parquet 缓存。"""
-    if not path.exists():
-        return None
-    try:
-        import pandas as pd
         return pd.read_parquet(path)
-    except Exception as e:
-        logger.warning("读取 Parquet 缓存失败 %s: %s", path, e)
-        return None
-
-
-def safe_read_parquet(path: Path):
-    """安全读取 Parquet 文件，损坏文件自动删除并返回 None。"""
-    try:
-        import pandas as pd
-        return pd.read_parquet(path)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Parquet 缓存损坏，已删除待重新下载: %s (%s: %s)",
             path, type(exc).__name__, exc,
@@ -118,12 +121,24 @@ def read_cache(
     ttl_seconds: int = 0,
     *,
     use_cache: bool = True,
-):
-    """统一缓存读取入口：存在性 → TTL → 安全反序列化。"""
+) -> pd.DataFrame | None:
+    """统一的缓存读取入口：存在性 → TTL → 安全反序列化。
+
+    Args:
+        path: 缓存文件路径。
+        ttl_seconds: 有效期秒数（0 = 永不过期）。
+        use_cache: False 时直接返回 None（跳过缓存）。
+
+    Returns:
+        缓存的 DataFrame 或 None（需要重新拉取）。
+    """
     if not use_cache:
         return None
+
     if not path.exists():
         return None
+
     if not is_cache_fresh(path, ttl_seconds):
         return None
+
     return safe_read_parquet(path)

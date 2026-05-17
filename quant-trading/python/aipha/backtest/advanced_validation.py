@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
 
 @dataclass(frozen=True)
 class DSRResult:
@@ -32,6 +34,7 @@ class DSRResult:
         expected_max_sharpe: 在 n_trials 次随机尝试下的期望最大 Sharpe
         is_significant: 在给定显著性水平下是否显著
         significance_level: 使用的显著性水平
+        z_score: DSR 检验的 z 统计量（与 p_value 一致）
     """
     observed_sharpe: float
     deflated_sharpe: float
@@ -41,6 +44,7 @@ class DSRResult:
     expected_max_sharpe: float
     is_significant: bool
     significance_level: float
+    z_score: float = 0.0
 
     def to_dict(self) -> dict:
         """转换为字典表示。"""
@@ -53,6 +57,7 @@ class DSRResult:
             "expected_max_sharpe": self.expected_max_sharpe,
             "is_significant": self.is_significant,
             "significance_level": self.significance_level,
+            "z_score": self.z_score,
         }
 
 
@@ -125,7 +130,7 @@ class DeflatedSharpeRatio:
         e_max_z = (1 - euler_mascheroni) * z1 + euler_mascheroni * z2
 
         # 年化换算因子
-        annual_factor = math.sqrt(252 / max(trading_days, 1))
+        annual_factor = math.sqrt(TRADING_DAYS_PER_YEAR / max(trading_days, 1))
 
         return e_max_z * annual_factor
 
@@ -178,7 +183,7 @@ class DeflatedSharpeRatio:
 
         # Sharpe 估计量的标准误
         # se(SR) ≈ sqrt( (1 - skew*SR + kurtosis*SR²/4) / T )
-        sr_daily = observed_sharpe / math.sqrt(252)
+        sr_daily = observed_sharpe / math.sqrt(TRADING_DAYS_PER_YEAR)
         se_sr_sq = (
             1
             - skewness * sr_daily
@@ -191,7 +196,7 @@ class DeflatedSharpeRatio:
         e_max_sr_annual = e_max_sr
 
         if se_sr > 1e-15:
-            z = (sr_daily - e_max_sr / math.sqrt(252)) / se_sr
+            z = (sr_daily - e_max_sr / math.sqrt(TRADING_DAYS_PER_YEAR)) / se_sr
         else:
             z = 0.0
 
@@ -213,6 +218,7 @@ class DeflatedSharpeRatio:
             expected_max_sharpe=e_max_sr,
             is_significant=is_significant,
             significance_level=self.significance_level,
+            z_score=z,
         )
 
 
@@ -270,7 +276,7 @@ class MonteCarloPermutationTest:
         self.random_seed = random_seed
 
     @staticmethod
-    def _compute_sharpe(returns: list[float], trading_days: int = 252) -> float:
+    def _compute_sharpe(returns: list[float], trading_days: int = TRADING_DAYS_PER_YEAR) -> float:
         """计算年化 Sharpe（路径敏感版本） — §13.2 委托共享模块。"""
         from aipha.utils.metrics import compute_sharpe_ratio_log
         import numpy as np

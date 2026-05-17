@@ -92,13 +92,20 @@ class GuardConfig:
 
     @classmethod
     def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
-        """从字段注册表 YAML 加载阈值配置。"""
+        """从字段注册表 YAML 加载阈值配置。
+
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
         p = Path(path) if path else (
             Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
         )
         if not p.exists():
-            logger.warning("注册表不存在: %s, 使用默认阈值", p)
-            return cls()
+            raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
         with open(p, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         t = data.get("guard_thresholds", {})
@@ -218,15 +225,28 @@ class ICTrapGuard:
                     )
 
             # Step 4: AR 不降检查 (IC Trap 核心防护)
-            if new_ar is not None and self._baseline_ar is not None:
-                ar_result = self._check_ar_drop(new_ar)
-                details["checks"]["ar_drop"] = ar_result
-                if not ar_result["passed"]:
-                    return GuardCheckResult(
-                        factor_name=factor_name,
-                        verdict=GuardVerdict.FAIL_AR_DROP,
-                        details=details,
+            if new_ar is not None:
+                if self._baseline_ar is None:
+                    logger.warning(
+                        "Factor '%s': new_ar=%.4f 已提供但 baseline_ar 未设置, "
+                        "AR 不降检查被跳过 — 这可能导致 IC Trap 漏检。"
+                        "请先调用 set_baseline()。",
+                        factor_name, new_ar,
                     )
+                    details["checks"]["ar_drop"] = {
+                        "passed": False,
+                        "skipped": True,
+                        "reason": "baseline_ar 未设置",
+                    }
+                else:
+                    ar_result = self._check_ar_drop(new_ar)
+                    details["checks"]["ar_drop"] = ar_result
+                    if not ar_result["passed"]:
+                        return GuardCheckResult(
+                            factor_name=factor_name,
+                            verdict=GuardVerdict.FAIL_AR_DROP,
+                            details=details,
+                        )
 
             # Step 5: HLZ 校正
             hlz_result = self._check_hlz(
@@ -248,7 +268,11 @@ class ICTrapGuard:
             )
 
         except Exception as e:
-            logger.error("Guard check error for %s: %s", factor_name, e)
+            logger.error(
+                "Guard check FAILED for %s: %s — "
+                "返回 ERROR 判定，此因子将被拒绝。",
+                factor_name, e, exc_info=True,
+            )
             details["error"] = str(e)
             return GuardCheckResult(
                 factor_name=factor_name,
@@ -424,8 +448,17 @@ class ICTrapGuard:
         }
 
     def _check_ar_drop(self, new_ar: float) -> dict:
-        """AR 不降检查（IC Trap 核心）。"""
-        baseline = self._baseline_ar or 0.0
+        """AR 不降检查（IC Trap 核心）。
+
+        Raises:
+            ValueError: baseline_ar 未设置时调用此方法
+        """
+        if self._baseline_ar is None:
+            raise ValueError(
+                "baseline_ar 未设置，无法执行 AR 不降检查。"
+                "请先调用 set_baseline() 设定基线 AR。"
+            )
+        baseline = self._baseline_ar
         drop = baseline - new_ar
         drop_pct = drop / abs(baseline) if abs(baseline) > 1e-10 else 0.0
         passed = drop_pct <= self.config.ar_drop_tolerance

@@ -178,6 +178,14 @@ def cmd_live(args):
         from aipha.execution.broker_gateway import BrokerType
 
         broker_config = config.get("broker", {})
+        # §13.1: lot_size 默认值按 market_type 从 MarketRules 派生
+        market_type = broker_config.get("market_type", "cn_equity")
+        if market_type in ("convertible_bond", "cb"):
+            from aipha.market.rules_convertible_bond import MarketRulesConvertibleBond
+            _default_lot = MarketRulesConvertibleBond().lot_size  # 10
+        else:
+            from aipha.market.rules_cn_equity import MarketRulesCNEquity
+            _default_lot = MarketRulesCNEquity().lot_size  # 100
         et_config = EasytraderConfig(
             broker_type=BrokerType.EASYTRADER,
             name=broker_name,
@@ -189,7 +197,7 @@ def cmd_live(args):
             dry_run=args.dry_run,
             poll_interval=broker_config.get("poll_interval", 1.0),
             auto_reconnect=broker_config.get("auto_reconnect", True),
-            lot_size=broker_config.get("lot_size", 100),
+            lot_size=broker_config.get("lot_size", _default_lot),
         )
 
         gateway = EasytraderGateway(et_config)
@@ -218,11 +226,42 @@ def cmd_live(args):
         # 创建运行器
         from aipha.runner.live_runner import LiveRunner, RunnerConfig, RunnerMode
 
-        runner_config = RunnerConfig(
-            mode=RunnerMode.LIVE,
-            initial_capital=Decimal(str(config.get("initial_capital", 1_000_000))),
-            lot_size=et_config.lot_size,
-        )
+        # §13.1: asset-aware RunnerConfig — 按 market_type 从 MarketRules 派生费率
+        if market_type in ("convertible_bond", "cb"):
+            from aipha.market.rules_convertible_bond import MarketRulesConvertibleBond
+            _rules = MarketRulesConvertibleBond()
+            runner_config = RunnerConfig(
+                mode=RunnerMode.LIVE,
+                initial_capital=Decimal(str(config.get("initial_capital", 1_000_000))),
+                lot_size=et_config.lot_size,
+                t_plus_n=_rules.t_plus,
+                commission_rate=Decimal(str(_rules.commission_rate)),
+                commission_min=Decimal(str(_rules.commission_min)),
+                stamp_tax_rate=Decimal("0"),
+                transfer_fee_rate=Decimal("0"),
+                slippage_bps=_rules.slippage_bps_default,
+            )
+        elif market_type == "etf":
+            from aipha.market.rules_etf import MarketRulesETF
+            _rules = MarketRulesETF()
+            runner_config = RunnerConfig(
+                mode=RunnerMode.LIVE,
+                initial_capital=Decimal(str(config.get("initial_capital", 1_000_000))),
+                lot_size=et_config.lot_size,
+                t_plus_n=_rules.t_plus,
+                commission_rate=Decimal(str(_rules.commission_rate)),
+                commission_min=Decimal(str(_rules.commission_min)),
+                stamp_tax_rate=Decimal("0"),
+                transfer_fee_rate=Decimal("0"),
+                slippage_bps=_rules.slippage_bps_default,
+            )
+        else:
+            # A股默认 — RunnerConfig 类级默认值已对齐 MarketRulesCNEquity
+            runner_config = RunnerConfig(
+                mode=RunnerMode.LIVE,
+                initial_capital=Decimal(str(config.get("initial_capital", 1_000_000))),
+                lot_size=et_config.lot_size,
+            )
 
         runner = LiveRunner(runner_config, strategy, gateway)
         runner.start()
@@ -418,6 +457,7 @@ def cmd_check_data(args):
 
             provider = TuShareProBarProvider(
                 token=token,
+                cache_dir="data/cache/tushare",
                 adjust="qfq",
             )
 
@@ -451,7 +491,7 @@ def cmd_check_data(args):
             from aipha.data.akshare_provider import AKShareBarProvider
 
             provider = AKShareBarProvider(
-                adjust="qfq",
+                cache_dir="data/cache/akshare", adjust="qfq",
             )
 
             for sym in symbols:

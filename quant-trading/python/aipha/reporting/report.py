@@ -23,6 +23,8 @@ from typing import Optional
 
 import numpy as np
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
 from aipha.utils.metrics import (
     compute_sharpe_ratio as _compute_sharpe,
     compute_sortino_ratio as _compute_sortino,
@@ -187,15 +189,15 @@ class BacktestReport:
 def calculate_metrics(
     nav_series: list[tuple[date, float]],
     risk_free_rate: float = 0.02,
-    trading_days_per_year: int = 252,
+    trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> PerformanceMetrics:
     """
-    从NAV序列计算性能指标 — §13.2 委托 aipha.utils.metrics 共享模块
+    今NAV序列计算性能指标 — §13.2 委托 aipha.utils.metrics 共享模块
 
     Args:
         nav_series: NAV序列，每个元素为(日期, NAV值)
         risk_free_rate: 无风险利率（年化），默认0.02
-        trading_days_per_year: 每年交易日数，默认252
+        trading_days_per_year: 每年交易日数（§13.8: 244）
 
     Returns:
         PerformanceMetrics: 计算得到的性能指标
@@ -260,7 +262,7 @@ def calculate_benchmark_relative_metrics(
     strategy_nav: list[tuple[date, float]],
     benchmark_nav: list[tuple[date, float]],
     risk_free_rate: float = 0.02,
-    trading_days_per_year: int = 252,
+    trading_days_per_year: int = TRADING_DAYS_PER_YEAR,
 ) -> PerformanceMetrics:
     """
     从策略 NAV 和基准 NAV 计算含基准相对指标的性能指标。
@@ -273,7 +275,7 @@ def calculate_benchmark_relative_metrics(
         strategy_nav: 策略 NAV 序列，每个元素为 (日期, NAV值)
         benchmark_nav: 基准 NAV 序列，每个元素为 (日期, NAV值)
         risk_free_rate: 无风险利率（年化），默认 0.02
-        trading_days_per_year: 每年交易日数，默认 252
+        trading_days_per_year: 每年交易日数（§13.8: 244）
 
     Returns:
         PerformanceMetrics: 含基准相对指标的完整性能指标

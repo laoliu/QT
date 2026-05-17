@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
+import time
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -23,7 +25,31 @@ from typing import Optional
 import pandas as pd
 from dotenv import load_dotenv
 
+from aipha.monitoring.downward_revision_tracker import DownwardRevisionTracker
+
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# 模块级单例 — 所有消费方通过 get_cb_provider() 获取共享实例
+# ---------------------------------------------------------------------------
+_cb_provider_instance: Optional["TuShareCBProvider"] = None
+
+
+def get_cb_provider(
+    token: Optional[str] = None,
+    cache_dir: str = "data/cache/cb_tushare",
+) -> "TuShareCBProvider":
+    """获取 TuShareCBProvider 全局单例。
+
+    所有 paper/live/preheat 消费方应通过此函数获取 Provider，
+    确保共享同一份 Parquet 缓存，避免重复 API 调用。
+    """
+    global _cb_provider_instance
+    if _cb_provider_instance is None:
+        _cb_provider_instance = TuShareCBProvider(
+            token=token, cache_dir=cache_dir,
+        )
+    return _cb_provider_instance
 
 
 class TuShareCBProvider:
@@ -37,13 +63,9 @@ class TuShareCBProvider:
     def __init__(
         self,
         token: Optional[str] = None,
-        cache_dir: str = "",
+        cache_dir: str = "data/cache/cb_tushare",
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
-
-        if not cache_dir:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "cb_tushare")
 
         load_dotenv()
         self._gateway = get_tushare_gateway(token=token)
@@ -95,6 +117,7 @@ class TuShareCBProvider:
 
         # --- 来源 1：本地映射文件 ---
         map_path = self.cache_dir / "cb_rating_map.parquet"
+        map_loaded = False
         if map_path.exists():
             try:
                 rating_map = pd.read_parquet(map_path)
@@ -111,6 +134,7 @@ class TuShareCBProvider:
                         logger.info(f"从本地评级映射补充 {filled}/{n_missing} 只转债评级")
                     missing_mask = df["rating"].isin(["", "nan", "None", "NaN"])
                     n_missing = missing_mask.sum()
+                    map_loaded = True
             except Exception as e:
                 logger.warning(f"加载本地评级映射失败: {e}")
 
@@ -118,10 +142,34 @@ class TuShareCBProvider:
             return df
 
         # --- 来源 2：AKShare 集思录（实时快照） ---
+        # 若本地映射文件已存在（即使不完整），跳过网络请求，避免阻塞回测
+        if map_loaded:
+            logger.debug(
+                f"本地评级映射已加载但仍有 {n_missing} 只转债评级缺失，"
+                "跳过 AKShare 实时拉取（避免阻塞回测）。"
+                "如需更新评级，请运行: python scripts/build_cb_rating_map.py"
+            )
+            return df
+
         try:
+            import concurrent.futures
             import akshare as ak
 
-            jsl_df = ak.bond_cb_jsl()
+            def _fetch_jsl():
+                return ak.bond_cb_jsl()
+
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(_fetch_jsl)
+            jsl_df = None
+            try:
+                jsl_df = future.result(timeout=15)  # 最多等待 15 秒
+            except concurrent.futures.TimeoutError:
+                logger.warning("AKShare 集思录请求超时 (15s)，跳过评级补充。")
+                executor.shutdown(wait=False)  # 不等待卡住的线程
+                return df
+            finally:
+                executor.shutdown(wait=False)  # 无论如何不阻塞等待
+
             if jsl_df is not None and not jsl_df.empty:
                 # 集思录代码格式: 纯数字，需映射到 ts_code
                 jsl_map: dict[str, str] = {}
@@ -129,8 +177,8 @@ class TuShareCBProvider:
                     code = str(row.get("代码", ""))
                     rating_val = str(row.get("债券评级", ""))
                     if code and rating_val and rating_val not in ("", "nan", "None"):
-                        # 映射: 11xxxx -> 11xxxx.SH, 12xxxx -> 12xxxx.SZ, 13xxxx -> 13xxxx.SZ
-                        if code.startswith("11"):
+                        # 映射: 11xxxx/132xxx -> .SH, 12xxxx/145xxx -> .SZ
+                        if code.startswith("11") or code.startswith("132"):
                             ts_code = code + ".SH"
                         else:
                             ts_code = code + ".SZ"
@@ -154,8 +202,8 @@ class TuShareCBProvider:
                         if r and r not in ("", "nan", "None"):
                             all_ratings.append({"ts_code": ts, "rating": r})
                     if all_ratings:
-                        pd.DataFrame(all_ratings).to_parquet(
-                            map_path, index=False,
+                        self._atomic_write_parquet(
+                            pd.DataFrame(all_ratings), map_path,
                         )
                         logger.info(f"评级映射已缓存: {map_path}")
 
@@ -199,7 +247,7 @@ class TuShareCBProvider:
 
         if df is not None and len(df) > 0:
             df = self._supplement_rating(df)
-            df.to_parquet(cache_path, index=False)
+            self._atomic_write_parquet(df, cache_path)
             logger.info(f"获取并缓存可转债基础信息: {len(df)} 条")
 
         return df
@@ -299,7 +347,7 @@ class TuShareCBProvider:
                         if df is not None and len(df) > 0:
                             all_data.append(df)
                             # 同时保存逐日缓存，供后续复用
-                            df.to_parquet(day_cache_path, index=False)
+                            self._atomic_write_parquet(df, day_cache_path)
                     except Exception as e:
                         logger.warning(f"获取 {trade_dt} 数据失败: {e}")
 
@@ -321,12 +369,138 @@ class TuShareCBProvider:
             # 移除 dropna 以统一批量/逐日缓存行为（修复 F-D3）。
 
             if len(result) > 0:
-                result.to_parquet(cache_path, index=False)
+                self._atomic_write_parquet(result, cache_path)
                 logger.info(f"获取并缓存可转债行情: {len(result)} 条")
 
             return result
 
         return pd.DataFrame()
+
+    # ------------------------------------------------------------------
+    # 单日全量快照 — Paper/Live/Preheat 的唯一数据入口
+    # ------------------------------------------------------------------
+
+    # get_daily_snapshot 所需的字段（覆盖 close/open/pre_close/vol/amount/cb_value/cb_over_rate）
+    _SNAPSHOT_FIELDS = (
+        "ts_code,trade_date,open,high,low,close,pre_close,"
+        "vol,amount,cb_value,cb_over_rate"
+    )
+
+    def get_daily_snapshot(
+        self,
+        trade_date: str,
+        *,
+        retry_interval: float = 3.0,
+        log_interval: float = 600.0,
+        alert_after: float = 1800.0,
+    ) -> pd.DataFrame:
+        """获取指定交易日的全量 CB 日线快照（缓存优先）。
+
+        这是 Paper/Live/Preheat 路径获取 CB 日线数据的 **唯一入口**。
+        所有消费方（_fetch_prices_once / fetch_open_prices / scorer 等）
+        应通过此方法获取数据，不应直接调用 gw.call("cb_daily")。
+
+        行为：
+        1. 缓存命中 → 直接返回 DataFrame
+        2. 缓存未命中 → 调 gw.call("cb_daily") → 原子写缓存 → 返回
+        3. API 失败 → 每 3s 重试，永不放弃
+        4. 日志：每次失败不输出，仅每 10 分钟输出一次 "仍在重试"
+        5. 30 分钟未成功 → 飞书告警（仅一次）
+
+        Args:
+            trade_date: 交易日期 YYYYMMDD
+            retry_interval: 重试间隔（秒），默认 3s
+            log_interval: 日志输出间隔（秒），默认 600s (10min)
+            alert_after: 超过此秒数发飞书告警，默认 1800s (30min)
+
+        Returns:
+            DataFrame，至少含 ts_code/close/open/pre_close/vol 等列。
+            非交易日或数据确实为空时返回空 DataFrame。
+        """
+        cache_path = self.cache_dir / f"cb_daily_{trade_date}.parquet"
+
+        # --- 缓存命中 ---
+        if cache_path.exists():
+            df = pd.read_parquet(cache_path)
+            if not df.empty:
+                return df
+
+        # --- 缓存未命中：重试直到成功 ---
+        start_ts = time.monotonic()
+        last_log_ts = 0.0
+        alerted = False
+        attempt = 0
+
+        while True:
+            attempt += 1
+            try:
+                df = self._gateway.call(
+                    "cb_daily",
+                    trade_date=trade_date,
+                    fields=self._SNAPSHOT_FIELDS,
+                )
+                if df is not None and not df.empty:
+                    # 过滤 close<=0 的无效行
+                    df = df[df["close"] > 0].copy()
+                    if not df.empty:
+                        self._atomic_write_parquet(df, cache_path)
+                        elapsed = time.monotonic() - start_ts
+                        if elapsed > 10:
+                            logger.info(
+                                "cb_daily %s 获取成功: %d 行 (耗时 %.0fs, %d 次尝试)",
+                                trade_date, len(df), elapsed, attempt,
+                            )
+                        return df
+            except Exception:
+                pass  # 静默——由下方日志抑制逻辑统一处理
+
+            # --- 日志抑制：仅每 log_interval 秒输出一次 ---
+            elapsed = time.monotonic() - start_ts
+            if elapsed - last_log_ts >= log_interval:
+                logger.warning(
+                    "cb_daily %s 仍在重试: 已 %.0f 分钟, %d 次尝试",
+                    trade_date, elapsed / 60, attempt,
+                )
+                last_log_ts = elapsed
+
+            # --- 飞书告警（仅一次） ---
+            if not alerted and elapsed >= alert_after:
+                self._send_snapshot_alert(trade_date, elapsed, attempt)
+                alerted = True
+
+            time.sleep(retry_interval)
+
+    @staticmethod
+    def _atomic_write_parquet(df: pd.DataFrame, path: Path) -> None:
+        """原子写入 Parquet（先写 .tmp 再 rename，避免并发读到半成品）。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(
+            suffix=".parquet.tmp", dir=str(path.parent),
+        )
+        try:
+            os.close(fd)
+            df.to_parquet(tmp, index=False)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    @staticmethod
+    def _send_snapshot_alert(trade_date: str, elapsed: float, attempt: int) -> None:
+        """发送数据获取超时飞书告警（仅一次）。"""
+        try:
+            from aipha.monitor.feishu_alert import send_feishu_alert
+            send_feishu_alert(
+                f"CB 日线数据获取超时: {trade_date}",
+                f"已重试 {attempt} 次 ({elapsed / 60:.0f} 分钟) 仍未获取到 cb_daily 数据。\n"
+                f"请检查 TuShare API 状态或网络连接。",
+                level="ERROR",
+            )
+        except Exception:
+            logger.error("飞书告警发送失败", exc_info=True)
 
     def load_trading_cb_list(self, trade_date: str) -> pd.DataFrame:
         """获取指定日期的可交易可转债列表
@@ -425,12 +599,165 @@ class TuShareCBProvider:
                 ["ts_code", "ann_date"], ascending=[True, True]
             ).reset_index(drop=True)
 
-            result.to_parquet(cache_path, index=False)
+            self._atomic_write_parquet(result, cache_path)
             logger.info(f"获取并缓存可转债赎回公告: {len(result)} 条")
             return result
 
         logger.warning("未获取到可转债赎回公告数据")
         return pd.DataFrame()
+
+    def load_cb_price_chg(self, use_cache: bool = True) -> pd.DataFrame:
+        """获取可转债转股价变动历史数据（cb_price_chg）
+
+        TuShare cb_price_chg 接口返回转股价变动记录，含下修/送股/配股等调整。
+        注意：此接口需单独开权限（非积分相关），权限不足时返回空 DataFrame 并 warning。
+
+        关键字段：
+        - publish_date: 公告日期（PIT 信号时点）
+        - change_date: 变动生效日期
+        - convertprice_bef / convertprice_aft: 修正前后转股价
+
+        Returns:
+            DataFrame with columns:
+                - ts_code: 转债代码
+                - bond_short_name: 转债简称
+                - publish_date: 公告日期 YYYYMMDD
+                - change_date: 变动日期 YYYYMMDD
+                - convert_price_initial: 初始转股价
+                - convertprice_bef: 修正前转股价（可能为 None，表示初始记录）
+                - convertprice_aft: 修正后转股价（可能为 None，表示初始记录）
+        """
+        cache_path = self.cache_dir / "cb_price_chg.parquet"
+
+        if use_cache and cache_path.exists():
+            df = pd.read_parquet(cache_path)
+            logger.info(f"从缓存加载可转债转股价变动: {len(df)} 条")
+            return df
+
+        logger.info("从 Tushare 获取可转债转股价变动数据...")
+
+        # 需要先获取所有转债代码列表
+        cb_basic = self.load_cb_basic(use_cache=True)
+        if cb_basic.empty:
+            logger.warning("无法获取转债基础信息，跳过转股价变动数据获取")
+            return pd.DataFrame()
+
+        all_codes = cb_basic["ts_code"].unique().tolist()
+        fields = (
+            "ts_code,bond_short_name,publish_date,change_date,"
+            "convert_price_initial,convertprice_bef,convertprice_aft"
+        )
+
+        all_data = []
+        # 分批查询 — cb_price_chg 限频 5次/分钟，用大批次 + 显式延迟
+        batch_size = 100
+        import time as _time
+
+        for i in range(0, len(all_codes), batch_size):
+            batch_codes = all_codes[i : i + batch_size]
+            ts_code_str = ",".join(batch_codes)
+            try:
+                df_batch = self._gateway.call(
+                    "cb_price_chg",
+                    ts_code=ts_code_str,
+                    fields=fields,
+                )
+                if df_batch is not None and len(df_batch) > 0:
+                    all_data.append(df_batch)
+                logger.info(
+                    "cb_price_chg batch %d/%d: %d 条",
+                    i // batch_size + 1,
+                    (len(all_codes) + batch_size - 1) // batch_size,
+                    len(df_batch) if df_batch is not None else 0,
+                )
+            except Exception as e:
+                err_msg = str(e)
+                if "权限" in err_msg or "permission" in err_msg.lower():
+                    logger.warning(
+                        "cb_price_chg 接口权限不足，需在 TuShare 后台单独开通。"
+                        "返回空 DataFrame。"
+                    )
+                    return pd.DataFrame()
+                logger.warning("cb_price_chg batch %d 获取失败: %s", i, e)
+            # 显式延迟避免触发 5次/分钟限制
+            if i + batch_size < len(all_codes):
+                _time.sleep(15)
+
+        if all_data:
+            result = pd.concat(all_data, ignore_index=True)
+            result = result.drop_duplicates(
+                subset=["ts_code", "change_date"], keep="last"
+            )
+            result = result.sort_values(
+                ["ts_code", "change_date"], ascending=[True, True]
+            ).reset_index(drop=True)
+
+            self._atomic_write_parquet(result, cache_path)
+            logger.info(f"获取并缓存可转债转股价变动: {len(result)} 条")
+            return result
+
+        logger.warning("未获取到可转债转股价变动数据")
+        return pd.DataFrame()
+
+    def build_downward_revision_events(
+        self,
+        use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """从转股价变动数据中提取下修事件。
+
+        筛选逻辑：
+        - convertprice_bef 和 convertprice_aft 均非空
+        - convertprice_aft < convertprice_bef（价格下调）
+        - 下修幅度 > 1%（排除除权除息导致的微小调整）
+
+        Returns:
+            DataFrame with columns:
+                - ts_code, bond_short_name, publish_date, change_date
+                - convertprice_bef, convertprice_aft
+                - revision_pct: 下修幅度（负值，如 -0.15 表示下修 15%）
+        """
+        price_chg = self.load_cb_price_chg(use_cache=use_cache)
+        if price_chg.empty:
+            return pd.DataFrame()
+
+        # 过滤有效变动（排除初始记录）
+        df = price_chg.dropna(
+            subset=["convertprice_bef", "convertprice_aft"]
+        ).copy()
+        if df.empty:
+            return pd.DataFrame()
+
+        df["convertprice_bef"] = pd.to_numeric(df["convertprice_bef"], errors="coerce")
+        df["convertprice_aft"] = pd.to_numeric(df["convertprice_aft"], errors="coerce")
+        df = df.dropna(subset=["convertprice_bef", "convertprice_aft"])
+
+        # 计算变动幅度
+        df["revision_pct"] = (
+            (df["convertprice_aft"] - df["convertprice_bef"]) / df["convertprice_bef"]
+        )
+
+        # 仅保留下修事件（价格下调且幅度 > 1%）
+        events = df[df["revision_pct"] < -0.01].copy()
+        events = events.sort_values(
+            ["change_date", "ts_code"], ascending=[True, True]
+        ).reset_index(drop=True)
+
+        logger.info(
+            f"提取下修事件: {len(events)} 次 "
+            f"(占总变动 {len(df)} 次的 {len(events)/max(len(df),1)*100:.1f}%)"
+        )
+        return events
+
+    def build_downward_revision_lookup(
+        self,
+        as_of_date: str | None = None,
+        use_cache: bool = True,
+    ) -> dict[str, dict]:
+        """构建可转债下修事件查询表（PIT 安全）。"""
+        events = self.build_downward_revision_events(use_cache=use_cache)
+        if events.empty:
+            return {}
+        return DownwardRevisionTracker(events).build_lookup(as_of_date=as_of_date)
 
     def build_force_redeem_lookup(
         self,
@@ -552,7 +879,7 @@ class TuShareCBProvider:
             df = df.sort_values("trade_date").reset_index(drop=True)
 
             if len(df) > 0:
-                df.to_parquet(cache_path, index=False)
+                self._atomic_write_parquet(df, cache_path)
                 logger.info(f"获取并缓存 {ts_code} 历史: {len(df)} 条")
 
             return df

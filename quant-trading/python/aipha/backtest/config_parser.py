@@ -25,7 +25,6 @@ from aipha.backtest.config_models import (
     PortfolioConfig,
     RiskConfig,
     StrategyConfig,
-    TickBacktestConfig,
     UniverseConfig,
 )
 from aipha.backtest.engine import BacktestConfig
@@ -61,6 +60,27 @@ def load_config(path: str | Path) -> BacktestRunConfig:
             import json
 
             raw = json.load(f)
+
+    # 展开 _preset 引用（§统一配置体系）
+    from aipha.config_resolver import resolve_config_refs
+
+    import os as _os
+
+    _project_root = path.resolve().parent
+    _found_marker = False
+    while _project_root != _project_root.parent:
+        if (_project_root / "pyproject.toml").exists():
+            _found_marker = True
+            break
+        _project_root = _project_root.parent
+    if not _found_marker:
+        _fallback = Path(_os.environ.get("AIPHA_PROJECT_ROOT", "/app"))
+        if (_fallback / "configs").exists():
+            _project_root = _fallback
+        else:
+            # 最终 fallback: YAML 文件上推 2 级（configs/xxx/file.yml → 项目根）
+            _project_root = path.resolve().parent.parent.parent
+    raw = resolve_config_refs(raw, base_dir=_project_root)
 
     return parse_config(raw)
 
@@ -268,7 +288,7 @@ def _normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
         "name", "description", "data", "universe", "strategy", "cost",
         "fill_model", "initial_capital", "lot_size", "t_plus_n",
         "random_seed", "output_dir", "quality_gates_path", "risk",
-        "portfolio",
+        "portfolio", "missing_quote_writeoff_enabled", "missing_quote_writeoff_days",
         # tolerated but not parsed:
         "market", "frequency", "report",
         # aliases (handled above):
@@ -361,6 +381,12 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
 
     # 解析股票池配置
     universe_raw = raw.get("universe", {})
+    if not universe_raw:
+        logger.warning(
+            "配置缺少 'universe' 或 'universe_policy' 节 (§3.2 违规). "
+            "自动填充安全默认值 (exclude_st/suspended/limit=True, min_listing_days=60). "
+            "建议在 YAML 中显式声明 universe_policy."
+        )
     universe = UniverseConfig(
         policy=universe_raw.get("policy", "default"),
         exclude_st=universe_raw.get("exclude_st", True),
@@ -389,6 +415,7 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         slippage_bps=cost_raw.get("slippage_bps", _defaults["slippage_bps"]),
         slippage_model=cost_raw.get("slippage_model", "fixed"),
         slippage_params=cost_raw.get("slippage_params", {}),
+        t_plus_n_discount=cost_raw.get("t_plus_n_discount", 1.0),
     )
 
     # 解析成交模型配置
@@ -403,7 +430,7 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
     risk = RiskConfig(
         enabled=risk_raw.get("enabled", True),
         max_position_weight=risk_raw.get("max_position_weight", 0.10),
-        max_drawdown=risk_raw.get("max_drawdown", 0.20),
+        max_drawdown=risk_raw.get("max_drawdown", 1.0),  # §4.3.2: 默认禁用渐进减仓
         drawdown_scale_factor_floor=risk_raw.get("drawdown_scale_factor_floor", 0.0),
         drawdown_allow_rotation=risk_raw.get("drawdown_allow_rotation", False),
         drawdown_peak_reset_days=risk_raw.get("drawdown_peak_reset_days", 0),
@@ -468,24 +495,15 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         },
     )
 
+    # §4.3.2 规则 8+9: DrawdownLimit 防护参数验证 (R163: 传入 top_k 检测死亡螺旋高危组合)
+    _top_k = strategy.params.get("top_k") if isinstance(strategy.params, dict) else None
+    risk.validate_drawdown_safety(top_k=_top_k if isinstance(_top_k, int) else None)
+
     # 解析顶层 valuation_sizing 节并注入 risk.extra
     val_sizing_raw = raw.get("valuation_sizing")
     if val_sizing_raw and isinstance(val_sizing_raw, dict):
         risk.extra["valuation_sizing"] = val_sizing_raw
         logger.debug("valuation_sizing 配置已注入 risk.extra")
-
-    # --- tick 回测配置 ---
-    tick_raw = raw.get("tick", {})
-    is_tick_mode = data.frequency == "tick"
-    tick_config = TickBacktestConfig(
-        enabled=tick_raw.get("enabled", is_tick_mode),
-        tick_source=tick_raw.get("tick_source", tick_raw.get("source", "auto")),
-        tick_cache_dir=tick_raw.get("tick_cache_dir", tick_raw.get("cache_dir")),
-        bridge_url=tick_raw.get("bridge_url", "http://127.0.0.1:58088"),
-        fill_mode=tick_raw.get("fill_mode", "bbo"),
-        aggregate_interval=tick_raw.get("aggregate_interval", 60),
-        feature_buffer_size=tick_raw.get("feature_buffer_size", 256),
-    )
 
     return BacktestRunConfig(
         name=raw.get("name", "unnamed_backtest"),
@@ -497,13 +515,14 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         fill_model=fill_model,
         risk=risk,
         portfolio=_parse_portfolio(raw),
-        tick=tick_config,
         initial_capital=raw.get("initial_capital", 1_000_000.0),
         lot_size=raw.get("lot_size", _defaults["lot_size"]),
         t_plus_n=raw.get("t_plus_n", _defaults["t_plus_n"]),
         random_seed=raw.get("random_seed"),
         output_dir=raw.get("output_dir", "output"),
         quality_gates_path=raw.get("quality_gates_path"),
+        missing_quote_writeoff_enabled=raw.get("missing_quote_writeoff_enabled", False),
+        missing_quote_writeoff_days=raw.get("missing_quote_writeoff_days", 20),
     )
 
 
@@ -619,6 +638,8 @@ def config_to_dict(config: BacktestRunConfig) -> dict[str, Any]:
         "random_seed": config.random_seed,
         "output_dir": config.output_dir,
         "quality_gates_path": config.quality_gates_path,
+        "missing_quote_writeoff_enabled": config.missing_quote_writeoff_enabled,
+        "missing_quote_writeoff_days": config.missing_quote_writeoff_days,
         "portfolio": {
             "method": config.portfolio.method,
             **(config.portfolio.params if config.portfolio.params else {}),
@@ -669,17 +690,27 @@ def to_backtest_config(run_config: BacktestRunConfig) -> BacktestConfig:
         transfer_fee_rate=run_config.cost.transfer_fee_rate,
         slippage_bps=run_config.cost.slippage_bps,
         t_plus_n=run_config.t_plus_n,
+        missing_quote_writeoff_enabled=run_config.missing_quote_writeoff_enabled,
+        missing_quote_writeoff_days=run_config.missing_quote_writeoff_days,
     )
 
 
-def validate_config(config: BacktestRunConfig) -> list[str]:
+def validate_config(config: BacktestRunConfig, *, strict_mode: bool = True) -> list[str]:
     """验证配置
 
     R87 增强: 添加滑点模型/费率合理性/资产类型一致性检查，
     防止 V7/V7.1 类型的配置格式不一致导致回测结果误诊。
 
+    Phase 1 加固 (Plan v3): 新增 strict_mode 零容忍检查：
+    - slippage_bps=0 → ERROR
+    - commission_rate=0（无显式豁免）→ ERROR
+    - fill_model.max_participation_rate > 0.30 → ERROR
+    - cost 与 MarketRules 偏差 > 200% → ERROR
+
     Args:
         config: 回测配置
+        strict_mode: 是否启用严格检查（默认 True）。
+                     仅在显式压力测试/sensitivity analysis 时设为 False。
 
     Returns:
         错误消息列表（空列表表示验证通过）
@@ -739,6 +770,50 @@ def validate_config(config: BacktestRunConfig) -> list[str]:
     # 策略验证
     if not config.strategy.name:
         errors.append("strategy.name is required")
+
+    # ========================================================================
+    # Phase 1 strict_mode 加固检查（Plan v3, §13.18 Fail-Closed）
+    # ========================================================================
+    if strict_mode:
+        # slippage_bps = 0 → 等于假设零交易冲击，虚高 AR
+        slippage_bps = getattr(config.cost, "slippage_bps", None)
+        if slippage_bps is not None and slippage_bps <= 0:
+            errors.append(
+                f"slippage_bps={slippage_bps} is invalid (must be > 0). "
+                "Zero slippage produces unrealistically inflated returns. "
+                "CB default=5.0, A-stock default=10.0."
+            )
+
+        # commission_rate = 0 → 除非显式标记 allow_zero_commission
+        cr = config.cost.commission_rate
+        allow_zero = getattr(config.cost, "allow_zero_commission", False)
+        if cr == 0 and not allow_zero:
+            errors.append(
+                "commission_rate=0 is not allowed without explicit "
+                "'allow_zero_commission: true'. "
+                "Standard rate: 0.0000854 (万0.854)."
+            )
+
+        # max_participation_rate > 0.30 → 不现实的成交假设
+        max_pr = getattr(config.fill_model, "max_participation_rate", None)
+        if max_pr is not None and max_pr > 0.30:
+            errors.append(
+                f"fill_model.max_participation_rate={max_pr} exceeds 30% limit. "
+                "High participation rates produce unrealistic fill assumptions."
+            )
+
+        # slippage_bps 与 MarketRules 偏差 > 200% → 可能是 typo
+        if slippage_bps is not None and slippage_bps > 0:
+            _asset = getattr(config, "asset_type", None) or "convertible_bond"
+            if "equity" in str(_asset).lower() or "stock" in str(_asset).lower():
+                _expected_bps = 10.0  # A-stock default
+            else:
+                _expected_bps = 5.0   # CB default
+            if slippage_bps > _expected_bps * 3:
+                errors.append(
+                    f"slippage_bps={slippage_bps} is >3x the MarketRules default "
+                    f"({_expected_bps}). If intentional, use strict_mode=False."
+                )
 
     return errors
 
@@ -810,6 +885,14 @@ def save_run_result(run_result: BacktestRunResult) -> dict[str, Path]:
                 "cost_vs_nav_pct": round(cost_attr.cost_vs_nav_pct, 6),
                 "cost_drag_annualized": round(cost_attr.cost_drag_annualized, 6),
             }
+            # T+1 折扣调整（原则D [CN]）
+            discount = run_result.config.cost.t_plus_n_discount
+            if discount < 1.0:
+                sr = metrics.get("sharpe_ratio", 0.0)
+                summary["metrics"]["sharpe_ratio_t1_adjusted"] = round(
+                    sr * discount, 6
+                )
+                summary["metrics"]["t_plus_n_discount"] = discount
         except Exception as _e:
             logger.debug("summary.json 指标计算失败: %s", _e)
         json.dump(summary, f, indent=2, ensure_ascii=False)
@@ -849,52 +932,39 @@ def save_run_result(run_result: BacktestRunResult) -> dict[str, Path]:
             paths["trades"] = trades_path
             logger.debug("交易明细已保存: %s (%d 笔)", trades_path, len(trades))
     except Exception as _e:
-        logger.debug("交易明细 CSV 保存失败（不影响结果）: %s", _e)
+        logger.warning("交易明细 CSV 保存失败: %s", _e)
 
-    # ── 保存每日快照 CSV ──
+    # ── 保存每日快照 CSV（委托 nav_artifacts §13.2 单一实现） ──
     try:
-        import csv as _csv
+        from aipha.backtest.nav_artifacts import write_daily_snapshots_csv
 
         snapshots = run_result.result.daily_snapshots
         if snapshots:
             snapshots_path = output_dir / "daily_snapshots.csv"
-            with open(snapshots_path, "w", newline="", encoding="utf-8") as f:
-                writer = _csv.writer(f)
-                writer.writerow([
-                    "date", "nav", "cash", "frozen_cash", "daily_return",
-                    "cumulative_return", "position_count", "positions", "position_values",
-                ])
-                for s in snapshots:
-                    writer.writerow([
-                        s.trade_date.isoformat(),
-                        round(s.nav, 2),
-                        round(s.cash, 2),
-                        round(s.frozen_cash, 2),
-                        round(s.daily_return, 6),
-                        round(s.cumulative_return, 6),
-                        len(s.positions),
-                        json.dumps(s.positions, ensure_ascii=False),
-                        json.dumps(
-                            {k: round(v, 2) for k, v in s.position_values.items()},
-                            ensure_ascii=False,
-                        ),
-                    ])
+            write_daily_snapshots_csv(snapshots, snapshots_path)
             paths["daily_snapshots"] = snapshots_path
             logger.debug("每日快照已保存: %s (%d 天)", snapshots_path, len(snapshots))
     except Exception as _e:
-        logger.debug("每日快照 CSV 保存失败（不影响结果）: %s", _e)
+        logger.warning("每日快照 CSV 保存失败: %s", _e)
 
     # ── 写入 SQLite 索引 ──
     try:
+        import tempfile as _tf
+
         from aipha.backtest.result_store import ResultStore, summary_json_to_run_dict
 
-        run_dict = summary_json_to_run_dict(summary_path)
-        store = ResultStore()
-        store.upsert_backtest_run(run_dict)
-        store.close()
-        logger.debug("结果已索引到 SQLite: %s", run_dict["run_id"])
+        # 跳过临时目录中的结果（测试环境产出），避免污染生产 DB
+        _tmpdir = Path(_tf.gettempdir()).resolve()
+        if summary_path.resolve().is_relative_to(_tmpdir):
+            logger.debug("跳过临时目录结果的 SQLite 索引: %s", summary_path)
+        else:
+            run_dict = summary_json_to_run_dict(summary_path)
+            store = ResultStore()
+            store.upsert_backtest_run(run_dict)
+            store.close()
+            logger.info("结果已索引到 SQLite: %s", run_dict["run_id"])
     except Exception as _e:
-        logger.debug("SQLite 索引写入失败（不影响结果）: %s", _e)
+        logger.warning("SQLite 索引写入失败: %s", _e)
 
     return paths
 

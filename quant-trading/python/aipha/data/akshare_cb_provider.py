@@ -205,9 +205,6 @@ class AKShareCBProvider:
         jsl_cookie: str | None = None,
         rate_limiter: RateLimiter | None = None,
     ):
-        if cache_dir is None:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "cb")
         self.cache_dir = cache_dir
         self.jsl_cookie = jsl_cookie
 

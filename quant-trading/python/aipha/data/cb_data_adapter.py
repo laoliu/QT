@@ -66,12 +66,9 @@ class CBDataAdapter:
 
     def __init__(
         self,
-        cache_dir: str = "",
+        cache_dir: str = "data/cache/cb_tushare",
         token: Optional[str] = None,
     ):
-        if not cache_dir:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "cb_tushare")
         self.provider = TuShareCBProvider(token=token, cache_dir=cache_dir)
         # 强赎公告数据（在 load() 中延迟加载）
         self._force_redeem_data: Optional[pd.DataFrame] = None
@@ -137,6 +134,7 @@ class CBDataAdapter:
             "delist_date",
             "maturity_date",
             "rating",
+            "conv_price",
         ]
         available_cols = [c for c in basic_cols if c in basic.columns]
         merged = daily.merge(basic[available_cols], on="ts_code", how="left")
@@ -156,6 +154,20 @@ class CBDataAdapter:
             merged = merged.sort_values(["ts_code", "trade_date"])
             merged["prev_close"] = merged.groupby("ts_code")["close"].shift(1)
             logger.debug("prev_close 已从前一交易日 close 推算")
+
+        # 5.7 §13.20 prev_close/pre_close 字段校验
+        # 首日 prev_close=NaN 是结构性缺失（shift(1) 无前驱），但非首日缺失须告警
+        if "prev_close" in merged.columns:
+            first_day_mask = merged.groupby("ts_code").cumcount() == 0
+            non_first = merged[~first_day_mask]
+            n_missing_prev_close = non_first["prev_close"].isna().sum()
+            if n_missing_prev_close > 0:
+                pct = n_missing_prev_close / len(non_first) * 100
+                logger.warning(
+                    "§13.20 prev_close(pre_close) 校验: %d 条非首日记录缺失 prev_close (%.2f%%), "
+                    "涨跌停检查可能被跳过",
+                    n_missing_prev_close, pct,
+                )
 
         # 6. 转换为 dict[date, dict[str, Bar]]
         bars_by_date: dict[date, dict[str, Bar]] = {}

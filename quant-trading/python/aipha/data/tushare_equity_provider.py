@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 import time
 from datetime import date, datetime
 from pathlib import Path
@@ -41,6 +42,28 @@ from aipha.data.cache_utils import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# 模块级单例 — 所有消费方通过 get_equity_provider() 获取共享实例
+# ---------------------------------------------------------------------------
+_equity_provider_instance: Optional["TuShareEquityProvider"] = None
+
+
+def get_equity_provider(
+    token: Optional[str] = None,
+    cache_dir: str = "data/cache/equity_tushare",
+) -> "TuShareEquityProvider":
+    """获取 TuShareEquityProvider 全局单例。
+
+    所有 paper/live/preheat 消费方应通过此函数获取 Provider，
+    确保共享同一份 Parquet 缓存，避免重复 API 调用。
+    """
+    global _equity_provider_instance
+    if _equity_provider_instance is None:
+        _equity_provider_instance = TuShareEquityProvider(
+            token=token, cache_dir=cache_dir,
+        )
+    return _equity_provider_instance
+
 
 class TuShareEquityProvider:
     """TuShare Pro A 股数据提供者
@@ -54,14 +77,10 @@ class TuShareEquityProvider:
     def __init__(
         self,
         token: Optional[str] = None,
-        cache_dir: str = "",
+        cache_dir: str = "data/cache/equity_tushare",
         max_retries: int = 20,
     ):
         from aipha.data.tushare_gateway import get_tushare_gateway
-
-        if not cache_dir:
-            from aipha.config import get_cache_dir
-            cache_dir = str(get_cache_dir() / "equity_tushare")
 
         load_dotenv()
         self._gateway = get_tushare_gateway(token=token)
@@ -74,6 +93,117 @@ class TuShareEquityProvider:
         # 通过网关获取 API 对象（向后兼容需要 self.api 的调用方）
         self.api = self._gateway.api
         logger.info(f"TuShareEquityProvider 初始化完成，缓存目录: {self.cache_dir}")
+
+    # ------------------------------------------------------------------
+    # 日线快照 — 全市场单日数据（Paper/Live 统一入口）
+    # ------------------------------------------------------------------
+    _SNAPSHOT_FIELDS = (
+        "ts_code,trade_date,open,high,low,close,pre_close,vol,amount"
+    )
+
+    def get_daily_snapshot(
+        self,
+        trade_date: str,
+        *,
+        retry_interval: float = 3.0,
+        log_interval: float = 600.0,
+        alert_after: float = 1800.0,
+    ) -> pd.DataFrame:
+        """获取 A 股全市场日线快照（缓存优先，无限重试）。
+
+        行为与 TuShareCBProvider.get_daily_snapshot() 完全对齐：
+        1. 缓存命中 → 直接返回（零 API 开销）
+        2. 缓存未命中 → 3s 固定重试，永不放弃
+        3. 日志每 10 分钟才输出一次（避免刷屏）
+        4. 30 分钟未成功 → 飞书告警（仅一次）
+        """
+        cache_path = self.cache_dir / f"daily_{trade_date}.parquet"
+
+        if cache_path.exists():
+            df = pd.read_parquet(cache_path)
+            if not df.empty:
+                return df
+
+        start_ts = time.monotonic()
+        last_log_ts = 0.0
+        alerted = False
+        attempt = 0
+
+        while True:
+            attempt += 1
+            try:
+                df = self._gateway.call(
+                    "daily",
+                    trade_date=trade_date,
+                    fields=self._SNAPSHOT_FIELDS,
+                )
+                if df is not None and not df.empty:
+                    df = df[df["close"] > 0].copy()
+                    if not df.empty:
+                        self._atomic_write_parquet(df, cache_path)
+                        elapsed = time.monotonic() - start_ts
+                        if elapsed > 10:
+                            logger.info(
+                                "daily %s 获取成功: %d 行 (%.0fs, %d 次)",
+                                trade_date, len(df), elapsed, attempt,
+                            )
+                        return df
+            except Exception:
+                pass
+
+            elapsed = time.monotonic() - start_ts
+            if elapsed - last_log_ts >= log_interval:
+                logger.warning(
+                    "daily %s 仍在重试: 已 %.0f 分钟, %d 次尝试",
+                    trade_date, elapsed / 60, attempt,
+                )
+                last_log_ts = elapsed
+
+            if not alerted and elapsed >= alert_after:
+                self._send_snapshot_alert(
+                    "A股", trade_date, elapsed, attempt,
+                )
+                alerted = True
+
+            time.sleep(retry_interval)
+
+    @staticmethod
+    def _atomic_write_parquet(df: pd.DataFrame, path: Path) -> None:
+        """原子写入 Parquet（先写 .tmp 再 rename）。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(
+            suffix=".parquet.tmp", dir=str(path.parent),
+        )
+        try:
+            os.close(fd)
+            df.to_parquet(tmp, index=False)
+            os.replace(tmp, str(path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    @staticmethod
+    def _send_snapshot_alert(
+        asset: str, trade_date: str, elapsed: float, attempt: int,
+    ) -> None:
+        """发送数据获取超时飞书告警（仅一次）。"""
+        try:
+            from aipha.monitor.feishu_alert import send_feishu_alert
+            send_feishu_alert(
+                f"{asset} 日线数据获取超时: {trade_date}",
+                f"已重试 {attempt} 次 ({elapsed / 60:.0f} 分钟) "
+                f"仍未获取到 daily 数据。\n"
+                f"请检查 TuShare API 状态和网络连通性。",
+                level="ERROR",
+            )
+        except Exception:
+            logger.error(
+                "%s daily 快照告警推送失败 (trade_date=%s)",
+                asset, trade_date,
+            )
 
     @staticmethod
     def _to_date(d) -> date:
@@ -144,7 +274,7 @@ class TuShareEquityProvider:
             subset=["ts_code"]
         )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         logger.info(f"stock_basic 已缓存: {len(df)} 只股票")
         return df
 
@@ -205,7 +335,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "trade_date"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df[df["trade_date"] == trade_date]
 
     def load_daily_basic_range(
@@ -286,7 +416,7 @@ class TuShareEquityProvider:
         )
 
         if df is not None and not df.empty:
-            df.to_parquet(cache_path, index=False)
+            self._atomic_write_parquet(df, cache_path)
 
         return df if df is not None else pd.DataFrame()
 
@@ -347,7 +477,7 @@ class TuShareEquityProvider:
             return []
 
         merged = pd.concat(all_frames, ignore_index=True)
-        merged.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(merged, cache_path)
 
         codes = merged["con_code"].unique().tolist()
         logger.info(f"指数成分并集: {len(codes)} 只唯一股票（跨 {len(all_frames)} 个快照）")
@@ -433,7 +563,7 @@ class TuShareEquityProvider:
             return {}
 
         merged = pd.concat(all_frames, ignore_index=True)
-        merged.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(merged, cache_path)
 
         result = {}
         for sd, grp in merged.groupby("snapshot_date"):
@@ -498,7 +628,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "trade_date"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df[df["trade_date"] == trade_date]
 
     def load_daily_bars_range(
@@ -594,7 +724,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "trade_date"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         mask = pd.Series(True, index=df.index)
         if start_date:
             mask &= df["trade_date"] >= start_date
@@ -671,7 +801,7 @@ class TuShareEquityProvider:
                         ).drop_duplicates(["ts_code", "trade_date"])
                     else:
                         combined = new_df
-                    combined.to_parquet(cache_path, index=False)
+                    self._atomic_write_parquet(combined, cache_path)
                     cached_df = combined
 
             if cached_df is not None and not cached_df.empty:
@@ -774,7 +904,7 @@ class TuShareEquityProvider:
             return pd.DataFrame()
 
         df = pd.concat(results, ignore_index=True)
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         logger.info(f"申万行业分类已缓存: {len(df)} 条映射")
         return df
 
@@ -831,18 +961,32 @@ class TuShareEquityProvider:
         """
         cache_path = self.cache_dir / f"fina_indicator_{ts_code.replace('.', '_')}.parquet"
 
+        # TS-1 Stage 1: new fields that must be present in cache
+        _TS1_REQUIRED_COLS = {"or_yoy", "roic", "ocf_to_or", "assets_turn", "netprofit_yoy"}
+
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
             if cached is not None and not cached.empty:
-                return cached
+                # Check if cache has TS-1 expanded fields
+                if _TS1_REQUIRED_COLS.issubset(cached.columns):
+                    return cached
+                logger.info(
+                    "fina_indicator cache outdated for %s (missing TS-1 fields), re-fetching",
+                    ts_code,
+                )
 
         logger.info(f"从 TuShare API 下载 fina_indicator: {ts_code}")
         fields = (
             "ts_code,ann_date,end_date,"
             "roe,roe_waa,roa,grossprofit_margin,netprofit_margin,"
-            "profit_to_gr,revenue_yoy,net_profit_yoy,dt_netprofit_yoy,"
+            "profit_to_gr,dt_netprofit_yoy,netprofit_yoy,"
             "eps,bps,cfps,current_ratio,quick_ratio,"
-            "debt_to_assets,op_yoy"
+            "debt_to_assets,op_yoy,"
+            # TS-1 Stage 1 expansion (R156)
+            "or_yoy,assets_yoy,"
+            "ar_turn,inv_turn,roic,ocf_to_or,"
+            "basic_eps_yoy,q_sales_yoy,q_roe,"
+            "ocfps,assets_turn"
         )
 
         kwargs: dict = {"ts_code": ts_code, "fields": fields}
@@ -865,7 +1009,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "end_date", "ann_date"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df
 
     def load_income(
@@ -919,7 +1063,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "end_date", "report_type"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df
 
     def load_balancesheet(
@@ -974,7 +1118,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "end_date", "report_type"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df
 
     def load_cashflow(
@@ -997,16 +1141,25 @@ class TuShareEquityProvider:
         """
         cache_path = self.cache_dir / f"cashflow_{ts_code.replace('.', '_')}.parquet"
 
+        # TS-1 Stage 2: capex field must be present in cache
+        _TS1_CF_REQUIRED = {"c_pay_acq_const_fiolta"}
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
             if cached is not None and not cached.empty:
-                return cached
+                if _TS1_CF_REQUIRED.issubset(cached.columns):
+                    return cached
+                logger.info(
+                    "cashflow cache outdated for %s (missing TS-1 fields), re-fetching",
+                    ts_code,
+                )
 
         logger.info(f"从 TuShare API 下载 cashflow: {ts_code}")
         fields = (
             "ts_code,ann_date,end_date,report_type,"
             "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"
-            "c_fr_sale_sg,c_paid_goods_s"
+            "c_fr_sale_sg,c_paid_goods_s,"
+            # TS-1 Stage 2 expansion (R156): capex for FCF
+            "c_pay_acq_const_fiolta"
         )
 
         kwargs: dict = {"ts_code": ts_code, "fields": fields}
@@ -1027,7 +1180,7 @@ class TuShareEquityProvider:
                     subset=["ts_code", "end_date", "report_type"]
                 )
 
-        df.to_parquet(cache_path, index=False)
+        self._atomic_write_parquet(df, cache_path)
         return df
 
     # ------------------------------------------------------------------
@@ -1079,7 +1232,7 @@ class TuShareEquityProvider:
             for col in ("start_date", "end_date", "ann_date"):
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], format="%Y%m%d", errors="coerce")
-            df.to_parquet(cache_path, index=False)
+            self._atomic_write_parquet(df, cache_path)
             logger.info(f"namechange 已缓存: {len(df)} 条 → {cache_path}")
         else:
             df = pd.DataFrame(columns=["ts_code", "name", "start_date", "end_date", "ann_date", "change_reason"])

@@ -26,8 +26,9 @@ class SectorRotationConfig(EquityRotationConfig):
 class SectorRotationStrategy(EquityRotationStrategy):
     name = "sector_rotation"
 
-    def __init__(self, config: SectorRotationConfig | None = None, **kwargs: object) -> None:
-        super().__init__(config=config or SectorRotationConfig(), **kwargs)
+    def __init__(self) -> None:
+        super().__init__()
+        self._config = SectorRotationConfig()
 
     @property
     def config(self) -> SectorRotationConfig:

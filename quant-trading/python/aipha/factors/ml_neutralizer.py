@@ -86,6 +86,68 @@ def build_regression_matrix(
     return np.hstack(parts)
 
 
+def compute_adaptive_alpha(
+    df: pd.DataFrame,
+    date_col: str = "datetime",
+    alpha_0: float = 1.0,
+    beta_vol: float = 0.5,
+    vol_window: int = 20,
+    vol_long_window: int = 252,
+    market_returns: pd.Series | None = None,
+) -> pd.Series:
+    """计算 Du 2025 自适应中性化强度 alpha_t.
+
+    公式: alpha_t = alpha_0 * (1 + beta_vol * (sigma_short - sigma_long) / sigma_long)
+    高波动时加强中性化，低波动时降低中性化保留更多信号。
+
+    Args:
+        df: 含 datetime 的面板数据 (用于提取日期和内部计算波动率)
+        date_col: 日期列名
+        alpha_0: 基础中性化强度（1.0=完全中性化）
+        beta_vol: 波动率敏感度
+        vol_window: 短期波动率窗口（交易日）
+        vol_long_window: 长期波动率窗口（交易日）
+        market_returns: 外部传入的市场日度收益率序列 (index=date)，
+                        若为 None 则从截面数据内部估算
+
+    Returns:
+        按日期索引的 alpha_t Series
+    """
+    unique_dates = np.sort(df[date_col].unique())
+
+    if market_returns is not None and len(market_returns) > 0:
+        # 使用外部市场收益率序列的绝对值作为波动率代理
+        vol_proxy = market_returns.abs()
+    elif "close" in df.columns:
+        # 内部估算: 计算全市场等权日收益率
+        # 先按 symbol 排序确保时序正确，再按日聚合
+        daily_mean_close = df.groupby(date_col)["close"].mean().sort_index()
+        # 市场组合日收益率 (等权)
+        mkt_ret = daily_mean_close.pct_change().fillna(0.0)
+        vol_proxy = mkt_ret.abs()
+    else:
+        # 无法计算波动率，返回固定 alpha
+        return pd.Series(alpha_0, index=unique_dates)
+
+    # 确保 vol_proxy 按日期排序
+    vol_proxy = vol_proxy.sort_index()
+
+    # 滚动窗口计算短期/长期波动率 (使用 std 而非 mean of abs)
+    sigma_short = vol_proxy.rolling(vol_window, min_periods=max(1, vol_window // 2)).std()
+    sigma_long = vol_proxy.rolling(vol_long_window, min_periods=max(1, vol_long_window // 4)).std()
+
+    # 避免除零
+    sigma_long_safe = sigma_long.replace(0, np.nan)
+    vol_ratio = (sigma_short - sigma_long_safe) / sigma_long_safe
+    vol_ratio = vol_ratio.fillna(0.0)
+
+    alpha_t = alpha_0 * (1.0 + beta_vol * vol_ratio)
+    # 限制在 [0.3, 1.5] 区间，防止极端值
+    alpha_t = alpha_t.clip(0.3, 1.5)
+
+    return alpha_t
+
+
 def neutralize_ml_features(
     df: pd.DataFrame,
     feature_cols: Sequence[str],
@@ -94,6 +156,11 @@ def neutralize_ml_features(
     date_col: str = "datetime",
     quadratic_size: bool = True,
     min_samples: int = 30,
+    adaptive: bool = False,
+    alpha_0: float = 1.0,
+    beta_vol: float = 0.5,
+    vol_window: int = 20,
+    vol_long_window: int = 252,
 ) -> pd.DataFrame:
     """对 ML 训练 DataFrame 进行按日截面中性化。
 
@@ -107,6 +174,11 @@ def neutralize_ml_features(
         date_col: 日期列名
         quadratic_size: 是否包含二次规模项
         min_samples: 每个截面最少样本数
+        adaptive: 是否启用自适应强度调节 (Du 2025 Step 3)
+        alpha_0: 基础中性化强度（1.0=完全中性化）
+        beta_vol: 波动率敏感度（>0: 高波动加强中性化）
+        vol_window: 短期波动率窗口
+        vol_long_window: 长期波动率窗口
 
     Returns:
         中性化后的 DataFrame (原地修改 feature_cols)
@@ -116,6 +188,13 @@ def neutralize_ml_features(
     if not valid_fcols:
         logger.warning("neutralize_ml_features: 无有效因子列")
         return df
+
+    # Step 3 准备: 保存原始值用于自适应混合
+    if adaptive and alpha_0 < 1.0:
+        # 仅在非完全中性化时需要保存原始值
+        raw_values = {col: df[col].values.copy() for col in valid_fcols}
+    else:
+        raw_values = None
 
     has_industry = industry_col in df.columns
     has_cap = cap_col in df.columns
@@ -206,4 +285,42 @@ def neutralize_ml_features(
 
     df.drop(columns=["_log_cap", "_ind_code"], inplace=True, errors="ignore")
     logger.info("中性化完成: %d 因子, %d 截面日 (quadratic=%s)", len(valid_fcols), n_dates, quadratic_size)
+
+    # ===== Step 3: 自适应中性化强度混合 (Du 2025 Eq.8) =====
+    if adaptive:
+        alpha_t_series = compute_adaptive_alpha(
+            df, date_col=date_col, alpha_0=alpha_0,
+            beta_vol=beta_vol, vol_window=vol_window,
+            vol_long_window=vol_long_window,
+        )
+        if raw_values is not None:
+            # 逐日混合: f_final = alpha_t * f_neutralized + (1 - alpha_t) * f_raw
+            date_arr_final = df[date_col].values
+            # 预计算 alpha_mapped 一次 (向量化, 避免 255 次重复 dict lookup)
+            unique_dates_blend, inv_blend = np.unique(
+                date_arr_final, return_inverse=True,
+            )
+            alpha_per_date = np.array([
+                alpha_t_series.get(d, alpha_0)
+                for d in unique_dates_blend
+            ], dtype=np.float64)
+            alpha_mapped = alpha_per_date[inv_blend]  # O(N) broadcast
+            one_minus_alpha = 1.0 - alpha_mapped
+            for col in valid_fcols:
+                f_neut = df[col].values
+                f_raw = raw_values[col]
+                df[col] = alpha_mapped * f_neut + one_minus_alpha * f_raw
+            logger.info(
+                "自适应混合完成: alpha_0=%.2f, beta_vol=%.2f, "
+                "alpha_t 范围 [%.3f, %.3f]",
+                alpha_0, beta_vol,
+                alpha_t_series.min(), alpha_t_series.max(),
+            )
+        else:
+            logger.info(
+                "自适应中性化: alpha_0=1.0 (完全中性化), alpha_t 仅监控用途. "
+                "范围 [%.3f, %.3f]",
+                alpha_t_series.min(), alpha_t_series.max(),
+            )
+
     return df

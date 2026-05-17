@@ -34,8 +34,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
@@ -65,6 +67,69 @@ _THROTTLE_KEYWORDS = (
 )
 
 
+class OfflineModeError(RuntimeError):
+    """Raised when API call is attempted in strict offline mode."""
+
+
+class _CrossProcessSemaphore:
+    """跨进程信号量 — 基于文件锁，确保多 cron 进程共享同一限流。
+
+    在 Linux (Docker) 上使用 fcntl.flock 实现跨进程互斥，
+    在 Windows (开发) 上降级为 threading.Semaphore (单进程足够)。
+    """
+
+    def __init__(self, max_concurrent: int = 2) -> None:
+        self._max = max_concurrent
+        self._fallback = threading.Semaphore(max_concurrent)
+        self._use_flock = False
+        self._lock_dir: Path | None = None
+        self._held_fd: Any = None
+
+        try:
+            import fcntl  # noqa: F401
+            self._use_flock = True
+            self._lock_dir = Path("/tmp/aipha_tushare_locks")
+            self._lock_dir.mkdir(parents=True, exist_ok=True)
+        except ImportError:
+            pass  # Windows — 降级到 threading.Semaphore
+
+    def acquire(self) -> None:
+        if not self._use_flock:
+            self._fallback.acquire()
+            return
+        import fcntl
+        # 尝试非阻塞获取任一槽位
+        for i in range(self._max):
+            lock_path = self._lock_dir / f"slot_{i}.lock"  # type: ignore[union-attr]
+            try:
+                fd = open(lock_path, "w")
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fd.write(str(os.getpid()))
+                fd.flush()
+                self._held_fd = fd
+                return
+            except OSError:
+                fd.close()
+        # 所有槽位忙 — 阻塞等待槽位 0
+        lock_path = self._lock_dir / "slot_0.lock"  # type: ignore[union-attr]
+        fd = open(lock_path, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        fd.write(str(os.getpid()))
+        fd.flush()
+        self._held_fd = fd
+
+    def release(self) -> None:
+        if not self._use_flock:
+            self._fallback.release()
+            return
+        if self._held_fd is not None:
+            try:
+                self._held_fd.close()
+            except Exception:
+                pass
+            self._held_fd = None
+
+
 class TuShareGateway:
     """TuShare Pro 统一数据网关（线程安全）
 
@@ -79,6 +144,7 @@ class TuShareGateway:
         token: TuShare Pro API Token（留空则从环境变量获取）
         max_concurrent: 最大并发请求数（默认 2）
         max_retries: 最大重试次数（默认 60，约 1 分钟）
+        strict_offline: 若为 True，任何 API 调用抛 OfflineModeError
     """
 
     def __init__(
@@ -86,17 +152,26 @@ class TuShareGateway:
         token: str | None = None,
         max_concurrent: int = _DEFAULT_MAX_CONCURRENT,
         max_retries: int = _DEFAULT_MAX_RETRIES,
+        strict_offline: bool | None = None,
     ):
+        import os as _os
+
         self._token = token or get_tushare_token()
         self._max_concurrent = max_concurrent
         self._max_retries = max_retries
+
+        # strict_offline: 参数 > 环境变量 > 默认 False
+        if strict_offline is not None:
+            self._strict_offline = strict_offline
+        else:
+            self._strict_offline = _os.environ.get("TUSHARE_STRICT_OFFLINE", "").strip() in ("1", "true", "True")
 
         # 初始化 TuShare API（全局唯一实例）
         ts.set_token(self._token)
         self._api = ts.pro_api(self._token, timeout=15)  # 15秒超时，避免长时间阻塞
 
-        # 并发信号量：硬性限制同时进行的请求数
-        self._semaphore = threading.Semaphore(max_concurrent)
+        # 并发信号量：使用文件锁实现跨进程安全 (CONC-2)
+        self._semaphore = _CrossProcessSemaphore(max_concurrent)
 
         # 速率限制器（复用全局单例）
         self._limiter = get_tushare_limiter()
@@ -153,6 +228,13 @@ class TuShareGateway:
             AttributeError: endpoint 不存在
         """
         retries = max_retries if max_retries is not None else self._max_retries
+
+        if self._strict_offline:
+            raise OfflineModeError(
+                f"TuShare API '{endpoint}' 被阻止：strict_offline 模式已启用。"
+                f"确保所有所需数据已在本地缓存中。"
+            )
+
         api_func = getattr(self._api, endpoint, None)
         if api_func is None:
             raise AttributeError(
@@ -228,6 +310,12 @@ class TuShareGateway:
             RuntimeError: 所有重试均失败
         """
         last_error: Exception | None = None
+
+        if self._strict_offline:
+            raise OfflineModeError(
+                "TuShare pro_bar 被阻止：strict_offline 模式已启用。"
+                "确保所有所需数据已在本地缓存中。"
+            )
 
         for attempt in range(self._max_retries):
             self._semaphore.acquire()

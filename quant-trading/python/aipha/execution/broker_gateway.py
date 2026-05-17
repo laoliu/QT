@@ -39,6 +39,7 @@ class BrokerType(Enum):
 
     # 量化平台接口
     EASYTRADER = auto()  # easytrader (同花顺/通达信客户端)
+    QMT = auto()  # 迅投 miniQMT (xtquant)
     QUANTAXIS = auto()  # QUANTAXIS 接口
     VNPY = auto()  # vnpy 网关适配
 

@@ -33,10 +33,6 @@ _reg.register_class("momentum_acceleration", MomentumAccelerationStrategy)
 _reg.register_class("turnaround_play", TurnaroundPlayStrategy)
 _reg.register_class("stable_compounder", StableCompounderStrategy)
 
-# 指数增强
-from aipha.strategy.index_enhance import IndexEnhanceStrategy
-_reg.register_class("index_enhance", IndexEnhanceStrategy)
-
 # 补充策略
 from aipha.strategy.buyback_signal import BuybackSignalStrategy
 from aipha.strategy.insider_buying import InsiderBuyingStrategy
@@ -47,13 +43,16 @@ _reg.register_class("high_delivery_expect", HighDeliveryExpectStrategy)
 
 # ── 迁移批次: A 股多因子 / 增强 ──────────────────────────────
 from aipha.strategy.a_stock_enhanced_v2 import AStockEnhancedV2Strategy
+from aipha.strategy.a_stock_event_pead import AStockEventPEADStrategy
 from aipha.strategy.a_stock_multifactor import AStockMultiFactorStrategy
 from aipha.strategy.adaptive_multifactor import AdaptiveMultiFactorStrategy
 from aipha.strategy.alt_factor_strategy import AltFactorStrategy
 from aipha.strategy.balanced_multifactor import BalancedMultiFactorStrategy
+from aipha.strategy.behavioral_sleeve import BehavioralSleeveStrategy
 from aipha.strategy.breadth_controlled import BreadthControlledStrategy
 from aipha.strategy.bucket_multifactor import BucketMultiFactorStrategy
 from aipha.strategy.cash_cow_select import CashCowSelectStrategy
+from aipha.strategy.csi500_quality_sleeve import CSI500QualitySleeveStrategy
 from aipha.strategy.composite_rank_equal import CompositeRankEqualStrategy
 from aipha.strategy.comprehensive_alpha import ComprehensiveAlphaStrategy
 from aipha.strategy.defensive_value import DefensiveValueStrategy
@@ -61,7 +60,6 @@ from aipha.strategy.dividend_defensive import DividendDefensiveStrategy
 from aipha.strategy.dividend_quality_select import DividendQualitySelectStrategy
 from aipha.strategy.earnings_surprise_alpha import EarningsSurpriseAlphaStrategy
 from aipha.strategy.etf_rotation import ETFRotationStrategy
-from aipha.strategy.factor_strategy import FactorBasedStrategy
 from aipha.strategy.fscore_value_enhanced import FScoreValueEnhancedStrategy
 from aipha.strategy.ic_adaptive_multifactor import ICAdaptiveMultifactorStrategy
 from aipha.strategy.industry_ic_tilt import IndustryIcTiltStrategy
@@ -87,6 +85,7 @@ from aipha.strategy.small_size import SmallSizeStrategy, SmallSizeEnsembleStrate
 from aipha.strategy.small_size_enhanced import SmallSizeEnhancedStrategy
 from aipha.strategy.smallcap_rotation import SmallCapRotationStrategy
 from aipha.strategy.st_removal_play import StRemovalPlayStrategy
+from aipha.strategy.three_sleeve_equity import ThreeSleeveEquityStrategy
 from aipha.strategy.trend_quality_managed import TrendQualityManagedStrategy
 from aipha.strategy.v19_hgro import V19HgroStrategy
 from aipha.strategy.v22_bmf import V22BmfStrategy
@@ -97,14 +96,16 @@ from aipha.strategy.volume_price_breakout import VolumePriceBreakoutStrategy
 from aipha.strategy.dual_ma import DualMAStrategy
 
 _reg.register_class("a_stock_enhanced_v2", AStockEnhancedV2Strategy)
+_reg.register_class("a_stock_event_pead", AStockEventPEADStrategy)
 _reg.register_class("a_stock_multifactor", AStockMultiFactorStrategy)
 _reg.register_class("adaptive_multifactor", AdaptiveMultiFactorStrategy)
 _reg.register_class("alt_factor_strategy", AltFactorStrategy)
-_reg.register_class("alt_factor", AltFactorStrategy)
 _reg.register_class("balanced_multifactor", BalancedMultiFactorStrategy)
+_reg.register_class("behavioral_sleeve", BehavioralSleeveStrategy)
 _reg.register_class("breadth_controlled", BreadthControlledStrategy)
 _reg.register_class("bucket_multifactor", BucketMultiFactorStrategy)
 _reg.register_class("cash_cow_select", CashCowSelectStrategy)
+_reg.register_class("csi500_quality_sleeve", CSI500QualitySleeveStrategy)
 _reg.register_class("composite_rank_equal", CompositeRankEqualStrategy)
 _reg.register_class("comprehensive_alpha", ComprehensiveAlphaStrategy)
 _reg.register_class("defensive_value", DefensiveValueStrategy)
@@ -112,27 +113,18 @@ _reg.register_class("dividend_defensive", DividendDefensiveStrategy)
 _reg.register_class("dividend_quality_select", DividendQualitySelectStrategy)
 _reg.register_class("earnings_surprise_alpha", EarningsSurpriseAlphaStrategy)
 _reg.register_class("etf_rotation", ETFRotationStrategy)
-_reg.register_class("factor_based", FactorBasedStrategy)
-_reg.register_class("factor", FactorBasedStrategy)
 _reg.register_class("fscore_value_enhanced", FScoreValueEnhancedStrategy)
 _reg.register_class("ic_adaptive_multifactor", ICAdaptiveMultifactorStrategy)
 _reg.register_class("industry_ic_tilt", IndustryIcTiltStrategy)
 _reg.register_class("low_vol_value", LowVolValueStrategy)
 _reg.register_class("max_drawdown_guard", MaxDrawdownGuardStrategy)
 _reg.register_class("mean_reversion", MeanReversionStrategy)
-_reg.register_class("demo_mean_reversion", MeanReversionStrategy)
-_reg.register_class("reversion", MeanReversionStrategy)
 _reg.register_class("micro_cap_value", MicroCapValueStrategy)
 _reg.register_class("ml_factor_strategy", MLFactorStrategy)
-_reg.register_class("ml_factor", MLFactorStrategy)
 _reg.register_class("ml_predict", MLPredictStrategy)
 _reg.register_class("momentum", MomentumStrategy)
-_reg.register_class("demo_momentum", MomentumStrategy)
-_reg.register_class("momentum_factor", MomentumStrategy)
 _reg.register_class("multi_period_ensemble", MultiPeriodEnsembleStrategy)
-_reg.register_class("ml_factor_ensemble", MultiPeriodEnsembleStrategy)
 _reg.register_class("multifactor_enhance", MultiFactorEnhanceStrategy)
-_reg.register_class("multi_factor", MultiFactorEnhanceStrategy)
 _reg.register_class("pead_drift", PeadDriftStrategy)
 _reg.register_class("profitability_composite", ProfitabilityCompositeStrategy)
 _reg.register_class("quality_growth", QualityGrowthStrategy)
@@ -147,6 +139,7 @@ _reg.register_class("small_size_ensemble", SmallSizeEnsembleStrategy)
 _reg.register_class("small_size_enhanced", SmallSizeEnhancedStrategy)
 _reg.register_class("smallcap_rotation", SmallCapRotationStrategy)
 _reg.register_class("st_removal_play", StRemovalPlayStrategy)
+_reg.register_class("three_sleeve_equity", ThreeSleeveEquityStrategy)
 _reg.register_class("trend_quality_managed", TrendQualityManagedStrategy)
 _reg.register_class("v19_hgro", V19HgroStrategy)
 _reg.register_class("v22_bmf", V22BmfStrategy)
@@ -155,8 +148,6 @@ _reg.register_class("value_growth_switch", ValueGrowthSwitchStrategy)
 _reg.register_class("vol_breakout", VolBreakoutStrategy)
 _reg.register_class("volume_price_breakout", VolumePriceBreakoutStrategy)
 _reg.register_class("dual_ma", DualMAStrategy)
-_reg.register_class("demo_dual_ma", DualMAStrategy)
-_reg.register_class("moving_average", DualMAStrategy)
 
 # ── 迁移批次: 可转债策略 ──────────────────────────────────────
 from aipha.strategy.cb_adaptive_factor import CBAdaptiveFactorStrategy
@@ -170,6 +161,7 @@ from aipha.strategy.cb_gamma_convexity import CBGammaConvexityStrategy
 from aipha.strategy.cb_heat_momentum import CBHeatMomentumStrategy
 from aipha.strategy.cb_intraday_strategies import CBVWAPDeviation, CBOvernightGapDecay
 from aipha.strategy.cb_ivol_value import CBIVOLValueStrategy
+from aipha.strategy.cb_iv_event_satellite import CBIVEventSatelliteStrategy
 from aipha.strategy.cb_low_vol_reversion import CBLowVolReversionStrategy
 from aipha.strategy.cb_mean_reversion import CBMeanReversionStrategy
 from aipha.strategy.cb_ml_ranking import CBMLRankingStrategy
@@ -182,12 +174,13 @@ from aipha.strategy.cb_reversal_small import CBReversalSmallStrategy
 from aipha.strategy.cb_small_size_gated import SmallSizeGatedStrategy as CBSmallSizeGatedStrategy
 from aipha.strategy.cb_stock_quality import CBStockQualityStrategy
 from aipha.strategy.cb_stock_quality_v2 import CBStockQualityV2Strategy
+from aipha.strategy.cb_stock_quality_v3 import CBStockQualityV3Strategy
 from aipha.strategy.cb_ultra import CBUltraStrategy, CBUltraNoAgeStrategy
 from aipha.strategy.cb_value_momentum import CBValueMomentumStrategy
 from aipha.strategy.cb_vol_squeeze import CBVolSqueezeStrategy
 from aipha.strategy.double_low import DoubleLowStrategy, ConversionArbitrageStrategy
 from aipha.strategy.double_low_plus import DoubleLowPlusStrategy
-from aipha.strategy.double_low_variants import DoubleLowPercentileStrategy, DoubleLowRankStrategy, DoubleLowZScoreStrategy
+from aipha.strategy.double_low_variants import DoubleLowPercentileStrategy, DoubleLowRankStrategy, DoubleLowZScoreStrategy, DoubleLowRawStrategy, CBEqualWeightStrategy
 from aipha.strategy.forced_redeem_play import ForcedRedeemPlayStrategy
 from aipha.strategy.low_premium import LowPremiumStrategy
 from aipha.strategy.low_price import LowPriceStrategy
@@ -211,6 +204,7 @@ _reg.register_class("cb_heat_momentum", CBHeatMomentumStrategy)
 _reg.register_class("cb_vwap_deviation", CBVWAPDeviation)
 _reg.register_class("cb_overnight_gap_decay", CBOvernightGapDecay)
 _reg.register_class("cb_ivol_value", CBIVOLValueStrategy)
+_reg.register_class("cb_iv_event_satellite", CBIVEventSatelliteStrategy)
 _reg.register_class("cb_low_vol_reversion", CBLowVolReversionStrategy)
 _reg.register_class("cb_mean_reversion", CBMeanReversionStrategy)
 _reg.register_class("cb_ml_ranking", CBMLRankingStrategy)
@@ -221,12 +215,11 @@ _reg.register_class("cb_multi_layer", CBMultiLayerStrategy)
 _reg.register_class("cb_regime_rotation", CBRegimeRotationStrategy)
 _reg.register_class("cb_reversal_small", CBReversalSmallStrategy)
 _reg.register_class("cb_small_size_gated", CBSmallSizeGatedStrategy)
-_reg.register_class("small_size_gated", CBSmallSizeGatedStrategy)
 _reg.register_class("cb_stock_quality", CBStockQualityStrategy)
 _reg.register_class("cb_stock_quality_v2", CBStockQualityV2Strategy)
+_reg.register_class("cb_stock_quality_v3", CBStockQualityV3Strategy)
 _reg.register_class("cb_ultra", CBUltraStrategy)
 _reg.register_class("cb_ultra_no_age", CBUltraNoAgeStrategy)
-_reg.register_class("cb_ultra_noage", CBUltraNoAgeStrategy)
 _reg.register_class("cb_value_momentum", CBValueMomentumStrategy)
 _reg.register_class("cb_vol_squeeze", CBVolSqueezeStrategy)
 _reg.register_class("double_low", DoubleLowStrategy)
@@ -250,7 +243,3 @@ _reg.register_class("ytm_plus", YTMPlusStrategy)
 
 # ── 迁移批次: RL / ML ────────────────────────────────────────
 # rl_portfolio is a training framework, not a Strategy subclass — skip registration
-
-# ── Tick 级别策略 ─────────────────────────────────────────────
-# 导入即自动注册到 TickStrategyRegistry
-import aipha.strategy.tick_strategies  # noqa: F401

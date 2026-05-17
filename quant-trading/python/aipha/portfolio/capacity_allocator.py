@@ -4,9 +4,9 @@
 避免向容量受限的策略（如小盘CB）分配超出其容量的资金。
 
 核心逻辑:
-  1. 读取各组件的容量约束 (max_capital / 绝对金额上限)
+    1. 读取各组件的容量约束 (max_capital / 绝对金额上限, max_weight / 权重上限)
   2. 按原始权重计算分配金额
-  3. 若某组件分配超出容量，截断到容量上限
+    3. 若某组件分配超出硬约束，截断到更严格的上限
   4. 超出部分按指定规则 (proportional / equal / priority) 重分配
 
 用法:
@@ -39,7 +39,8 @@ class CapacityConstraint:
     """单组件容量约束。"""
 
     component: str
-    max_capital: float  # 绝对金额上限 (元)
+    max_capital: float = float("inf")  # 绝对金额上限 (元)
+    max_weight: float = 1.0  # 权重上限
     min_weight: float = 0.0  # 最低权重 (保底配置)
 
     def __post_init__(self) -> None:
@@ -47,9 +48,18 @@ class CapacityConstraint:
             raise ValueError(
                 f"max_capital must be >= 0, got {self.max_capital}"
             )
+        if not 0 <= self.max_weight <= 1:
+            raise ValueError(
+                f"max_weight must be in [0,1], got {self.max_weight}"
+            )
         if not 0 <= self.min_weight <= 1:
             raise ValueError(
                 f"min_weight must be in [0,1], got {self.min_weight}"
+            )
+        if self.min_weight > self.max_weight:
+            raise ValueError(
+                "min_weight cannot exceed max_weight: "
+                f"{self.min_weight} > {self.max_weight}"
             )
 
 
@@ -107,6 +117,7 @@ class CapacityAwareAllocator:
         self,
         base_weights: dict[str, float],
         capacity_limits: dict[str, float] | None = None,
+        max_weights: dict[str, float] | None = None,
         min_weights: dict[str, float] | None = None,
         redistribution: str = "proportional",
         priority_order: list[str] | None = None,
@@ -123,6 +134,7 @@ class CapacityAwareAllocator:
             )
         self.base_weights = dict(base_weights)
         self.capacity_limits = dict(capacity_limits or {})
+        self.max_weights = dict(max_weights or {})
         self.min_weights = dict(min_weights or {})
         self.redistribution = redistribution
         self.priority_order = list(priority_order or [])
@@ -145,16 +157,30 @@ class CapacityAwareAllocator:
         excess = 0.0
         adjustments: dict[str, float] = {}
 
-        # Pass 1: 识别超出容量的组件并截断
-        for comp, limit in self.capacity_limits.items():
+        # Pass 1: 识别超出硬约束的组件并截断
+        constrained_components = set(self.capacity_limits) | set(self.max_weights)
+        for comp in constrained_components:
             if comp not in capitals:
                 continue
-            if capitals[comp] > limit:
-                old_w = weights[comp]
-                new_w = max(
-                    limit / total_capital,
-                    self.min_weights.get(comp, 0.0),
+            limit = self.capacity_limits.get(comp, float("inf"))
+            max_weight = self.max_weights.get(comp, 1.0)
+            hard_cap_w = min(limit / total_capital, max_weight)
+            soft_floor_w = self.min_weights.get(comp, 0.0)
+
+            if soft_floor_w > hard_cap_w:
+                logger.warning(
+                    "Soft floor ignored for %s: min_weight=%.1f%% exceeds "
+                    "hard ceiling=%.1f%% (capital=%.0f万, limit=%.0f万)",
+                    comp,
+                    soft_floor_w * 100,
+                    hard_cap_w * 100,
+                    total_capital / 10000,
+                    limit / 10000,
                 )
+
+            if weights[comp] > hard_cap_w:
+                old_w = weights[comp]
+                new_w = min(max(old_w, 0.0), hard_cap_w)
                 excess += (old_w - new_w) * total_capital
                 adjustments[comp] = new_w - old_w
                 weights[comp] = new_w
@@ -162,8 +188,9 @@ class CapacityAwareAllocator:
                 capped.append(comp)
                 logger.info(
                     "Capacity cap %s: %.1f%% → %.1f%% "
-                    "(limit=%.0f万, alloc=%.0f万)",
+                    "(hard_ceiling=%.1f%%, limit=%.0f万, alloc=%.0f万)",
                     comp, old_w * 100, new_w * 100,
+                    hard_cap_w * 100,
                     limit / 10000, capitals[comp] / 10000,
                 )
 
@@ -266,11 +293,14 @@ def create_allocator_from_config(
         return None
 
     limits = {}
+    max_weights = {}
     min_weights = {}
 
     # 支持两种格式: 简写 (cb_max_capital) 和详细格式 (limits.cb.max_capital)
     if "cb_max_capital" in cap_cfg:
         limits["cb"] = cap_cfg["cb_max_capital"]
+    if "cb_max_weight" in cap_cfg:
+        max_weights["cb"] = cap_cfg["cb_max_weight"]
     if "cb_min_weight" in cap_cfg:
         min_weights["cb"] = cap_cfg["cb_min_weight"]
 
@@ -280,12 +310,15 @@ def create_allocator_from_config(
             limits[comp] = float(limit_cfg)
         elif isinstance(limit_cfg, dict):
             limits[comp] = limit_cfg.get("max_capital", float("inf"))
+            if "max_weight" in limit_cfg:
+                max_weights[comp] = limit_cfg["max_weight"]
             if "min_weight" in limit_cfg:
                 min_weights[comp] = limit_cfg["min_weight"]
 
     return CapacityAwareAllocator(
         base_weights=base_weights,
         capacity_limits=limits,
+        max_weights=max_weights,
         min_weights=min_weights,
         redistribution=cap_cfg.get("redistribution_rule", "proportional"),
     )

@@ -1,110 +1,198 @@
-"""行业动量轮动"""
+"""A 股行业轮动策略 — 板块动量 + 板块内精选
+
+核心 Alpha：A 股行业轮动效应显著，行业 β 占个股收益方差 40-60%。
+先识别"热门行业"（20 日平均动量最高的行业），再在热门行业内
+按动量+低波动+价值+质量+小市值多因子精选个股。
+
+与现有策略的本质区别：
+- multifactor_enhance / pead_event / smallcap_rotation 均为"个股维度直接打分"
+- 本策略引入"行业动量排名 → 行业内个股精选"两阶段架构
+- 利用 metadata["industry"]（申万一级行业）做行业聚合
+
+学术支撑：
+- Moskowitz & Grinblatt (1999): Industry Momentum
+- A 股行业主题热度持续 2-4 周，散户抱团加剧了行业动量
+
+对齐 copilot-instructions.md：
+- 策略层只输出 OrderIntent
+- 因子计算无前视偏差
+- 所有假设写入 configs/backtest/sector_momentum.yml
+"""
+
 from __future__ import annotations
+
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
-from aipha.factors.equity_factors import compute_momentum_factor, compute_quality_factor, compute_size_factor, compute_value_factor, compute_volatility_factor
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from aipha.factors.equity_factors import (
+    compute_quality_factor,
+    compute_size_factor,
+    compute_value_factor,
+)
 from aipha.strategy.base import StrategyContext
-from aipha.strategy.equity_rotation_base import EquityCandidateInfo, EquityRotationConfig, EquityRotationStrategy
-from aipha.domain.models import Side
+from aipha.strategy.equity_rotation_base import (
+    EquityCandidateInfo,
+    EquityRotationConfig,
+    EquityRotationStrategy,
+)
+from aipha.strategy.registry import StrategyRegistry
+
+if TYPE_CHECKING:
+    from aipha.domain.models import Bar
+
 logger = logging.getLogger(__name__)
 
 
-def _industry_rank_scores(candidates: list[EquityCandidateInfo], lookback: int) -> dict[str, float]:
-    """Compute industry-level momentum rank scores for each candidate (legacy compat)."""
-    by_ind: dict[str, list[tuple[str, float]]] = defaultdict(list)
-    for c in candidates:
-        ind = getattr(c, "industry", None) or (c.metadata.get("industry", "") if c.metadata else "")
-        ret = getattr(c, f"return_{lookback}d", None) or getattr(c, "return_20d", 0.0) or 0.0
-        by_ind[ind].append((c.code, ret))
-    ind_avg = {ind: sum(r for _, r in items) / max(len(items), 1) for ind, items in by_ind.items()}
-    ranked = sorted(ind_avg, key=ind_avg.get, reverse=True)  # type: ignore
-    n = max(len(ranked), 1)
-    ind_score = {ind: 1.0 - i / n for i, ind in enumerate(ranked)}
-    return {c.code: ind_score.get(getattr(c, "industry", None) or (c.metadata.get("industry", "") if c.metadata else ""), 0.5) for c in candidates}
+# ---------------------------------------------------------------------------
+# 配置
+# ---------------------------------------------------------------------------
+
 
 @dataclass
 class SectorMomentumConfig(EquityRotationConfig):
-    top_k: int = 25; rebalance_days: int = 10; min_price: float = 5.0; max_price: float = 500.0
-    min_turnover: float = 3000.0; min_listed_days: int = 250; stop_loss_pct: float = 0.12
-    trailing_stop_pct: float = 0.08; buffer_k: int = 8; max_single_pct: float = 0.06
-    min_mv: float = 1_000_000.0; max_mv: float = float("inf"); inverse_vol_weighting: bool = True
-    max_industry_pct: float = 0.30; top_industries: int = 6; industry_momentum_lookback: int = 20
-    weight_momentum: float = 0.30
-    weight_volatility: float = 0.25
-    weight_value: float = 0.20
-    weight_quality: float = 0.15
-    weight_size: float = 0.10
+    """行业轮动策略配置。
 
+    继承 EquityRotationConfig，添加行业轮动特有字段。
+    """
+
+    # 覆盖默认值
+    top_k: int = 30
+    rebalance_days: int = 10       # 双周调仓以捕捉行业切换
+    min_price: float = 5.0
+    max_price: float = 200.0
+    min_turnover: float = 800.0    # 万元
+    min_listed_days: int = 120
+    stop_loss_pct: float = 0.12    # 行业轮动换手高，止损更严
+    buffer_k: int = 8
+    max_single_pct: float = 0.05
+
+    # 行业轮动特有参数
+    top_industries: int = 6        # 选择 top N 个热门行业
+    momentum_lookback: int = 20    # 行业动量回看窗口
+
+    # 行业内个股因子权重
+    weight_momentum: float = 0.30      # 个股动量
+    weight_volatility: float = 0.25    # 低波动
+    weight_value: float = 0.20         # 估值（低 PE）
+    weight_quality: float = 0.15       # 质量（高 ROE）
+    weight_size: float = 0.10          # 小市值偏好
+
+
+# ---------------------------------------------------------------------------
+# 策略实现
+# ---------------------------------------------------------------------------
+
+
+@StrategyRegistry().register("sector_momentum")
 class SectorMomentumStrategy(EquityRotationStrategy):
+    """A 股行业轮动策略
+
+    两阶段选股：
+    1. 行业排名：计算每个行业内候选股票的平均 20 日动量，选 top N 行业
+    2. 行业内精选：在热门行业内用多因子打分选出 top_k 个股
+
+    相比纯个股轮动策略，行业轮动能更好地捕捉 A 股的板块效应。
+    """
+
     name = "sector_momentum"
-    def __init__(self, config: SectorMomentumConfig | None = None, **kw: object):
-        super().__init__(config=config or SectorMomentumConfig(), **kw)
+
+    def __init__(self, config: SectorMomentumConfig | None = None, **kwargs):
+        """初始化行业轮动策略。
+
+        Args:
+            config: 策略配置，None 时使用默认值或从 kwargs 构造。
+        """
+        super().__init__()
+        self._config = config or SectorMomentumConfig(**kwargs)
+
     @property
-    def config(self) -> SectorMomentumConfig: return self._config  # type: ignore
+    def config(self) -> SectorMomentumConfig:
+        """返回策略配置。"""
+        return self._config
 
-    def on_fill(self, symbol: str, side: Side, qty: int, price: float) -> None:
-        if side == Side.BUY:
-            self._peak_prices[symbol] = price
-        elif side == Side.SELL:
-            self._peak_prices.pop(symbol, None)
+    def _score_candidates(
+        self,
+        candidates: list[EquityCandidateInfo],
+        context: StrategyContext,
+    ) -> list[str]:
+        """两阶段打分：行业排名 → 行业内精选。
 
-    def _score_candidates(self, candidates: list[EquityCandidateInfo], ctx: StrategyContext) -> list[str]:
-        from aipha.strategy.cb_ultra import _rank_scores
-        cfg = self.config
+        Args:
+            candidates: 经过基础过滤的候选列表。
+            context: 策略上下文。
+
+        Returns:
+            按综合得分降序排列的 symbol 列表。
+        """
+        cfg = self._config
         if not candidates:
             return []
 
-        # Use strategy's price history
-        ph = {c.code: list(self._price_history.get(c.code, [])) for c in candidates}
-
-        # Step 1: Industry momentum filter
-        by_ind: dict[str, list[EquityCandidateInfo]] = defaultdict(list)
+        # ---- 第一阶段：行业动量排名 ----
+        industry_candidates: dict[str, list[EquityCandidateInfo]] = defaultdict(list)
         for c in candidates:
-            ind = c.metadata.get("industry", "未知") if c.metadata else "未知"
-            by_ind[ind].append(c)
+            industry = c.metadata.get("industry", "未知")
+            industry_candidates[industry].append(c)
 
-        ind_mom: dict[str, float] = {}
-        for ind, stocks in by_ind.items():
-            moms = []
-            for c in stocks:
-                prices = ph.get(c.code, [])
-                if len(prices) >= 2:
-                    moms.append(prices[-1] / prices[0] - 1 if prices[0] > 0 else 0.0)
-                else:
-                    moms.append(0.0)
-            ind_mom[ind] = sum(moms) / max(len(moms), 1)
+        # 计算每个行业的平均动量（要求行业内至少 3 只候选，避免少数标的噪声）
+        _MIN_INDUSTRY_STOCKS = 3
+        industry_momentum: dict[str, float] = {}
+        for ind, cands in industry_candidates.items():
+            if len(cands) < _MIN_INDUSTRY_STOCKS:
+                # 标的数不足的行业给予最低动量，避免偶发性选中
+                industry_momentum[ind] = float("-inf")
+                continue
+            moms = [self.calc_momentum(c.symbol) for c in cands]
+            if moms:
+                industry_momentum[ind] = sum(moms) / len(moms)
+            else:
+                industry_momentum[ind] = float("-inf")
 
-        ranked_inds = sorted(ind_mom, key=ind_mom.get, reverse=True)
-        hot_inds = set(ranked_inds[:cfg.top_industries])
+        # 选 top N 行业
+        sorted_industries = sorted(
+            industry_momentum.items(), key=lambda x: x[1], reverse=True
+        )
+        top_ind_names = {
+            ind for ind, _ in sorted_industries[:cfg.top_industries]
+        }
 
-        hot_candidates = [c for c in candidates if (c.metadata.get("industry", "未知") if c.metadata else "未知") in hot_inds]
-        if not hot_candidates:
-            hot_candidates = candidates
-
-        # Step 2: Compute and rank-normalize factors
-        ph_hot = {c.code: ph.get(c.code, []) for c in hot_candidates}
-        mom_raw = compute_momentum_factor(ph_hot, hot_candidates, lookback=20)
-        vol_raw = compute_volatility_factor(ph_hot, hot_candidates, lookback=20)
-        val_raw = compute_value_factor(hot_candidates)
-        qual_raw = compute_quality_factor(hot_candidates)
-        sz_raw = compute_size_factor(hot_candidates)
-
-        mom_r = _rank_scores(mom_raw) if mom_raw else {}
-        vol_r = _rank_scores(vol_raw) if vol_raw else {}
-        val_r = _rank_scores(val_raw) if val_raw else {}
-        qual_r = _rank_scores(qual_raw) if qual_raw else {}
-        sz_r = _rank_scores(sz_raw) if sz_raw else {}
-
-        composite = {}
-        for c in hot_candidates:
-            code = c.code
-            composite[code] = (
-                cfg.weight_momentum * mom_r.get(code, 0.5)
-                + cfg.weight_volatility * vol_r.get(code, 0.5)
-                + cfg.weight_value * val_r.get(code, 0.5)
-                + cfg.weight_quality * qual_r.get(code, 0.5)
-                + cfg.weight_size * sz_r.get(code, 0.5)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                f"热门行业 top-{cfg.top_industries}: "
+                f"{[(ind, round(m, 4)) for ind, m in sorted_industries[:cfg.top_industries]]}"
             )
 
-        return sorted(composite, key=composite.get, reverse=True)[:cfg.top_k]  # type: ignore
+        # ---- 第二阶段：只在热门行业内打分 ----
+        hot_candidates = [
+            c for c in candidates
+            if c.metadata.get("industry", "未知") in top_ind_names
+        ]
+        if not hot_candidates:
+            # 降级：若热门行业无候选，回退到全部候选
+            hot_candidates = candidates
+
+        scores: dict[str, float] = {}
+
+        # 个股动量
+        f_mom = {c.symbol: self.calc_momentum(c.symbol) for c in hot_candidates}
+        self.rank_normalize(hot_candidates, f_mom, cfg.weight_momentum, scores)
+
+        # 低波动
+        f_vol = {c.symbol: -self.calc_volatility(c.symbol) for c in hot_candidates}
+        self.rank_normalize(hot_candidates, f_vol, cfg.weight_volatility, scores)
+
+        # 价值（低 PE）—— 通过因子桥接层计算
+        f_value = compute_value_factor(hot_candidates, metric="pe_ttm")
+        self.rank_normalize(hot_candidates, f_value, cfg.weight_value, scores)
+
+        # 质量（高 ROE）—— 通过因子桥接层计算
+        f_quality = compute_quality_factor(hot_candidates, metric="roe")
+        self.rank_normalize(hot_candidates, f_quality, cfg.weight_quality, scores)
+
+        # 小市值 —— 通过因子桥接层计算
+        f_size = compute_size_factor(hot_candidates)
+        self.rank_normalize(hot_candidates, f_size, cfg.weight_size, scores)
+
+        return self.rank_sort(scores)

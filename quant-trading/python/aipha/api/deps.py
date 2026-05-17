@@ -23,7 +23,10 @@ def get_result_store() -> ResultStore:
 
 
 # ── JWT helpers (thin wrapper) ────────────────────────────────
-_JWT_SECRET = os.environ.get("AIPHA_JWT_SECRET", "aipha-dev-secret-change-me")
+_JWT_SECRET = os.environ.get(
+    "AIPHA_JWT_SECRET",
+    "aipha-dev-secret-change-me-with-at-least-32-bytes-for-hs256",
+)
 _JWT_ALGORITHM = "HS256"
 _ACCESS_TOKEN_EXPIRE = 1800  # 30 min
 _REFRESH_TOKEN_EXPIRE = 604800  # 7 days

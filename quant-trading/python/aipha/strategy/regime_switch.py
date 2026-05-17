@@ -1,4 +1,29 @@
-"""市场情绪切换策略 — 牛/熊/中性三种情绪下动态调整因子权重"""
+"""A 股牛熊切换策略 (Regime Switch)
+
+核心逻辑：根据市场状态在**动量**与**价值**之间切换。
+- 牛市 → 动量因子为主（追趋势）
+- 熊市 → 价值因子为主（守安全边际）
+- 震荡 → 均配
+
+学术基础：
+- Asness (2019) — "Value and Momentum Everywhere"，动量与价值长期负相关
+- 在市场状态转换时，两类因子有互补特性
+- A 股"牛短熊长"特征 → 状态切换能显著改善组合表现
+
+与 quality_momentum_combo 的差异：
+- quality_momentum_combo：固定权重混合动量+质量
+- **regime_switch**：根据市场状态**动态调整**因子权重
+
+Alpha 来源（4 因子 + 状态切换）：
+1. **动量** (牛市 50% / 熊市 10%)
+2. **价值 EP** (牛市 10% / 熊市 50%)
+3. **质量 ROE** (25%)
+4. **规模** (15%)
+5. **状态信号**：MA + 动量综合判断
+
+预期表现：AR 18-25%, MDD 20-30%, Sharpe 0.6-0.9
+"""
+
 from __future__ import annotations
 
 import logging
@@ -17,15 +42,18 @@ from aipha.strategy.equity_rotation_base import (
     EquityRotationConfig,
     EquityRotationStrategy,
 )
+from aipha.strategy.registry import StrategyRegistry
 
 if TYPE_CHECKING:
-    from aipha.domain.models import Bar
+    from aipha.backtest.engine import Bar
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class RegimeSwitchConfig(EquityRotationConfig):
+    """牛熊切换配置。"""
+
     top_k: int = 30
     rebalance_days: int = 10
     min_price: float = 3.0
@@ -36,111 +64,157 @@ class RegimeSwitchConfig(EquityRotationConfig):
     trailing_stop_pct: float = 0.15
     buffer_k: int = 8
     max_single_pct: float = 0.05
-    min_mv: float = 300_000.0
+    min_mv: float = 300_000.0       # 30 亿
     max_mv: float = float("inf")
     max_industry_pct: float = 0.20
-    # 牛市权重
+
+    # 牛市因子权重
     bull_weight_momentum: float = 0.50
     bull_weight_value: float = 0.10
     bull_weight_quality: float = 0.25
     bull_weight_size: float = 0.15
-    # 熊市权重
+
+    # 熊市因子权重
     bear_weight_momentum: float = 0.10
     bear_weight_value: float = 0.50
     bear_weight_quality: float = 0.25
     bear_weight_size: float = 0.15
-    # 中性权重
+
+    # 震荡因子权重
     neutral_weight_momentum: float = 0.25
     neutral_weight_value: float = 0.30
     neutral_weight_quality: float = 0.25
     neutral_weight_size: float = 0.20
-    # 情绪判断
+
+    # 状态检测参数
     ma_short: int = 20
     ma_long: int = 60
     momentum_lookback: int = 60
     bull_momentum_threshold: float = 0.08
     bear_momentum_threshold: float = -0.06
+
     max_pe: float = 80.0
+
+    # 内部状态
     _index_history: list[float] = field(default_factory=list)
     _current_regime: str = "NEUTRAL"
 
 
+@StrategyRegistry().register("regime_switch")
 class RegimeSwitchStrategy(EquityRotationStrategy):
-    """市场情绪切换 — 根据指数动量判断牛/熊/中性, 动态切换因子权重"""
+    """牛熊切换：动态调整动量/价值因子权重。"""
+
     name = "regime_switch"
 
-    def __init__(self, config: RegimeSwitchConfig | None = None, **kwargs: object):
-        super().__init__(config=config or RegimeSwitchConfig(), **kwargs)
-        self._index_hist: list[float] = []
-        self._regime = "NEUTRAL"
+    def __init__(
+        self, config: RegimeSwitchConfig | None = None, **kwargs,
+    ):
+        super().__init__()
+        self._config = config or RegimeSwitchConfig(**kwargs)
 
     @property
     def config(self) -> RegimeSwitchConfig:
-        return self._config  # type: ignore[return-value]
+        return self._config
 
     def _detect_regime(self) -> str:
-        cfg = self.config
-        hist = self._index_hist
+        """基于 MA + 动量的状态检测。"""
+        cfg = self._config
+        hist = cfg._index_history
         if len(hist) < cfg.ma_long:
             return "NEUTRAL"
+
+        # 信号 1: MA 交叉
         ma_s = sum(hist[-cfg.ma_short:]) / cfg.ma_short
         ma_l = sum(hist[-cfg.ma_long:]) / cfg.ma_long
-        if ma_l <= 0:
-            return "NEUTRAL"
-        mom = (ma_s - ma_l) / ma_l
-        if mom > cfg.bull_momentum_threshold:
-            return "BULL"
-        if mom < cfg.bear_momentum_threshold:
-            return "BEAR"
-        return "NEUTRAL"
+        ma_signal = "BULL" if ma_s > ma_l else ("BEAR" if ma_s < ma_l * 0.98 else "NEUTRAL")
 
-    def _on_bar_update_state(self, bars: dict[str, "Bar"], context: StrategyContext) -> None:
-        # 用所有标的均价作为市场代理
-        if bars:
-            avg = sum(b.close for b in bars.values()) / len(bars)
-            self._index_hist.append(avg)
-        self._regime = self._detect_regime()
+        # 信号 2: 动量
+        if len(hist) >= cfg.momentum_lookback + 1:
+            ret = (hist[-1] - hist[-(cfg.momentum_lookback + 1)]) / hist[-(cfg.momentum_lookback + 1)]
+            if ret > cfg.bull_momentum_threshold:
+                mom_signal = "BULL"
+            elif ret < cfg.bear_momentum_threshold:
+                mom_signal = "BEAR"
+            else:
+                mom_signal = "NEUTRAL"
+        else:
+            mom_signal = "NEUTRAL"
 
-    def _extra_filter(self, candidate: EquityCandidateInfo, context: StrategyContext) -> bool:
-        pe = getattr(candidate, "pe_ttm", None)
-        if pe is not None and pe > self.config.max_pe:
+        # 投票
+        if ma_signal == mom_signal:
+            return ma_signal
+        if ma_signal == "NEUTRAL":
+            return mom_signal
+        if mom_signal == "NEUTRAL":
+            return ma_signal
+        return "NEUTRAL"  # 矛盾 → 中性
+
+    def _on_bar_update_state(
+        self, bars: dict[str, "Bar"], context: StrategyContext,
+    ) -> None:
+        """更新指数序列 + 检测市场状态。"""
+        cfg = self._config
+        bench_price = context.metadata.get("benchmark_close")
+        if bench_price is None:
+            prices = [b.close for b in bars.values() if b.close > 0]
+            bench_price = sum(prices) / len(prices) if prices else 0.0
+
+        cfg._index_history.append(bench_price)
+        max_len = max(cfg.ma_long, cfg.momentum_lookback) + 10
+        if len(cfg._index_history) > max_len:
+            del cfg._index_history[:-max_len]
+
+        cfg._current_regime = self._detect_regime()
+        context.metadata["market_regime"] = cfg._current_regime
+
+    def _extra_filter(
+        self, candidate: EquityCandidateInfo, context: StrategyContext,
+    ) -> bool:
+        pe = candidate.metadata.get("pe_ttm")
+        if pe is not None and (pe <= 0 or pe > self._config.max_pe):
             return False
         return True
 
     def _score_candidates(
         self, candidates: list[EquityCandidateInfo], context: StrategyContext,
     ) -> list[str]:
-        cfg = self.config
-        regime = self._regime
+        """根据市场状态动态调整因子权重。"""
+        cfg = self._config
+        if not candidates:
+            return []
+
+        regime = cfg._current_regime
         if regime == "BULL":
-            w_mom, w_val, w_qual, w_sz = (
-                cfg.bull_weight_momentum, cfg.bull_weight_value,
-                cfg.bull_weight_quality, cfg.bull_weight_size,
-            )
+            w_mom = cfg.bull_weight_momentum
+            w_val = cfg.bull_weight_value
+            w_qual = cfg.bull_weight_quality
+            w_size = cfg.bull_weight_size
         elif regime == "BEAR":
-            w_mom, w_val, w_qual, w_sz = (
-                cfg.bear_weight_momentum, cfg.bear_weight_value,
-                cfg.bear_weight_quality, cfg.bear_weight_size,
-            )
+            w_mom = cfg.bear_weight_momentum
+            w_val = cfg.bear_weight_value
+            w_qual = cfg.bear_weight_quality
+            w_size = cfg.bear_weight_size
         else:
-            w_mom, w_val, w_qual, w_sz = (
-                cfg.neutral_weight_momentum, cfg.neutral_weight_value,
-                cfg.neutral_weight_quality, cfg.neutral_weight_size,
-            )
+            w_mom = cfg.neutral_weight_momentum
+            w_val = cfg.neutral_weight_value
+            w_qual = cfg.neutral_weight_quality
+            w_size = cfg.neutral_weight_size
 
-        price_hist = {c.code: getattr(c, "price_history", []) for c in candidates}
-        mom = compute_momentum_factor(price_hist, candidates, lookback=cfg.momentum_lookback)
-        val = compute_value_factor(candidates)
-        qual = compute_quality_factor(candidates)
-        sz = compute_size_factor(candidates)
+        scores: dict[str, float] = {}
 
-        composite: dict[str, float] = {}
-        for c in candidates:
-            composite[c.code] = (
-                w_mom * mom.get(c.code, 0.0)
-                + w_val * val.get(c.code, 0.0)
-                + w_qual * qual.get(c.code, 0.0)
-                + w_sz * sz.get(c.code, 0.0)
-            )
-        sorted_codes = sorted(composite.keys(), key=lambda c: composite[c], reverse=True)
-        return sorted_codes[:cfg.top_k]
+        f_mom = compute_momentum_factor(
+            candidates, price_history=self._price_history,
+            lookback=cfg.momentum_lookback, risk_adjusted=True,
+        )
+        self.rank_normalize(candidates, f_mom, w_mom, scores)
+
+        f_ep = compute_value_factor(candidates, metric="ep")
+        self.rank_normalize(candidates, f_ep, w_val, scores)
+
+        f_roe = compute_quality_factor(candidates, metric="roe")
+        self.rank_normalize(candidates, f_roe, w_qual, scores)
+
+        f_size = compute_size_factor(candidates)
+        self.rank_normalize(candidates, f_size, w_size, scores)
+
+        return self.rank_sort(scores)

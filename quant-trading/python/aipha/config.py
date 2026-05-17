@@ -80,24 +80,8 @@ def get_risk_free_rate() -> float:
 
 
 def get_cache_dir() -> Path:
-    """获取数据缓存目录
-
-    优先级:
-      1. DATA_CACHE_DIR 环境变量（显式指定）
-      2. QTDATA_DIR/cache（与 local_parquet_provider 共享）
-      3. 回退到 data/cache（旧版兼容）
-    """
-    explicit = os.environ.get("DATA_CACHE_DIR")
-    if explicit:
-        return Path(explicit)
-    qtdata = os.environ.get("QTDATA_DIR")
-    if qtdata:
-        return Path(qtdata) / "cache"
-    # 默认指向 G:/qtdata/cache 与 local_parquet_provider 统一
-    default_qtdata = Path("G:/qtdata/cache")
-    if default_qtdata.exists():
-        return default_qtdata
-    return Path("data/cache")
+    """获取数据缓存目录"""
+    return Path(get_config("DATA_CACHE_DIR", "data/cache"))
 
 
 def get_log_level() -> str:

@@ -222,14 +222,27 @@ class CBUniverseProvider(UniversePolicy):
             min_score = rating_score(self._config.min_rating) if self._config.min_rating else None
 
             filtered_bonds = []
+            unrated_count = 0
             for b in bonds:
                 rating = getattr(b, "rating", "") or ""
-                if self._config.exclude_unrated and not str(rating).strip():
-                    continue
-                if min_score is not None and str(rating).strip():
-                    if rating_score(str(rating)) < min_score:
+                rating_str = str(rating).strip()
+                # §13.18 fail-closed: 无评级标的在 min_rating 或 exclude_unrated 时排除
+                if not rating_str:
+                    if self._config.exclude_unrated or min_score is not None:
+                        unrated_count += 1
+                        continue
+                if min_score is not None and rating_str:
+                    if rating_score(rating_str) < min_score:
                         continue
                 filtered_bonds.append(b)
+            if unrated_count > 0:
+                logger.warning(
+                    "cb_universe: %d bonds excluded due to missing rating "
+                    "(min_rating=%s, exclude_unrated=%s)",
+                    unrated_count,
+                    self._config.min_rating,
+                    self._config.exclude_unrated,
+                )
             bonds = filtered_bonds
 
         # 额外过滤：排除黑名单

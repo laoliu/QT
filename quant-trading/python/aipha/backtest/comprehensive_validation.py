@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
 from aipha.backtest.advanced_validation import (
     DSRResult,
     DeflatedSharpeRatio,
@@ -245,7 +247,7 @@ class ComprehensiveValidator:
         mean = sum(daily_returns) / n
         var = sum((r - mean) ** 2 for r in daily_returns) / max(n - 1, 1)
         std = math.sqrt(var) if var > 0 else 0.01
-        sharpe = (mean / std) * math.sqrt(252) if std > 1e-15 else 0.0
+        sharpe = (mean / std) * math.sqrt(TRADING_DAYS_PER_YEAR) if std > 1e-15 else 0.0
         result = self._dsr.compute(
             observed_sharpe=sharpe,
             n_trials=cfg.n_trials,
@@ -308,8 +310,8 @@ class ComprehensiveValidator:
         mean = sum(rets) / n
         var = sum((r - mean) ** 2 for r in rets) / max(n - 1, 1)
         std = math.sqrt(var) if var > 0 else 0.01
-        annual_return = mean * 252
-        sharpe = (mean / std) * math.sqrt(252) if std > 1e-15 else 0.0
+        annual_return = mean * TRADING_DAYS_PER_YEAR
+        sharpe = (mean / std) * math.sqrt(TRADING_DAYS_PER_YEAR) if std > 1e-15 else 0.0
         # 简化最大回撤
         nav = 1.0
         peak = 1.0

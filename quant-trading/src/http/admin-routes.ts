@@ -2377,6 +2377,76 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     }),
   });
 
+  // ── Clear All Positions API (清仓) ──────────────────────────
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/admin/api/clear-positions",
+    handler: secure(async (req, res) => {
+      if (req.method !== "POST") {
+        json(res, { error: "仅支持 POST" }, 405);
+        return;
+      }
+      try {
+        const engine = getEngine();
+        if (engine.getStatus() !== "running") {
+          json(res, { error: "实盘引擎未启动" }, 400);
+          return;
+        }
+        const orderMgr = engine.orderManager;
+        if (!orderMgr) {
+          json(res, { error: "订单管理器不可用" }, 400);
+          return;
+        }
+        const broker = engine.broker;
+        let positions = engine.getPositions();
+        if (broker) {
+          try {
+            positions = await broker.queryPositions();
+          } catch {
+            // keep cached
+          }
+        }
+        const body = await parseObjectBody(req);
+        const selectedSymbols: string[] | null = Array.isArray(body.symbols) ? body.symbols.map(String) : null;
+        const allSellable = positions.filter((p) => p.availableQty > 0);
+        const sellable = selectedSymbols
+          ? allSellable.filter((p) => selectedSymbols.includes(p.symbol))
+          : allSellable;
+        if (!sellable.length) {
+          json(res, { message: "暂无可卖持仓", submitted: 0, skipped: 0 });
+          return;
+        }
+        const submitted: { symbol: string; quantity: number; orderId?: string }[] = [];
+        const skipped: { symbol: string; reason: string }[] = [];
+        for (const pos of sellable) {
+          const orderReq: OrderRequest = {
+            symbol: pos.symbol,
+            market: pos.market,
+            side: "sell",
+            orderType: "market",
+            quantity: pos.availableQty,
+            strategyId: "clear-positions",
+            signalId: `clear_${Date.now()}_${pos.symbol}`,
+          };
+          const result = await orderMgr.submit(orderReq, { skipMarketHours: true });
+          if (result.ok) {
+            submitted.push({ symbol: pos.symbol, quantity: pos.availableQty, orderId: result.order.orderId });
+          } else {
+            skipped.push({ symbol: pos.symbol, reason: result.reason ?? "提交失败" });
+          }
+        }
+        json(res, {
+          message: `已提交 ${submitted.length} 个清仓卖单` + (skipped.length ? `，${skipped.length} 个跳过` : ""),
+          submitted: submitted.length,
+          skipped: skipped.length,
+          details: { submitted, skipped },
+        });
+      } catch (err) {
+        json(res, { error: `清仓失败: ${err instanceof Error ? err.message : String(err)}` }, 500);
+      }
+    }),
+  });
+
   // ── Order Fill Status API (poll after placing orders) ────────
   api.registerHttpRoute({
     auth: "plugin",

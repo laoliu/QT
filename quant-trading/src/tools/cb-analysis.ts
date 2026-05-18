@@ -33,9 +33,10 @@ export function createCBAnalysisTool(_api: OpenClawPluginApi, config: QuantTradi
         strategy: {
           type: "string",
           description:
-            "策略名称（action=select 时使用）。可选: cb_double_low, cb_multi_factor, cb_gamma_convexity, " +
-            "cb_credit_spread, cb_momentum, cb_mean_reversion, cb_small_size, cb_delta_balanced, " +
-            "cb_value_momentum, cb_rotation",
+            "策略名称（action=select 时使用）。可选: cb_double_low, cb_multi_factor, " +
+            "cb_credit_spread, cb_momentum, cb_mean_reversion, cb_small_size_gated, " +
+            "cb_value_momentum, cb_regime_rotation, cb_stock_quality_v3, cb_iv_event_satellite, " +
+            "cb_enhanced_mf_v2, cb_ultra, cb_ml_ranking, cb_multi_layer",
         },
         symbols: {
           type: "array",

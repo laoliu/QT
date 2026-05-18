@@ -382,6 +382,18 @@ def _get_astock_strategies() -> list[str]:
         return []
 
 
+_STRATEGY_DISPLAY_NAMES: dict[str, str] = {
+    "a_stock_event_pead": "A股事件PEAD",
+    "behavioral_sleeve": "行为金融子组合",
+    "csi500_quality_sleeve": "中证500质量子组合",
+    "overreaction": "过度反应因子",
+    "pair_trading_industry_neutral": "行业中性配对",
+    "quality_lowvol": "质量低波",
+    "three_sleeve_equity": "三子组合权益",
+    "microcap_ml_csi2000": "微盘ML-CSI2000",
+}
+
+
 def _list_available_strategies() -> dict:
     """返回所有可用的AIPHA A股策略ID和名称（排除可转债策略）。"""
     try:
@@ -392,7 +404,12 @@ def _list_available_strategies() -> dict:
         strategies = []
         for sid in a_stock_ids:
             cls = reg.get(sid)
-            label = getattr(cls, "name", sid) if cls else sid
+            raw_name = getattr(cls, "name", sid) if cls else sid
+            # Use display name override, or fall back to sid if name is generic
+            if raw_name in ("BaseStrategy", "BaseTickStrategy"):
+                label = _STRATEGY_DISPLAY_NAMES.get(sid, sid)
+            else:
+                label = _STRATEGY_DISPLAY_NAMES.get(sid, raw_name)
             strategies.append({"id": sid, "name": label})
         return {"strategies": strategies, "count": len(strategies)}
     except Exception as e:

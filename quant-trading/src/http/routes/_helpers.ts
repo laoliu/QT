@@ -382,6 +382,14 @@ export const DAILY_PICK_STRATEGY_LABELS: Record<string, string> = {
   earnings_momentum: "盈利动量",
   garp_select: "GARP选股",
   sector_rotation: "行业轮动",
+  // ── 新增 Aipha 策略 (2026-05 sync) ──
+  a_stock_event_pead: "A股事件PEAD",
+  behavioral_sleeve: "行为金融子组合",
+  csi500_quality_sleeve: "中证500质量子组合",
+  overreaction: "过度反应因子",
+  pair_trading_industry_neutral: "行业中性配对",
+  quality_lowvol: "质量低波",
+  three_sleeve_equity: "三子组合权益",
 };
 
 export const CTA_SCREEN_STRATEGY_MAP: Record<string, string> = {

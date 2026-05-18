@@ -1814,6 +1814,32 @@ export function getPlannerBodyHtml(b: string): string {
         <button class="btn btn-primary" onclick="loadConditionalOrders()">🔄 刷新条件单</button>
         <button class="btn" onclick="checkConditionalNow()">⚡ 立即检查触发</button>
         <button class="btn" onclick="toggleCondHistory()">📜 触发历史</button>
+        <button class="btn btn-danger" onclick="showClearPositionsModal()" style="margin-left:auto">🗑️ 一键清仓</button>
+      </div>
+
+      <!-- Clear Positions Modal -->
+      <div id="clear-pos-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto">
+        <div style="max-width:600px;margin:60px auto;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0">🗑️ 一键清仓 — 选择卖出持仓</h3>
+            <button class="btn btn-sm" onclick="closeClearPosModal()">✕ 关闭</button>
+          </div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">勾选要卖出的持仓，取消勾选可保留该股票。将以市价卖出可用数量。</p>
+          <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+            <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="clear-pos-select-all" checked onchange="toggleClearPosAll(this.checked)"> 全选/取消</label>
+            <span id="clear-pos-hint" style="font-size:12px;color:var(--text-dim)"></span>
+          </div>
+          <div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+            <table id="clear-pos-table" style="font-size:12px">
+              <thead><tr><th style="width:30px"></th><th>代码</th><th>名称</th><th>可卖</th><th>成本</th><th>现价</th><th>盈亏%</th><th>市值</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn" onclick="closeClearPosModal()">取消</button>
+            <button class="btn btn-danger" id="clear-pos-confirm-btn" onclick="executeClearPositions()">确认清仓</button>
+          </div>
+        </div>
       </div>
       <div id="cond-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
 

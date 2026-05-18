@@ -545,6 +545,86 @@ function checkConditionalNow(){
     });
 }
 
+function showClearPositionsModal(){
+  var positions=_enginePositions.filter(function(p){return p.availableQty>0});
+  if(!positions.length){
+    toast('暂无可卖持仓');
+    return;
+  }
+  var tbody=document.querySelector('#clear-pos-table tbody');
+  var rows='';
+  positions.forEach(function(p,i){
+    var pnlPct=p.unrealizedPnlPct!=null?p.unrealizedPnlPct:null;
+    var pnlColor=pnlPct!=null?(pnlPct>0?'var(--green)':pnlPct<0?'var(--red)':'var(--text)'):'var(--text-dim)';
+    rows+='<tr>'+
+      '<td><input type="checkbox" class="clear-pos-check" data-symbol="'+esc(p.symbol)+'" checked onchange="updateClearPosHint()"></td>'+
+      '<td style="font-family:monospace;color:var(--accent)">'+esc(p.symbol)+'</td>'+
+      '<td>'+esc(p.name||'-')+'</td>'+
+      '<td>'+numInt(p.availableQty)+'</td>'+
+      '<td>'+num(p.avgCost)+'</td>'+
+      '<td>'+(p.currentPrice!=null?num(p.currentPrice):'-')+'</td>'+
+      '<td style="color:'+pnlColor+'">'+(pnlPct!=null?(pnlPct>=0?'+':'')+(pnlPct*100).toFixed(2)+'%':'-')+'</td>'+
+      '<td>'+(p.marketValue!=null?'¥'+numInt(p.marketValue):'-')+'</td>'+
+      '</tr>';
+  });
+  tbody.innerHTML=rows;
+  document.getElementById('clear-pos-select-all').checked=true;
+  updateClearPosHint();
+  document.getElementById('clear-pos-modal').style.display='block';
+}
+
+function closeClearPosModal(){
+  document.getElementById('clear-pos-modal').style.display='none';
+}
+
+function toggleClearPosAll(checked){
+  var boxes=document.querySelectorAll('.clear-pos-check');
+  for(var i=0;i<boxes.length;i++){boxes[i].checked=checked;}
+  updateClearPosHint();
+}
+
+function updateClearPosHint(){
+  var boxes=document.querySelectorAll('.clear-pos-check');
+  var total=boxes.length;
+  var selected=0;
+  for(var i=0;i<boxes.length;i++){if(boxes[i].checked)selected++;}
+  document.getElementById('clear-pos-hint').textContent='已选 '+selected+'/'+total+' 只';
+  document.getElementById('clear-pos-select-all').checked=selected===total;
+  document.getElementById('clear-pos-select-all').indeterminate=selected>0&&selected<total;
+  document.getElementById('clear-pos-confirm-btn').disabled=selected===0;
+}
+
+function executeClearPositions(){
+  var boxes=document.querySelectorAll('.clear-pos-check');
+  var symbols=[];
+  for(var i=0;i<boxes.length;i++){
+    if(boxes[i].checked)symbols.push(boxes[i].getAttribute('data-symbol'));
+  }
+  if(!symbols.length){toast('请至少选择一只持仓');return;}
+  if(!confirm('⚠️ 确认清仓 '+symbols.length+' 只股票？\\n\\n将以市价卖出，此操作不可撤销！'))return;
+  closeClearPosModal();
+  document.getElementById('cond-status').textContent='正在提交清仓卖单…';
+  api('/quant/admin/api/clear-positions',{method:'POST',body:JSON.stringify({symbols:symbols})})
+    .then(function(d){
+      if(d.error){
+        toast('❌ '+d.error,'error');
+        document.getElementById('cond-status').textContent='清仓失败: '+d.error;
+        return;
+      }
+      toast('✅ '+d.message);
+      document.getElementById('cond-status').textContent=d.message;
+      if(d.details&&d.details.skipped&&d.details.skipped.length){
+        var skipMsg=d.details.skipped.map(function(s){return s.symbol+': '+s.reason}).join('; ');
+        document.getElementById('cond-status').textContent+=' | 跳过: '+skipMsg;
+      }
+      setTimeout(function(){loadEngineStatus();loadConditionalOrders();},1500);
+    })
+    .catch(function(e){
+      toast('❌ 清仓请求失败: '+e.message,'error');
+      document.getElementById('cond-status').textContent='清仓请求失败: '+e.message;
+    });
+}
+
 function updateCondAddFields(){
   var type=document.getElementById('cond-add-type').value;
   var label=document.getElementById('cond-add-trigger-label');

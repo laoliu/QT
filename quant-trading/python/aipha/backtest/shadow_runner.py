@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Callable
 
 from aipha.domain.models import Fill, Side
 from aipha.execution.fees import (
@@ -269,3 +269,62 @@ class ShadowComparator:
         for ev in events:
             report.divergences.append(self.compare_trade(ev))
         return report
+
+
+# ── TradeRecord → TradeEvent 适配 ────────────────────────────────
+
+
+def build_trade_events(
+    trades: list[Any],
+    price_lookup: Callable[[str, date], tuple[float, float] | None],
+) -> list[TradeEvent]:
+    """把回测 TradeRecord 转成可比较的 TradeEvent.
+
+    TradeRecord 只保存实际成交价，不保存当日收盘价与次日开盘价，
+    因此双路径比较必须由调用方提供行情查询 —— 这是此前无法接入
+    例行流程的原因。
+
+    Args:
+        trades: BacktestResult.trades (需有 symbol / side / qty / trade_date)
+        price_lookup: (symbol, trade_date) → (close_price, next_open_price)。
+            返回 None 表示该笔缺行情，跳过而非报错（避免个别缺失
+            拖垮整份报告）。
+
+    Returns:
+        可交给 ShadowComparator.compare_trades 的事件列表
+    """
+    events: list[TradeEvent] = []
+    skipped = 0
+    for tr in trades:
+        symbol = getattr(tr, "symbol", None) or getattr(tr, "code", None)
+        trade_date = getattr(tr, "trade_date", None)
+        if not symbol or trade_date is None:
+            skipped += 1
+            continue
+
+        prices = price_lookup(symbol, trade_date)
+        if not prices:
+            skipped += 1
+            continue
+        close_price, next_open = prices
+        if not (close_price > 0 and next_open > 0):
+            skipped += 1
+            continue
+
+        raw_side = getattr(tr, "side", "buy")
+        side = getattr(raw_side, "value", raw_side)
+        events.append(TradeEvent(
+            trade_date=trade_date,
+            symbol=symbol,
+            side=str(side).lower(),
+            qty=int(getattr(tr, "qty", 0)),
+            close_price=float(close_price),
+            next_open_price=float(next_open),
+        ))
+
+    if skipped:
+        logger.info(
+            "shadow 比较跳过 %d/%d 笔交易（缺行情或字段不全）",
+            skipped, len(trades),
+        )
+    return events

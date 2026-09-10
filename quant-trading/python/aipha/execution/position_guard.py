@@ -464,11 +464,22 @@ class PositionGuard:
             symbol = rec.get("ts_code", rec.get("symbol", ""))
             if not symbol or symbol in held:
                 continue
+            # advisory 侧 revalidate() 会把追高/失效的建议降级为 hold —
+            # 此处必须尊重 action，否则降级不起作用
+            # 缺失或空值按 "buy" 处理 — 老调用方不带 action 字段
+            action = str(rec.get("action") or "buy").lower()
+            if action not in ("buy", "strong_buy"):
+                logger.info("跳过建仓 %s: action=%s 非买入建议", symbol, action)
+                continue
             confidence = float(rec.get("confidence", 0))
             if confidence < self.config.min_confidence:
                 continue
             price = Decimal(str(rec.get("price", 0)))
             if price <= 0:
+                continue
+            skip = self._entry_price_block(symbol, price, rec)
+            if skip:
+                logger.info("跳过建仓 %s: %s", symbol, skip)
                 continue
             alloc = (self.nav * self.config.max_single_position_pct
                      * min(confidence, 1.0))
@@ -483,9 +494,37 @@ class PositionGuard:
                 qty=qty, price=price, urgency=1,
                 reason=f"新股建仓: confidence={confidence:.2f}",
                 metadata={"confidence": confidence,
-                          "source": rec.get("source", "advisory")},
+                          "source": rec.get("source", "advisory"),
+                          "stop_loss": rec.get("stop_loss"),
+                          "target_price": rec.get("target_price"),
+                          "holding_days": rec.get("holding_days")},
             ))
         return actions
+
+    @staticmethod
+    def _entry_price_block(
+        symbol: str,
+        price: Decimal,
+        rec: dict,
+    ) -> str | None:
+        """按推荐自带的价位计划拦截建仓，None 表示放行。
+
+        ``price`` 应为下单时点的最新价；推荐里的 max_entry_price / stop_loss
+        由 advisory.RecommendationEngine 在信号日算出。两者比较即可拦掉
+        「推荐到下单之间已经涨上去」和「还没买就已破位」两种情况。
+        """
+        max_entry = rec.get("max_entry_price")
+        if max_entry:
+            limit = Decimal(str(max_entry))
+            if limit > 0 and price > limit:
+                return f"追高 — 现价 {price} > 入场上限 {limit}"
+
+        stop_loss = rec.get("stop_loss")
+        if stop_loss:
+            stop = Decimal(str(stop_loss))
+            if stop > 0 and price <= stop:
+                return f"开仓前已破位 — 现价 {price} <= 止损 {stop}"
+        return None
 
     # ── 辅助方法 ──────────────────────────────────────────────
 

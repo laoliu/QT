@@ -1540,6 +1540,7 @@ def wf_json_to_wf_dict(wf_path: Path) -> dict[str, Any]:
     data = json.loads(wf_path.read_text(encoding="utf-8"))
     wf_id = wf_path.stem  # 文件名（不含扩展名）
     params = data.get("params", {})
+    stats = data.get("statistical_validation", {}) or {}
     return {
         "wf_id": wf_id,
         "strategy_name": data.get("strategy_name", "unknown"),
@@ -1553,6 +1554,9 @@ def wf_json_to_wf_dict(wf_path: Path) -> dict[str, Any]:
         "purged": params.get("purged", False),
         "params": params,
         "splits": data.get("splits", data.get("splits_detail")),
+        "pbo": stats.get("pbo"),
+        "dsr": stats.get("dsr"),
+        "hlz_adjusted_t": stats.get("hlz_adjusted_t"),
     }
 
 

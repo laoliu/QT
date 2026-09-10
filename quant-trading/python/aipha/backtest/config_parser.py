@@ -287,7 +287,7 @@ def _normalize_config(raw: dict[str, Any]) -> dict[str, Any]:
     known_keys = {
         "name", "description", "data", "universe", "strategy", "cost",
         "fill_model", "initial_capital", "lot_size", "t_plus_n",
-        "random_seed", "output_dir", "quality_gates_path", "risk",
+        "random_seed", "output_dir", "quality_gates_path", "n_trials", "risk",
         "portfolio", "missing_quote_writeoff_enabled", "missing_quote_writeoff_days",
         # tolerated but not parsed:
         "market", "frequency", "report",
@@ -521,6 +521,7 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         random_seed=raw.get("random_seed"),
         output_dir=raw.get("output_dir", "output"),
         quality_gates_path=raw.get("quality_gates_path"),
+        n_trials=raw.get("n_trials"),
         missing_quote_writeoff_enabled=raw.get("missing_quote_writeoff_enabled", False),
         missing_quote_writeoff_days=raw.get("missing_quote_writeoff_days", 20),
     )
@@ -638,6 +639,7 @@ def config_to_dict(config: BacktestRunConfig) -> dict[str, Any]:
         "random_seed": config.random_seed,
         "output_dir": config.output_dir,
         "quality_gates_path": config.quality_gates_path,
+        "n_trials": config.n_trials,
         "missing_quote_writeoff_enabled": config.missing_quote_writeoff_enabled,
         "missing_quote_writeoff_days": config.missing_quote_writeoff_days,
         "portfolio": {

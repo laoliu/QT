@@ -318,6 +318,10 @@ class BacktestRunConfig:
     random_seed: int | None = None
     output_dir: str = "output"
     quality_gates_path: str | None = None
+    # 本批试验总次数 N，用于缩减夏普（DSR）的多重检验校正。
+    # 例如网格搜了 80 组参数就填 80。不填则 DSR 门禁记为「未检验」——
+    # 不会判失败，但报告会点名缺这项检验。
+    n_trials: int | None = None
     missing_quote_writeoff_enabled: bool = False
     missing_quote_writeoff_days: int = 20
 

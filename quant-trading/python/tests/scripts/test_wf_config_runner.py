@@ -173,3 +173,38 @@ class TestWFConfigRunner:
         text = result["report"].summary()
         assert "样本外验证报告" in text
         assert "multifactor_enhance" in text
+
+    def test_statistical_validation_attached(self, synthetic_config_path: Path):
+        """WF 结果应附带统计诊断摘要。"""
+        result = run_walk_forward_from_config(
+            config_path=synthetic_config_path,
+            train_days=50,
+            test_days=20,
+            n_splits=2,
+        )
+
+        stats = result["statistical_validation"]
+        assert isinstance(stats, dict)
+        assert "n_trials" in stats
+        assert "pbo" in stats
+        assert "dsr" in stats
+        assert stats["n_trials"] == 2
+
+    def test_overfitting_gate_attached(self, synthetic_config_path: Path):
+        """DSR/PBO 应产生判定，而不只是一条日志。"""
+        result = run_walk_forward_from_config(
+            config_path=synthetic_config_path,
+            train_days=50,
+            test_days=20,
+            n_splits=2,
+        )
+
+        gate = result["overfitting_gate"]
+        assert isinstance(gate["all_passed"], bool)
+        stats = result["statistical_validation"]
+        # 算出来的指标必须被判定，算不出来的必须被点名为未检验
+        for metric in ("dsr_p_value", "pbo"):
+            if stats.get(metric) is None:
+                assert metric in gate["skipped"]
+            else:
+                assert metric not in gate["skipped"]

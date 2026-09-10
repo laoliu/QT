@@ -42,6 +42,10 @@ class QualityGate:
         threshold: 阈值
         severity: 严重度: "error"=硬门禁(必须通过), "warning"=软告警
         description: 人类可读描述
+        required: 指标缺失时是否算失败。``False`` 表示「未提供则跳过」——
+            用于过拟合检验这类需要额外输入（试验次数 / CPCV 折）的指标，
+            单次回测拿不到时不应被判为不合格，但必须在报告里显式列出
+            「未检验」，否则缺检验和通过检验看起来一样。
     """
 
     metric: str
@@ -49,6 +53,7 @@ class QualityGate:
     threshold: float
     severity: str = "error"
     description: str = ""
+    required: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +84,9 @@ class QualityReport:
         results: 各门禁检查结果列表
         errors: 硬门禁失败列表
         warnings: 软告警列表
+        skipped: 因指标未提供而跳过的非必需门禁（``required=False``）。
+            不计入 all_passed，但必须被读到 —— 「未做过拟合检验」
+            和「过拟合检验通过」是两回事。
     """
 
     strategy_name: str
@@ -87,11 +95,63 @@ class QualityReport:
     results: list[GateResult]
     errors: list[GateResult]
     warnings: list[GateResult]
+    skipped: list[GateResult] = field(default_factory=list)
 
 
 # ============================================================================
 # 默认质量门禁配置
 # ============================================================================
+
+# 过拟合检验阈值 — 与 governance/statistical_gate.py 保持一致
+# （那里做策略晋级门禁，这里做单次回测门禁；两处阈值必须相同，
+#   由 tests/backtest/test_quality_gates_overfitting.py 断言守护）
+DSR_P_MAX = 0.10   # DSR_P_SOFT
+PBO_MAX = 0.50
+OOS_SHARPE_DECAY_MAX = 0.50
+
+# 样本外/多重检验门禁。
+#
+# 这一组全部 required=False: 单次回测本身算不出这些指标（DSR 需要
+# 试验次数 N，PBO 需要 CPCV 折集合），必须由调用方喂进来。设为
+# 必需会让所有现有回测直接变红；设为跳过则至少在报告里点名
+# 「这条策略没做过拟合检验」，而不是让样本内高 Sharpe 冒充有效性。
+#
+# 这一组是「回测好看但实盘不行」最直接的统计防线 —— 样本内指标
+# 再漂亮也不能证明信号在样本外还在。
+OVERFITTING_QUALITY_GATES: list[dict] = [
+    {
+        "metric": "dsr_p_value",
+        "operator": "<=",
+        "threshold": DSR_P_MAX,
+        "severity": "error",
+        "description": f"DSR p 值不高于{DSR_P_MAX}（多重检验校正后仍显著）",
+        "required": False,
+    },
+    {
+        "metric": "dsr",
+        "operator": ">",
+        "threshold": 0.0,
+        "severity": "warning",
+        "description": "缩减夏普（DSR）统计量应为正（优于同批试验的期望最大值）",
+        "required": False,
+    },
+    {
+        "metric": "pbo",
+        "operator": "<=",
+        "threshold": PBO_MAX,
+        "severity": "error",
+        "description": f"回测过拟合概率不高于{PBO_MAX:.0%}",
+        "required": False,
+    },
+    {
+        "metric": "oos_sharpe_decay",
+        "operator": "<=",
+        "threshold": OOS_SHARPE_DECAY_MAX,
+        "severity": "error",
+        "description": f"IS→OOS 夏普衰减不超过{OOS_SHARPE_DECAY_MAX:.0%}",
+        "required": False,
+    },
+]
 
 DEFAULT_QUALITY_GATES: list[dict] = [
     {
@@ -164,6 +224,7 @@ DEFAULT_QUALITY_GATES: list[dict] = [
         "severity": "warning",
         "description": "最大单票集中度建议不超过50%（过度集中风险）",
     },
+    *OVERFITTING_QUALITY_GATES,
 ]
 
 
@@ -269,6 +330,7 @@ class QualityChecker:
         results: list[GateResult] = []
         errors: list[GateResult] = []
         warnings: list[GateResult] = []
+        skipped: list[GateResult] = []
 
         for gate in self.gates:
             # 通过别名映射解决指标名不一致问题
@@ -287,6 +349,20 @@ class QualityChecker:
                             break
 
             if actual is None:
+                if not gate.required:
+                    # 未提供 ≠ 不合格，但也 ≠ 通过 —— 记为跳过并显式点名
+                    gr = GateResult(
+                        gate=gate,
+                        actual_value=None,
+                        passed=True,
+                        message=(
+                            f"○ 未检验: {gate.description or gate.metric} "
+                            f"（指标 '{gate.metric}' 未提供）"
+                        ),
+                    )
+                    results.append(gr)
+                    skipped.append(gr)
+                    continue
                 gr = GateResult(
                     gate=gate,
                     actual_value=None,
@@ -352,6 +428,7 @@ class QualityChecker:
             results=results,
             errors=errors,
             warnings=warnings,
+            skipped=skipped,
         )
 
     @staticmethod
@@ -387,7 +464,10 @@ def format_quality_report(report: QualityReport) -> str:
 
     status = "全部通过 ✓" if report.all_passed else "存在失败 ✗"
     lines.append(f"总体结果: {status}")
-    lines.append(f"  硬门禁错误: {len(report.errors)}  软告警: {len(report.warnings)}")
+    lines.append(
+        f"  硬门禁错误: {len(report.errors)}  软告警: {len(report.warnings)}"
+        f"  未检验: {len(report.skipped)}"
+    )
     lines.append("")
 
     for gr in report.results:
@@ -404,8 +484,106 @@ def format_quality_report(report: QualityReport) -> str:
         for gr in report.warnings:
             lines.append(f"  {gr.message}")
 
+    if report.skipped:
+        lines.append("\n--- 未检验（指标未提供，不计入判定）---")
+        for gr in report.skipped:
+            lines.append(f"  {gr.message}")
+        lines.append(
+            "  注: 「未检验」不等于「通过」。样本外/多重检验指标缺失时，"
+            "样本内表现不足以支持上线。"
+        )
+
     lines.append("=" * 60)
     return "\n".join(lines)
+
+
+# ============================================================================
+# 过拟合指标计算 — 把 DSR / PBO 变成可喂给门禁的数值
+# ============================================================================
+
+
+def check_overfitting_gates(
+    metrics: dict[str, Any],
+    strategy_name: str = "",
+) -> QualityReport:
+    """只跑过拟合门禁，不碰样本内指标。
+
+    用于 Walk-Forward / CPCV 这类已经算出 DSR / PBO 的流程 ——
+    那里本来就有这些数字，此前只是打了条日志、没有判定。
+
+    Args:
+        metrics: 含 ``dsr`` / ``dsr_p_value`` / ``pbo`` /
+            ``oos_sharpe_decay`` 的字典（如
+            ``wf_statistical_validation.summarize_wf_statistical_validation``
+            的输出）。缺哪项就跳过哪项。
+        strategy_name: 策略名称
+
+    Returns:
+        QualityReport
+    """
+    checker = QualityChecker.from_config(OVERFITTING_QUALITY_GATES)
+    # None 值等同于「未提供」—— 上游用 None 表示算不出来
+    cleaned = {k: v for k, v in metrics.items() if v is not None}
+    return checker.check(cleaned, strategy_name=strategy_name)
+
+
+def compute_overfitting_metrics(
+    daily_returns: list[float],
+    sharpe_ratio: float,
+    n_trials: int,
+    pbo: float | None = None,
+    oos_sharpe: float | None = None,
+) -> dict[str, float]:
+    """计算可直接合并进门禁指标字典的过拟合指标。
+
+    ``n_trials`` 是本策略所属那一批试验的总次数（调过的参数组合数、
+    比较过的策略数）。它必须由调用方提供 —— 单次回测无从得知自己
+    是第几次尝试，而这正是样本内 Sharpe 会虚高的原因: 试 100 组
+    参数，最好那一组的 Sharpe 天然偏高，与信号是否真实无关。
+
+    Args:
+        daily_returns: 日收益序列（用于偏度/峰度/观测数）
+        sharpe_ratio: 观测到的年化夏普
+        n_trials: 试验次数 N（<2 时 DSR 无意义，返回空字典）
+        pbo: 外部算好的过拟合概率（如 ComboCPCV 的输出），可选
+        oos_sharpe: 样本外夏普，给出时计算 IS→OOS 衰减
+
+    Returns:
+        {"dsr", "dsr_p_value", "n_trials", ...} —— 缺输入的键直接不出现，
+        以便门禁把它记为「未检验」而非「不合格」
+    """
+    metrics: dict[str, float] = {}
+
+    if n_trials >= 2 and len(daily_returns) >= 20:
+        try:
+            import numpy as np
+            from scipy import stats as sp_stats
+
+            from aipha.factors.deflated_sharpe import deflated_sharpe_ratio
+
+            arr = np.asarray(daily_returns, dtype=float)
+            dsr = deflated_sharpe_ratio(
+                observed_sr=float(sharpe_ratio),
+                n_trials=int(n_trials),
+                skewness=float(sp_stats.skew(arr, bias=False)),
+                kurtosis=float(sp_stats.kurtosis(arr, bias=False, fisher=False)),
+                t_observations=len(arr),
+            )
+            metrics["dsr"] = float(dsr["dsr"])
+            metrics["dsr_p_value"] = float(dsr["p_value"])
+            metrics["n_trials"] = float(n_trials)
+        except Exception as exc:  # pragma: no cover - 防御性
+            logger.warning("DSR 计算失败，该门禁记为未检验: %s", exc)
+
+    if pbo is not None:
+        metrics["pbo"] = float(pbo)
+
+    if oos_sharpe is not None and sharpe_ratio > 0:
+        metrics["oos_sharpe_decay"] = max(
+            0.0, 1.0 - float(oos_sharpe) / float(sharpe_ratio),
+        )
+
+    return metrics
 
 
 # ============================================================================

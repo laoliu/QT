@@ -57,8 +57,30 @@ from aipha.backtest.validation import (  # noqa: E402
     judge_walk_forward,
     auto_n_splits,
 )
+from aipha.backtest.wf_statistical_validation import (  # noqa: E402
+    summarize_wf_statistical_validation,
+)
+from aipha.backtest.quality_gates import (  # noqa: E402
+    check_overfitting_gates,
+    format_quality_report,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_daily_returns(backtest_result: Any) -> list[float]:
+    """从 BacktestResult 提取日收益序列。"""
+    snapshots = getattr(backtest_result, "daily_snapshots", None) or []
+    returns: list[float] = []
+    for snap in snapshots:
+        daily_return = getattr(snap, "daily_return", None)
+        if daily_return is None:
+            continue
+        try:
+            returns.append(float(daily_return))
+        except (TypeError, ValueError):
+            continue
+    return returns
 
 
 def run_walk_forward_from_config(
@@ -139,6 +161,12 @@ def run_walk_forward_from_config(
         )
 
     validator = WalkForwardValidator(splitter=splitter)
+    fold_oos_daily_returns: list[list[float]] = []
+    split_periods = splitter.split(data_start, data_end)
+    test_period_keys = {
+        (period.test_start, period.test_end)
+        for period in split_periods
+    }
 
     # 6. 构建 run_fn: 每个 fold 创建新的策略实例 + 引擎
     strategy_name = config.strategy.name
@@ -186,6 +214,9 @@ def run_walk_forward_from_config(
             logger.error(f"Fold {start}~{end} 回测失败: {e}")
             return {"return": 0.0, "sharpe": 0.0, "max_drawdown": 0.0}
 
+        if (start, end) in test_period_keys:
+            fold_oos_daily_returns.append(_extract_daily_returns(result))
+
         perf = compute_performance_metrics(result)
         dd = compute_drawdown_analysis(result)
 
@@ -217,15 +248,40 @@ def run_walk_forward_from_config(
     effective_thresholds = thresholds or WalkForwardThresholds()
     verdict = judge_walk_forward(report, thresholds=effective_thresholds)
     score = compute_wf_score(report)
+    statistical_validation = summarize_wf_statistical_validation(
+        fold_oos_daily_returns,
+        n_trials=max(n_splits, 1),
+    )
+
+    # 8b. 把 DSR / PBO 变成判定，而不只是一条日志
+    overfitting_report = check_overfitting_gates(
+        statistical_validation, strategy_name=strategy_name,
+    )
 
     # 9. 输出结果
     logger.info(report.summary())
     logger.info(f"判定: {verdict} | 评分: {score}/10")
+    if statistical_validation.get("pbo") is not None:
+        logger.info(
+            "WF统计验证: DSR=%s HLZ=%s PBO=%s",
+            statistical_validation.get("dsr"),
+            statistical_validation.get("hlz_adjusted_t"),
+            statistical_validation.get("pbo"),
+        )
+    if not overfitting_report.all_passed:
+        logger.error("过拟合门禁未通过:\n%s", format_quality_report(overfitting_report))
 
     return {
         "report": report,
         "verdict": verdict,
         "score": score,
+        "statistical_validation": statistical_validation,
+        "overfitting_gate": {
+            "all_passed": overfitting_report.all_passed,
+            "errors": [gr.message for gr in overfitting_report.errors],
+            "warnings": [gr.message for gr in overfitting_report.warnings],
+            "skipped": [gr.gate.metric for gr in overfitting_report.skipped],
+        },
         "config_path": str(config_path),
         "strategy_name": strategy_name,
         "data_range": f"{data_start} ~ {data_end}",
@@ -358,6 +414,7 @@ def main() -> int:
             "config_path": result["config_path"],
             "data_range": result["data_range"],
             "n_trading_days": result["n_trading_days"],
+            "statistical_validation": result["statistical_validation"],
             "params": {
                 "train_days": result["train_days"],
                 "test_days": result["test_days"],

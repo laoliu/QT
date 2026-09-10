@@ -17,9 +17,10 @@ Design principles:
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 import numpy as np
 
@@ -29,6 +30,8 @@ from aipha.market.trading_calendar_constants import (
 
 if TYPE_CHECKING:
     from aipha.backtest.engine import BacktestResult
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -320,6 +323,11 @@ class BacktestReport:
     # 可选：因子暴露分析
     factor_exposure: dict | None = None
 
+    # 可选：双路径执行差异（回测 NextBarOpen 假设 vs 实盘口径）
+    # 由 shadow_runner.ShadowComparator 产出。回测收益里落在这块的部分
+    # 实盘拿不到，因此它是策略能否上线的必查项而非可选项。
+    execution_divergence: dict | None = None
+
     def summary(self) -> str:
         """生成文本摘要"""
         lines = [
@@ -423,6 +431,17 @@ class BacktestReport:
                     lines.append(
                         f"  {name}: 均值={mean:.4f}, 标准差={std:.4f}, 最新={latest:.4f}"
                     )
+
+        if self.execution_divergence:
+            ed = self.execution_divergence
+            lines.extend([
+                "",
+                "【执行口径差异】(回测假设 vs 实盘口径)",
+                f"  比较笔数:     {ed.get('total_trades', 0)}",
+                f"  平均成交价差: {ed.get('mean_price_diff_bps', 0.0):+.2f} bps",
+                f"  最大成交价差: {ed.get('max_price_diff_bps', 0.0):.2f} bps",
+                f"  累计净额差:   {ed.get('total_net_diff', 0.0):+,.2f}",
+            ])
 
         return "\n".join(lines)
 
@@ -1145,6 +1164,7 @@ def generate_report(
     benchmark_sector_weights: dict[str, float] | None = None,
     benchmark_sector_returns: dict[str, float] | None = None,
     factor_scores_by_date: dict[date, dict[str, dict[str, float]]] | None = None,
+    price_lookup: Callable[[str, date], tuple[float, float] | None] | None = None,
 ) -> BacktestReport:
     """生成完整回测报告
 
@@ -1158,6 +1178,9 @@ def generate_report(
         benchmark_sector_returns: 基准行业收益率 {sector: return}（可选，Brinson 用）
         factor_scores_by_date: 每日因子分数（可选，因子暴露分析用）
             格式: {trade_date: {factor_name: {symbol: score}}}
+        price_lookup: (symbol, trade_date) → (当日收盘价, 次日开盘价)。
+            提供时计算双路径执行差异，量化「回测按次日开盘成交」与
+            「实盘按当日收盘成交」两种口径的收益落差。
 
     Returns:
         BacktestReport
@@ -1208,6 +1231,13 @@ def generate_report(
             result.daily_snapshots, factor_scores_by_date,
         )
 
+    # 计算双路径执行差异（需要行情查询才能拿到收盘价/次日开盘价）
+    execution_divergence = None
+    if price_lookup is not None and result.trades:
+        execution_divergence = _compute_execution_divergence(
+            result.trades, price_lookup,
+        )
+
     return BacktestReport(
         strategy_name=result.strategy_name,
         start_date=result.start_date,
@@ -1225,7 +1255,28 @@ def generate_report(
         benchmark_relative=benchmark_relative,
         brinson_attribution=brinson_result,
         factor_exposure=factor_exposure_result,
+        execution_divergence=execution_divergence,
     )
+
+
+def _compute_execution_divergence(
+    trades: list,
+    price_lookup: Callable[[str, date], tuple[float, float] | None],
+) -> dict | None:
+    """量化回测执行口径与实盘口径的差异。
+
+    行情缺失或比较器不可用时返回 None —— 附加分析不应让主报告失败。
+    """
+    try:
+        from aipha.backtest.shadow_runner import ShadowComparator, build_trade_events
+
+        events = build_trade_events(trades, price_lookup)
+        if not events:
+            return None
+        return ShadowComparator.for_cn_equity().compare_trades(events).to_dict()
+    except Exception as exc:  # pragma: no cover - 防御性
+        logger.warning("执行口径差异计算失败，跳过: %s", exc)
+        return None
 
 
 def _compute_yearly_returns(
@@ -1259,6 +1310,9 @@ def _compute_yearly_returns(
 def extract_metrics_dict(
     result: BacktestResult,
     risk_free_rate: float = RISK_FREE_RATE_DEFAULT,
+    n_trials: int | None = None,
+    pbo: float | None = None,
+    oos_sharpe: float | None = None,
 ) -> dict[str, Any]:
     """从回测结果提取扁平化指标字典，用于质量门禁检查。
 
@@ -1268,10 +1322,16 @@ def extract_metrics_dict(
     - 交易指标: win_rate, profit_factor, turnover_rate, total_trades
     - 逐年指标: yearly_returns（{年份: 年化收益率} 字典）
     - 持仓指标: avg_positions, max_positions, max_concentration
+    - 过拟合指标: dsr, dsr_p_value, pbo, oos_sharpe_decay（仅在提供
+      ``n_trials`` / ``pbo`` / ``oos_sharpe`` 时出现）
 
     Args:
         result: 回测结果
         risk_free_rate: 年化无风险利率
+        n_trials: 本批试验总次数，用于 DSR。不传则不产出 DSR 指标，
+            对应门禁记为「未检验」
+        pbo: 外部算好的回测过拟合概率（如 ComboCPCV 输出）
+        oos_sharpe: 样本外夏普，用于计算 IS→OOS 衰减
 
     Returns:
         指标名→数值 的字典
@@ -1306,14 +1366,15 @@ def extract_metrics_dict(
         "idle_ratio": positions.idle_ratio,
     }
 
+    nav_list = [s.nav for s in result.daily_snapshots]
+    daily_rets = [
+        nav_list[i] / nav_list[i - 1] - 1
+        for i in range(1, len(nav_list))
+        if nav_list[i - 1] > 0
+    ]
+
     # VaR/CVaR 风险指标
     if len(result.daily_snapshots) >= 2:
-        nav_list = [s.nav for s in result.daily_snapshots]
-        daily_rets = [
-            nav_list[i] / nav_list[i - 1] - 1
-            for i in range(1, len(nav_list))
-            if nav_list[i - 1] > 0
-        ]
         rs = compute_risk_summary(daily_rets)
         if rs is not None:
             metrics["var_95"] = rs.var_95
@@ -1324,5 +1385,17 @@ def extract_metrics_dict(
     # 逐年收益（>=TRADING_DAYS_PER_YEAR 个交易日才有意义）
     if len(result.daily_snapshots) >= TRADING_DAYS_PER_YEAR:
         metrics["yearly_returns"] = _compute_yearly_returns(result)
+
+    # 过拟合指标 — 需要回测之外的输入，缺则不产出（门禁记为未检验）
+    if n_trials is not None or pbo is not None or oos_sharpe is not None:
+        from aipha.backtest.quality_gates import compute_overfitting_metrics
+
+        metrics.update(compute_overfitting_metrics(
+            daily_returns=daily_rets,
+            sharpe_ratio=perf.sharpe_ratio,
+            n_trials=n_trials or 0,
+            pbo=pbo,
+            oos_sharpe=oos_sharpe,
+        ))
 
     return metrics

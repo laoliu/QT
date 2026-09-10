@@ -228,8 +228,8 @@ def _run_quality_gates(
             checker = QualityChecker.default()
             logger.info("质量门禁: 使用默认配置")
 
-        # 提取指标
-        metrics = extract_metrics_dict(result)
+        # 提取指标（config.n_trials 非空时附带 DSR 过拟合指标）
+        metrics = extract_metrics_dict(result, n_trials=config.n_trials)
 
         # 执行检查
         strategy_name = config.strategy.name
@@ -245,6 +245,14 @@ def _run_quality_gates(
                 logger.error(f"质量门禁 FAIL: {err.message}")
             for warn in report.warnings:
                 logger.warning(f"质量门禁 WARN: {warn.message}")
+
+        # 「未检验」必须可见 —— 否则样本内高分会被当成有效性证明
+        if report.skipped:
+            logger.warning(
+                "质量门禁: %d 项未检验（缺样本外/多重检验输入）: %s",
+                len(report.skipped),
+                ", ".join(gr.gate.metric for gr in report.skipped),
+            )
 
         return report
     except Exception as e:

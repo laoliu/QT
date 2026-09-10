@@ -319,6 +319,11 @@ class TestConversionFunctions:
             "score": 7.5,
             "config_path": "configs/test.yml",
             "data_range": "2018 ~ 2024",
+            "statistical_validation": {
+                "pbo": 0.31,
+                "dsr": 1.18,
+                "hlz_adjusted_t": 2.26,
+            },
             "params": {
                 "train_days": 504,
                 "test_days": 252,
@@ -335,6 +340,9 @@ class TestConversionFunctions:
         assert result["verdict"] == "PASS"
         assert result["train_days"] == 504
         assert result["purged"] is True
+        assert result["pbo"] == pytest.approx(0.31)
+        assert result["dsr"] == pytest.approx(1.18)
+        assert result["hlz_adjusted_t"] == pytest.approx(2.26)
 
 
 # ============================================================================

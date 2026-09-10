@@ -774,8 +774,28 @@ class TestExtractMetricsDict:
         checker = QualityChecker.default()
         report = checker.check(metrics, strategy_name="test")
 
-        # 不应有"指标不存在"的错误（默认门禁的所有指标都应存在）
+        # 必需门禁的指标必须全部存在（否则会因缺指标而误判失败）。
+        # required=False 的过拟合门禁（DSR/PBO/衰减）需要回测之外的输入，
+        # 缺失时记为「未检验」，不在此列。
         for r in report.results:
+            if not r.gate.required:
+                continue
             assert r.actual_value is not None, (
                 f"指标 '{r.gate.metric}' 在 extract_metrics_dict 中缺失"
             )
+
+    def test_optional_overfitting_gates_skipped_not_failed(
+        self, sample_result: BacktestResult,
+    ):
+        """不提供试验次数时过拟合门禁记为未检验，而非判失败"""
+        from aipha.backtest.quality_gates import QualityChecker
+
+        report = QualityChecker.default().check(
+            extract_metrics_dict(sample_result), strategy_name="test",
+        )
+
+        assert {gr.gate.metric for gr in report.skipped} == {
+            "dsr", "dsr_p_value", "pbo", "oos_sharpe_decay",
+        }
+        for gr in report.errors:
+            assert gr.gate.required

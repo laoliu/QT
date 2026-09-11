@@ -33,9 +33,11 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from aipha.utils.paths import PROJECT_ROOT
+
 logger = logging.getLogger("paper_engine_eod")
 
-_LOG_DIR = Path(__file__).resolve().parents[3] / "logs" / "paper"
+_LOG_DIR = PROJECT_ROOT / "logs" / "paper"
 _MAX_PENDING_AGE_DAYS = 2  # 挂单最大保留交易日数
 _DEFAULT_DEADLINE = "23:30"
 
@@ -517,8 +519,23 @@ def run_daily(cfg: dict, dry_run: bool = False) -> None:
     risk_raw = cfg.get("risk", {})
     if risk_raw.get("enabled", True):
         try:
-            from aipha.risk.risk_config_loader import build_risk_manager_from_dict
-            _risk_manager = build_risk_manager_from_dict(risk_raw, lot_size=10)
+            from aipha.risk.risk_config_loader import (
+                build_risk_manager_from_dict,
+                infer_portfolio_top_k,
+            )
+            # §4.3.2 规则 9 / R163: 死亡螺旋告警需要组合总持仓数。
+            # paper 配置两种形态都要认：组件式（顶层组件段）和单策略式
+            # （strategy.parameters.top_k，如 configs/paper/v2_ml_ensemble.yml）。
+            _top_k = infer_portfolio_top_k(
+                [c for _, c in _resolve_components(cfg, cfg.get("portfolio_weights", {}))]
+            )
+            if _top_k is None:
+                _strategy_params = (cfg.get("strategy") or {}).get("parameters") or {}
+                _raw_top_k = _strategy_params.get("top_k", cfg.get("top_k"))
+                _top_k = int(_raw_top_k) if _raw_top_k is not None else None
+            _risk_manager = build_risk_manager_from_dict(
+                risk_raw, lot_size=10, top_k=_top_k,
+            )
         except Exception as _e:
             logger.warning("风控管理器构建失败: %s", _e)
 

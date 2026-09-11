@@ -15,6 +15,7 @@ from aipha.api.auth import get_current_user
 from aipha.api.deps import get_result_store
 from aipha.api.schemas import ApiResponse, UserInfo
 from aipha.factors.technical import TechnicalFactorCalculator, bollinger_bands, macd
+from aipha.utils.paths import project_path
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -22,8 +23,10 @@ try:
     from aipha.config import get_cache_dir as _get_cache_dir
     _CACHE_DIR = _get_cache_dir()
 except Exception:
-    _CACHE_DIR = Path(os.environ.get("AIPHA_CACHE_DIR", "data/cache"))
-_ANN_DIR = Path("data/annotations")
+    # 环境变量优先；兜底值锚到项目根，不吃当前工作目录
+    _env_cache = os.environ.get("AIPHA_CACHE_DIR")
+    _CACHE_DIR = Path(_env_cache) if _env_cache else project_path("data", "cache")
+_ANN_DIR = project_path("data", "annotations")
 _MONTHLY_CACHE_RE = re.compile(r"^(?P<symbol>[A-Z0-9.]+)_(?P<month>\d{6})_daily_")
 _CB_DAILY_RE = re.compile(r"^cb_daily_(?P<date>\d{8})$")
 

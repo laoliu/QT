@@ -18,10 +18,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = PROJECT_ROOT
 _LIVE_SETTINGS = _PROJECT_ROOT / "configs" / "live" / "system_settings.json"
 _LIVE_STATE = _PROJECT_ROOT / "data" / "live_state"
 _AUDIT_DIR = _PROJECT_ROOT / "output" / "transition_audit"

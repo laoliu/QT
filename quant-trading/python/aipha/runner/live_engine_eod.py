@@ -38,9 +38,11 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import yaml
 
+from aipha.utils.paths import KILL_SWITCH_PATH, PROJECT_ROOT
+
 logger = logging.getLogger("live_engine_eod")
 
-_PROJ = Path(__file__).resolve().parents[3]
+_PROJ = PROJECT_ROOT
 _CN_TZ = ZoneInfo("Asia/Shanghai")
 _STATE_ROOT = _PROJ / "data" / "live_state"
 _AUDIT_DIR = _PROJ / "logs" / "audit"
@@ -70,7 +72,6 @@ from aipha.execution.qmt_account_sync import (
     ReconcileResult,
 )
 from aipha.runner.scorers import get_scorer
-from aipha.utils.paths import KILL_SWITCH_PATH
 # 共享日级工具 — Phase R1 迁移到 daily_utils
 from aipha.runner.daily_utils import (
     load_config,
@@ -159,7 +160,10 @@ class LiveEngineEOD:
 
     def _build_shared_risk_manager(self):
         """§13.15: 从 YAML risk: 节构建共享风控管理器."""
-        from aipha.risk.risk_config_loader import build_risk_manager_from_dict
+        from aipha.risk.risk_config_loader import (
+            build_risk_manager_from_dict,
+            infer_portfolio_top_k,
+        )
         risk_raw = self.cfg.get("risk", {})
         if not risk_raw or not risk_raw.get("enabled", True):
             logger.info("风控管理器未启用（risk 节为空或 enabled=false）")
@@ -171,7 +175,12 @@ class LiveEngineEOD:
             (int(c.get("lot_size", 100)) for c in components),
             default=100,
         )
-        return build_risk_manager_from_dict(risk_raw, lot_size=min_lot)
+        # §4.3.2 规则 9 / R163: 死亡螺旋告警需要组合总持仓数
+        return build_risk_manager_from_dict(
+            risk_raw,
+            lot_size=min_lot,
+            top_k=infer_portfolio_top_k(components),
+        )
 
     def _build_compliance_engine(self):
         """§13.15: 构建合规检查引擎。"""

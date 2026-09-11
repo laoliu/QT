@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import random
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,10 +17,12 @@ from aipha.api.schemas import (
     PaginationMeta,
     UserInfo,
 )
+from aipha.utils.paths import project_path
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
 
-_OUTPUT_DIR = Path("output")
+# 锚到项目根，不吃当前工作目录（见 aipha/utils/paths.py）
+_OUTPUT_DIR = project_path("output")
 
 
 def _load_async_tasks(store) -> List[Dict[str, Any]]:

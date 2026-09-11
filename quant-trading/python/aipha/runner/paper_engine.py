@@ -65,6 +65,7 @@ from aipha.risk.ml_risk_controls import (
 from aipha.risk.position_sizing import UnifiedPositionSizer
 from aipha.runner.live_runner import LiveRunner, RunnerConfig, RunnerMode
 from aipha.runner.state_manager import StateManager
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +140,11 @@ class PaperEngineConfig:
     slippage_params: dict = field(default_factory=dict)  # 传给模型的参数
 
     # 状态持久化
-    state_dir: Path = field(default_factory=lambda: Path("data/paper_state"))
+    state_dir: Path = field(default_factory=lambda: project_path("data", "paper_state"))
     state_file: str = "paper_state.json"
 
     # 日志
-    audit_log_dir: Path = field(default_factory=lambda: Path("logs/paper"))
+    audit_log_dir: Path = field(default_factory=lambda: project_path("logs", "paper"))
 
     # EOD 自动结算时间（收盘后5分钟执行结算）
     eod_settlement_delay_sec: int = 300

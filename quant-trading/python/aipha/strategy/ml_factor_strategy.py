@@ -44,6 +44,7 @@ from aipha.strategy.equity_rotation_base import (
     EquityRotationStrategy,
 )
 from aipha.strategy.registry import StrategyRegistry
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +173,7 @@ class MLFactorStrategy(EquityRotationStrategy):
 
         model_dir = Path(self._config.model_path)
         if not model_dir.is_absolute():
-            model_dir = Path(__file__).resolve().parents[3] / model_dir
+            model_dir = PROJECT_ROOT / model_dir
         if not model_dir.exists():
             logger.warning("模型路径不存在: %s, 回退线性打分", model_dir)
             return
@@ -207,7 +208,7 @@ class MLFactorStrategy(EquityRotationStrategy):
 
         fpath = Path(self._config.oos_predictions_path)
         if not fpath.is_absolute():
-            fpath = Path(__file__).resolve().parents[3] / fpath
+            fpath = PROJECT_ROOT / fpath
         if not fpath.exists():
             logger.warning(
                 "OOS 预测文件不存在: %s, 回退线性打分", fpath,
@@ -238,7 +239,7 @@ class MLFactorStrategy(EquityRotationStrategy):
         """
         from pathlib import Path
 
-        root = Path(__file__).resolve().parents[3]
+        root = PROJECT_ROOT
         loaded = 0
         for p in self._config.oos_predictions_paths:
             fpath = Path(p)

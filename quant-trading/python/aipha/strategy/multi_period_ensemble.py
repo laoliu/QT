@@ -43,6 +43,7 @@ from aipha.strategy.equity_rotation_base import (
     EquityRotationStrategy,
 )
 from aipha.strategy.registry import StrategyRegistry
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,7 @@ class MultiPeriodEnsembleStrategy(EquityRotationStrategy):
         """加载所有周期的 OOS 预测文件。"""
         from pathlib import Path
 
-        project_root = Path(__file__).resolve().parents[3]
+        project_root = PROJECT_ROOT
         loaded = 0
 
         for pc in self._period_configs:

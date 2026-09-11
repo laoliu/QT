@@ -17,10 +17,11 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJ_ROOT = Path(__file__).resolve().parents[3]
+_PROJ_ROOT = PROJECT_ROOT
 
 # Default thresholds
 DEFAULT_FREEZE_THRESHOLD = 5      # consecutive failures before auto-freeze

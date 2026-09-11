@@ -31,10 +31,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 STOP_REGISTRY = ROOT / "configs" / "governance" / "stop_research_registry.yml"
 SANDBOX_REGISTRY = ROOT / "configs" / "governance" / "research_sandbox_registry.yml"
 

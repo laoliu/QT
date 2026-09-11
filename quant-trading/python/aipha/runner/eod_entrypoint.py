@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ def _run_live_eod(options: EodRunOptions) -> EodRunResult:
         # from_yaml() re-reads the YAML file so raw_cfg mutations are ineffective.
         if not raw_cfg.get("state_dir"):
             orch._cfg.state_dir = "data/live_state"
-            orch._state_dir = Path("data/live_state")
+            orch._state_dir = project_path("data", "live_state")
         if options.dry_run:
             orch._cfg.dry_run = True
         orch.initialize()

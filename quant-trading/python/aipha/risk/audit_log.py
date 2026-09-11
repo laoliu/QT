@@ -21,6 +21,7 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import project_path
 
 
 logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ class SensitiveDataMasker:
 class AuditLogConfig:
     """审计日志配置"""
 
-    log_dir: Path = field(default_factory=lambda: Path("logs/audit"))
+    log_dir: Path = field(default_factory=lambda: project_path("logs", "audit"))
     file_prefix: str = "audit"
     enable_masking: bool = True
     console_output: bool = False

@@ -10,6 +10,7 @@ from datetime import date, datetime, time, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
+from aipha.utils.paths import PROJECT_ROOT, project_path
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +93,8 @@ class CNStockCalendar:
 
         # 自动搜索常见位置
         paths_to_try.extend([
-            Path("data/calendars/cn_stock_v1.json"),
-            Path(__file__).parent.parent.parent.parent / "data" / "calendars" / "cn_stock_v1.json",
+            project_path("data", "calendars", "cn_stock_v1.json"),
+            PROJECT_ROOT / "data" / "calendars" / "cn_stock_v1.json",
         ])
 
         for path in paths_to_try:

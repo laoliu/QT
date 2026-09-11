@@ -36,7 +36,7 @@ from aipha.runner.combo_eod_runner import (
     ComboNavRecord,
     ComponentConfig,
 )
-from aipha.utils.paths import KILL_SWITCH_PATH
+from aipha.utils.paths import KILL_SWITCH_PATH, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ _MDD_HALT_THRESHOLD = 0.30
 _NAV_DRIFT_WARN_PCT = 3.0
 _NAV_DRIFT_CRITICAL_PCT = 10.0
 
-_PROJ_ROOT = Path(__file__).resolve().parents[3]  # ⚠ 偏一层，见 aipha/utils/paths.py
+_PROJ_ROOT = PROJECT_ROOT
 
 # §4.3.2: 成本字段名向后兼容映射
 _COST_FIELD_ALIASES = {
@@ -191,7 +191,11 @@ class ComboOrchestrator:
 
     def _build_shared_risk_manager(self):
         """§13.15: 从 OrchestratorConfig.risk 构建共享风控管理器."""
-        from aipha.risk.risk_config_loader import build_risk_manager, build_risk_manager_from_dict
+        from aipha.risk.risk_config_loader import (
+            build_risk_manager,
+            build_risk_manager_from_dict,
+            infer_portfolio_top_k,
+        )
 
         risk_cfg = self._cfg.risk
         # §13.15: 使用组件中的最小 lot_size（组合级风控的保守选择）
@@ -199,12 +203,16 @@ class ComboOrchestrator:
             (int(c.get("lot_size", 100)) for c in self._cfg.components),
             default=100,
         )
+        # §4.3.2 规则 9 / R163: 死亡螺旋告警要看组合总持仓数，不传就不会告警
+        top_k = infer_portfolio_top_k(self._cfg.components)
         # Phase C: risk 字段已自动 coerce 为 RiskConfig（__post_init__）
         if isinstance(risk_cfg, RiskConfig):
-            risk_cfg.validate_drawdown_safety()
+            risk_cfg.validate_drawdown_safety(top_k=top_k)
             rm = build_risk_manager(risk_cfg, lot_size=min_lot)
         else:
-            rm = build_risk_manager_from_dict(risk_cfg or {}, lot_size=min_lot)
+            rm = build_risk_manager_from_dict(
+                risk_cfg or {}, lot_size=min_lot, top_k=top_k,
+            )
         if rm:
             logger.info(
                 "§13.15 共享风控管理器已构建: %d 约束",

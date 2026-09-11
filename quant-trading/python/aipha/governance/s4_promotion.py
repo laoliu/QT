@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +334,7 @@ def update_strategy_catalog(
         True if catalog was updated, False otherwise.
     """
     if catalog_path is None:
-        catalog_path = Path("configs/strategy_catalog.json")
+        catalog_path = project_path("configs", "strategy_catalog.json")
     else:
         catalog_path = Path(catalog_path)
 

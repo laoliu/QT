@@ -16,10 +16,11 @@ from pathlib import Path
 import pandas as pd
 
 from aipha.data.tushare_gateway import TuShareGateway, get_tushare_gateway
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CACHE_DIR = Path("data/cache/tushare")
+_DEFAULT_CACHE_DIR = project_path("data", "cache", "tushare")
 
 
 class TuShareMoneyflowProvider:

@@ -9,6 +9,7 @@ build_risk_manager(risk_config, lot_size) 是 CompositeRiskManager 的
 from __future__ import annotations
 
 import logging
+from typing import Any, Iterable
 
 from aipha.config_shared import RiskConfig
 from aipha.risk.constraints import (
@@ -200,15 +201,25 @@ def build_risk_manager(
 def build_risk_manager_from_dict(
     raw: dict,
     lot_size: int = 100,
+    *,
+    top_k: int | None = None,
 ) -> CompositeRiskManager | None:
     """从原始 dict（YAML risk: 节）一步构建 CompositeRiskManager.
 
-    用于 combo_orchestrator / live_engine_eod 的 _build_shared_risk_manager()
-    统一委托，避免两处重复的 dict→RiskConfig 转换逻辑。
+    用于 combo_orchestrator / live_engine_eod / paper_engine_eod 的
+    _build_shared_risk_manager() 统一委托，避免重复的 dict→RiskConfig 转换。
 
     Args:
         raw: YAML 中的 risk: 节字典
         lot_size: 最小交易单位
+        top_k: 组合层面的预期持仓数（多组件时取各组件之和）。
+            仅用于 §4.3.2 规则 9 / R163 的「死亡螺旋」告警判定
+            （``top_k <= 10`` 且 ``max_drawdown < 0.40``）。
+            **不传就等于关掉那条告警** —— 这正是修之前的状态：
+            上面那句 "Paper/Live 路径也必须执行安全校验" 的注释是对的，
+            但三个调用方都没把 top_k 递进来，于是整条 R163 规则在
+            paper/live 上从未触发过，只在回测路径（config_runner 传了
+            top_k）生效。
     """
     if not raw or not raw.get("enabled", True):
         return None
@@ -217,5 +228,35 @@ def build_risk_manager_from_dict(
         if k in RiskConfig.__dataclass_fields__
     })
     # §4.3.2 / WF-9: Paper/Live 路径也必须执行 DrawdownLimit 安全校验
-    risk_cfg.validate_drawdown_safety()
+    risk_cfg.validate_drawdown_safety(top_k=top_k)
     return build_risk_manager(risk_cfg, lot_size=lot_size)
+
+
+def infer_portfolio_top_k(components: Iterable[Any]) -> int | None:
+    """从组件列表推出组合层面的持仓数，供 §4.3.2 规则 9 判定用。
+
+    取**各组件 top_k 之和**而不是最小值：R163 关心的是「组合总共只拿几只票」，
+    3 个组件各 top_k=10 的组合实际持有约 30 只，并不集中；若取 min 会把它
+    误判成高危、天天刷告警，久了就没人看告警了。
+
+    top_k 可能写在组件顶层，也可能在 ``params:`` 子节（两种格式都有存量配置）。
+    一个都读不到时返回 ``None`` —— 宁可不判，也不要拿一个猜出来的数去报警。
+    """
+    total = 0
+    found = False
+    for c in components or ():
+        if not isinstance(c, dict):
+            continue
+        val = c.get("top_k")
+        if val is None:
+            params = c.get("params")
+            if isinstance(params, dict):
+                val = params.get("top_k")
+        if val is None:
+            continue
+        try:
+            total += int(val)
+            found = True
+        except (TypeError, ValueError):
+            continue
+    return total if found else None

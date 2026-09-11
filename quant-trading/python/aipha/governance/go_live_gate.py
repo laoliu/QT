@@ -24,11 +24,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from aipha.utils.paths import KILL_SWITCH_PATH
+from aipha.utils.paths import KILL_SWITCH_PATH, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = PROJECT_ROOT
 
 
 @dataclass

@@ -14,9 +14,11 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from aipha.utils.paths import PROJECT_ROOT
+
 logger = logging.getLogger("daily_utils")
 
-_PROJ = Path(__file__).resolve().parents[3]  # src/aipha/runner → Aipha-Q
+_PROJ = PROJECT_ROOT
 _CN_TZ = ZoneInfo("Asia/Shanghai")
 _STATE_ROOT = _PROJ / "data" / "paper_state"
 _AUDIT_DIR = _PROJ / "logs" / "audit"
@@ -404,8 +406,16 @@ def _check_mdd(
         halt_threshold=cfg.get("mdd_halt_threshold", 0.30),
     )
     result = checker.check(nav, state.peak_nav)
+    dd = 1.0 - nav / state.peak_nav if state.peak_nav > 0 else 0.0
+    # 绿灯也记一行：这两个阈值在 36 份 paper 配置里一个都没显式写过，
+    # 全靠上面的 0.15 / 0.30 兜底。不打出来，运维翻配置文件是看不出
+    # 「当前到底有没有回撤保护、阈值是多少」的。每日一次，不刷屏。
+    logger.info(
+        "MDD 检查 [%s]: 回撤 %.2f%% / 告警 %.0f%% / 熔断 %.0f%% → %s",
+        state.profile_name, dd * 100,
+        checker.alert_threshold * 100, checker.halt_threshold * 100, result,
+    )
     if result in ("alert", "halt"):
-        dd = 1.0 - nav / state.peak_nav if state.peak_nav > 0 else 0.0
         if result == "alert":
             logger.warning("MDD 告警: %.2f%% (阈值 %.0f%%)",
                             dd * 100, checker.alert_threshold * 100)

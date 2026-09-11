@@ -25,10 +25,11 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJ_ROOT = Path(__file__).resolve().parents[3]
+_PROJ_ROOT = PROJECT_ROOT
 _STATE_DIR = _PROJ_ROOT / "data" / "paper_state"
 _METRICS_DIR = _PROJ_ROOT / "data" / "metrics"
 

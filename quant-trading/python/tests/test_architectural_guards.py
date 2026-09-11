@@ -24,8 +24,44 @@ import yaml
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SRC_ROOT = PROJECT_ROOT / "src" / "aipha"
+# 包根。原先写的是 ``PROJECT_ROOT / "src" / "aipha"`` —— 那是包还在 src/
+# 下面时的位置，src/ 拿掉后这个常量就指向了一个不存在的目录，于是下面 4 条
+# §13.x 一致性护栏全部在扫空目录：三条 ``assert not violations`` 空跑通过
+# （绿灯，但一个文件都没读），一条 ``pytest.skip``。
+#
+# 护栏指错路比没有护栏更坏 —— 它给出的是"已检查且合规"的假信号。
+# 所以本文件不再容忍"扫描根不存在"：见 TestGuardSelfCheck。
+PKG_ROOT = PROJECT_ROOT / "aipha"
 CONFIGS_ROOT = PROJECT_ROOT / "configs"
+# README 在 python/ 的上一级（仓库里只有 quant-trading/README.md 这一份）
+REPO_ROOT = PROJECT_ROOT.parent
+
+
+# ── 护栏自检 ───────────────────────────────────────────────────
+# 放在文件最前面：下面所有扫描式护栏都依赖这几个根路径，根一错，
+# 它们就集体变成空转的绿灯。这几条是元护栏，守的是护栏本身。
+
+
+class TestGuardSelfCheck:
+    """扫描根必须真实存在且非空 —— 否则本文件其余护栏全是假绿。"""
+
+    def test_pkg_root_exists_and_populated(self):
+        assert PKG_ROOT.is_dir(), (
+            f"包根不存在: {PKG_ROOT}\n"
+            "本文件的 §13.2 去重/年化/无风险利率护栏全靠它扫描，"
+            "路径一错就会静默空转通过。"
+        )
+        n = sum(1 for _ in PKG_ROOT.rglob("*.py"))
+        assert n >= 300, f"包根下 .py 文件过少 ({n})，扫描范围可能不对: {PKG_ROOT}"
+
+    def test_configs_root_exists(self):
+        assert CONFIGS_ROOT.is_dir(), f"配置根不存在: {CONFIGS_ROOT}"
+
+    def test_repo_readme_exists(self):
+        """README 护栏（费率文档一致性）需要真能读到文件。"""
+        assert (REPO_ROOT / "README.md").is_file(), (
+            f"README 不存在: {REPO_ROOT / 'README.md'}"
+        )
 
 
 # ── §13.1 MarketRules 默认值一致性 ──────────────────────────────
@@ -253,7 +289,7 @@ class TestSingleImplementation:
             "equity_rotation_base.py",  # A 股轮动专用（不同 API）
         }
         violations = []
-        for py in SRC_ROOT.rglob("*.py"):
+        for py in PKG_ROOT.rglob("*.py"):
             if py.name in allowed:
                 continue
             try:
@@ -288,7 +324,7 @@ class TestSingleImplementation:
             re.DOTALL,
         )
         violations = []
-        for py in SRC_ROOT.rglob("*.py"):
+        for py in PKG_ROOT.rglob("*.py"):
             if py.name in allowed:
                 continue
             try:
@@ -316,7 +352,7 @@ class TestSingleImplementation:
             re.IGNORECASE,
         )
         violations = []
-        for py in SRC_ROOT.rglob("*.py"):
+        for py in PKG_ROOT.rglob("*.py"):
             try:
                 text = py.read_text(encoding="utf-8", errors="ignore")
             except Exception:
@@ -479,13 +515,31 @@ class TestYAMLConfigIntegrity:
 class TestStrategyIntegrity:
     """验证策略模块可导入、注册表完整"""
 
-    def test_all_strategy_files_importable(self):
-        """src/aipha/strategy/ 下所有 .py 模块必须可导入"""
-        strategy_dir = SRC_ROOT / "strategy"
-        if not strategy_dir.exists():
-            pytest.skip("strategy directory not found")
+    # 已知导不进来、且暂不修的策略模块。
+    #
+    # tick 微结构那条线缺的不是一个名字，而是整套数据模型：
+    # ``domain/models.py`` 里没有 Tick / DepthLevel，``strategy/base.py``
+    # 里没有 TickContext / TickFeatures / TickStrategy，``strategy/registry.py``
+    # 里没有 TickStrategyRegistry —— 六个符号都是 dcb1308 批量导入时漏掉的，
+    # 和 scripts/ops/ 同源。全树没有任何测试或配置引用这条线，所以按
+    # 「生产正确性优先，长尾后置」放着。
+    #
+    # 这个名单本身被 test_known_broken_list_is_accurate 盯着：修好了不删
+    # 会红，新坏了不加也会红。名单只能是「已登记的债」，不能是垃圾桶。
+    _KNOWN_BROKEN = {
+        "aipha.strategy.tick_strategies",
+    }
 
-        errors = []
+    @staticmethod
+    def _import_all_strategies() -> tuple[int, dict[str, str]]:
+        """导入 aipha/strategy/ 下每个模块，返回 (模块数, {模块: 错误})。"""
+        strategy_dir = PKG_ROOT / "strategy"
+        assert strategy_dir.is_dir(), (
+            f"策略目录不存在: {strategy_dir}\n"
+            "此前这里是 pytest.skip —— 于是策略导入护栏在 src/ 移除后"
+            "静默停工，直到有人手工发现模块导不进来。"
+        )
+        errors: dict[str, str] = {}
         count = 0
         for py in sorted(strategy_dir.glob("*.py")):
             if py.name.startswith("_"):
@@ -495,11 +549,28 @@ class TestStrategyIntegrity:
             try:
                 importlib.import_module(module_name)
             except Exception as e:
-                errors.append(f"{module_name}: {type(e).__name__}: {e}")
+                errors[module_name] = f"{type(e).__name__}: {e}"
+        return count, errors
 
-        assert count >= 30, f"策略模块数量过少: {count}"
-        assert not errors, (
-            f"以下策略模块导入失败：\n" + "\n".join(errors)
+    def test_all_strategy_files_importable(self):
+        """aipha/strategy/ 下所有 .py 模块必须可导入（已登记的例外除外）。"""
+        count, errors = self._import_all_strategies()
+        unexpected = {
+            m: e for m, e in errors.items() if m not in self._KNOWN_BROKEN
+        }
+        assert count >= 100, f"策略模块数量过少: {count}（扫描范围可能不对）"
+        assert not unexpected, (
+            "以下策略模块导入失败：\n"
+            + "\n".join(f"  {m}: {e}" for m, e in sorted(unexpected.items()))
+        )
+
+    def test_known_broken_list_is_accurate(self):
+        """例外名单必须与实际一致 —— 两个方向都不许漂移。"""
+        _, errors = self._import_all_strategies()
+        broken = set(errors)
+        fixed = self._KNOWN_BROKEN - broken
+        assert not fixed, (
+            f"以下模块已能正常导入，请从 _KNOWN_BROKEN 中删除: {sorted(fixed)}"
         )
 
     def test_replay_cost_module_importable(self):
@@ -1189,10 +1260,12 @@ class TestR96ComprehensiveParameterGuard:
         )
 
     def test_readme_transfer_fee_rate(self):
-        """README.md transfer_fee_rate <= §13.1 权威值。"""
-        readme = PROJECT_ROOT / "README.md"
-        if not readme.exists():
-            pytest.skip("README not found")
+        """README.md transfer_fee_rate <= §13.1 权威值。
+
+        README 在 python/ 的上一级 —— 原先按 ``PROJECT_ROOT / "README.md"``
+        找，永远 skip。存在性由 TestGuardSelfCheck 兜底，这里直接读。
+        """
+        readme = REPO_ROOT / "README.md"
         text = readme.read_text(encoding="utf-8")
         for m in re.finditer(
             r"transfer_fee_rate:\s*([\d.e-]+)", text
@@ -1203,13 +1276,17 @@ class TestR96ComprehensiveParameterGuard:
                 f"> §13.1 A股权威值 0.00001"
             )
 
-    def test_archive_commission_min_five_cb(self):
-        """archive/ CB 脚本 commission_min 应为 5（CB 最低佣金5元）。"""
-        archive_dir = PROJECT_ROOT / "scripts" / "archive"
-        if not archive_dir.exists():
-            pytest.skip("archive dir missing")
+    def test_scripts_commission_min_five(self):
+        """scripts/ 下不得出现 commission_min = 0.1 / 0.0x（最低佣金 5 元）。
+
+        原先只扫 ``scripts/archive/`` —— 本树里没有这个目录，于是这条
+        一直 skip。最低佣金 5 元对 A 股和 CB 都成立（§13.1），把范围
+        改成整个 ``scripts/`` 才真正守住了东西；已验证当前零违规。
+        """
+        scripts_dir = PROJECT_ROOT / "scripts"
+        assert scripts_dir.is_dir(), f"脚本目录不存在: {scripts_dir}"
         violations = []
-        for py in archive_dir.glob("*.py"):
+        for py in scripts_dir.rglob("*.py"):
             try:
                 text = py.read_text(encoding="utf-8", errors="ignore")
             except Exception:
@@ -1225,9 +1302,11 @@ class TestR96ComprehensiveParameterGuard:
                     r"|min_fee=0\.0[^1-9]",
                     line,
                 ):
-                    violations.append(f"{py.name}:{i}")
+                    violations.append(
+                        f"{py.relative_to(PROJECT_ROOT)}:{i}"
+                    )
         assert not violations, (
-            "archive/ CB commission_min 应为5:\n"
+            "commission_min 应为 5（§13.1 最低佣金）:\n"
             + "\n".join(violations)
         )
 

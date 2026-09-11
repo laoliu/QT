@@ -33,11 +33,12 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
 # ── 默认审计日志路径 ────────────────────────────────────────────────────
-_DEFAULT_LOG_DIR = Path(__file__).parent.parent.parent.parent / "logs" / "audit"
+_DEFAULT_LOG_DIR = PROJECT_ROOT / "logs" / "audit"
 
 
 class AuditEventType(str, Enum):

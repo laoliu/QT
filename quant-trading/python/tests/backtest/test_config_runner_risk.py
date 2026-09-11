@@ -11,6 +11,7 @@ Validates that:
 """
 from __future__ import annotations
 
+import logging
 import tempfile
 from datetime import date
 from pathlib import Path
@@ -175,6 +176,99 @@ class TestDrawdownSafetyAutoInjection:
         assert config.risk.drawdown_allow_rotation is True
         assert config.risk.drawdown_scale_factor_floor == 0.5
         assert config.risk.drawdown_peak_reset_days == 60
+
+
+def _log_text(caplog) -> str:
+    """把捕获到的日志拼成一整段文本。
+
+    不能用 ``record.message % record.args``：告警文案里带 ``40%`` 这种
+    字面百分号，二次格式化会 ValueError。``getMessage()`` 才是记录时
+    实际生成的那一句。
+    """
+    return "\n".join(r.getMessage() for r in caplog.records)
+
+
+class TestR163DeathSpiralWarning:
+    """§4.3.2 规则 9 / R163：集中持仓 + 低 max_drawdown 必须告警。
+
+    这条规则只在传了 ``top_k`` 时才判定。paper/live 路径原先全都没传
+    （``build_risk_manager_from_dict`` 没有这个参数），所以规则虽然写着
+    「Paper/Live 路径也必须执行」，实际从未在那条路上触发过。
+
+    历史依据：CB new_small 案例里 top_k<=10 配 max_drawdown<0.40
+    把 AR 从 40% 打到 2.6%（docs/known_limitations.md §13）。
+    """
+
+    def test_warns_when_concentrated_and_tight(self, caplog):
+        rc = RiskConfig(max_drawdown=0.30)
+        with caplog.at_level(logging.WARNING):
+            rc.validate_drawdown_safety(top_k=8)
+        assert "死亡螺旋高危" in _log_text(caplog)
+
+    def test_silent_when_diversified(self, caplog):
+        """持仓分散（top_k>10）时不告警 —— 告警太吵就没人看了"""
+        rc = RiskConfig(max_drawdown=0.30)
+        with caplog.at_level(logging.WARNING):
+            rc.validate_drawdown_safety(top_k=50)
+        assert "死亡螺旋高危" not in _log_text(caplog)
+        # 但配套参数注入照常发生
+        assert rc.drawdown_allow_rotation is True
+
+    def test_silent_when_top_k_unknown(self, caplog):
+        """推不出 top_k 时不判定：宁可不报，也不拿猜出来的数报警"""
+        rc = RiskConfig(max_drawdown=0.30)
+        with caplog.at_level(logging.WARNING):
+            rc.validate_drawdown_safety(top_k=None)
+        assert "死亡螺旋高危" not in _log_text(caplog)
+
+    def test_build_risk_manager_from_dict_forwards_top_k(self, caplog):
+        """paper/live 的统一入口必须把 top_k 透到校验里。
+
+        回归防线：这个参数被去掉或忘记转发，R163 就会再次静默失效，
+        而且不会有任何测试变红 —— 除了这一条。
+        """
+        from aipha.risk.risk_config_loader import build_risk_manager_from_dict
+
+        with caplog.at_level(logging.WARNING):
+            build_risk_manager_from_dict(
+                {"enabled": True, "max_drawdown": 0.30}, top_k=8,
+            )
+        assert "死亡螺旋高危" in _log_text(caplog)
+
+
+class TestInferPortfolioTopK:
+    """组合层 top_k 推断 —— R163 判定的输入。"""
+
+    def test_sums_component_top_k(self):
+        """取和而非取小：3 个组件各 10 只 = 实际持有 30 只，并不集中"""
+        from aipha.risk.risk_config_loader import infer_portfolio_top_k
+
+        assert infer_portfolio_top_k(
+            [{"top_k": 50}, {"top_k": 10}, {"top_k": 3}],
+        ) == 63
+
+    def test_reads_nested_params(self):
+        """存量配置两种写法都有：组件顶层和 params: 子节"""
+        from aipha.risk.risk_config_loader import infer_portfolio_top_k
+
+        assert infer_portfolio_top_k(
+            [{"params": {"top_k": 20}}, {"params": {"top_k": 5}}],
+        ) == 25
+
+    def test_returns_none_when_absent(self):
+        from aipha.risk.risk_config_loader import infer_portfolio_top_k
+
+        assert infer_portfolio_top_k([{"name": "x"}]) is None
+        assert infer_portfolio_top_k([]) is None
+        assert infer_portfolio_top_k(None) is None
+
+    def test_ignores_unparsable_values(self):
+        """脏值跳过，不让一个坏字段把整个推断带偏"""
+        from aipha.risk.risk_config_loader import infer_portfolio_top_k
+
+        assert infer_portfolio_top_k(
+            [{"top_k": 10}, {"top_k": "auto"}, {"top_k": None}],
+        ) == 10
 
 
 # ============================================================================

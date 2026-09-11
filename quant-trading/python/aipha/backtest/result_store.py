@@ -34,17 +34,40 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from aipha.utils.paths import PROJECT_ROOT
+
 logger = logging.getLogger(__name__)
 
-# 项目根目录（src/aipha/backtest/ → 上溯 4 级）
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# 项目根：认路标，不数层数（见 aipha/utils/paths.py）。
+# 原先写的是 ``parent.parent.parent.parent``，注释还留着 "src/aipha/backtest/"
+# —— 那是包还在 src/ 下面时的层数，src/ 拿掉后这个常量就指到了 python/ 的
+# 上一级 quant-trading/，主库因此一直落在 quant-trading/output/ 而不是
+# python/output/（其它回测产物都在后者）。
+_PROJECT_ROOT = PROJECT_ROOT
+
+# 迁移期兼容：老位置真的有库（见 _resolve_db_path 注释）
+_LEGACY_DB_PATH = Path(__file__).resolve().parents[3] / "output" / "backtest_index.db"
+
 
 # AIPHA_DB_PATH 环境变量优先；未设置则使用 output/backtest_index.db
 def _resolve_db_path() -> Path:
     env_val = os.environ.get("AIPHA_DB_PATH", "").strip()
     if env_val:
         return Path(env_val)
-    return _PROJECT_ROOT / "output" / "backtest_index.db"
+
+    correct = _PROJECT_ROOT / "output" / "backtest_index.db"
+    # 路径修正前写下的那个库还在老位置。直接切过去会让整段回测历史在
+    # UI / query_runs 里凭空消失 —— 所以只要新位置还没有库、老位置有，
+    # 就继续用老的，并把话说清楚，等人手工搬过去为止。
+    if not correct.exists() and _LEGACY_DB_PATH.exists():
+        logger.warning(
+            "回测主库仍在旧路径 %s（路径常量曾偏一层）。新位置 %s 尚不存在，"
+            "本次继续读写旧库以免丢失历史；建议停机后手工移过去（连同 "
+            "-wal / -shm），之后本回退分支即失效。",
+            _LEGACY_DB_PATH, correct,
+        )
+        return _LEGACY_DB_PATH
+    return correct
 
 DEFAULT_DB_PATH = _resolve_db_path()
 

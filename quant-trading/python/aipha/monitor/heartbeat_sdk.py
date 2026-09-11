@@ -25,6 +25,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def _get_heartbeat_dir() -> Path:
             _HEARTBEAT_DIR = app_path
         else:
             # 从当前文件位置推导项目根目录
-            project_root = Path(__file__).resolve().parents[3]
+            project_root = PROJECT_ROOT
             _HEARTBEAT_DIR = project_root / "logs" / "heartbeat"
 
     _HEARTBEAT_DIR.mkdir(parents=True, exist_ok=True)

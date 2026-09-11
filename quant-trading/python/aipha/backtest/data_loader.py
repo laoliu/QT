@@ -22,6 +22,7 @@ from decimal import Decimal
 
 from aipha.backtest.config_models import BacktestRunConfig
 from aipha.market.halt_checker import HaltChecker, LimitStatus
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +330,7 @@ def _load_bars_bulk(
     from aipha.domain.models import Bar
 
     eq_cache = Path(config.data.cache_dir or "data/cache") / ".." / "equity_tushare"
-    eq_cache = Path("data/cache/equity_tushare")
+    eq_cache = project_path("data", "cache", "equity_tushare")
 
     # 1) 确定月份范围
     start_ym = int(config.data.start_date.strftime("%Y%m"))

@@ -24,6 +24,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -522,7 +523,7 @@ class FileAuditNotifier(AlertNotifier):
     def __init__(self, audit_path: str | Path | None = None):
         if audit_path is None:
             # 默认: 项目根 / logs / audit / alerts.jsonl
-            _root = Path(__file__).resolve().parent.parent.parent.parent
+            _root = PROJECT_ROOT
             audit_path = _root / "logs" / "audit" / "alerts.jsonl"
         self._path = Path(audit_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)

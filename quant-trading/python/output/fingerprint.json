@@ -1,12 +1,12 @@
 {
-  "git_commit": "2034f56f2b9ad999a2bedc5a7d3383d65af5b705",
-  "git_short": "2034f56",
+  "git_commit": "d87f4edb9eebf2622c832788eff2e8a022b0bb60",
+  "git_short": "d87f4ed",
   "git_dirty": true,
   "git_branch": "master",
-  "config_path": "C:\\Users\\Admin\\AppData\\Local\\Temp\\pytest-of-Admin\\pytest-154\\test_explicit_synthetic_source0\\test.yml",
+  "config_path": "C:\\Users\\Admin\\AppData\\Local\\Temp\\pytest-of-Admin\\pytest-165\\test_explicit_synthetic_source0\\test.yml",
   "config_hash": "e57a2677dd285a28",
   "data_fingerprint": "2b45eba20efc5542",
   "random_seed": 42,
-  "run_time": "2026-09-11T12:45:17.975758",
+  "run_time": "2026-09-11T16:13:02.757231",
   "python_version": "3.13.4"
 }

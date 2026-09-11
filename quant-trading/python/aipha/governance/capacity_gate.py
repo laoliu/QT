@@ -24,9 +24,10 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 
 # Binding constraints from confirmed_research_conclusions.md
 CF001_CB_HARD_CAP_WAN = 200.0  # CB per-strategy capacity ceiling

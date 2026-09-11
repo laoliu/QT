@@ -18,11 +18,11 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 
 
 @dataclass

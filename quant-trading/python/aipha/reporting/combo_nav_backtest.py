@@ -12,8 +12,9 @@ import yaml
 from aipha.utils.reproducibility import create_fingerprint, save_fingerprint
 
 from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+from aipha.utils.paths import PROJECT_ROOT
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 
 
 def _resolve_path(path_str: str) -> Path:

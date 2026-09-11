@@ -13,10 +13,10 @@ import argparse
 import json
 import logging
 import sys
-from pathlib import Path
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 
 
 def run_governance_ci(strict: bool = False) -> dict:

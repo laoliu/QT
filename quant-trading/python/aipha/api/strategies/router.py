@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,11 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from aipha.api.auth import get_current_user, require_role
 from aipha.api.deps import get_result_store
 from aipha.api.schemas import ApiResponse, PaginatedResponse, PaginationMeta, UserInfo
+from aipha.utils.paths import project_path
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 
-_CATALOG_PATH = Path("configs/strategy_catalog.json")
-_STATUS_PATH = Path("configs/strategy_status.json")
+# 锚到项目根，不吃当前工作目录（见 aipha/utils/paths.py）
+_CATALOG_PATH = project_path("configs", "strategy_catalog.json")
+_STATUS_PATH = project_path("configs", "strategy_status.json")
 _LIFECYCLE_STAGES = [f"S{i}" for i in range(1, 8)]
 _VALID_STATUSES = {"active", "archived", "deprecated", "experimental"}
 
@@ -222,7 +223,7 @@ async def get_strategy_versions(
     _user: UserInfo = Depends(get_current_user),
 ):
     """Get version history for a strategy."""
-    versions_path = Path("configs/strategy_versions.json")
+    versions_path = project_path("configs", "strategy_versions.json")
     versions = []
     if versions_path.exists():
         import json as json_mod

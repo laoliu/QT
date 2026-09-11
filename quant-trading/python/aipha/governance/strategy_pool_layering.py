@@ -22,10 +22,11 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 CATALOG_PATH = ROOT / "configs" / "strategy_catalog.json"
 STATUS_PATH = ROOT / "configs" / "strategy_status.json"
 

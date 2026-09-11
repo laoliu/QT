@@ -22,9 +22,10 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 
 RC_ERROR_THRESHOLD = 0.50
 RC_WARNING_THRESHOLD = 0.40

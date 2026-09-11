@@ -20,13 +20,16 @@ from fastapi import APIRouter, HTTPException, Query
 
 from aipha.api.schemas import ApiResponse
 from aipha.utils.compliance_config import DEFAULT_COMPLIANCE_CONFIG_PATH
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
 # Output directory (backtest results)
-_OUTPUT_DIR = Path("output")
+# 锚到项目根，不吃当前工作目录：API 由 uvicorn / docker 从别的目录拉起时，
+# Path("output") 会指到一个空目录，接口于是返回"没有回测结果"而不是报错。
+_OUTPUT_DIR = project_path("output")
 
 
 def _find_strategy_dirs() -> list[dict[str, Any]]:

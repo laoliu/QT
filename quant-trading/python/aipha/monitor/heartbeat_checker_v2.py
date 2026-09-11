@@ -24,6 +24,7 @@ from datetime import datetime, date, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ def load_heartbeat_policy(policy_path: Path | None = None) -> HeartbeatPolicy:
         # 自动探测路径
         candidates = [
             Path("/app/configs/paper/heartbeat_policy.yml"),
-            Path(__file__).resolve().parents[3] / "configs" / "paper" / "heartbeat_policy.yml",
+            PROJECT_ROOT / "configs" / "paper" / "heartbeat_policy.yml",
         ]
         for c in candidates:
             if c.exists():
@@ -513,7 +514,7 @@ def run_heartbeat_check_v2(
     if heartbeat_dir is None:
         candidates = [
             Path("/app/logs/heartbeat"),
-            Path(__file__).resolve().parents[3] / "logs" / "heartbeat",
+            PROJECT_ROOT / "logs" / "heartbeat",
         ]
         for c in candidates:
             if c.exists():

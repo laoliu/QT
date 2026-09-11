@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ def run_wf_from_config(
     )
 
     # Save
-    out = Path(output_dir) if output_dir else Path("output") / f"wf_{strategy_name}"
+    out = Path(output_dir) if output_dir else project_path("output") / f"wf_{strategy_name}"
     out.mkdir(parents=True, exist_ok=True)
     report_dict = asdict(report)
     (out / "wf_report.json").write_text(

@@ -20,10 +20,11 @@ from aipha.governance.paper_backtest_reconciliation import (
     load_paper_nav,
     run_reconciliation,
 )
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = PROJECT_ROOT
 
 
 @dataclass

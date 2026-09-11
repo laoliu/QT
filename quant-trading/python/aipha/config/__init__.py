@@ -11,6 +11,7 @@
 """
 import os as _os
 from pathlib import Path as _Path
+from aipha.utils.paths import project_path
 
 
 def get_config(key: str, default: str | None = None) -> str | None:
@@ -36,7 +37,7 @@ def get_cache_dir() -> _Path:
     default_qtdata = _Path("G:/qtdata/cache")
     if default_qtdata.exists():
         return default_qtdata
-    return _Path("data/cache")
+    return project_path("data", "cache")
 
 
 def get_tushare_token() -> str:

@@ -64,6 +64,15 @@ class SectorMomentumConfig(EquityRotationConfig):
     top_k: int = 25
     rebalance_days: int = 10       # 双周调仓以捕捉行业切换
     min_price: float = 5.0
+    # be42091 在同一次"格式化"里把这行从 500.0 改成了 200.0，同样没在提交
+    # 信息里提。但这一处**不回滚**，和上面的 top_k 不同：
+    #   - top_k=25 有 dc5d7a6 的显式提交和一直按 25 断言的测试撑着，改回去是误伤；
+    #   - max_price=500.0 只来自 dcb1308 的批量导入，没有任何提交或测试支持它。
+    # 而 200.0 才是 A 股轮动线的通行值（相邻的 sector_momentum_plus.py:59 就是
+    # 200.0，adaptive_multifactor / balanced_multifactor / pead_* 等一片都是）。
+    # 用 500.0 的是 cash_cow_select / dividend_quality_select / stable_compounder
+    # 这类"不限高价蓝筹"的红利策略 —— 行业轮动不是那个路子：一手 500 元股
+    # 就是 5 万元，在 max_single_pct=0.05 下会直接顶穿小账户的单票上限。
     max_price: float = 200.0
     min_turnover: float = 800.0    # 万元
     min_listed_days: int = 120

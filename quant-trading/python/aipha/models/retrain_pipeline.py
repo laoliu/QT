@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class AutoRetrainPipeline:
     def __init__(self, config: RetrainConfig) -> None:
         self.config = config
         self._project_root = Path(
-            config.project_root or Path(__file__).resolve().parents[3]
+            config.project_root or PROJECT_ROOT
         )
 
     def run(

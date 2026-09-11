@@ -14,16 +14,16 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Any
 
 import yaml
 
 from aipha.runner.daily_utils import ComboState, _send_alert
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJ = Path(__file__).resolve().parents[3]
+_PROJ = PROJECT_ROOT
 
 
 class LiveDelegate:

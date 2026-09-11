@@ -11,10 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from aipha.api.auth import get_current_user
 from aipha.api.deps import get_result_store
 from aipha.api.schemas import ApiResponse, UserInfo
+from aipha.utils.paths import project_path
 
 router = APIRouter(prefix="/backtests", tags=["backtests"])
 
-_OUTPUT_DIR = Path("output")
+# 锚到项目根，不吃当前工作目录（见 aipha/utils/paths.py）
+_OUTPUT_DIR = project_path("output")
 
 
 def _load_json(path: Path) -> Optional[Dict]:

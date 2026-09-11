@@ -30,6 +30,7 @@ from typing import Optional
 import pandas as pd
 
 from aipha.domain.models import Bar
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +299,7 @@ class AKShareCBDataAdapter:
         # 尝试 TuShare 缓存的默认位置
         candidates = [
             self.cache_dir.parent / "cb_tushare" / "cb_basic.parquet",
-            Path("data/cache/cb_tushare/cb_basic.parquet"),
+            project_path("data", "cache", "cb_tushare", "cb_basic.parquet"),
         ]
         for p in candidates:
             if p.exists():

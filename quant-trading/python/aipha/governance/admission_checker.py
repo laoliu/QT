@@ -33,10 +33,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 DEFAULT_CONFIG = ROOT / "configs" / "governance" / "admission_checklist.yml"
 
 

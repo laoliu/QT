@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class MetricsConfig:
     """指标收集配置"""
 
     # 输出目录
-    output_dir: Path = field(default_factory=lambda: Path("data/metrics"))
+    output_dir: Path = field(default_factory=lambda: project_path("data", "metrics"))
 
     # 输出文件名
     output_file: str = "live_metrics.json"

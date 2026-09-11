@@ -18,12 +18,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from aipha.utils.paths import KILL_SWITCH_PATH
+from aipha.utils.paths import KILL_SWITCH_PATH, PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
 _CN_TZ = timezone(timedelta(hours=8))
-_PROJ_ROOT = Path(__file__).resolve().parents[3]  # ⚠ 偏一层，见 aipha/utils/paths.py
+_PROJ_ROOT = PROJECT_ROOT
 
 
 class DeadmanCheckResult:

@@ -14,12 +14,12 @@ import json
 import logging
 from dataclasses import dataclass, field, asdict
 from datetime import date, datetime
-from pathlib import Path
 from typing import Optional
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-_PROJ_ROOT = Path(__file__).resolve().parents[3]
+_PROJ_ROOT = PROJECT_ROOT
 _SYSTEM_SETTINGS = _PROJ_ROOT / "configs" / "paper" / "system_settings.json"
 
 

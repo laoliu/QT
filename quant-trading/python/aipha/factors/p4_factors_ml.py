@@ -13,14 +13,14 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent
+ROOT = PROJECT_ROOT
 ALT_CACHE = ROOT / "data" / "cache" / "alternative"
 
 

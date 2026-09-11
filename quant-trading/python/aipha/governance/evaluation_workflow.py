@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT, project_path
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def run_evaluation(
     yaml_path = Path(yaml_path)
     strategy_name = yaml_path.stem.replace("_8y", "").replace("_11y", "")
 
-    out = Path(output_dir) if output_dir else Path("output") / f"eval_{strategy_name}"
+    out = Path(output_dir) if output_dir else project_path("output") / f"eval_{strategy_name}"
     out.mkdir(parents=True, exist_ok=True)
 
     result = EvaluationResult(strategy_name=strategy_name, yaml_path=str(yaml_path))
@@ -312,7 +313,7 @@ def _update_catalog(
     eval_result: EvaluationResult,
 ) -> bool:
     """Step 4: Update strategy_catalog.json with evaluation results."""
-    catalog_path = Path(__file__).resolve().parents[3] / "configs" / "strategy_catalog.json"
+    catalog_path = PROJECT_ROOT / "configs" / "strategy_catalog.json"
     if not catalog_path.exists():
         logger.warning("Catalog not found at %s", catalog_path)
         return False

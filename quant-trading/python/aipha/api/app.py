@@ -17,6 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from aipha.utils.paths import project_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,11 +74,17 @@ def _bootstrap_paper_registry(app: FastAPI) -> None:
         #    Load disabled set from system_settings.json
         disabled_ids: set = set()
         try:
-            settings_path = Path(
-                os.environ.get("AIPHA_PAPER_REGISTRY", "configs/paper")
-            ).parent / "paper" / "system_settings.json"
+            _registry = os.environ.get("AIPHA_PAPER_REGISTRY")
+            # 兜底锚到项目根：原先两条分支都是 CWD 相对路径，
+            # uvicorn / docker 从别处拉起就读不到，disabled_portfolios
+            # 于是静默为空 —— 被停用的组合会重新出现在接口里。
+            _default = project_path("configs", "paper", "system_settings.json")
+            settings_path = (
+                Path(_registry).parent / "paper" / "system_settings.json"
+                if _registry else _default
+            )
             if not settings_path.exists():
-                settings_path = Path("configs/paper/system_settings.json")
+                settings_path = _default
             if settings_path.exists():
                 import json as _json
                 _settings = _json.loads(settings_path.read_text(encoding="utf-8"))

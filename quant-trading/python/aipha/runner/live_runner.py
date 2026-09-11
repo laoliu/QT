@@ -41,7 +41,7 @@ from aipha.execution.paper_gateway import PaperGateway
 from aipha.execution.slippage import SlippageModel
 from aipha.runner.bar_buffer import BarBuffer, group_bars_by_end_ts
 from aipha.strategy.base import OrderIntent, Strategy, StrategyContext
-from aipha.utils.paths import KILL_SWITCH_PATH
+from aipha.utils.paths import KILL_SWITCH_PATH, project_path
 
 # 可选依赖：风险约束和监控
 try:
@@ -144,7 +144,7 @@ class RunnerConfig:
 
     # 审计日志配置
     audit_log_enabled: bool = True
-    audit_log_dir: Path = field(default_factory=lambda: Path("logs/audit"))
+    audit_log_dir: Path = field(default_factory=lambda: project_path("logs", "audit"))
 
     def __post_init__(self) -> None:
         """§13.1: 从 MarketRulesCNEquity 动态派生费率默认值."""

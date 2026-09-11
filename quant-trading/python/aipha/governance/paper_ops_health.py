@@ -19,10 +19,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = PROJECT_ROOT
 PAPER_STATE_DIR = ROOT / "data" / "paper_state"
 PAPER_REGISTRY = ROOT / "configs" / "paper" / "paper_registry.json"
 

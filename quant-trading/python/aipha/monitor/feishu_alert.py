@@ -40,8 +40,8 @@ import sys
 import time
 import urllib.request
 from datetime import datetime
-from pathlib import Path
 from typing import Any
+from aipha.utils.paths import PROJECT_ROOT, project_path
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ def _resolve_environment() -> str:
     # 从 system_settings.json 读取
     try:
         settings_path = (
-            Path(__file__).resolve().parents[3]
+            PROJECT_ROOT
             / "configs" / "paper" / "system_settings.json"
         )
         if settings_path.exists():
@@ -400,7 +400,7 @@ def _send_via_lark_cli(
 # =========================================================================
 # 告警审计日志 — 本地 JSONL 持久化 (§13.13 告警即生命线)
 # =========================================================================
-_ALERT_AUDIT_DIR = Path("logs/audit")
+_ALERT_AUDIT_DIR = project_path("logs", "audit")
 
 
 def _log_alert_audit(

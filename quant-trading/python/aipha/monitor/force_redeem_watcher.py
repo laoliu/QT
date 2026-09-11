@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from aipha.utils.paths import PROJECT_ROOT
 
 if TYPE_CHECKING:
     from aipha.data.tushare_cb_provider import TushareCbProvider
@@ -124,7 +125,7 @@ class ForceRedeemWatcher:
         notifiers: list["AlertNotifier"] = [LogNotifier()]
 
         if audit_dir is None:
-            _repo = Path(__file__).resolve().parents[3]
+            _repo = PROJECT_ROOT
             audit_dir = _repo / "logs" / "audit"
 
         Path(audit_dir).mkdir(parents=True, exist_ok=True)

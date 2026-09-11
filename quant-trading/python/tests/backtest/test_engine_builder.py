@@ -23,12 +23,19 @@ class TestStrategyModulesCompleteness:
 
     @staticmethod
     def _find_registered_modules() -> dict[str, list[str]]:
-        """扫描 src/aipha/strategy/ 下所有 @register 装饰器。"""
+        """扫描 aipha/strategy/ 下所有 @register 装饰器。
+
+        原先拼的是 ``parents[2] / "src" / "aipha" / "strategy"`` —— src/
+        拿掉后这是个不存在的目录，glob 空转，于是下面
+        test_all_registered_modules_in_list 一直在「零注册模块 vs
+        _STRATEGY_MODULES」之间比对，永远通过。真有人新写一个策略却忘了
+        登记进 _STRATEGY_MODULES，回测引擎发现不了它，而这条护栏不会响。
+        """
         strategy_dir = (
-            Path(__file__).resolve().parents[2]
-            / "src"
-            / "aipha"
-            / "strategy"
+            Path(__file__).resolve().parents[2] / "aipha" / "strategy"
+        )
+        assert strategy_dir.is_dir(), (
+            f"策略目录不存在: {strategy_dir} —— 扫描根指错会让本护栏空转通过"
         )
         registered: dict[str, list[str]] = {}
         for f in strategy_dir.glob("*.py"):

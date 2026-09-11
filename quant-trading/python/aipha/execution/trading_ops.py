@@ -2267,8 +2267,9 @@ def data_preflight(
 
     # §13.9 缓存文件新鲜度检查
     if check_cache:
-        from pathlib import Path as _Path
-        cache_dir = _Path(__file__).resolve().parents[3] / "data" / "cache"
+        from aipha.utils.paths import PROJECT_ROOT
+
+        cache_dir = PROJECT_ROOT / "data" / "cache"
         ok, msg = _check_cache_freshness(
             cache_dir, patterns=("*.parquet",), max_stale_days=cache_max_stale_days
         )

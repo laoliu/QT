@@ -11,10 +11,11 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Any
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_CACHE_DIR = Path("data/cache/financials")
+_DEFAULT_CACHE_DIR = project_path("data", "cache", "financials")
 
 
 class FinancialProvider:

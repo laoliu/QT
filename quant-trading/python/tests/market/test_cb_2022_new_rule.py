@@ -140,10 +140,10 @@ class TestCB2022NewRulePriceLimit:
         )
         assert result.allowed is False
 
-    # --- 无 prev_close 时不检查 ---
+    # --- 无 prev_close 时拒单（§13.3）---
 
-    def test_no_prev_close_skips_check(self, rules):
-        """未提供 prev_close → 不检查涨跌停"""
+    def test_no_prev_close_rejects(self, rules):
+        """未提供 prev_close → 拒单，不是跳过涨跌停检查"""
         bar = _bar(close=200.0)
         result = rules.precheck_order(
             order=_order(Side.BUY),
@@ -151,7 +151,8 @@ class TestCB2022NewRulePriceLimit:
             trade_date=date(2024, 1, 15),
             prev_close=None,
         )
-        assert result.allowed is True
+        assert result.allowed is False
+        assert result.reason == CBRejectReason.DATA_MISSING
 
     # --- 首日不受新规涨跌停影响 ---
 

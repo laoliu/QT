@@ -16,6 +16,7 @@ from datetime import date
 
 import pytest
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.portfolio.cross_asset_allocator import (
     AssetClass,
     CrossAssetAllocator,
@@ -122,7 +123,8 @@ class TestUtilFunctions:
         rets = [0.01, -0.01, 0.01, -0.01] * 30
         ann_vol = compute_annualized_vol(rets)
         daily_vol = compute_volatility(rets)
-        assert abs(ann_vol - daily_vol * math.sqrt(252)) < 1e-10
+        # §13.8：年化因子统一来自 trading_calendar_constants（A 股 244）
+        assert abs(ann_vol - daily_vol * math.sqrt(TRADING_DAYS_PER_YEAR)) < 1e-10
 
     def test_covariance_matrix_identity(self):
         """相同序列的协方差 = 方差。"""

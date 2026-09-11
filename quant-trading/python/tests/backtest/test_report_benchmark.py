@@ -19,6 +19,12 @@ from aipha.backtest.report import (
     compute_benchmark_relative,
     generate_report,
 )
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
+
+# 年化因子走 §13.8 的唯一标准值 sqrt(244)（A 股实际交易日，见
+# aipha/market/trading_calendar_constants.py:20），不是美股惯例的 252。
+# 本文件原先手算时写死 252，于是 tracking_error / active_return 两条
+# 公式测试恒偏 sqrt(252/244) 倍 —— 偏差来自测试，不是 report.py。
 
 
 # ============================================================================
@@ -68,7 +74,7 @@ class TestComputeBenchmarkRelative:
         assert result.information_ratio < 0
 
     def test_tracking_error_formula(self) -> None:
-        """跟踪误差 = std(active_rets) * sqrt(252)"""
+        """跟踪误差 = std(active_rets) * sqrt(TRADING_DAYS_PER_YEAR)"""
         strat = [0.02, -0.01, 0.015, -0.005, 0.01]
         bench = [0.01, 0.005, -0.003, 0.002, 0.008]
         result = compute_benchmark_relative(strat, bench)
@@ -78,7 +84,7 @@ class TestComputeBenchmarkRelative:
         active = [s - b for s, b in zip(strat, bench)]
         mean_a = sum(active) / len(active)
         var_a = sum((r - mean_a) ** 2 for r in active) / (len(active) - 1)
-        expected_te = var_a ** 0.5 * 252 ** 0.5
+        expected_te = var_a ** 0.5 * TRADING_DAYS_PER_YEAR ** 0.5
 
         assert abs(result.tracking_error - expected_te) < 1e-10
 
@@ -100,7 +106,7 @@ class TestComputeBenchmarkRelative:
         # 应该使用 7 天数据
         active = [0.005] * 7
         mean_a = sum(active) / 7
-        expected_ar = mean_a * 252
+        expected_ar = mean_a * TRADING_DAYS_PER_YEAR
         assert abs(result.active_return - expected_ar) < 1e-10
 
 

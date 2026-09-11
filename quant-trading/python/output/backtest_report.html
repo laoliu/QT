@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回测报告 - Momentum</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+        .header h1 { font-size: 32px; margin-bottom: 10px; }
+        .header-meta { display: flex; gap: 30px; opacity: 0.9; font-size: 14px; }
+        .header-meta span { display: flex; align-items: center; gap: 5px; }
+        
+        /* Status Badge */
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: 15px;
+        }
+        .status-badge.excellent { background: #52c41a; }
+        .status-badge.good { background: #1890ff; }
+        .status-badge.normal { background: #faad14; }
+        .status-badge.poor { background: #f5222d; }
+        
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        .summary-card h3 { 
+            font-size: 13px; 
+            color: #666; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        .summary-card .value { 
+            font-size: 28px; 
+            font-weight: bold;
+            color: #333;
+        }
+        .summary-card .value.positive { color: #52c41a; }
+        .summary-card .value.negative { color: #f5222d; }
+        .summary-card .sub { font-size: 12px; color: #999; margin-top: 5px; }
+        
+        /* Charts */
+        .chart-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .chart-section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .chart-container { height: 300px; position: relative; }
+        
+        /* Tables */
+        .table-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        .table-section h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .metric-label { color: #666; }
+        .metric-value { font-weight: 600; }
+        
+        /* Grid Layout */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+            font-size: 12px;
+        }
+        
+        /* Cost Breakdown */
+        .cost-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: #f0f0f0;
+            margin-top: 10px;
+            overflow: hidden;
+            display: flex;
+        }
+        .cost-bar .commission { background: #1890ff; }
+        .cost-bar .stamp-tax { background: #52c41a; }
+        .cost-bar .transfer { background: #faad14; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>
+                Momentum
+                <span class="status-badge poor">较差</span>
+            </h1>
+            <div class="header-meta">
+                <span>📅 2024-01-01 ~ 2024-01-31</span>
+                <span>💰 初始资金: ¥100,000</span>
+                <span>📊 交易天数: 23</span>
+                <span>🕐 生成时间: 2026-09-11T12:45:17</span>
+            </div>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <h3>最终净值</h3>
+                <div class="value">¥100,130.19</div>
+                <div class="sub">初始: ¥100,000</div>
+            </div>
+            <div class="summary-card">
+                <h3>累计收益</h3>
+                <div class="value positive">+0.13%</div>
+                <div class="sub">年化: +1.39%</div>
+            </div>
+            <div class="summary-card">
+                <h3>夏普比率</h3>
+                <div class="value">-0.55</div>
+                <div class="sub">波动率: 1.11%</div>
+            </div>
+            <div class="summary-card">
+                <h3>最大回撤</h3>
+                <div class="value negative">0.26%</div>
+                <div class="sub">持续: 5 天</div>
+            </div>
+            <div class="summary-card">
+                <h3>卡玛比率</h3>
+                <div class="value">5.45</div>
+                <div class="sub">收益/回撤</div>
+            </div>
+            <div class="summary-card">
+                <h3>胜率</h3>
+                <div class="value">0.0%</div>
+                <div class="sub">盈亏比: 0.00</div>
+            </div>
+        </div>
+        
+        <!-- NAV Chart -->
+        <div class="chart-section">
+            <h2>📈 净值曲线</h2>
+            <div class="chart-container">
+                <canvas id="navChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Drawdown Chart -->
+        <div class="chart-section">
+            <h2>📉 回撤曲线</h2>
+            <div class="chart-container">
+                <canvas id="ddChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Detailed Metrics -->
+        <div class="two-col">
+            <!-- Performance Metrics -->
+            <div class="table-section">
+                <h2>📊 收益风险指标</h2>
+                <div class="metric-row">
+                    <span class="metric-label">累计收益率</span>
+                    <span class="metric-value positive">0.13%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">年化收益率</span>
+                    <span class="metric-value">1.39%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">年化波动率</span>
+                    <span class="metric-value">1.11%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">夏普比率</span>
+                    <span class="metric-value">-0.55</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">索提诺比率</span>
+                    <span class="metric-value">-0.89</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">卡玛比率</span>
+                    <span class="metric-value">5.45</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">最大回撤</span>
+                    <span class="metric-value negative">0.26%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">平均回撤</span>
+                    <span class="metric-value">0.02%</span>
+                </div>
+            </div>
+            
+            <!-- Trading Stats -->
+            <div class="table-section">
+                <h2>💹 交易统计</h2>
+                <div class="metric-row">
+                    <span class="metric-label">总交易次数</span>
+                    <span class="metric-value">1</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">买入 / 卖出</span>
+                    <span class="metric-value">1 / 0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">盈利 / 亏损交易</span>
+                    <span class="metric-value">0 / 0</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">胜率</span>
+                    <span class="metric-value">0.0%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">平均盈利</span>
+                    <span class="metric-value positive">¥0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">平均亏损</span>
+                    <span class="metric-value negative">¥0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">盈亏比</span>
+                    <span class="metric-value">0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">年化换手率</span>
+                    <span class="metric-value">51.03%</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="two-col">
+            <!-- Cost Attribution -->
+            <div class="table-section">
+                <h2>💸 成本分析</h2>
+                <div class="metric-row">
+                    <span class="metric-label">总费用</span>
+                    <span class="metric-value">¥5.10</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">佣金</span>
+                    <span class="metric-value">¥5.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">印花税</span>
+                    <span class="metric-value">¥0.00</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">过户费</span>
+                    <span class="metric-value">¥0.10</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">滑点成本</span>
+                    <span class="metric-value">¥9.63</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">费用占比</span>
+                    <span class="metric-value">0.01%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">年化费率拖累</span>
+                    <span class="metric-value">0.05%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">成本前年化收益</span>
+                    <span class="metric-value">1.44%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">成本后年化收益</span>
+                    <span class="metric-value">1.39%</span>
+                </div>
+            </div>
+            
+            <!-- Position Stats -->
+            <div class="table-section">
+                <h2>📦 持仓统计</h2>
+                <div class="metric-row">
+                    <span class="metric-label">平均持仓数</span>
+                    <span class="metric-value">0.3</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">最大持仓数</span>
+                    <span class="metric-value">1</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">最小持仓数</span>
+                    <span class="metric-value">1</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">平均集中度</span>
+                    <span class="metric-value">3.0%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">最大集中度</span>
+                    <span class="metric-value">10.0%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>Aipha-Q Quantitative Trading System | 生成于 2026-09-11 12:45:17</p>
+            <p style="font-size: 11px; color: #999; margin-top: 4px;">实验指纹: Git: 2034f56(master) | Config: e57a2677 | Data: 2b45eba20efc | Seed: 42</p>
+        </div>
+    </div>
+    
+    <script>
+        // NAV Chart
+        const navData = [["2024-01-01", 100000.0], ["2024-01-02", 100000.0], ["2024-01-03", 100000.0], ["2024-01-04", 100000.0], ["2024-01-05", 100000.0], ["2024-01-08", 100000.0], ["2024-01-09", 100000.0], ["2024-01-10", 100000.0], ["2024-01-11", 100000.0], ["2024-01-12", 100000.0], ["2024-01-15", 100000.0], ["2024-01-16", 100000.0], ["2024-01-17", 100000.0], ["2024-01-18", 100000.0], ["2024-01-19", 100000.0], ["2024-01-22", 100000.0], ["2024-01-23", 100010.27393085066], ["2024-01-24", 100106.98211748594], ["2024-01-25", 100125.89203710528], ["2024-01-26", 100374.4867443417], ["2024-01-29", 100305.89518048208], ["2024-01-30", 100118.44363305076], ["2024-01-31", 100130.18979625945]];
+        if (navData.length > 0) {
+            const navCtx = document.getElementById('navChart').getContext('2d');
+            new Chart(navCtx, {
+                type: 'line',
+                data: {
+                    labels: navData.map(d => d[0]),
+                    datasets: [{
+                        label: '净值',
+                        data: navData.map(d => d[1]),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { display: false },
+                            ticks: { maxTicksLimit: 10 }
+                        },
+                        y: {
+                            display: true,
+                            grid: { color: '#f0f0f0' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Drawdown Chart
+        const ddData = [["2024-01-01", 0.0], ["2024-01-02", 0.0], ["2024-01-03", 0.0], ["2024-01-04", 0.0], ["2024-01-05", 0.0], ["2024-01-08", 0.0], ["2024-01-09", 0.0], ["2024-01-10", 0.0], ["2024-01-11", 0.0], ["2024-01-12", 0.0], ["2024-01-15", 0.0], ["2024-01-16", 0.0], ["2024-01-17", 0.0], ["2024-01-18", 0.0], ["2024-01-19", 0.0], ["2024-01-22", 0.0], ["2024-01-23", 0.0], ["2024-01-24", 0.0], ["2024-01-25", 0.0], ["2024-01-26", 0.0], ["2024-01-29", -0.0006833565588666526], ["2024-01-30", -0.002550878411394481], ["2024-01-31", -0.002433855016409554]];
+        if (ddData.length > 0) {
+            const ddCtx = document.getElementById('ddChart').getContext('2d');
+            new Chart(ddCtx, {
+                type: 'line',
+                data: {
+                    labels: ddData.map(d => d[0]),
+                    datasets: [{
+                        label: '回撤',
+                        data: ddData.map(d => d[1] * 100),
+                        borderColor: '#f5222d',
+                        backgroundColor: 'rgba(245, 34, 45, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { display: false },
+                            ticks: { maxTicksLimit: 10 }
+                        },
+                        y: {
+                            display: true,
+                            grid: { color: '#f0f0f0' },
+                            ticks: {
+                                callback: function(value) { return value.toFixed(1) + '%'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

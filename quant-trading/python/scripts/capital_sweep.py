@@ -28,8 +28,8 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from src.aipha.backtest.config_parser import load_config, config_to_dict
-from src.aipha.backtest.config_runner import run_from_config
+from aipha.backtest.config_parser import load_config, config_to_dict
+from aipha.backtest.config_runner import run_from_config
 
 logger = logging.getLogger(__name__)
 

@@ -309,10 +309,71 @@ class VolTargetScaler:
         """获取当前缩放因子（增量模式）。"""
         return self._current_scale
 
+    @property
+    def n_observations(self) -> int:
+        """已喂入的日收益率条数（增量模式）。"""
+        return len(self._returns)
+
     def reset(self) -> None:
         """重置增量状态。"""
         self._returns.clear()
         self._current_scale = 1.0
+
+
+# ============================================================================
+# 综合仓位缩放（MDD 梯度 + 波动率目标）
+# ============================================================================
+
+
+@dataclass
+class CombinedPositionSizer:
+    """把 MDD 梯度减仓与波动率目标合成单个缩放因子。
+
+    取两者中**更保守**的一个（min），而不是相乘 —— 相乘会在"回撤 0.8 ×
+    高波动 0.6"时压到 0.48，比任何单个控制器的意图都激进。
+
+    面向 NAV 序列的一次性接口（研究脚本 / 日终复盘用）。回测与 Paper/Live
+    循环请用 ``aipha.risk.position_sizing.UnifiedPositionSizer``，
+    它是 §4.3.1 的三路径共享实现，还多了回撤控制与估值择时两层。
+    """
+
+    mdd_deleverager: MddGradientDeleverager = field(
+        default_factory=MddGradientDeleverager,
+    )
+    vol_scaler: VolTargetScaler = field(default_factory=VolTargetScaler)
+
+    def compute_scale(self, nav_series: pd.Series) -> dict[str, Any]:
+        """根据 NAV 序列计算综合仓位比例。
+
+        Args:
+            nav_series: 组合净值序列（日频，升序）
+
+        Returns:
+            dict，含 mdd / mdd_scale / mdd_triggered / vol_scale / final_scale
+        """
+        nav = pd.Series(nav_series, dtype=float).dropna()
+        if nav.empty:
+            return {
+                "mdd": 0.0,
+                "mdd_scale": 1.0,
+                "mdd_triggered": False,
+                "vol_scale": 1.0,
+                "final_scale": 1.0,
+            }
+
+        peak = float(nav.cummax().iloc[-1])
+        current = float(nav.iloc[-1])
+        mdd = (1.0 - current / peak) if peak > 0 else 0.0
+        mdd_scale = self.mdd_deleverager.get_scale(mdd)
+        vol_scale = self.vol_scaler.get_scale(nav)
+
+        return {
+            "mdd": mdd,
+            "mdd_scale": mdd_scale,
+            "mdd_triggered": mdd_scale < 1.0,
+            "vol_scale": vol_scale,
+            "final_scale": min(mdd_scale, vol_scale),
+        }
 
 
 # ============================================================================

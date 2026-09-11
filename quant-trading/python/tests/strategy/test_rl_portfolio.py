@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -12,6 +14,15 @@ from aipha.strategy.rl_portfolio import (
     RLTrainer,
     SimplePolicyAgent,
     TrainResult,
+)
+
+# PortfolioEnv.__init__ 要建 gymnasium.spaces.Box，缺包时直接 raise ImportError
+# （rl_portfolio.py:88）。gymnasium 是可选依赖（RL 研究线），不装也不该让
+# tests/strategy 挂红。只跳真正依赖它的两个类：Config / SimplePolicyAgent
+# 是纯 numpy，照常跑。
+requires_gym = pytest.mark.skipif(
+    importlib.util.find_spec("gymnasium") is None,
+    reason="PortfolioEnv 依赖可选包 gymnasium（pip install gymnasium）",
 )
 
 
@@ -36,6 +47,7 @@ class TestRLPortfolioConfig:
 # ── 环境测试 ──
 
 
+@requires_gym
 class TestPortfolioEnv:
     @pytest.fixture
     def small_env(self):
@@ -133,6 +145,7 @@ class TestSimplePolicyAgent:
 # ── 训练器测试 ──
 
 
+@requires_gym
 class TestRLTrainer:
     def test_train_short(self):
         cfg = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5)

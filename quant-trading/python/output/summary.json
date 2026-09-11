@@ -1,0 +1,42 @@
+{
+  "strategy_name": "Momentum",
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-31",
+  "initial_capital": 100000.0,
+  "final_nav": 100130.18979625945,
+  "total_trades": 1,
+  "total_fees": 5.096275162645834,
+  "metrics": {
+    "total_return": 0.001302,
+    "annualized_return": 0.013898,
+    "annual_return": 0.013898,
+    "volatility": 0.011068,
+    "sharpe_ratio": -0.554639,
+    "sortino_ratio": -0.888576,
+    "calmar_ratio": 5.448378,
+    "trading_days": 23.0,
+    "max_drawdown_pct": 0.002551,
+    "avg_drawdown": 0.000246,
+    "total_trades": 1.0,
+    "win_rate": 0.0,
+    "profit_factor": 0.0,
+    "turnover_rate": 0.510345,
+    "avg_positions": 0.304348,
+    "max_positions": 1.0,
+    "max_concentration": 0.099698,
+    "idle_ratio": 0.695652,
+    "var_95": 0.001869,
+    "cvar_95": 0.001869,
+    "var_99": 0.001869,
+    "cvar_99": 0.001869
+  },
+  "cost_attribution": {
+    "total_fees": 5.1,
+    "commission_total": 5.0,
+    "stamp_tax_total": 0.0,
+    "transfer_fee_total": 0.1,
+    "slippage_cost": 9.63,
+    "cost_vs_nav_pct": 5.1e-05,
+    "cost_drag_annualized": 0.000541
+  }
+}

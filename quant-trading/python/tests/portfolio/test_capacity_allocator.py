@@ -170,14 +170,29 @@ class TestAllocatorMinWeight:
     """最低权重保障测试。"""
 
     def test_min_weight_respected(self):
+        """min_weight 能放进容量上限时才生效。"""
+        a = CapacityAwareAllocator(
+            base_weights={"ml": 0.90, "cb": 0.10},
+            capacity_limits={"cb": 500_000},  # 5% of 1000万，容得下 2%
+            min_weights={"cb": 0.02},
+        )
+        r = a.compute(10_000_000)
+        assert r.weights["cb"] >= 0.02
+
+    def test_capacity_ceiling_beats_min_weight(self):
+        """容量硬上限压过 min_weight 软下限。
+
+        cb 容量只有 0.1 万，min_weight=2% 要 20 万 —— 真按 min_weight 配，
+        就是往一个只装得下 0.1 万的策略里塞 200 倍的钱，冲击成本会把
+        回测里那点超额收益全吃掉。容量是硬约束，软下限必须让路。
+        """
         a = CapacityAwareAllocator(
             base_weights={"ml": 0.60, "cb": 0.40},
             capacity_limits={"cb": 1_000},  # 极小容量
             min_weights={"cb": 0.02},
         )
         r = a.compute(10_000_000)
-        # cb 容量只有 0.1万, 但 min_weight=2% → 20万
-        assert r.weights["cb"] >= 0.02
+        assert r.weights["cb"] <= 1_000 / 10_000_000 + 1e-12
 
 
 class TestAllocatorMultiCapped:

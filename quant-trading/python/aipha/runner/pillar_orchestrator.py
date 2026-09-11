@@ -311,7 +311,10 @@ class PillarOrchestrator(Strategy):
             side: 买卖方向
             qty: 成交数量
             price: 成交价格
-            commission: 交易总费用（佣金+印花税+过户费）
+            commission: **被忽略**。§13.7/§13.2 规定费用只有一个来源
+                ``calc_trade_cost()``；网关上报的这个值通常只含佣金，
+                不含印花税/过户费，采信它会让模拟盘现金系统性偏高。
+                参数保留只为兼容既有调用方签名。
             market_date: 市场日期（用于 T+1 记录），None 时降级为 date.today()
         """
         pillar = self._symbol_pillar.get(symbol)
@@ -320,6 +323,18 @@ class PillarOrchestrator(Strategy):
 
         state = self._pillar_states[pillar]
         current_qty = state.positions.get(symbol, 0)
+
+        # 数量为 0/负的「成交」不是成交，直接返回。
+        # 不能往下走：calc_trade_cost(0, ...) 会返回**最低佣金 5 元**
+        # （commission = max(amount * rate, commission_min)），于是一笔
+        # 什么都没成交的事件照样扣 5 元现金。重复 fill 事件、或持仓已被
+        # 手工清掉后迟到的卖出回报，都会走到这里。
+        if qty <= 0:
+            logger.warning(
+                f"Pillar '{pillar}' 收到 qty={qty} 的 fill ({symbol})，已忽略"
+            )
+            return
+
         trade_value = qty * price
         fill_date = market_date or date.today()
 
@@ -356,6 +371,14 @@ class PillarOrchestrator(Strategy):
         else:
             # 防止超卖: 限制卖出量不超过持仓
             actual_sell = min(qty, current_qty)
+            # 一股都卖不出（持仓已为 0）时不动现金。
+            # 同上：calc_trade_cost(0, "sell", ...) 会收最低佣金 5 元。
+            if actual_sell <= 0:
+                logger.warning(
+                    f"Pillar '{pillar}' 卖出 {symbol} {qty} 股但当前持仓为 "
+                    f"{current_qty}，已忽略"
+                )
+                return
             remaining = current_qty - actual_sell
             actual_value = actual_sell * price
             # 若实际卖出量 < 原始 qty，需按实际金额重算费用

@@ -146,9 +146,13 @@ class RiskConfig:
         enabled: 是否启用风控（默认 True）
         max_position_weight: 单票最大权重 → PositionLimit
         max_drawdown: 最大回撤阈值 → DrawdownLimit
-            ⚠️ 对集中持仓策略（top_k ≤ 10），默认 0.20 会触发反馈循环
-            （reduce_position_at=0.10 在正常波动中持续缩仓，导致策略失效）。
-            可转债集中策略建议设为 0.50。详见 docs/known_limitations.md #13。
+            **默认 1.0 = 不启用渐进减仓**（§4.3.2）。曾经默认 0.20，但对
+            集中持仓策略（top_k ≤ 10）会触发反馈循环：reduce_position_at=0.10
+            在正常波动中持续缩仓，CB new_small 案例 AR 从 40% 掉到 2.6%
+            （详见 docs/known_limitations.md §13）。
+            要启用必须在 YAML 里显式设 < 1.0，此时
+            ``validate_drawdown_safety()`` 会自动补齐三个防护参数。
+            可转债集中策略若要启用，建议 0.50。
         max_sector_weight: 行业最大权重 → SectorLimit（None = 不启用）
         max_daily_turnover: 日最大换手率 → TurnoverLimit（None = 不启用）
         daily_loss_limit: 日亏损限制 → CircuitBreaker daily_loss

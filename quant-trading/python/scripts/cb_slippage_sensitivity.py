@@ -29,8 +29,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from src.aipha.backtest.config_runner import run_from_config  # noqa: E402
-from src.aipha.backtest.result_store import ResultStore  # noqa: E402
+from aipha.backtest.config_runner import run_from_config  # noqa: E402
+from aipha.backtest.result_store import ResultStore  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

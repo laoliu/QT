@@ -69,6 +69,12 @@ def normal_bar() -> Bar:
         low=9.95,
         close=10.02,
         volume=100000,
+        # §13.3：限价单必须能算出涨跌停价，prev_close 缺失一律拒单
+        # （rules_cn_equity.py:120，禁止静默放行）。不给这个字段的话，
+        # 所有 LIMIT 用例都在 precheck 就返回 DATA_MISSING，
+        # 撮合模型根本没被执行到 —— 测的就不是限价撮合了。
+        # 10.00 → 主板 ±10% 即 9.00~11.00，用例里的 9.98/9.90 都在区间内。
+        prev_close=10.00,
         is_suspended=False,
         is_limit_up=False,
         is_limit_down=False,

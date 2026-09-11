@@ -25,9 +25,17 @@ from aipha.risk.position_sizing import (
 
 class TestVolatilityTargetOverlay:
     def test_default_config(self):
+        """默认配置即 VolatilityTargetConfig 的默认值。
+
+        断言的是 CPS 生产验证值 (target_vol=0.20, lookback=60)，与
+        UnifiedPositionSizer 共用同一份默认值 —— overlay 不得自带第二套，
+        否则同名配置类在两处含义不同。
+        """
         o = VolatilityTargetOverlay()
-        assert o._config.target_vol == 0.10
-        assert o._config.lookback_days == 20
+        assert o._config.target_vol == VolatilityTargetConfig().target_vol
+        assert o._config.lookback_days == VolatilityTargetConfig().lookback_days
+        assert o._config.target_vol == 0.20
+        assert o._config.lookback_days == 60
 
     def test_short_returns_max_scale(self):
         """数据不足时返回 max_scale"""

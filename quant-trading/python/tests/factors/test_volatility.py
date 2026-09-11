@@ -9,6 +9,7 @@ import pytest
 
 from aipha.factors.base import FactorData
 from aipha.factors.volatility import VolatilityFactor
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 
 
 class TestVolatilityFactor:
@@ -19,7 +20,10 @@ class TestVolatilityFactor:
         factor = VolatilityFactor(lookback_days=20)
         assert factor.name == "VOL_20"
         assert factor.lookback_days == 20
-        assert factor.annualization_factor == pytest.approx(math.sqrt(252))
+        # §13.8：年化因子来自 trading_calendar_constants（A 股 244），不是 252
+        assert factor.annualization_factor == pytest.approx(
+            math.sqrt(TRADING_DAYS_PER_YEAR)
+        )
 
     def test_factor_creation_custom_name(self):
         """创建波动率因子 - 自定义名称"""

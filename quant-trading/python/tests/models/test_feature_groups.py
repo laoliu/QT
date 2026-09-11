@@ -15,11 +15,18 @@ from aipha.models.feature_groups import (
 # 分组完整性
 # ---------------------------------------------------------------------------
 
-def test_all_eight_groups_defined():
-    assert set(FEATURE_GROUPS) == {
-        "quality", "valuation", "liquidity", "crowding", "alternative", "momentum",
-        "behavioral", "advanced_alpha",
-    }
+#: 分组全集。写死成显式集合（而不是 ``set(FEATURE_GROUPS)``）是有意的：
+#: 新增一组特征必须同时改这里，避免有人悄悄加一组进模型却没人看见。
+EXPECTED_GROUPS = {
+    "quality", "valuation", "liquidity", "crowding", "alternative", "momentum",
+    "behavioral", "advanced_alpha",
+    # ↓ be42091 重写整个模块时新增的三组（生产侧的正当扩展）
+    "fundamental_extended", "composite_momentum", "event_driven",
+}
+
+
+def test_all_groups_defined():
+    assert set(FEATURE_GROUPS) == EXPECTED_GROUPS
 
 
 def test_each_group_nonempty():
@@ -119,5 +126,7 @@ def test_get_all_groups_returns_copy():
     assert "injected_feat" not in FEATURE_GROUPS["quality"]
 
 
-def test_get_all_groups_has_eight_keys():
-    assert len(get_all_groups()) == 8
+def test_get_all_groups_covers_every_group():
+    # 断言 get_all_groups() 和 FEATURE_GROUPS 同步，而不是断言一个魔数 8 ——
+    # 后者每加一组特征就误报一次，且只告诉你"数量变了"，不告诉你变了哪个。
+    assert set(get_all_groups()) == EXPECTED_GROUPS

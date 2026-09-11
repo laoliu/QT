@@ -372,11 +372,18 @@ class TestPEADPostFixValidation:
         assert abs(total_weight - 1.0) < 1e-6
 
     def test_pit_enriched_metadata_flows_to_scoring(self):
-        """PIT 注入的 roe/eps/growth 字段在 scoring 中实际被使用"""
+        """PIT 注入的 roe/eps/growth/sue 字段在 scoring 中实际被使用。
+
+        ``sue`` 必须显式给出：生产路径上它由
+        ``data_loader._compute_sue_fields``（data_loader.py:1474）写进同一个
+        ``fina_row``，再被 ``_enrich_bar_metadata`` 整体拷进 metadata。
+        本用例手工拼 fina_pit_map，跳过了那一步，所以要自己补上 ——
+        否则测的是"没有 SUE 的 PEAD"，而 PEAD 现在会（正确地）拒绝打分。
+        """
         fina_pit_map = {
             "STAR.SZ": [
                 _make_fina_record(date(2024, 4, 28), roe=25.0, eps=3.0,
-                                  dt_netprofit_yoy=50.0),
+                                  dt_netprofit_yoy=50.0, sue=2.0),
             ],
         }
         meta: dict = {}
@@ -389,6 +396,7 @@ class TestPEADPostFixValidation:
         assert meta["roe"] == 25.0
         assert meta["eps"] == 3.0
         assert meta["dt_netprofit_yoy"] == 50.0
+        assert meta["sue"] == 2.0
 
         # 这些字段会被 PEAD 打分使用
         strategy = PEADStrategy(PEADConfig(min_sue=-999, min_roe=0))
@@ -406,3 +414,19 @@ class TestPEADPostFixValidation:
         result = strategy._score_candidates([cand], ctx)
         assert len(result) == 1
         assert result[0] == "STAR.SZ"
+
+        # 反过来：PIT 里没有 SUE 时，同一只票不进名单。
+        # 这是 PEAD 的契约（见 tests/strategy/test_pead_event.py），
+        # 在集成层再钉一遍，防止哪天 _enrich_bar_metadata 丢了 sue 字段
+        # 却因为 roe/动量还在、名单照常产出而无人察觉。
+        meta_no_sue = {k: v for k, v in meta.items() if k != "sue"}
+        cand_no_sue = EquityCandidateInfo(
+            symbol="STAR.SZ",
+            close=20.0,
+            metadata=meta_no_sue,
+            circ_mv=400_000.0,
+            turnover_rate=3.0,
+            amount=5_000.0,
+            list_date="20190101",
+        )
+        assert strategy._score_candidates([cand_no_sue], ctx) == []

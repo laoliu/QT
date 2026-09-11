@@ -268,7 +268,23 @@ def create_app() -> FastAPI:
     from aipha.api.system.router import router as sys_router
     from aipha.api.data_hub.router import router as data_router
     from aipha.api.audit.router import router as audit_router
-    from aipha.api.live.router import router as live_router
+
+    # aipha.api.live 整个包目前不在树里（engine_manager + router 都缺）。
+    # 之前这里是无条件 import，于是 `import aipha.api.app` 直接
+    # ModuleNotFoundError —— 模块末尾还有一句 `app = create_app()`，
+    # 结果**整个 API 服务连启动都做不到**，其余十几个 router 全被一个
+    # 缺失模块拖死。上面 lifespan 里对 engine_manager 用的就是可选导入
+    # （`:214`），这里跟它保持一致。
+    #
+    # 缺的是「HTTP 启停实盘引擎」这条控制面（app.py:213 提到
+    # POST /api/v1/live/engine/start）。没有测试规格、也没有调用方
+    # （前端的 /quant/api/live/status 由 Node 侧自己实现），凭空补一个
+    # 能下真钱的启停接口不合适，留给人决定。
+    try:
+        from aipha.api.live.router import router as live_router
+    except ImportError as e:
+        live_router = None
+        logger.warning("Live router 不可用，实盘启停接口未注册: %s", e)
 
     prefix = "/api/v1"
     app.include_router(auth_router, prefix=prefix)
@@ -280,7 +296,8 @@ def create_app() -> FastAPI:
     app.include_router(mining_router, prefix=prefix)
     app.include_router(port_router, prefix=prefix)
     app.include_router(trade_router, prefix=prefix)
-    app.include_router(live_router, prefix=prefix)
+    if live_router is not None:
+        app.include_router(live_router, prefix=prefix)
     app.include_router(sys_router, prefix=prefix)
     app.include_router(data_router, prefix=prefix)
     app.include_router(audit_router, prefix=prefix)

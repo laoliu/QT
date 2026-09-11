@@ -170,18 +170,73 @@ class TestMarketRulesConsistency:
             f"={cr}，应为 A 股权威值 0.0000854"
         )
 
-    def test_multi_strategy_yaml_fallback_matches_cb(self):
-        """multi_strategy create_from_yaml CB fallback commission_min 必须为 5"""
-        import inspect
+    def test_multi_strategy_fee_defaults_match_authority(self):
+        """PortfolioConfig 省略的费用字段必须落到权威值，且不能漏出哨兵
 
-        from aipha.runner.multi_strategy import MultiStrategyRunner
+        原来这条是按源码文本断言 ``'"commission_min", "5")' in source``。
+        实现后来改好了 —— 不再把 5 这个字面量抄在 YAML 解析里，而是用
+        ``Decimal("-1")`` 哨兵 + ``__post_init__`` 从 MarketRulesCNEquity
+        取权威值（§13.2 单一实现）。文本断言于是卡在了更差的旧写法上。
+        改为断言行为：无论 YAML 写了哪几个字段，其余字段都必须解析成
+        正的权威值，绝不能留下负的哨兵。
+        """
+        from decimal import Decimal
 
-        # 读取源码检查 commission_min fallback
-        source = inspect.getsource(MultiStrategyRunner.create_from_yaml)
-        # 确保 commission_min fallback 为 "5"（CB 最低佣金5元）
-        assert '"commission_min", "5")' in source, (
-            "create_from_yaml commission_min fallback 应为 5（CB 最低佣金5元）"
+        from aipha.market.rules_cn_equity import MarketRulesCNEquity
+        from aipha.runner.multi_strategy import PortfolioConfig
+
+        authority = MarketRulesCNEquity()
+
+        # 覆盖「一个都没写」「只写一个」等组合 —— 只写 commission_rate
+        # 曾让其余四个哨兵漏出去（stamp_tax_rate=-1 意味着卖出变负成本）
+        cases = {
+            "全部省略": {},
+            "只写 commission_rate": {"commission_rate": Decimal("0.0000854")},
+            "只写 commission_min": {"commission_min": Decimal("5")},
+            "只写 stamp_tax_rate": {"stamp_tax_rate": Decimal("0.0005")},
+        }
+        for label, kwargs in cases.items():
+            cfg = PortfolioConfig(**kwargs)
+            for field in (
+                "commission_rate", "commission_min",
+                "stamp_tax_rate", "transfer_fee_rate",
+            ):
+                value = getattr(cfg, field)
+                assert value > 0, (
+                    f"[{label}] {field}={value} 漏出哨兵 —— "
+                    f"负费率会让成本变成收益"
+                )
+            assert cfg.slippage_bps > 0, (
+                f"[{label}] slippage_bps={cfg.slippage_bps} 漏出哨兵 —— "
+                f"负滑点等于每笔都成交在有利价"
+            )
+            # 省略的字段必须等于权威值
+            if "commission_min" not in kwargs:
+                assert cfg.commission_min == authority.commission_min, (
+                    f"[{label}] commission_min 应取权威值 "
+                    f"{authority.commission_min}（最低佣金 5 元）"
+                )
+            if "stamp_tax_rate" not in kwargs:
+                assert cfg.stamp_tax_rate == authority.stamp_tax_rate
+
+    def test_multi_strategy_explicit_fees_not_overwritten(self):
+        """显式写了的费用字段不能被默认值覆盖"""
+        from decimal import Decimal
+
+        from aipha.runner.multi_strategy import PortfolioConfig
+
+        cfg = PortfolioConfig(
+            commission_rate=Decimal("0.0003"),
+            commission_min=Decimal("1"),
+            stamp_tax_rate=Decimal("0.001"),
+            transfer_fee_rate=Decimal("0.00002"),
+            slippage_bps=25.0,
         )
+        assert cfg.commission_rate == Decimal("0.0003")
+        assert cfg.commission_min == Decimal("1")
+        assert cfg.stamp_tax_rate == Decimal("0.001")
+        assert cfg.transfer_fee_rate == Decimal("0.00002")
+        assert cfg.slippage_bps == 25.0
 
 
 # ── §13.2 单一实现原则 ─────────────────────────────────────────
@@ -609,7 +664,12 @@ class TestCBPrevCloseWarning:
 
 
 class TestAStockPrevCloseWarning:
-    """确保 A 股涨跌停检查在 prev_close=None 时记录 warning（§13.3）"""
+    """确保 A 股涨跌停检查在 prev_close=None 时拒单并留痕（§13.3）
+
+    契约已收紧：早期实现是「放行 + 标记未校验」，现在是「拒单 +
+    warning」。放行版本的危险在于 —— 限价单价格再离谱（比如前收 10 元
+    却挂 999 元）也照样通过，涨跌停这道闸门等于不存在。
+    """
 
     def test_precheck_logs_when_prev_close_none(self):
         import inspect
@@ -619,10 +679,14 @@ class TestAStockPrevCloseWarning:
             "A股 precheck_order 未在 prev_close=None 时记录 warning (§13.3)"
         )
 
-    def test_precheck_returns_warning_when_prev_close_none(self):
+    def test_precheck_rejects_when_prev_close_none(self):
+        """prev_close 缺失 → 拒单（DATA_MISSING）且带 warning，不得静默放行"""
         from datetime import datetime
         from aipha.domain.models import Bar, Order, OrderType, Side
-        from aipha.market.rules_cn_equity import MarketRulesCNEquity
+        from aipha.market.rules_cn_equity import (
+            MarketRulesCNEquity,
+            RejectReason,
+        )
         rules = MarketRulesCNEquity()
         ts = datetime(2024, 1, 2, 9, 30)
         bar = Bar(
@@ -634,12 +698,44 @@ class TestAStockPrevCloseWarning:
             order_id="test_001", symbol="000001.SZ",
             side=Side.BUY, qty=100,
             order_type=OrderType.LIMIT, t_submit=ts,
-            limit_price=999.0,
+            limit_price=999.0,  # 前收 10 元却挂 999 —— 放行版本会漏过这单
         )
         decision = rules.precheck_order(order=order, bar=bar)
-        assert decision.allowed, "prev_close=None 时应放行但标记未校验"
+        assert not decision.allowed, (
+            "prev_close 缺失时涨跌停无法校验，必须拒单而不是放行 (§13.3)"
+        )
+        assert decision.reason == RejectReason.DATA_MISSING, (
+            f"拒单原因应为 DATA_MISSING，实际 {decision.reason}"
+        )
         assert decision.warning is not None, (
             "A股 prev_close=None 时 decision.warning 不应为 None (§13.3)"
+        )
+
+    def test_precheck_allows_limit_order_when_prev_close_present(self):
+        """反面：给了 prev_close 且价格在涨跌停内，限价单应放行
+
+        没有这一条，上面那个「拒单」断言会被一个永远拒单的实现
+        蒙混过关。
+        """
+        from datetime import datetime
+        from aipha.domain.models import Bar, Order, OrderType, Side
+        from aipha.market.rules_cn_equity import MarketRulesCNEquity
+        rules = MarketRulesCNEquity()
+        ts = datetime(2024, 1, 2, 9, 30)
+        bar = Bar(
+            symbol="000001.SZ", start_ts=ts, end_ts=ts,
+            open=10.0, high=11.0, low=9.0,
+            close=10.5, volume=1000, prev_close=10.0,
+        )
+        order = Order(
+            order_id="test_002", symbol="000001.SZ",
+            side=Side.BUY, qty=100,
+            order_type=OrderType.LIMIT, t_submit=ts,
+            limit_price=10.2,  # 前收 10 元，主板 ±10% → [9.0, 11.0] 内
+        )
+        decision = rules.precheck_order(order=order, bar=bar)
+        assert decision.allowed, (
+            f"价格在涨跌停内的限价单被拒: {decision.reason}"
         )
 
 

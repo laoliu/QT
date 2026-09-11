@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from aipha.utils.metrics import (
-    DEFAULT_RISK_FREE_RATE,
     DEFAULT_TRADING_DAYS,
     compute_annualized_return,
     compute_calmar_ratio,
@@ -28,21 +27,17 @@ class TestSharpeRatio:
 
     def test_known_value(self):
         """固定已知输入验证公式正确性"""
-        # 252 天每天 +0.1% 收益
-        rets = np.full(252, 0.001)
-        rf_daily = DEFAULT_RISK_FREE_RATE / DEFAULT_TRADING_DAYS
-        excess_mean = 0.001 - rf_daily
-        std_r = float(np.std(rets, ddof=1))
-        expected = excess_mean * math.sqrt(252) / std_r
-        result = compute_sharpe_ratio(rets)
-        # std=0 for constant → 此例中 std≈0，应返回 0
-        # 实际上全相同值 std=0，所以改用包含变化的数据
+        # 每天 +0.1% 的恒定收益：std=0，按约定返回 0（不是 inf）
+        rets = np.full(DEFAULT_TRADING_DAYS, 0.001)
+        assert compute_sharpe_ratio(rets) == 0.0
+
+        # 有波动的序列才能手算验证公式
         rets2 = np.array([0.01, -0.005, 0.008, -0.003, 0.006] * 50)
         r = compute_sharpe_ratio(rets2, risk_free_rate=0.0)
-        # 手算验证
         mean_r = float(np.mean(rets2))
         std_v = float(np.std(rets2, ddof=1))
-        expected2 = (mean_r / std_v) * math.sqrt(252)
+        # §13.8：年化因子取 DEFAULT_TRADING_DAYS（=244），不写死 252
+        expected2 = (mean_r / std_v) * math.sqrt(DEFAULT_TRADING_DAYS)
         assert abs(r - expected2) < 1e-10
 
     def test_rf_deduction(self):

@@ -19,8 +19,20 @@ from typing import Any
 
 import yaml
 
-# 默认配置文件路径（相对于项目根目录）
-_DEFAULT_CONFIG_PATH = Path(__file__).parents[3] / "configs" / "algo_trading_compliance.yml"
+# 默认配置文件路径（相对于本文件，不依赖进程 CWD）
+# parents[0]=aipha/utils, parents[1]=aipha, parents[2]=python ← configs/ 在这一层。
+# 曾经写成 parents[3]（= quant-trading），多跳一层，导致无参调用 load_compliance_config()
+# 永远抛 FileNotFoundError —— 合规检查在生产里静默不可用。
+#
+# 公开这个常量是为了让调用方别再各自写 Path("configs/algo_trading_compliance.yml")：
+# 那是相对 CWD 的，从 python/ 以外任何目录启动都读不到，而调用方普遍写成
+# `if path.exists(): from_config() else ComplianceEngine()`，于是静默退回默认限额。
+DEFAULT_COMPLIANCE_CONFIG_PATH = (
+    Path(__file__).parents[2] / "configs" / "algo_trading_compliance.yml"
+)
+
+# 旧私有名保留为别名，避免外部引用断裂
+_DEFAULT_CONFIG_PATH = DEFAULT_COMPLIANCE_CONFIG_PATH
 
 
 @dataclass(frozen=True)

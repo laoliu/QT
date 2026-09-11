@@ -246,8 +246,8 @@ class TestLimitPriceRange:
         result = rules.precheck_order(order=order, bar=bar)
         assert result.allowed is True
 
-    def test_without_prev_close_skips_range_check(self):
-        """无 prev_close 时跳过价格范围检查"""
+    def test_without_prev_close_rejects(self):
+        """无 prev_close 时拒单，而不是跳过价格范围检查（§13.3）"""
         bar = _make_bar()  # 标准 bar, 没有 prev_close
         order = _make_order(
             symbol="600000.SH",
@@ -255,5 +255,6 @@ class TestLimitPriceRange:
             limit_price=999.0,  # 极端价格
         )
         result = rules.precheck_order(order=order, bar=bar)
-        # 因为没有 prev_close 属性，跳过范围检查 → 通过
-        assert result.allowed is True
+        # 没有 prev_close 就算不出涨跌停价，放行等于盲下单
+        assert result.allowed is False
+        assert result.reason == RejectReason.DATA_MISSING

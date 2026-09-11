@@ -14,10 +14,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock
 
-import pytest
 
 from aipha.runner.state_manager import (
     AccountState,
@@ -220,25 +217,99 @@ class TestStateManagerPendingOrders:
 # ============================================================================
 
 
+class _FakePaperGateway:
+    """PaperGateway 的最小替身（§13.16）。
+
+    刻意**不用** MagicMock：``state_manager`` 是靠 ``_is_paper_gateway``
+    标记认网关的（`state_manager.py:213` / `:390`），动机就是别让裸
+    MagicMock 的 auto-attribute 冒充成 PaperGateway。用 Mock 写这些测试，
+    ``getattr(gw, '_is_paper_gateway', False) is True`` 会是 False，
+    于是走「不支持的网关类型」分支 —— save 侧存的是**空状态**（cash=0），
+    restore 侧**什么都不做**。测试看着在测持久化，其实在测降级分支。
+
+    ``tests/runner/test_state_manager.py`` 里有一份同名替身；两个文件
+    各自保留一份，是为了让单个测试文件自成一体。
+    """
+
+    _is_paper_gateway = True
+
+    def __init__(
+        self,
+        cash: float = 500_000.0,
+        frozen_cash: float = 10_000.0,
+        positions: dict | None = None,
+        active_orders: list | None = None,
+        trade_date: date | None = None,
+        with_orders_attr: bool = True,
+        active_orders_raises: bool = False,
+    ) -> None:
+        self._cash = Decimal(str(cash))
+        self._frozen_cash = Decimal(str(frozen_cash))
+        self._positions: dict = dict(positions or {})
+        self._current_trade_date = trade_date
+        self._active_orders: list = list(active_orders or [])
+        self._active_orders_raises = active_orders_raises
+        if with_orders_attr:
+            self._orders: dict = {}
+
+    # -- §13.16 公开接口 ----------------------------------------------------
+    def save_state(self) -> dict:
+        """与 PaperGateway.save_state 相同的键名/口径。"""
+        return {
+            "cash": float(self._cash),
+            "frozen_cash": float(self._frozen_cash),
+            "positions": {
+                symbol: {
+                    "total_qty": p.get("qty", 0),
+                    "avg_cost": float(p.get("avg_cost", 0)),
+                    "today_bought_qty": p.get("today_bought", 0),
+                    "frozen_qty": p.get("frozen", 0),
+                }
+                for symbol, p in self._positions.items()
+            },
+            "latest_prices": {},
+        }
+
+    def restore_state(self, state: dict) -> None:
+        self._cash = Decimal(str(state.get("cash", 0)))
+        self._frozen_cash = Decimal(str(state.get("frozen_cash", 0)))
+        self._positions = {
+            symbol: {
+                "qty": p.get("total_qty", 0),
+                "avg_cost": Decimal(str(p.get("avg_cost", 0))),
+                "today_bought": p.get("today_bought_qty", 0),
+                "frozen": p.get("frozen_qty", 0),
+            }
+            for symbol, p in state.get("positions", {}).items()
+        }
+
+    def get_active_orders(self) -> list:
+        if self._active_orders_raises:
+            # 模拟老网关没实现该方法
+            raise AttributeError("no method")
+        return list(self._active_orders)
+
+
 class TestSaveFromGatewayWithOrders:
     """save_from_gateway 提取活跃订单"""
 
-    def _make_gateway_mock(self, active_orders=None):
-        """创建 mock gateway"""
-        gw = MagicMock()
-        gw._positions = {
-            "000001.SZ": {"qty": 100, "avg_cost": Decimal("10.5"), "today_bought": 0, "frozen": 0}
-        }
-        gw._cash = Decimal("500000")
-        gw._frozen_cash = Decimal("10000")
-        gw._current_trade_date = date(2024, 6, 15)
-
-        if active_orders is None:
-            gw.get_active_orders.return_value = []
-        else:
-            gw.get_active_orders.return_value = active_orders
-
-        return gw
+    def _make_gateway_mock(self, active_orders=None, active_orders_raises=False):
+        """创建测试用 PaperGateway 替身"""
+        return _FakePaperGateway(
+            cash=500_000.0,
+            frozen_cash=10_000.0,
+            positions={
+                "000001.SZ": {
+                    "qty": 100,
+                    "avg_cost": Decimal("10.5"),
+                    "today_bought": 0,
+                    "frozen": 0,
+                }
+            },
+            active_orders=active_orders,
+            trade_date=date(2024, 6, 15),
+            active_orders_raises=active_orders_raises,
+        )
 
     def test_saves_active_orders(self, tmp_path):
         from aipha.execution.gateway import GatewayOrder, OrderStatus
@@ -267,6 +338,10 @@ class TestSaveFromGatewayWithOrders:
         po = loaded.account.pending_orders[0]
         assert po.order_id == "act-001"
         assert po.entrust_no == "E_ACT"
+        # 顺手钉住「走的确实是 PaperGateway 分支」：降级分支下 cash/持仓
+        # 会是空的，只断言 pending_orders 的话这条测试用 MagicMock 也能过。
+        assert loaded.account.cash == 500000.0
+        assert len(loaded.account.positions) == 1
 
     def test_saves_empty_when_no_active_orders(self, tmp_path):
         gw = self._make_gateway_mock(active_orders=[])
@@ -280,8 +355,7 @@ class TestSaveFromGatewayWithOrders:
 
     def test_handles_gateway_without_active_orders(self, tmp_path):
         """get_active_orders 抛异常时不影响其他状态保存"""
-        gw = self._make_gateway_mock()
-        gw.get_active_orders.side_effect = AttributeError("no method")
+        gw = self._make_gateway_mock(active_orders_raises=True)
 
         manager = StateManager(state_dir=tmp_path)
         result = manager.save_from_gateway(gw, strategy_name="test")
@@ -321,14 +395,7 @@ class TestRestoreToGatewayWithOrders:
         )
         snap = StateSnapshot(account=acct)
 
-        # Mock gateway with _orders and _order_entrust_map
-        gw = MagicMock()
-        gw._cash = Decimal("0")
-        gw._frozen_cash = Decimal("0")
-        gw._positions = {}
-        gw._orders = {}
-        gw._order_entrust_map = {}
-        gw._current_trade_date = None
+        gw = _FakePaperGateway(cash=0.0, frozen_cash=0.0)
 
         manager = StateManager(state_dir=tmp_path)
         manager.restore_to_gateway(gw, snap)
@@ -337,10 +404,16 @@ class TestRestoreToGatewayWithOrders:
         order = gw._orders["r-001"]
         assert order.symbol == "000001.SZ"
         assert order.side == "BUY"
-        assert gw._order_entrust_map["r-001"] == "E_R001"
+        # entrust_no 落在 order.metadata 里（`state_manager.py:421`），
+        # 不存在单独的 _order_entrust_map —— 那个字段属于 EasyTraderGateway
+        # (`easytrader_gateway.py:127`)，而 restore_to_gateway 只支持
+        # PaperGateway（§13.16 明确拒绝其它网关），实盘持仓/委托是从券商侧拉的。
+        assert order.metadata["entrust_no"] == "E_R001"
+        # 资金也要真的恢复：走降级分支的话这里还是 0
+        assert gw._cash == Decimal("100000.0")
 
     def test_restores_without_orders_attr(self, tmp_path):
-        """Gateway 没有 _orders 属性时不崩溃"""
+        """Gateway 没有 _orders 属性时不崩溃（订单跳过，资金/持仓照常恢复）"""
         acct = AccountState(
             cash=50000.0,
             frozen_cash=0.0,
@@ -350,17 +423,13 @@ class TestRestoreToGatewayWithOrders:
         )
         snap = StateSnapshot(account=acct)
 
-        class SimpleGateway:
-            pass
-
-        gw = SimpleGateway()
-        gw._cash = Decimal("0")
-        gw._frozen_cash = Decimal("0")
-        gw._positions = {}
-        gw._current_trade_date = None
-        # 没有 _orders 属性
+        gw = _FakePaperGateway(cash=0.0, frozen_cash=0.0, with_orders_attr=False)
+        assert not hasattr(gw, "_orders")
 
         manager = StateManager(state_dir=tmp_path)
         # 应不崩溃
         manager.restore_to_gateway(gw, snap)
-        assert not hasattr(gw, '_orders')
+
+        assert not hasattr(gw, "_orders")
+        # 订单恢复被跳过不应连累账户状态
+        assert gw._cash == Decimal("50000.0")

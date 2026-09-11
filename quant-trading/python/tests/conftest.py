@@ -8,6 +8,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
+# 下面三个文件不是 pytest 测试，而是手工联调脚本：它们在模块顶层直接
+# 对 QMT bridge（硬编码的局域网地址）发 HTTP 请求，并在 import 期调用
+# sys.exit()。pytest 收集时会把 SystemExit 当成 INTERNALERROR，直接
+# 中断整个 run —— 全量套件曾因此必须挂 --ignore 才能跑完。
+# 保持文件原样（仍可 `python tests/test_direct_mode.py` 手工执行），
+# 只把它们从自动收集里排除。
+collect_ignore = [
+    "test_direct_mode.py",
+    "test_extended_bridge.py",
+    "test_real_bridge.py",
+]
+
 
 @pytest.fixture
 def synthetic_klines():

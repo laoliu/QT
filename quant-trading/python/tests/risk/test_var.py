@@ -14,6 +14,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.risk.var import (
     A_SHARE_STRESS_SCENARIOS,
     CornishFisherVaR,
@@ -104,9 +105,13 @@ class TestHistoricalVaR:
         assert result.var < 0  # 没有真正的损失
 
     def test_annualized_var(self, normal_returns):
-        """年化 VaR = 日 VaR × sqrt(252)"""
+        """年化 VaR = 日 VaR × sqrt(TRADING_DAYS_PER_YEAR)
+
+        用默认构造，所以年化因子必须取 §13.8 的常量；下面 PortfolioVaR 那条
+        显式传了 252，是在验证参数能被覆盖，两者不矛盾。
+        """
         result = HistoricalVaR(0.95).compute(normal_returns)
-        expected_annual = result.var * math.sqrt(252)
+        expected_annual = result.var * math.sqrt(TRADING_DAYS_PER_YEAR)
         assert result.annualized_var == pytest.approx(expected_annual)
 
     def test_insufficient_samples(self):

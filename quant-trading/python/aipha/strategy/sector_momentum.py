@@ -58,7 +58,10 @@ class SectorMomentumConfig(EquityRotationConfig):
     """
 
     # 覆盖默认值
-    top_k: int = 30
+    # top_k=25 来自 dc5d7a6（标题即 "set top_k to 25 and adjust related tests"）。
+    # be42091 把这段单行配置展开成多行时顺手写回了 30，提交信息只字未提 ——
+    # 那次提交的主题是 ComboCPCV/质量门槛，改到这里属于误伤。测试一直按 25 断言。
+    top_k: int = 25
     rebalance_days: int = 10       # 双周调仓以捕捉行业切换
     min_price: float = 5.0
     max_price: float = 200.0
@@ -70,7 +73,10 @@ class SectorMomentumConfig(EquityRotationConfig):
 
     # 行业轮动特有参数
     top_industries: int = 6        # 选择 top N 个热门行业
-    momentum_lookback: int = 20    # 行业动量回看窗口
+    # 两阶段共用一个窗口：第一阶段的行业平均动量和第二阶段的行业内个股动量
+    # 都走 calc_momentum(cfg.momentum_lookback)。原注释只写"行业动量回看窗口"，
+    # 容易让人以为个股那一段另有窗口 —— 并没有。
+    momentum_lookback: int = 20
 
     # 行业内个股因子权重
     weight_momentum: float = 0.30      # 个股动量

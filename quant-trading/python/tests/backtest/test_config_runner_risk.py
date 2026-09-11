@@ -86,7 +86,13 @@ class TestRiskConfigDefaults:
         rc = RiskConfig()
         assert rc.enabled is True
         assert rc.max_position_weight == 0.10
-        assert rc.max_drawdown == 0.20
+        # §4.3.2: 默认 1.0 = 渐进减仓**关闭**（不是 0.20）。
+        # 0.20 曾经是默认值，但对集中持仓策略会形成反馈循环：
+        # reduce_position_at=0.10 在正常波动里持续缩仓，CB new_small 案例
+        # AR 从 40% 掉到 2.6%（docs/known_limitations.md §13）。
+        # 想要回撤降杠杆必须在 YAML 里显式配 —— 见
+        # TestDrawdownSafetyAutoInjection。
+        assert rc.max_drawdown == 1.0
         assert rc.max_sector_weight is None
         assert rc.max_daily_turnover is None
         assert rc.daily_loss_limit is None
@@ -110,6 +116,65 @@ class TestRiskConfigDefaults:
         assert rc.max_drawdown == 0.15
         assert rc.max_sector_weight == 0.25
         assert rc.stop_loss_pct == 0.10
+
+
+class TestDrawdownSafetyAutoInjection:
+    """§4.3.2: 一旦启用渐进减仓，配套防护参数会被自动补上。
+
+    这是 ``max_drawdown`` 默认 1.0 的另一半：默认值只是「不启用」，
+    而**启用时**必须带着三个防护参数一起，否则集中持仓策略会进入
+    死亡螺旋（reduce_position_at 在正常波动里持续缩仓 →
+    净值下不来 → 继续缩仓）。三个参数的作用：
+
+    * ``drawdown_allow_rotation`` —— 有持仓时允许跳过区间缩减，让策略还能换股；
+    * ``drawdown_scale_factor_floor`` —— 缩放比例地板，不至于缩到 0；
+    * ``drawdown_peak_reset_days`` —— 空仓 N 天后重置 peak_nav，
+      否则旧高点永远压着仓位。
+
+    注入发生在 ``RiskConfig.validate_drawdown_safety()``，由
+    ``parse_config()``（`config_parser.py:500`）以及实盘/组合路径调用。
+    """
+
+    def test_no_injection_when_disabled(self):
+        """max_drawdown=1.0（默认）时不注入，字段保持原样"""
+        rc = RiskConfig()
+        rc.validate_drawdown_safety()
+        assert rc.drawdown_allow_rotation is False
+        assert rc.drawdown_scale_factor_floor == 0.0
+        assert rc.drawdown_peak_reset_days == 0
+
+    def test_injects_guards_when_enabled(self):
+        """max_drawdown<1.0 且未配防护参数 → 三个参数被补上"""
+        rc = RiskConfig(max_drawdown=0.20)
+        rc.validate_drawdown_safety()
+        assert rc.drawdown_allow_rotation is True
+        assert rc.drawdown_scale_factor_floor == 0.5
+        assert rc.drawdown_peak_reset_days == 60
+
+    def test_does_not_weaken_explicit_guards(self):
+        """比安全下限更严的显式配置不被覆盖"""
+        rc = RiskConfig(
+            max_drawdown=0.20,
+            drawdown_scale_factor_floor=0.8,
+            drawdown_peak_reset_days=90,
+        )
+        rc.validate_drawdown_safety()
+        assert rc.drawdown_scale_factor_floor == 0.8
+        assert rc.drawdown_peak_reset_days == 90
+
+    def test_injection_via_parse_config(self):
+        """走 parse_config 时同样注入（不只是直接调 validate 才生效）"""
+        raw = {
+            "name": "test",
+            "data": {"source": "synthetic", "start_date": "2024-01-01",
+                     "end_date": "2024-12-31"},
+            "risk": {"max_drawdown": 0.20},
+        }
+        config = parse_config(raw)
+        assert config.risk.max_drawdown == 0.20
+        assert config.risk.drawdown_allow_rotation is True
+        assert config.risk.drawdown_scale_factor_floor == 0.5
+        assert config.risk.drawdown_peak_reset_days == 60
 
 
 # ============================================================================
@@ -256,7 +321,7 @@ class TestParseConfigRisk:
         config = parse_config(raw)
         assert config.risk.enabled is True
         assert config.risk.max_position_weight == 0.10
-        assert config.risk.max_drawdown == 0.20
+        assert config.risk.max_drawdown == 1.0  # §4.3.2 渐进减仓默认关闭
 
     def test_parse_risk_section_direct(self):
         """Direct risk section in YAML."""
@@ -297,13 +362,25 @@ class TestBuildRiskManager:
     """Test _build_risk_manager builder."""
 
     def test_basic_risk_manager(self):
-        """Should create CompositeRiskManager with PositionLimit + DrawdownLimit."""
+        """默认配置只建 PositionLimit —— max_drawdown=1.0 是 no-op
+
+        §4.3.2 把渐进减仓改成默认关闭后，DrawdownLimit 不再无条件构造。
+        下面 test_basic_risk_manager_with_drawdown_enabled 是它的对照面。
+        """
         config = _make_config()
         rm = _build_risk_manager(config)
         assert rm is not None
         assert isinstance(rm, CompositeRiskManager)
-        assert len(rm.constraints) == 2
         types = [type(c).__name__ for c in rm.constraints]
+        assert types == ["PositionLimit"]
+        assert "DrawdownLimit" not in types
+
+    def test_basic_risk_manager_with_drawdown_enabled(self):
+        """显式配 max_drawdown < 1.0 时才有 DrawdownLimit"""
+        config = _make_config(max_drawdown=0.20)
+        rm = _build_risk_manager(config)
+        types = [type(c).__name__ for c in rm.constraints]
+        assert len(rm.constraints) == 2
         assert "PositionLimit" in types
         assert "DrawdownLimit" in types
 
@@ -326,7 +403,8 @@ class TestBuildRiskManager:
         """SectorLimit should be added when max_sector_weight specified."""
         config = _make_config(max_sector_weight=0.25)
         rm = _build_risk_manager(config)
-        assert len(rm.constraints) == 3
+        # PositionLimit + SectorLimit（无 DrawdownLimit：max_drawdown 默认 1.0）
+        assert len(rm.constraints) == 2
         sec_limit = next(c for c in rm.constraints if isinstance(c, SectorLimit))
         assert sec_limit.max_weight == 0.25
 
@@ -334,7 +412,8 @@ class TestBuildRiskManager:
         """TurnoverLimit should be added when max_daily_turnover specified."""
         config = _make_config(max_daily_turnover=0.50)
         rm = _build_risk_manager(config)
-        assert len(rm.constraints) == 3
+        # PositionLimit + TurnoverLimit（无 DrawdownLimit：max_drawdown 默认 1.0）
+        assert len(rm.constraints) == 2
         to_limit = next(c for c in rm.constraints if isinstance(c, TurnoverLimit))
         assert to_limit.max_daily_turnover == 0.50
 
@@ -539,7 +618,7 @@ class TestRiskConfigSerialization:
         d = config_to_dict(config)
         assert d["risk"]["enabled"] is True
         assert d["risk"]["max_position_weight"] == 0.10
-        assert d["risk"]["max_drawdown"] == 0.20
+        assert d["risk"]["max_drawdown"] == 1.0  # §4.3.2 渐进减仓默认关闭
 
 
 # ============================================================================
@@ -638,7 +717,7 @@ class TestVolumeConstraintConfig:
 
     def test_volume_constraint_parsed_by_config_runner(self):
         """FillModelConfig correctly parses volume_constraint dict."""
-        from src.aipha.backtest.config_runner import FillModelConfig
+        from aipha.backtest.config_runner import FillModelConfig
 
         fm_cfg = FillModelConfig(
             name="next_bar_open",
@@ -901,11 +980,16 @@ class TestBuildPositionSizing:
             }
         }))
         assert overlay is not None
-        assert overlay._vol_overlay is not None
-        assert overlay._vol_overlay._config.target_vol == 0.15
-        assert overlay._vol_overlay._config.lookback_days == 30
-        assert overlay._vol_overlay._config.min_scale == 0.2
-        assert overlay._vol_overlay._config.max_scale == 1.5
+        # §13.2: 波动率目标的唯一实现是 VolTargetScaler（`position_sizing.py:250`），
+        # 早先的 `_vol_overlay` 子对象已不存在。配置留在 `_vol_config`，
+        # 实际生效的参数在 `_vol_scaler` 上 —— 两边都断言，
+        # 免得「配置存下来了但没接进 scaler」这种断线被漏掉。
+        assert overlay._vol_config.target_vol == 0.15
+        assert overlay._vol_config.lookback_days == 30
+        assert overlay._vol_scaler.vol_target == 0.15
+        assert overlay._vol_scaler.lookback == 30
+        assert overlay._vol_scaler.min_scale == 0.2
+        assert overlay._vol_scaler.max_scale == 1.5
 
     def test_creates_overlay_with_drawdown_control(self):
         """仅配置 drawdown_control 时创建 overlay。"""
@@ -938,8 +1022,10 @@ class TestBuildPositionSizing:
             }
         }))
         assert overlay is not None
-        assert overlay._vol_overlay is not None
+        # §13.2: 波动率目标走 _vol_scaler（VolTargetScaler），无 _vol_overlay
+        assert overlay._vol_scaler.vol_target == 0.12
         assert overlay._dd_reducer is not None
+        assert overlay._dd_reducer._config.threshold == 0.05
 
     def test_risk_config_extra_field_populated(self):
         """YAML 中非标准字段应落入 extra dict。"""

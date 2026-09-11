@@ -68,13 +68,26 @@ def fetch_cb_daily_enriched(
 ) -> pd.DataFrame:
     del max_retries
 
-    # --- 优先通过 Provider 缓存获取（§Plan Phase 2） ---
+    # --- 优先读 Provider 缓存（§Plan Phase 2），未命中再用调用方的网关 ---
+    #
+    # max_wait=0 = 只读缓存、一次 API 都不打。不能在这里让 provider 自己去
+    # 取数：它默认「3s 一次、永不放弃」，一旦接口抽风或没配 token，就会卡死
+    # 在 provider 的 while True 里，下面这条降级路径永远走不到。而且在
+    # provider 里等本身是白等 —— 降级打的是同一个 cb_daily 接口，缓存该由
+    # 盘前 data_preheat 灌好；真正的重试/放弃语义属于调用方（EOD 引擎、
+    # cron 的 timeout），不该埋在一次数据增强里。
+    df: pd.DataFrame | None = None
     try:
         from aipha.data.tushare_cb_provider import get_cb_provider
         provider = get_cb_provider()
-        df = provider.get_daily_snapshot(trade_date)
+        df = provider.get_daily_snapshot(trade_date, max_wait=0)
+    except TimeoutError:
+        # 缓存未命中，属预期路径（盘前 preheat 没跑或跑在别的机器上）
+        logger.info("cb_daily %s provider 缓存未命中，改用调用方网关", trade_date)
     except Exception as exc:
         logger.warning("get_daily_snapshot 失败，降级到 gw.call: %s", exc)
+
+    if df is None or df.empty:
         df = gw.call(
             "cb_daily",
             trade_date=trade_date,

@@ -86,14 +86,32 @@ class TestGetCacheDir:
     """get_cache_dir 测试"""
 
     def test_returns_configured_path(self) -> None:
-        """返回配置路径"""
+        """DATA_CACHE_DIR 优先级最高"""
         with patch.dict(os.environ, {"DATA_CACHE_DIR": "/custom/cache"}):
             assert get_cache_dir() == Path("/custom/cache")
 
+    def test_falls_back_to_qtdata_dir(self) -> None:
+        """无 DATA_CACHE_DIR 时用 QTDATA_DIR/cache（与 local_parquet_provider 共享）"""
+        with patch.dict(os.environ, {"QTDATA_DIR": "/qtdata"}):
+            os.environ.pop("DATA_CACHE_DIR", None)
+            assert get_cache_dir() == Path("/qtdata/cache")
+
     def test_returns_default(self) -> None:
-        """返回默认路径"""
-        os.environ.pop("DATA_CACHE_DIR", None)
-        assert get_cache_dir() == Path("data/cache")
+        """无任何环境变量时的回退。
+
+        优先级 DATA_CACHE_DIR > QTDATA_DIR/cache > G:/qtdata/cache >
+        data/cache。倒数第二级是否命中取决于机器上有没有这块盘，
+        所以这里按实际存在性取期望值，而不是写死 data/cache
+        （写死会让有 G 盘的开发机永远红）。
+        """
+        with patch.dict(os.environ, {}):
+            os.environ.pop("DATA_CACHE_DIR", None)
+            os.environ.pop("QTDATA_DIR", None)
+            default_qtdata = Path("G:/qtdata/cache")
+            expected = (
+                default_qtdata if default_qtdata.exists() else Path("data/cache")
+            )
+            assert get_cache_dir() == expected
 
 
 class TestGetLogLevel:

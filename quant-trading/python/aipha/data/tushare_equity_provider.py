@@ -108,14 +108,17 @@ class TuShareEquityProvider:
         retry_interval: float = 3.0,
         log_interval: float = 600.0,
         alert_after: float = 1800.0,
+        max_wait: float | None = None,
     ) -> pd.DataFrame:
-        """获取 A 股全市场日线快照（缓存优先，无限重试）。
+        """获取 A 股全市场日线快照（缓存优先，默认无限重试）。
 
         行为与 TuShareCBProvider.get_daily_snapshot() 完全对齐：
         1. 缓存命中 → 直接返回（零 API 开销）
-        2. 缓存未命中 → 3s 固定重试，永不放弃
+        2. 缓存未命中 → 3s 固定重试，默认永不放弃
         3. 日志每 10 分钟才输出一次（避免刷屏）
         4. 30 分钟未成功 → 飞书告警（仅一次）
+        5. ``max_wait`` 非 None 且超时 → 抛 ``TimeoutError``；空返回不代表
+           非交易日（与 CB 同口径，判非交易日请查交易日历）
         """
         cache_path = self.cache_dir / f"daily_{trade_date}.parquet"
 
@@ -130,6 +133,15 @@ class TuShareEquityProvider:
         attempt = 0
 
         while True:
+            # 等待上限（默认 None = 不设上限）。检查放在打接口之前，故
+            # max_wait=0 等价于「只用缓存」。
+            elapsed = time.monotonic() - start_ts
+            if max_wait is not None and elapsed >= max_wait:
+                raise TimeoutError(
+                    f"daily {trade_date} 未取到数据: 已等待 {elapsed:.1f}s "
+                    f"(上限 {max_wait:.1f}s, {attempt} 次尝试)"
+                )
+
             attempt += 1
             try:
                 df = self._gateway.call(

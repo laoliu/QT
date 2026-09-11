@@ -60,26 +60,33 @@ def _bar(
 # ══════════════════════════════════════════════════════════════
 
 
-class TestPrevCloseZeroSkipsCheck:
-    """prev_close=0 时价格校验被跳过"""
+class TestPrevCloseMissingRejects:
+    """prev_close 缺失/为 0 时拒单（§13.3）
 
-    def test_limit_order_with_prev_close_zero_passes(self):
-        """prev_close=0 → 条件为 False → 跳过价格范围校验 → 允许任意限价"""
+    注意这里拒的是**限价单**：涨跌停价以 prev_close 为基准，算不出来就
+    无法判断这笔限价是否越界。0 和 None 走同一条路径 —— 0 不是合法的
+    昨收价，只可能是数据缺失。
+    """
+
+    def test_limit_order_with_prev_close_zero_rejected(self):
+        """prev_close=0 → 无法计算涨跌停 → 拒单"""
         rules = MarketRulesCNEquity()
         o = _order(
             order_type=OrderType.LIMIT, limit_price=999.99,
         )
         b = _bar(prev_close=0.0)
         result = rules.precheck_order(order=o, bar=b)
-        assert result.allowed is True
+        assert result.allowed is False
+        assert result.reason == RejectReason.DATA_MISSING
 
-    def test_limit_order_with_prev_close_none_passes(self):
-        """prev_close=None → 也跳过价格校验"""
+    def test_limit_order_with_prev_close_none_rejected(self):
+        """prev_close=None → 同样拒单"""
         rules = MarketRulesCNEquity()
         o = _order(order_type=OrderType.LIMIT, limit_price=1.0)
         b = _bar(prev_close=None)
         result = rules.precheck_order(order=o, bar=b)
-        assert result.allowed is True
+        assert result.allowed is False
+        assert result.reason == RejectReason.DATA_MISSING
 
 
 class TestStarBoardLimitPrice:

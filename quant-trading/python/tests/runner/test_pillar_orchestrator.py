@@ -5,9 +5,46 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from aipha.domain.models import Bar, Side
+from aipha.execution.trading_ops import calc_trade_cost, get_fee_params
 from aipha.runner.paper_engine import PaperEngineConfig, PillarConfig, run_paper_trading
 from aipha.runner.pillar_orchestrator import PillarOrchestrator
 from aipha.strategy.base import OrderIntent, StrategyContext
+
+
+# ---------------------------------------------------------------------------
+# 费用口径
+# ---------------------------------------------------------------------------
+# §13.7/§13.2: PillarOrchestrator.on_fill() **有意忽略** 传入的 commission
+# 参数，一律用 calc_trade_cost() 重算（`pillar_orchestrator.py:340`）。
+# 原因是网关上报的 commission 只是佣金，不含印花税/过户费，直接采信会让
+# 模拟盘现金比实盘多出来一截。
+#
+# 所以测试里不能写硬编码的费用算术（"cash - qty*price - commission"），
+# 那是在断言一份**已经不生效**的口径；早先的版本就是这么写的，于是
+# 佣金最低 5 元、印花税仅卖出、过户费万分之一这些规则一条都没被守住。
+# 下面这个 helper 走的是生产同一条路径，费率变了两边一起变。
+_MARKET_TO_ASSET = {
+    "a_stock": "cn_equity",
+    "convertible_bond": "convertible_bond",
+    "etf": "etf",
+    "bond": "etf",
+}
+
+
+def _fee(
+    trade_value: float,
+    side: str,
+    market_type: str = "a_stock",
+    trade_date: date | None = None,
+) -> float:
+    """按生产口径算这笔成交的总费用（佣金+印花税+过户费）。
+
+    ``trade_date`` 影响 A 股时变印花税；不传时用 ``date.today()``，
+    与 ``on_fill(market_date=None)`` 的降级行为一致。
+    """
+    fee_params = get_fee_params(_MARKET_TO_ASSET.get(market_type, "cn_equity"))
+    td = (trade_date or date.today()).strftime("%Y%m%d")
+    return calc_trade_cost(trade_value, side, fee_params, trade_date=td)
 
 
 class DummyStrategy:
@@ -118,11 +155,10 @@ def test_run_paper_trading_uses_pillar_orchestrator(tmp_path: Path):
 # 增强测试 — CBCompositeStrategy / StaticHoldStrategy / NAV 追踪
 # ===================================================================
 
-from aipha.runner.pillar_orchestrator import (
+from aipha.runner.pillar_orchestrator import (  # noqa: E402
+    MARKET_RULES,
     CBCompositeStrategy,
     StaticHoldStrategy,
-    PillarState,
-    MARKET_RULES,
 )
 
 
@@ -208,12 +244,14 @@ def test_pillar_orchestrator_on_fill_routes_correctly():
         orch = PillarOrchestrator(pillars, {"cb": 0.3}, 1_000_000)
 
     orch._symbol_pillar["110001.SH"] = "cb"
+    # commission=2.5 会被忽略（见文件头 _fee 说明）；CB 实际最低佣金 5 元
     orch.on_fill("110001.SH", Side.BUY, 50, 100.0, commission=2.5)
 
     state = orch.pillar_states["cb"]
     assert state.positions["110001.SH"] == 50
-    # R92: 买入后 cash = capital - trade_value - commission
-    expected_cash = 300_000 - 50 * 100.0 - 2.5
+    # R92: 买入后 cash = capital - trade_value - 实际费用
+    buy_fee = _fee(50 * 100.0, "buy", "convertible_bond")
+    expected_cash = 300_000 - 50 * 100.0 - buy_fee
     assert abs(state.cash - expected_cash) < 0.01
     # computed NAV = cash + positions_value (50 * 100.0)
     expected_nav = expected_cash + 50 * 100.0
@@ -222,8 +260,11 @@ def test_pillar_orchestrator_on_fill_routes_correctly():
     # 卖出应减少持仓，cash 增加（扣费用）
     orch.on_fill("110001.SH", Side.SELL, 30, 105.0, commission=1.5)
     assert state.positions["110001.SH"] == 20
-    expected_cash2 = expected_cash + 30 * 105.0 - 1.5
+    sell_fee = _fee(30 * 105.0, "sell", "convertible_bond")
+    expected_cash2 = expected_cash + 30 * 105.0 - sell_fee
     assert abs(state.cash - expected_cash2) < 0.01
+    # CB 免印花税：卖出费用应只有佣金（5 元最低）
+    assert sell_fee == 5.0
 
 
 def test_pillar_orchestrator_on_fill_unknown_symbol():
@@ -371,19 +412,23 @@ def test_on_fill_with_commission_deducted_from_nav():
     initial_cash = orch.pillar_states["ml"].cash  # 300,000
     orch._symbol_pillar["000001.SZ"] = "ml"
 
-    # R92: 买入 → cash -= trade_value + commission
+    # R92: 买入 → cash -= trade_value + 实算费用（传入的 commission=10.0 被忽略）
     orch.on_fill("000001.SZ", Side.BUY, 100, 30.0, commission=10.0)
-    expected_cash = initial_cash - 100 * 30.0 - 10.0
+    buy_fee = _fee(100 * 30.0, "buy", "a_stock")
+    expected_cash = initial_cash - 100 * 30.0 - buy_fee
     assert abs(orch.pillar_states["ml"].cash - expected_cash) < 0.01
-    # NAV = cash + positions_value，佣金是真正的成本
+    # NAV = cash + positions_value，费用是真正的成本
     expected_nav = expected_cash + 100 * 30.0  # position value at fill price
     assert abs(orch.get_pillar_nav("ml") - expected_nav) < 0.01
 
-    # R92: 卖出 → cash += trade_value - commission - stamp_tax (A股 0.05%)
+    # R92: 卖出 → cash += trade_value - 实算费用（A股卖出含印花税）
     orch.on_fill("000001.SZ", Side.SELL, 50, 35.0, commission=8.5)
-    stamp_tax = 50 * 35.0 * 0.0005  # A股卖出印花税
-    expected_cash2 = expected_cash + 50 * 35.0 - 8.5 - stamp_tax
+    sell_fee = _fee(50 * 35.0, "sell", "a_stock")
+    expected_cash2 = expected_cash + 50 * 35.0 - sell_fee
     assert abs(orch.pillar_states["ml"].cash - expected_cash2) < 0.01
+    # 印花税只在卖出侧：同额买/卖的费用差应恰好是 0.05% 印花税
+    stamp_tax = 50 * 35.0 * 0.0005
+    assert abs(sell_fee - _fee(50 * 35.0, "buy", "a_stock") - stamp_tax) < 0.01
 
 
 def test_positions_value_uses_last_price():
@@ -526,6 +571,9 @@ def test_etf_fallback_warning(caplog):
 
     # 应有降级 warning
     assert any("降级" in r.message or "未注册" in r.message for r in caplog.records)
+    # 且降级不等于崩溃：pillar 仍然建起来了、资金也分配到位
+    assert "etf" in orch.pillar_states
+    assert orch.pillar_states["etf"].capital == 500_000
 
 
 # ===================================================================
@@ -550,8 +598,11 @@ def test_compute_nav_returns_cash_plus_positions_value():
     # 模拟买入后: cash 减少, 持仓增加
     orch._symbol_pillar["000001.SZ"] = "ml"
     orch.on_fill("000001.SZ", Side.BUY, 200, 25.0)
-    expected_cash = 1_000_000 - 200 * 25.0
+    expected_cash = 1_000_000 - 200 * 25.0 - _fee(200 * 25.0, "buy", "a_stock")
     expected_nav = expected_cash + 200 * 25.0  # cash + positions
+    # 两侧都钉住：NAV 对了但 cash/positions 各错一半、正好抵消的情况也要排除
+    assert abs(state.cash - expected_cash) < 0.01
+    assert state.positions["000001.SZ"] == 200
     assert abs(orch.get_pillar_nav("ml") - expected_nav) < 0.01
 
 
@@ -570,14 +621,18 @@ def test_a_stock_sell_stamp_tax():
 
     # 买入: 无印花税
     orch.on_fill("600036.SH", Side.BUY, 100, 40.0, commission=5.0)
-    buy_cash = 500_000 - 100 * 40.0 - 5.0
+    buy_fee = _fee(100 * 40.0, "buy", "a_stock")
+    buy_cash = 500_000 - 100 * 40.0 - buy_fee
     assert abs(state.cash - buy_cash) < 0.01
 
     # 卖出: 有印花税 (0.05%)
     orch.on_fill("600036.SH", Side.SELL, 100, 42.0, commission=5.0)
-    stamp_tax = 100 * 42.0 * 0.0005
-    sell_cash = buy_cash + 100 * 42.0 - 5.0 - stamp_tax
+    sell_fee = _fee(100 * 42.0, "sell", "a_stock")
+    sell_cash = buy_cash + 100 * 42.0 - sell_fee
     assert abs(state.cash - sell_cash) < 0.01
+    # 印花税确实只出现在卖出侧（这才是本用例的题目）
+    stamp_tax = 100 * 42.0 * 0.0005
+    assert abs(sell_fee - _fee(100 * 42.0, "buy", "a_stock") - stamp_tax) < 0.01
 
 
 def test_cb_sell_no_stamp_tax():
@@ -595,9 +650,12 @@ def test_cb_sell_no_stamp_tax():
 
     orch.on_fill("110001.SH", Side.BUY, 50, 100.0)
     orch.on_fill("110001.SH", Side.SELL, 50, 105.0, commission=1.0)
-    # CB 无印花税: cash = initial - buy_value + sell_value - commission
-    expected = 300_000 - 50 * 100.0 + 50 * 105.0 - 1.0
+    buy_fee = _fee(50 * 100.0, "buy", "convertible_bond")
+    sell_fee = _fee(50 * 105.0, "sell", "convertible_bond")
+    expected = 300_000 - 50 * 100.0 - buy_fee + 50 * 105.0 - sell_fee
     assert abs(state.cash - expected) < 0.01
+    # CB 免印花税也免过户费 → 同额买/卖费用完全相同（只剩佣金）
+    assert _fee(50 * 100.0, "sell", "convertible_bond") == buy_fee
 
 
 def test_on_fill_market_date_parameter():
@@ -640,8 +698,11 @@ def test_on_fill_sell_overcount_protection():
     orch.on_fill("110001.SH", Side.SELL, 50, 105.0)
     # 持仓应清零
     assert "110001.SH" not in state.positions
-    # 现金只增加 30 张 * 105
-    expected_cash = cash_before + 30 * 105.0
+    # 现金只按**实际卖出的 30 张**结算，费用也必须按 30 张重算 ——
+    # 若按下单的 50 张收费，超卖保护就只挡住了股数、没挡住钱。
+    expected_cash = (
+        cash_before + 30 * 105.0 - _fee(30 * 105.0, "sell", "convertible_bond")
+    )
     assert abs(state.cash - expected_cash) < 0.01
 
 
@@ -688,8 +749,12 @@ def test_etf_sell_no_stamp_tax():
     state = orch.pillar_states["etf"]
     orch.on_fill("159915.SZ", Side.BUY, 1000, 3.5)
     orch.on_fill("159915.SZ", Side.SELL, 1000, 3.6, commission=2.0)
-    expected = 200_000 - 1000 * 3.5 + 1000 * 3.6 - 2.0
+    buy_fee = _fee(1000 * 3.5, "buy", "etf")
+    sell_fee = _fee(1000 * 3.6, "sell", "etf")
+    expected = 200_000 - 1000 * 3.5 - buy_fee + 1000 * 3.6 - sell_fee
     assert abs(state.cash - expected) < 0.01
+    # ETF 免印花税 → 同额买/卖费用相同
+    assert _fee(1000 * 3.6, "buy", "etf") == sell_fee
 
 
 def test_multi_pillar_nav_isolation():
@@ -763,7 +828,15 @@ def test_on_fill_sell_empty_position():
     cash_before = orch.pillar_states["cb"].cash
     # 卖出不存在的持仓：actual_sell=min(100,0)=0
     orch.on_fill("110001.SH", Side.SELL, 100, 100.0)
-    # 现金应不变（actual_value=0, no stamp_tax）
+    # 现金必须**一分不动**。这条曾经真的失败：actual_sell=0 时代码仍会
+    # 调 calc_trade_cost(0, "sell", ...)，而佣金有 5 元最低值，于是一笔
+    # 零成交照样扣 5 元。网关重发的 fill、或持仓已清空后迟到的卖出回报，
+    # 都会走到这里，每次放血 5 元。
+    assert abs(orch.pillar_states["cb"].cash - cash_before) < 0.01
+    assert "110001.SH" not in orch.pillar_states["cb"].positions
+
+    # qty=0 的脏 fill 同理
+    orch.on_fill("110001.SH", Side.BUY, 0, 100.0)
     assert abs(orch.pillar_states["cb"].cash - cash_before) < 0.01
 
 
@@ -778,9 +851,13 @@ def test_on_fill_zero_commission():
         orch = PillarOrchestrator(pillars, {"cb": 1.0}, 100_000)
 
     orch._symbol_pillar["110001.SH"] = "cb"
+    # commission=0.0 传进去不代表这笔交易免费：费用只由 calc_trade_cost 决定。
+    # 1000 元成交额算出来的佣金低于下限，落到 5 元最低佣金上。
     orch.on_fill("110001.SH", Side.BUY, 10, 100.0, commission=0.0)
     state = orch.pillar_states["cb"]
-    assert abs(state.cash - (100_000 - 10 * 100.0)) < 0.01
+    buy_fee = _fee(10 * 100.0, "buy", "convertible_bond")
+    assert buy_fee == 5.0, "1000 元成交额应触发 5 元最低佣金"
+    assert abs(state.cash - (100_000 - 10 * 100.0 - buy_fee)) < 0.01
 
 
 def test_daily_return_zero_prev_nav():

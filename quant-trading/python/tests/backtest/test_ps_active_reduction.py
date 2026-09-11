@@ -1,4 +1,16 @@
-"""PS主动减持（position_scale < 0.85 时缩减已有仓位）专项测试。
+"""PS主动减持（position_scale < reduce_threshold 时缩减已有仓位）专项测试。
+
+⚠️ 主动减持**默认关闭**：``UnifiedPositionSizer.reduce_threshold``
+默认 0.0（`position_sizing.py:259`，R161 §4.1），引擎侧的减持分支
+在 `engine.py:1001` 上 ``_ps_reduce_threshold > 0`` 才进入。默认关掉的
+原因就是死亡螺旋 —— 回撤触发减仓、减仓压低收益、净值起不来、继续减仓。
+所以本文件的 overlay 一律**显式**传 ``reduce_threshold=0.85`` 打开它；
+不传的话「没有减持」这些用例会全部通过，但通过的原因是功能没开，
+而不是逻辑正确。
+
+引擎还有两道配套护栏，本文件用默认值：
+``scale_floor=0.3``（position_scale 不会低于 0.3，防清仓）、
+``reduce_cooldown_days=5``（两次主动减持至少隔 5 天）。
 
 覆盖场景：
 1. scale < 0.85 时已有仓位被减持，减持数量 = qty * (1 - scale) 取整
@@ -168,9 +180,16 @@ class TestPSActiveReduction:
         )
 
     def _make_drawdown_overlay(
-        self, threshold: float = 0.03, max_threshold: float = 0.10, min_scale: float = 0.3,
+        self,
+        threshold: float = 0.03,
+        max_threshold: float = 0.10,
+        min_scale: float = 0.3,
+        reduce_threshold: float = 0.85,
     ) -> PositionSizingOverlay:
-        """创建一个回撤控制 overlay。"""
+        """创建一个回撤控制 overlay（主动减持显式开启）。
+
+        ``reduce_threshold`` 必须显式给：默认 0.0 = 主动减持禁用（见模块 docstring）。
+        """
         return PositionSizingOverlay(
             vol_config=VolatilityTargetConfig(enabled=False),
             dd_config=DrawdownControlConfig(
@@ -179,11 +198,14 @@ class TestPSActiveReduction:
                 min_scale=min_scale,
                 enabled=True,
             ),
+            reduce_threshold=reduce_threshold,
         )
 
     def test_no_reduction_when_scale_above_threshold(self):
         """scale >= 0.85 时不触发减持，仓位不变。"""
         # 使用高目标波动率 overlay 使 scale 保持在 1.0
+        # reduce_threshold 同样要显式开启：否则「没减持」是因为功能没开，
+        # 而不是因为 scale 高于阈值，这条用例就白测了。
         overlay = PositionSizingOverlay(
             vol_config=VolatilityTargetConfig(
                 target_vol=0.50,  # 很高的目标波动率 → scale ≈ 1.0
@@ -191,6 +213,7 @@ class TestPSActiveReduction:
                 enabled=True,
             ),
             dd_config=DrawdownControlConfig(enabled=False),
+            reduce_threshold=0.85,
         )
         strat = BuyThenHoldStrategy(buy_qty=1000)
         eng = _engine(strat, position_sizing=overlay)

@@ -203,8 +203,14 @@ class TestComputeSUEValues:
         assert result["A"] == 2.0
         assert result["B"] == -1.5
 
-    def test_missing_sue_negative_inf(self):
-        """SUE 缺失时返回 -inf"""
+    def test_missing_sue_is_nan(self):
+        """SUE 缺失时返回 NaN（"无数据"），不是 -inf（"有数据、排最后"）。
+
+        原用例断言 -inf。但在 rank_normalize 里这两个值语义不同：
+        -inf = 有数据、排最末、**保留**；NaN = 无数据、**剔除**。
+        用 -inf 表示缺失，等于让没有超预期数据的股票靠动量/质量
+        照样排进买入名单 —— 而 PEAD 的整个立论就是 SUE。
+        """
         c = EquityCandidateInfo(
             symbol="X",
             close=20.0,
@@ -212,7 +218,7 @@ class TestComputeSUEValues:
             circ_mv=100_000.0,
         )
         result = self.strategy._compute_sue_values([c])
-        assert result["X"] == float("-inf") or math.isfinite(result.get("X", 0))
+        assert math.isnan(result["X"])
 
 
 # ============================================================
@@ -331,7 +337,13 @@ class TestPEADBoundaryScenarios:
             assert strategy._extra_filter(c, self.ctx) is False
 
     def test_all_none_financial_data_no_crash(self):
-        """所有财务 metadata 字段均为 None 时不崩溃"""
+        """所有财务 metadata 字段均为 None 时不崩溃，且一个都不推。
+
+        原用例断言"全部返回，只是分数低"。分数低不等于不买 ——
+        top_k 是按排名取的，一组全缺数据的候选里排第一的照样会被买。
+        sue 全 None 时 PEAD 没有任何选股依据，正确结果是空名单
+        （与 TestPEADSueNoneFiltered 同一契约）。
+        """
         candidates = [
             EquityCandidateInfo(
                 symbol=f"S{i}",
@@ -346,7 +358,7 @@ class TestPEADBoundaryScenarios:
         ]
         result = self.strategy._score_candidates(candidates, self.ctx)
         assert isinstance(result, list)
-        assert len(result) == 3  # 全部返回，只是分数低
+        assert result == []
 
     def test_sue_online_computation_path(self):
         """eps/eps_prev/eps_std 在线计算 SUE 路径"""
@@ -365,7 +377,12 @@ class TestPEADBoundaryScenarios:
         assert abs(result["ONLINE"] - expected) < 1e-9
 
     def test_sue_online_zero_std_fallback(self):
-        """eps_std = 0 时无法计算 SUE → fallback -inf"""
+        """eps_std = 0 时无法计算 SUE → NaN（缺失），随后被剔除。
+
+        除以 0 标准差没有意义，属于"算不出来"而不是"算出来很差"，
+        所以和 metadata 里压根没有 sue 走同一条路（见
+        test_missing_sue_is_nan 的理由）。
+        """
         c = EquityCandidateInfo(
             symbol="ZERO_STD",
             close=20.0,
@@ -373,7 +390,9 @@ class TestPEADBoundaryScenarios:
             circ_mv=500_000.0,
         )
         result = self.strategy._compute_sue_values([c])
-        assert result["ZERO_STD"] == float("-inf")
+        assert math.isnan(result["ZERO_STD"])
+        # 端到端：算不出 SUE 的候选不进买入名单
+        assert self.strategy._score_candidates([c], _make_context()) == []
 
     def test_sue_extreme_values_ranking(self):
         """SUE 极高 vs 极低的排名正确（纯 SUE 权重）"""

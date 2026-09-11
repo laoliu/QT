@@ -7,12 +7,11 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from aipha.api import deps
-from aipha.api.app import create_app
 from aipha.api.data_hub import router as data_router
 from aipha.api.deps import create_access_token, get_result_store
 
 
-def _bootstrap(tmp_path: Path) -> tuple[TestClient, dict[str, str], Path]:
+def _bootstrap(tmp_path: Path, app) -> tuple[TestClient, dict[str, str], Path]:
     deps._DB_PATH = tmp_path / "backtest_index.db"
     get_result_store.cache_clear()
     cache_dir = tmp_path / "cache"
@@ -24,7 +23,7 @@ def _bootstrap(tmp_path: Path) -> tuple[TestClient, dict[str, str], Path]:
     store = get_result_store()
     store.upsert_user({"username": "researcher1", "name": "researcher1", "password_hash": "x", "role": "researcher"})
     headers = {"Authorization": f"Bearer {create_access_token('researcher1', 'researcher')}"}
-    return TestClient(create_app()), headers, cache_dir
+    return TestClient(app), headers, cache_dir
 
 
 def _write_equity(cache_dir: Path, symbol: str, month: str, closes: list[float]) -> None:
@@ -40,8 +39,8 @@ def _write_equity(cache_dir: Path, symbol: str, month: str, closes: list[float])
     df.to_parquet(cache_dir / f"{symbol}_{month}_daily_qfq.parquet")
 
 
-def test_data_hub_routes_use_real_cache_files(tmp_path: Path) -> None:
-    client, headers, cache_dir = _bootstrap(tmp_path)
+def test_data_hub_routes_use_real_cache_files(tmp_path: Path, app) -> None:
+    client, headers, cache_dir = _bootstrap(tmp_path, app)
     _write_equity(cache_dir, "000001.SZ", "202401", [10, 11, 12])
     _write_equity(cache_dir, "000002.SZ", "202401", [20, 21, 22])
     _write_equity(cache_dir, "000001.SZ", "202402", [13, 14, 15])
@@ -67,8 +66,8 @@ def test_data_hub_routes_use_real_cache_files(tmp_path: Path) -> None:
     assert heatmap.json()["data"]["fields"] == ["open", "high", "low", "close", "volume"]
 
 
-def test_bars_and_indicators_are_loaded_from_cached_parquet(tmp_path: Path) -> None:
-    client, headers, cache_dir = _bootstrap(tmp_path)
+def test_bars_and_indicators_are_loaded_from_cached_parquet(tmp_path: Path, app) -> None:
+    client, headers, cache_dir = _bootstrap(tmp_path, app)
     _write_equity(cache_dir, "600000.SH", "202401", [10, 11, 12, 13, 14])
     _write_equity(cache_dir, "600000.SH", "202402", [15, 16, 17, 18, 19])
 
@@ -92,8 +91,8 @@ def test_bars_and_indicators_are_loaded_from_cached_parquet(tmp_path: Path) -> N
     assert "BOLL_UPPER" in data["indicators"]
 
 
-def test_data_update_creates_task_and_update_log(tmp_path: Path) -> None:
-    client, headers, _cache_dir = _bootstrap(tmp_path)
+def test_data_update_creates_task_and_update_log(tmp_path: Path, app) -> None:
+    client, headers, _cache_dir = _bootstrap(tmp_path, app)
 
     queued = client.post("/api/v1/data/update", headers=headers, json={"source": "cb"})
     assert queued.status_code == 200

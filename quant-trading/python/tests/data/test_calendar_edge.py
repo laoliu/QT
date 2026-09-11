@@ -226,12 +226,21 @@ class TestFingerprintEdge:
 # 10. _is_obvious_holiday: 春节/端午/中秋正确标记（已修复）
 # ============================================================
 class TestObviousHolidayFixed:
-    def test_spring_festival_range_is_holiday(self):
-        """更新后的春节区间 1/28~2/10 内的工作日被正确标记为假期"""
+    def test_lunar_holidays_not_guessed(self):
+        """降级日历不猜农历节日 —— 这些都是真实交易日
+
+        原实现用固定公历窗口近似春节/端午/中秋，结果把下面这三天
+        （全是真实开市日）当成了假期：
+        - 2023-02-01：2023 年春节休市 1/21~1/27，2/1 正常交易
+        - 2023-06-12：2023 年端午休市 6/22~6/24
+        - 2023-09-18：2023 年中秋在 9/29
+        农历日期每年漂移 30 天以上，固定窗口不是"精度不够"而是错位。
+        把真实交易日标成假期，order_validator 会拒单、engine 会整天跳过。
+        """
         cal = CNStockCalendar()
-        d = date(2023, 2, 1)  # 周三，在春节核心区间
         fallback = cal._generate_fallback_calendar()
-        assert d not in fallback
+        for d in (date(2023, 2, 1), date(2023, 6, 12), date(2023, 9, 18)):
+            assert d in fallback, f"{d} 是真实交易日，不能被降级日历排除"
 
     def test_spring_festival_edge_not_holiday(self):
         """春节区间外的日期不应被标记为假期"""
@@ -239,20 +248,6 @@ class TestObviousHolidayFixed:
         d = date(2023, 1, 25)  # 周三，不在缩窄后的区间内
         fallback = cal._generate_fallback_calendar()
         assert d in fallback  # 应该是交易日
-
-    def test_dragon_boat_is_holiday(self):
-        """6月8-14日区间内的工作日被正确标记为假期"""
-        cal = CNStockCalendar()
-        d = date(2023, 6, 12)  # 周一，在缩窄后的端午区间
-        fallback = cal._generate_fallback_calendar()
-        assert d not in fallback
-
-    def test_mid_autumn_is_holiday(self):
-        """9月13-19日区间内的工作日被正确标记为假期"""
-        cal = CNStockCalendar()
-        d = date(2023, 9, 18)  # 周一，在缩窄后的中秋区间
-        fallback = cal._generate_fallback_calendar()
-        assert d not in fallback
 
     def test_non_holiday_still_trading(self):
         """非假期区间的工作日仍然是交易日"""
@@ -286,48 +281,22 @@ class TestFallbackHolidayRanges:
                 f"Year {year}: {len(year_days)} trading days, expected 225~255"
             )
 
-    def test_spring_festival_not_too_wide(self):
-        """春节假期区间不应超过 14 天"""
-        cal = CNStockCalendar()
-        for year in range(2010, 2026):
-            holiday_days = 0
-            # 只统计春节窗口（排除元旦）
-            for month, day_range in [(1, range(2, 32)), (2, range(1, 29))]:
-                for day in day_range:
-                    try:
-                        d = date(year, month, day)
-                        if cal._is_obvious_holiday(d):
-                            holiday_days += 1
-                    except ValueError:
-                        pass
-            # 1/28~2/10 = 14 天
-            assert holiday_days <= 14, (
-                f"Year {year}: Spring Festival window = {holiday_days} days, expected <= 14"
-            )
+    def test_no_lunar_holiday_windows(self):
+        """春节/端午/中秋所在月份不得出现任何猜测出来的假期
 
-    def test_dragon_boat_not_too_wide(self):
-        """端午假期区间不应超过 7 天"""
+        除 1/1 元旦外，1、2、6、9 四个月里不应有 fallback 假期 ——
+        有就说明农历窗口又被加回来了。
+        """
         cal = CNStockCalendar()
         for year in range(2010, 2026):
-            holiday_days = sum(
-                1 for day in range(1, 31)
-                if cal._is_obvious_holiday(date(year, 6, day))
-            )
-            assert holiday_days <= 7, (
-                f"Year {year}: Dragon Boat window = {holiday_days} days, expected <= 7"
-            )
-
-    def test_mid_autumn_not_too_wide(self):
-        """中秋假期区间不应超过 7 天"""
-        cal = CNStockCalendar()
-        for year in range(2010, 2026):
-            holiday_days = sum(
-                1 for day in range(1, 31)
-                if cal._is_obvious_holiday(date(year, 9, day))
-            )
-            assert holiday_days <= 7, (
-                f"Year {year}: Mid-Autumn window = {holiday_days} days, expected <= 7"
-            )
+            for month, last_day in [(1, 31), (2, 28), (6, 30), (9, 30)]:
+                guessed = [
+                    date(year, month, day)
+                    for day in range(1, last_day + 1)
+                    if cal._is_obvious_holiday(date(year, month, day))
+                    and not (month == 1 and day == 1)  # 元旦是公历固定日
+                ]
+                assert not guessed, f"{year}-{month:02d} 出现猜测假期: {guessed}"
 
     def test_known_non_holidays_are_trading_days(self):
         """一些确定不是假日的日期不应被 fallback 误判"""
@@ -346,18 +315,34 @@ class TestFallbackHolidayRanges:
             )
 
     def test_known_holidays_still_marked(self):
-        """确定的假日仍然被正确标记"""
+        """公历固定日期的假日仍然被正确标记
+
+        只列公历固定假期。原用例还断言 2024-02-05「春节期间」，
+        但 2024 年春节休市是 2/9~2/16，2/5 周一是正常交易日 ——
+        那条断言本身就和市场事实相反。农历假期改由精确日历文件负责。
+        """
         cal = CNStockCalendar()
         holidays = [
             date(2024, 1, 1),   # 元旦
-            date(2024, 2, 5),   # 春节期间
             date(2024, 4, 5),   # 清明
             date(2024, 5, 1),   # 劳动节
-            date(2024, 6, 10),  # 端午（大概率在此区间）
-            date(2024, 9, 15),  # 中秋（大概率在此区间）
             date(2024, 10, 1),  # 国庆
         ]
         for d in holidays:
             assert cal._is_obvious_holiday(d), (
                 f"{d} should be marked as holiday"
             )
+
+    def test_real_trading_days_never_dropped(self):
+        """一组已核实的真实交易日必须全部保留在降级日历里"""
+        cal = CNStockCalendar()
+        fallback = cal._generate_fallback_calendar()
+        real_trading_days = [
+            date(2024, 1, 29),  # 春节前，正常交易
+            date(2024, 2, 5),   # 春节前，正常交易
+            date(2024, 2, 8),   # 春节休市前最后一个交易日
+            date(2024, 6, 3),   # 端午前
+            date(2024, 9, 13),  # 中秋休市前最后一个交易日
+        ]
+        for d in real_trading_days:
+            assert d in fallback, f"{d} 是真实交易日，不能被降级日历排除"

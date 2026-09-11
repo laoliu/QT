@@ -14,10 +14,16 @@ import yaml
 from aipha.api.auth import get_current_user, require_role
 from aipha.api.deps import get_result_store
 from aipha.api.schemas import ApiResponse, PaginatedResponse, PaginationMeta, UserInfo
+from aipha.utils.paths import PROJECT_ROOT
 
 router = APIRouter(prefix="/system", tags=["system"])
 
-_ROOT_DIR = Path(__file__).resolve().parents[4]
+# parents[4] 会跳到 quant-trading/（没有 configs/、没有 .env.example），
+# 于是 GET /system/config/env 永远返回空列表，而「手动黑名单」规则的
+# item_count 永远是 0 —— 管理界面显示「没有任何黑名单标的」，
+# 实际 configs/universe/exclude_list.yml 里是有的。
+# 统一走 aipha.utils.paths（认 configs/ 路标，不数层数）。
+_ROOT_DIR = PROJECT_ROOT
 _UNIVERSE_CONFIG = _ROOT_DIR / "configs" / "universe" / "exclude_list.yml"
 _ENV_EXAMPLE = _ROOT_DIR / ".env.example"
 

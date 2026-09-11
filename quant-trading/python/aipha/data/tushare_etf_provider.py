@@ -73,10 +73,12 @@ class TuShareETFProvider:
         retry_interval: float = 3.0,
         log_interval: float = 600.0,
         alert_after: float = 1800.0,
+        max_wait: float | None = None,
     ) -> pd.DataFrame:
-        """获取 ETF 全市场日线快照（缓存优先，无限重试）。
+        """获取 ETF 全市场日线快照（缓存优先，默认无限重试）。
 
-        行为与 CB/Equity 的 get_daily_snapshot() 完全对齐。
+        行为与 CB/Equity 的 get_daily_snapshot() 完全对齐（含 ``max_wait``
+        语义：默认 None = 不设上限；给了值且超时抛 ``TimeoutError``）。
         """
         cache_path = self._cache_dir / f"fund_daily_{trade_date}.parquet"
 
@@ -91,6 +93,15 @@ class TuShareETFProvider:
         attempt = 0
 
         while True:
+            # 等待上限（默认 None = 不设上限）。检查放在打接口之前，故
+            # max_wait=0 等价于「只用缓存」。
+            elapsed = time.monotonic() - start_ts
+            if max_wait is not None and elapsed >= max_wait:
+                raise TimeoutError(
+                    f"fund_daily {trade_date} 未取到数据: 已等待 "
+                    f"{elapsed:.1f}s (上限 {max_wait:.1f}s, {attempt} 次尝试)"
+                )
+
             attempt += 1
             try:
                 df = self._gateway.call(

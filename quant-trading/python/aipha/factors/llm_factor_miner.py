@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
 
 # ── 字段注册表加载（单一来源: configs/mining/field_registry.yml）────
 
-_REGISTRY_PATH = Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+# parents[2]=python ← configs/ 所在层（parents[3]=quant-trading 下没有 configs/）
+_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "configs" / "mining" / "field_registry.yml"
 _registry_cache: dict | None = None
 
 

@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.strategy.cb_orthogonal_factors import (
     HighDistanceTracker,
     IVOLTracker,
@@ -151,8 +152,9 @@ class TestHighDistanceTracker:
     """52 周高点距离 Tracker 单测 — ≥10 个用例。"""
 
     def test_init_defaults(self):
+        """默认回望窗口取 §13.8 的 TRADING_DAYS_PER_YEAR（A 股 244），不是 252。"""
         t = HighDistanceTracker()
-        assert t.lookback == 252
+        assert t.lookback == TRADING_DAYS_PER_YEAR
 
     def test_init_custom(self):
         t = HighDistanceTracker(lookback=60)

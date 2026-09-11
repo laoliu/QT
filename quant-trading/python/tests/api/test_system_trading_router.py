@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from aipha.api import deps
-from aipha.api.app import create_app
 from aipha.api.deps import create_access_token, get_result_store
 
 
@@ -26,9 +25,8 @@ def _auth_headers(store, username: str, role: str) -> dict[str, str]:
     return {'Authorization': f'Bearer {token}'}
 
 
-def test_permission_matrix_can_be_persisted(tmp_path: Path):
+def test_permission_matrix_can_be_persisted(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     headers = _auth_headers(store, 'admin1', 'admin')
 
@@ -58,9 +56,8 @@ def test_permission_matrix_can_be_persisted(tmp_path: Path):
     assert reloaded.json()['data'] == new_matrix
 
 
-def test_system_task_queue_and_audit_routes_return_page_data(tmp_path: Path):
+def test_system_task_queue_and_audit_routes_return_page_data(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     admin_headers = _auth_headers(store, 'admin1', 'admin')
     ops_headers = _auth_headers(store, 'ops1', 'ops')
@@ -179,9 +176,8 @@ def test_system_task_queue_and_audit_routes_return_page_data(tmp_path: Path):
     assert a_env['value'] == 'paper'
 
 
-def test_trading_create_supports_combo_and_custom_strategies(tmp_path: Path):
+def test_trading_create_supports_combo_and_custom_strategies(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     researcher_headers = _auth_headers(store, 'researcher1', 'researcher')
     ops_headers = _auth_headers(store, 'ops1', 'ops')
@@ -255,9 +251,8 @@ def test_trading_create_supports_combo_and_custom_strategies(tmp_path: Path):
     assert isinstance(pnl, list)
 
 
-def test_strategy_lifecycle_checklist_and_log_are_persisted(tmp_path: Path):
+def test_strategy_lifecycle_checklist_and_log_are_persisted(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     researcher_headers = _auth_headers(store, 'researcher1', 'researcher')
     risk_headers = _auth_headers(store, 'risk1', 'risk_approver')
@@ -291,9 +286,8 @@ def test_strategy_lifecycle_checklist_and_log_are_persisted(tmp_path: Path):
     assert entries[0]['comment'] == 'ready for backtest'
 
 
-def test_combo_routes_return_normalized_structure_and_persist_versions(tmp_path: Path):
+def test_combo_routes_return_normalized_structure_and_persist_versions(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     researcher_headers = _auth_headers(store, 'researcher1', 'researcher')
 
@@ -382,9 +376,8 @@ def test_combo_routes_return_normalized_structure_and_persist_versions(tmp_path:
     assert combo_backtest_resp.json()['data']['combo_id'] == combo_id
 
 
-def test_factor_routes_return_enriched_data_for_pages(tmp_path: Path):
+def test_factor_routes_return_enriched_data_for_pages(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     researcher_headers = _auth_headers(store, 'researcher1', 'researcher')
 
@@ -428,9 +421,8 @@ def test_factor_routes_return_enriched_data_for_pages(tmp_path: Path):
     assert isinstance(events_resp.json()['data'], list)
 
 
-def test_backtest_and_data_update_submission_routes_persist_async_tasks(tmp_path: Path):
+def test_backtest_and_data_update_submission_routes_persist_async_tasks(tmp_path: Path, app):
     store = _bootstrap_store(tmp_path)
-    app = create_app()
     client = TestClient(app)
     researcher_headers = _auth_headers(store, 'researcher1', 'researcher')
 

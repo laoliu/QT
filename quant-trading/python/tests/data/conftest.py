@@ -20,15 +20,19 @@ def reset_gateway():
 
 
 @pytest.fixture
-def mock_tushare_api(mocker):
+def mock_tushare_api(monkeypatch):
     """Mock TuShare Pro API（兼容 TuShareGateway 单例）
 
     同时 mock tushare.pro_api 和 tushare.set_token，
     确保 TuShareGateway 初始化时使用 mock 对象。
+
+    用内置的 monkeypatch 而不是 pytest-mock 的 mocker：这两处 patch
+    monkeypatch 原生就能做，多挂一个未安装的插件只会让整个文件报
+    "fixture 'mocker' not found"。
     """
     mock_api = MagicMock()
-    mocker.patch("tushare.pro_api", return_value=mock_api)
-    mocker.patch("tushare.set_token")
+    monkeypatch.setattr("tushare.pro_api", lambda *args, **kwargs: mock_api)
+    monkeypatch.setattr("tushare.set_token", lambda *args, **kwargs: None)
     return mock_api
 
 

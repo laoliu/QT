@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.utils.vectorized import (
     batch_compute_correlation,
     batch_compute_covariance,
@@ -57,7 +58,9 @@ class TestComputeVolatility:
         vol = compute_volatility(returns, annualize=True)
 
         daily_std = np.std(returns, ddof=1)
-        expected = daily_std * np.sqrt(252)
+        # §13.8：年化因子只能来自 trading_calendar_constants，写死 252 会在
+        # A 股口径（244）下产生 1.6% 的系统性偏差
+        expected = daily_std * np.sqrt(TRADING_DAYS_PER_YEAR)
         assert abs(vol - expected) < 1e-10
 
     def test_non_annualized_volatility(self):

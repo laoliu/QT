@@ -21,6 +21,21 @@ import json
 import sys
 import time
 
+# 这个文件是**诊断脚本**而不是 pytest 用例：整个模块体在 import 期就向
+# 真实 QMT bridge 发 HTTP 请求，末尾还 sys.exit()。被 pytest 收集时那句
+# sys.exit 会让整个 collection 直接 INTERNALERROR，全量套件必须靠
+# --ignore 才能跑完。这里在 import 期就跳过，脚本主体一行都不执行；
+# 手动跑 `python tests/test_direct_mode.py` 时 __name__ == "__main__"，
+# 行为与原来完全一致。
+if __name__ != "__main__":
+    import pytest
+
+    pytest.skip(
+        "需要运行中的 QMT bridge（192.168.3.30:58088）；"
+        "手动执行：python tests/test_direct_mode.py",
+        allow_module_level=True,
+    )
+
 BASE = "http://192.168.3.30:58088"
 passed = 0
 failed = 0

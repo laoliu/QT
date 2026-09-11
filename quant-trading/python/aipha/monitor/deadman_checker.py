@@ -18,10 +18,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from aipha.utils.paths import KILL_SWITCH_PATH
+
 logger = logging.getLogger(__name__)
 
 _CN_TZ = timezone(timedelta(hours=8))
-_PROJ_ROOT = Path(__file__).resolve().parents[3]
+_PROJ_ROOT = Path(__file__).resolve().parents[3]  # ⚠ 偏一层，见 aipha/utils/paths.py
 
 
 class DeadmanCheckResult:
@@ -82,7 +84,7 @@ def run_deadman_check(
 
 def _check_kill_switch_flag(result: DeadmanCheckResult) -> None:
     """检查 Kill Switch 是否被遗留激活。"""
-    kill_flag = _PROJ_ROOT / "configs" / "kill_switch.flag"
+    kill_flag = KILL_SWITCH_PATH
     if kill_flag.exists():
         try:
             content = kill_flag.read_text(encoding="utf-8").strip()

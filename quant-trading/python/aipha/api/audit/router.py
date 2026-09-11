@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from aipha.api.schemas import ApiResponse
+from aipha.utils.compliance_config import DEFAULT_COMPLIANCE_CONFIG_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -234,8 +235,10 @@ async def yearly_summary(
 @router.get("/risk-config")
 async def get_risk_config() -> ApiResponse:
     """Get current participation rate and risk configuration."""
-    # Read from algo_trading_compliance.yml if exists
-    config_path = Path("configs/algo_trading_compliance.yml")
+    # Read from algo_trading_compliance.yml if exists.
+    # 用包内解析出的绝对路径，不要用相对 CWD 的路径 —— API 进程的工作目录
+    # 不一定是 python/，那样会静默返回 source="default" 而不是真实配置。
+    config_path = DEFAULT_COMPLIANCE_CONFIG_PATH
     config: dict[str, Any] = {
         "max_participation_rate": 0.10,
         "max_participation_rate_crowded": 0.05,
@@ -268,7 +271,7 @@ async def update_risk_config(
     ),
 ) -> ApiResponse:
     """Update participation rate configuration."""
-    config_path = Path("configs/algo_trading_compliance.yml")
+    config_path = DEFAULT_COMPLIANCE_CONFIG_PATH
     if not config_path.is_file():
         raise HTTPException(404, "Config file not found")
 

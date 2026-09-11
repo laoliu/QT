@@ -2,12 +2,18 @@
 
 验证 FillModel 能正确配合 MarketRulesConvertibleBond 工作：
 - lot_size=10 检查
-- 无涨跌停限制
+- 2022 新规 ±20% 涨跌停（非首日）
 - 停牌拒绝
 - SameBarClose（T+0 模型）
 - VolumeConstrained + CB lot_size
 - TwapSlice 使用 rules.lot_size 而非硬编码
 - 强赎警告透传
+
+注意：所有 Bar 都必须给 prev_close。§13.3 规定 prev_close 缺失时
+涨跌停无法校验 —— 不得静默放行，一律拒单（DATA_MISSING）。
+不给 prev_close 的话 precheck 会在 fill model 之前就短路，
+测试看起来在测撮合，实际什么都没测到。
+（本文件早期版本正是如此，且 docstring 还写着「无涨跌停限制」。）
 """
 
 from datetime import datetime
@@ -62,7 +68,10 @@ def eq_rules() -> MarketRulesCNEquity:
 
 @pytest.fixture
 def cb_bar() -> Bar:
-    """正常可转债行情"""
+    """正常可转债行情
+
+    prev_close=120 → 2022 新规 ±20% 区间 [96, 144]，close=122 在区间内。
+    """
     return Bar(
         symbol="127075.SZ",
         start_ts=datetime(2024, 1, 15, 9, 30),
@@ -73,6 +82,7 @@ def cb_bar() -> Bar:
         close=122.0,
         volume=100000,
         is_suspended=False,
+        prev_close=120.0,
     )
 
 
@@ -89,12 +99,16 @@ def suspended_bar() -> Bar:
         close=120.0,
         volume=0,
         is_suspended=True,
+        prev_close=120.0,
     )
 
 
 @pytest.fixture
 def limit_up_bar() -> Bar:
-    """涨停行情（A 股场景，CB 不适用）"""
+    """涨停行情（A 股场景，CB 不适用）
+
+    prev_close=10 → close=11 正好是 A 股 +10% 涨停价。
+    """
     return Bar(
         symbol="600000.SH",
         start_ts=datetime(2024, 1, 15, 9, 30),
@@ -106,6 +120,7 @@ def limit_up_bar() -> Bar:
         volume=50000,
         is_suspended=False,
         is_limit_up=True,
+        prev_close=10.0,
     )
 
 
@@ -153,6 +168,7 @@ class TestMarketRulesProtocol:
             end_ts=cb_bar.end_ts,
             open=10.0, high=11.0, low=9.9, close=10.5,
             volume=50000, is_suspended=False,
+            prev_close=10.0,
         )
 
         r_eq = eq_rules.precheck_order(order=order, bar=eq_bar)
@@ -334,6 +350,7 @@ class TestVolumeConstrainedCB:
             open=120.0, high=125.0, low=118.0, close=122.0,
             volume=200,  # 低成交量
             is_suspended=False,
+            prev_close=120.0,
         )
 
         inner = NextBarOpenFillModel()
@@ -381,6 +398,7 @@ class TestTwapSliceCB:
             end_ts=datetime(2024, 1, 15, 15, 0),
             open=10.0, high=11.0, low=9.9, close=10.5,
             volume=50000, is_suspended=False,
+            prev_close=10.0,
         )
         # 500 shares / 5 slices = 100, round_to_100 = 100
         order = Order(
@@ -448,6 +466,7 @@ class TestFillResultRejectReasonType:
             end_ts=datetime(2024, 1, 15, 15, 0),
             open=10.0, high=10.0, low=10.0, close=10.0,
             volume=0, is_suspended=True,
+            prev_close=10.0,
         )
         order = Order(
             order_id="eq_001", symbol="600000.SH", side=Side.BUY,
@@ -477,6 +496,7 @@ class TestPrecheckDecisionWarning:
             end_ts=datetime(2024, 1, 15, 15, 0),
             open=10.0, high=11.0, low=9.9, close=10.5,
             volume=50000, is_suspended=False,
+            prev_close=10.0,
         )
         order = Order(
             order_id="eq_001", symbol="600000.SH", side=Side.BUY,

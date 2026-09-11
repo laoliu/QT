@@ -98,7 +98,11 @@ class GuardConfig:
             FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
         """
         p = Path(path) if path else (
-            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+            # parents[0]=aipha/factors, [1]=aipha, [2]=python ← configs/ 在这一层。
+            # 曾经写成 parents[3]（=quant-trading，没有 configs/），于是
+            # from_registry() 无参调用必然 FileNotFoundError —— §6.1a 要求
+            # "禁止硬编码默认值" 的失败闭合，被这个路径错误变成了永远失败。
+            Path(__file__).resolve().parents[2] / "configs" / "mining" / "field_registry.yml"
         )
         if not p.exists():
             raise FileNotFoundError(

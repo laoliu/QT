@@ -49,7 +49,12 @@ _BASE_CONFIG = {
     "cost": {
         "commission_rate": 0.0001,
         "stamp_tax_rate": 0.0,
-        "slippage_bps": 0.0,
+        # 不能是 0：strict_mode（§13.18 Fail-Closed，config_parser.py:782）
+        # 会拒绝零滑点配置 —— 零滑点等于假设零冲击成本，会把 AR 虚高，
+        # 而参数扫描恰恰最容易被这种虚高误导（每个格点都虚高，选出来的
+        # "最优参数" 其实是最会吃滑点的那个）。
+        # 10.0 = A 股 MarketRules 默认值（本 fixture 用的是 A 股标的）。
+        "slippage_bps": 10.0,
     },
     "risk": {
         "enabled": False,

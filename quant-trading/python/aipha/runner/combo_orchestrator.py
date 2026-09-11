@@ -36,6 +36,7 @@ from aipha.runner.combo_eod_runner import (
     ComboNavRecord,
     ComponentConfig,
 )
+from aipha.utils.paths import KILL_SWITCH_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ _MDD_HALT_THRESHOLD = 0.30
 _NAV_DRIFT_WARN_PCT = 3.0
 _NAV_DRIFT_CRITICAL_PCT = 10.0
 
-_PROJ_ROOT = Path(__file__).resolve().parents[3]
+_PROJ_ROOT = Path(__file__).resolve().parents[3]  # ⚠ 偏一层，见 aipha/utils/paths.py
 
 # §4.3.2: 成本字段名向后兼容映射
 _COST_FIELD_ALIASES = {
@@ -214,13 +215,21 @@ class ComboOrchestrator:
     def _build_compliance_engine(self):
         """§13.15: 构建合规检查引擎。"""
         from aipha.portfolio.compliance_engine import ComplianceEngine
+        from aipha.utils.compliance_config import DEFAULT_COMPLIANCE_CONFIG_PATH
 
-        config_path = Path("configs/algo_trading_compliance.yml")
+        config_path = DEFAULT_COMPLIANCE_CONFIG_PATH
         if config_path.exists():
             ce = ComplianceEngine.from_config(config_path)
+            logger.info("§13.15 合规检查引擎已构建 (config=%s)", config_path)
         else:
+            # 退回默认限额是有意的降级，但不能悄悄发生 —— 否则实际生效的
+            # 限额与配置文件里写的不是一回事，且无从察觉。
             ce = ComplianceEngine()
-        logger.info("§13.15 合规检查引擎已构建")
+            logger.warning(
+                "§13.15 合规配置缺失 (%s)，已退回内置默认限额 —— "
+                "配置文件里的限额本次不生效",
+                config_path,
+            )
         return ce
 
     def _build_audit_logger(self):
@@ -680,8 +689,18 @@ class ComboOrchestrator:
 
     # -- 步骤方法 (将在后续步骤填充) --
     def _persist_kill_switch(self, reason: str) -> None:
-        """§14.2 L3: 紧急停止时写入 kill_switch.flag 并告警."""
-        kill_flag = _PROJ_ROOT / "configs" / "kill_switch.flag"
+        """§14.2 L3: 紧急停止时写入 kill_switch.flag 并告警.
+
+        路径用 ``aipha.utils.paths.KILL_SWITCH_PATH``，与读方
+        （live_runner / live_engine_eod / deadman_checker / go_live_gate）
+        共用一个常量。原先这里是 ``_PROJ_ROOT / "configs" / ...``，
+        而 ``_PROJ_ROOT`` 偏了一层指向 quant-trading/ —— 那个目录下没有
+        configs/，``write_text`` 会 FileNotFoundError，**紧急停止这一步
+        本身就会抛异常**；即便写成功了，读方算出来的也是另一个路径。
+        """
+        kill_flag = KILL_SWITCH_PATH
+        # 紧急路径不能因为缺目录而失败
+        kill_flag.parent.mkdir(parents=True, exist_ok=True)
         kill_flag.write_text(
             f"activated by orchestrator: {reason}\n", encoding="utf-8"
         )
@@ -698,7 +717,7 @@ class ComboOrchestrator:
     def _check_system_switch(self) -> bool:
         """检查系统开关/FREEZE/Kill Switch。返回 True 表示允许运行。"""
         # §14.2 L3 Kill Switch: 物理文件存在即立即停止一切交易
-        kill_flag = _PROJ_ROOT / "configs" / "kill_switch.flag"
+        kill_flag = KILL_SWITCH_PATH
         if kill_flag.exists():
             logger.critical(
                 "§14.2 L3 KILL SWITCH ACTIVE: %s exists — all trading halted",

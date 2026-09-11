@@ -268,7 +268,7 @@ class RecommendationEngine:
                 holding_days=cfg.holding_days.get(horizon),
                 confidence=conf_val,
                 reasons=list(sig.factors.keys()),
-                signal_sources=sig.source_scores,
+                signal_sources=dict(sig.source_scores),  # 复制，避免与信号共享可变字典
                 created_at=now,
                 expires_at=expiry,
                 metadata=metadata,

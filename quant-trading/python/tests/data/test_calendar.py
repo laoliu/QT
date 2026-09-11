@@ -155,6 +155,20 @@ class TestCNStockCalendar:
         # 简化日历会包含调休日，所以放宽范围
         assert 240 <= count <= 260  # 允许范围240-260
 
+    def test_fallback_does_not_drop_real_trading_days(self):
+        """降级日历不得把真实交易日算成假日
+
+        2024-01-29 ~ 2024-02-08 都是真实交易日（春节 2/9 才开始休市），
+        但农历节日用固定公历窗口近似时会整片抹掉它们 —— 那会让
+        order_validator 拒单、让 live/paper 引擎静默跳过整天。
+        降级方向必须是"多算交易日"，不能是"少算"。
+        """
+        calendar = CNStockCalendar()
+        if not calendar.is_fallback:
+            pytest.skip("已加载精确日历，本用例只约束降级路径")
+        for d in (date(2024, 1, 29), date(2024, 2, 1), date(2024, 2, 8)):
+            assert calendar.is_trading_day(d) is True, f"{d} 是真实交易日"
+
     def test_calendar_coverage_year_range(self):
         """测试：日历覆盖年份范围（2000-2030）"""
         calendar = CNStockCalendar()

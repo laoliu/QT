@@ -4,6 +4,17 @@ import urllib.request
 import json
 import sys
 
+# 诊断脚本，非 pytest 用例：模块体在 import 期访问真实 QMT bridge，
+# 中途 sys.exit() 会打断 pytest 的 collection（详见 test_direct_mode.py）。
+if __name__ != "__main__":
+    import pytest
+
+    pytest.skip(
+        "需要运行中的 QMT bridge（192.168.3.30:58088）；"
+        "手动执行：python tests/test_real_bridge.py",
+        allow_module_level=True,
+    )
+
 BASE = "http://192.168.3.30:58088"
 
 def get(path, timeout=5):

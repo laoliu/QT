@@ -95,6 +95,10 @@ def test_limit_touch_no_fill_if_not_touched() -> None:
         low=9.9,
         close=10.1,
         volume=10000,
+        # 限价单必须给 prev_close，否则 §13.3 在涨跌停校验处就拒单
+        # （DATA_MISSING），根本走不到「限价未触及」这一步。
+        # prev_close=9.5 → 主板 ±10% 区间 [8.55, 10.45]，容得下 limit_price=9.0。
+        prev_close=9.5,
     )
 
     result = fill_model.try_fill(order=order, next_bar=bar, rules=rules)

@@ -273,7 +273,7 @@ class TestPutBackChecker:
 
 
 class TestPrevCloseNoneHandling:
-    """§13.3: prev_close=None 时不静默跳过，返回 warning"""
+    """§13.3: prev_close=None 时不静默跳过，拒单并带 warning"""
 
     @pytest.fixture
     def rules(self):
@@ -283,8 +283,8 @@ class TestPrevCloseNoneHandling:
             commission_rate=Decimal("0.0000854"),
         )
 
-    def test_prev_close_none_returns_warning(self, rules):
-        """prev_close=None 时订单放行但附带 warning"""
+    def test_prev_close_none_rejects_with_warning(self, rules):
+        """prev_close=None 时拒单并附带 warning"""
         from datetime import date as date_cls
         bar = Bar(
             symbol="127075.SZ",
@@ -304,11 +304,12 @@ class TestPrevCloseNoneHandling:
             trade_date=date_cls(2023, 1, 15),
             prev_close=None,
         )
-        # 允许交易但有 warning
-        assert result.allowed is True
+        # 拒单并说明原因
+        assert result.allowed is False
+        assert result.reason == CBRejectReason.DATA_MISSING
         assert result.warning is not None
         assert "prev_close" in result.warning
-        assert "未校验" in result.warning
+        assert "订单被拒绝" in result.warning
 
     def test_prev_close_valid_no_warning(self, rules):
         """prev_close 有效时正常进行涨跌停检查"""

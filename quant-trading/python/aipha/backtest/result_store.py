@@ -1081,13 +1081,34 @@ INSERT OR REPLACE INTO users (
                 )
 
     def soft_delete_user(self, username: str) -> bool:
-        """删除用户记录。不可删除最后一个活跃 admin。
+        """软删除：将 is_active 设为 0，保留记录本身。
+
+        原先这里执行的是 ``DELETE FROM users``（真删），与方法名、与本模块
+        其余 ``soft_delete_*`` 的约定（见 :meth:`soft_delete_strategy_config`）
+        以及调用方 ``DELETE /system/users``（docstring 写的是 "Soft delete a
+        user"）全都相反。真删的两个后果都不能接受：
+
+        1. **审计断链** —— ``last_login`` / ``failed_login_attempts`` 随行消失，
+           历史审计记录里引用的这个账号再也查不到主体。
+        2. **用户名可被重用** —— 删掉后同名账号可再建，于是历史审计条目
+           被静默地重新指向一个新主体。
+
+        同时 ``list_users(active_only=False)`` / ``count_users(active_only=False)``
+        这两个分支在真删语义下永远取不到 is_active=0 的行，属于死代码；
+        ``auth/router.py`` 里的 ``if not row["is_active"]: 拒绝登录`` 同样永远
+        命中不到被删用户。改回软删后这三处才各自成立。
+
+        禁用后该账号无法登录：``build_stauth_credentials()`` 只取
+        ``active_only=True``，且登录接口另有 is_active 校验（双层）。
+        要恢复账号走 ``PUT /system/users/{username}`` 把 is_active 置回 True。
+
+        不可禁用最后一个活跃 admin，否则系统将无人可管。
 
         Returns:
-            是否执行了删除。
+            是否命中了记录（用户不存在时 False，调用方据此返回 404）。
 
         Raises:
-            ValueError: 尝试删除最后一个活跃 admin 时。
+            ValueError: 尝试禁用最后一个活跃 admin 时。
         """
         user = self.get_user(username)
         if not user:
@@ -1098,8 +1119,12 @@ INSERT OR REPLACE INTO users (
             ).fetchone()[0]
             if admin_count <= 1:
                 raise ValueError("无法删除最后一个活跃管理员账号")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self.transaction() as cur:
-            cur.execute("DELETE FROM users WHERE username=?", (username,))
+            cur.execute(
+                "UPDATE users SET is_active=0, updated_at=? WHERE username=?",
+                (now, username),
+            )
             return cur.rowcount > 0
 
     def count_users(self, active_only: bool = True) -> int:

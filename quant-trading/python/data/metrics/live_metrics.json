@@ -1,0 +1,30 @@
+{
+  "strategy_name": "test_strategy",
+  "timestamp": "2026-09-11T12:47:17.087374",
+  "nav": {
+    "current": 100000.0,
+    "initial": 100000.0,
+    "peak": 100000.0,
+    "total_return_pct": 0.0,
+    "daily_return_pct": 0.0
+  },
+  "risk": {
+    "current_drawdown_pct": 0.0,
+    "max_drawdown_pct": 0.0,
+    "rolling_sharpe": 0.0,
+    "rolling_volatility_pct": 0.0
+  },
+  "trading": {
+    "total_fills": 0,
+    "total_orders": 0,
+    "total_bars": 0,
+    "update_count": 1
+  },
+  "nav_history_len": 1,
+  "nav_recent": [
+    [
+      "2026-09-11 12:47:17",
+      100000.0
+    ]
+  ]
+}

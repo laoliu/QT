@@ -1,11 +1,20 @@
 """
-PaperEngine <-> ml_risk_controls 共享风控模块集成测试
+PaperEngine <-> 统一仓位缩放器集成测试
 
 验证 R81 §4.3.1 约束：
-- PaperEngine 正确初始化 CombinedPositionSizer
+- PaperEngine 正确初始化 UnifiedPositionSizer
 - NAV 历史追踪与缩放因子计算
 - risk_position_scale 注入 LiveRunner 执行链
 - YAML 配置加载 ML 风控字段
+
+本文件原先针对 ``ml_risk_controls.CombinedPositionSizer`` 及其
+``compute_scale(nav_series) -> dict`` 接口。该类已按 §4.3.1（回测/模拟/
+实盘三路径共享同一个缩放器）并入 ``risk/position_sizing.py`` 的
+``UnifiedPositionSizer``，NAV 序列入参也改成了「累积日收益率 + 当前 NAV」
+的 ``compute_scale_detail()`` —— 与 PaperEngine 心跳的真实调用口径一致
+（paper_engine.py:1061-1085）。这里跟着改测试而不是把旧名字加回去：
+再加一个返回 dict 的 compute_scale 就等于给同一个概念留两套接口，
+而 §4.3.1 正是为了消灭这种双轨。
 """
 
 from __future__ import annotations
@@ -21,13 +30,34 @@ import pytest
 from aipha.data.akshare_realtime_provider import MarketType
 from aipha.data.calendar import CNStockCalendar, TradingSession
 from aipha.domain.models import Bar
-from aipha.risk.ml_risk_controls import (
-    CombinedPositionSizer,
-    MddGradientDeleverager,
-    VolTargetScaler,
-)
+from aipha.risk.ml_risk_controls import VolTargetScaler
+from aipha.risk.position_sizing import UnifiedPositionSizer
 from aipha.runner.live_runner import RunnerMode
 from aipha.runner.paper_engine import PaperEngine, PaperEngineConfig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _replay_nav(
+    sizer: UnifiedPositionSizer, nav_values: list[float]
+) -> dict[str, object]:
+    """按 PaperEngine 心跳的口径回放一段 NAV 序列，返回最后一次的明细。
+
+    必须逐日喂：``UnifiedPositionSizer`` 的 MDD 峰值和波动率窗口都是
+    **有状态**的（``_mdd_gradient_peak`` / ``VolTargetScaler._returns``），
+    只把最后一个 NAV 传进去算不出回撤。这也正是 paper_engine.py:1067-1073
+    的做法 —— 测的是生产路径本身，不是另写一遍算法。
+    """
+    detail: dict[str, object] = {}
+    for i in range(1, len(nav_values)):
+        daily_rets = [
+            nav_values[j] / nav_values[j - 1] - 1 for j in range(1, i + 1)
+        ]
+        detail = sizer.compute_scale_detail(daily_rets, float(nav_values[i]))
+    return detail
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +142,7 @@ paper_engine:
 
 
 class TestPaperRiskInit:
-    """PaperEngine 初始化 CombinedPositionSizer"""
+    """PaperEngine 初始化 UnifiedPositionSizer"""
 
     def test_sizer_created_when_enabled(
         self, base_config, closed_calendar
@@ -122,7 +152,7 @@ class TestPaperRiskInit:
             base_config, _DummyStrategy(), calendar=closed_calendar
         )
         assert engine._position_sizer is not None
-        assert isinstance(engine._position_sizer, CombinedPositionSizer)
+        assert isinstance(engine._position_sizer, UnifiedPositionSizer)
         assert engine._risk_scale == 1.0
         assert len(engine._nav_history) == 0
 
@@ -171,31 +201,37 @@ class TestPaperRiskInit:
 
 
 class TestScaleComputation:
-    """CombinedPositionSizer 缩放因子计算集成"""
+    """UnifiedPositionSizer 缩放因子计算集成
+
+    统一用 ``from_paper_config()`` 构造：裸 ``UnifiedPositionSizer()`` 的
+    ``mdd_gradient_levels`` 为 None（回测路径按需注入），MDD 梯度整条是
+    关闭的；Paper/Live 走的是 from_paper_config，默认带
+    ``DEFAULT_MDD_LEVELS``。测哪条路径就构造哪条路径的实例。
+    """
 
     def test_no_drawdown_scale_one(self):
-        sizer = CombinedPositionSizer()
-        nav = pd.Series([100.0 + i * 0.1 for i in range(100)])
-        result = sizer.compute_scale(nav)
+        sizer = UnifiedPositionSizer.from_paper_config()
+        nav = [100.0 + i * 0.1 for i in range(100)]
+        result = _replay_nav(sizer, nav)
         assert result["final_scale"] >= 0.99
         assert result["mdd_triggered"] is False
 
     def test_large_drawdown_reduces_scale(self):
-        sizer = CombinedPositionSizer()
+        sizer = UnifiedPositionSizer.from_paper_config()
         # 峰值 200，当前 160 → MDD = 20%
-        nav_values = list(range(100, 201)) + [160]
-        nav = pd.Series(nav_values, dtype=float)
-        result = sizer.compute_scale(nav)
+        nav_values = [float(v) for v in range(100, 201)] + [160.0]
+        result = _replay_nav(sizer, nav_values)
         assert result["mdd"] == pytest.approx(0.20, abs=0.01)
         assert result["mdd_scale"] < 1.0
         assert result["mdd_triggered"] is True
+        # 回撤减仓必须真的传导到最终缩放，而不是只体现在明细里
+        assert result["final_scale"] <= result["mdd_scale"]
 
     def test_catastrophic_drawdown_minimal_scale(self):
-        sizer = CombinedPositionSizer()
+        sizer = UnifiedPositionSizer.from_paper_config()
         # 峰值 200，当前 140 → MDD = 30%
-        nav_values = list(range(100, 201)) + [140]
-        nav = pd.Series(nav_values, dtype=float)
-        result = sizer.compute_scale(nav)
+        nav_values = [float(v) for v in range(100, 201)] + [140.0]
+        result = _replay_nav(sizer, nav_values)
         assert result["mdd_scale"] <= 0.30
 
     def test_vol_scaler_high_vol(self):
@@ -231,15 +267,16 @@ class TestScaleInjection:
             base_config, _DummyStrategy(), calendar=closed_calendar
         )
         # 模拟 NAV 下跌 → MDD 15%
-        for i in range(50):
-            engine._nav_history.append(1_000_000 + i * 1000)
-        # 峰值 ~1049000, 跌到 891650 → MDD ~15%
-        engine._nav_history.append(1_049_000 * 0.85)
+        nav_values = [1_000_000.0 + i * 1000 for i in range(50)]
+        # 峰值 1049000, 跌到 891650 → MDD 15%
+        nav_values.append(1_049_000 * 0.85)
+        engine._nav_history.extend(nav_values)
 
-        nav_s = pd.Series(engine._nav_history)
-        info = engine._position_sizer.compute_scale(nav_s)
+        info = _replay_nav(engine._position_sizer, nav_values)
         engine._risk_scale = info["final_scale"]
         engine._runner.risk_position_scale = engine._risk_scale
+
+        assert info["mdd"] == pytest.approx(0.15, abs=0.005)
 
         assert engine._runner.risk_position_scale < 1.0
         assert engine.risk_scale == engine._runner.risk_position_scale

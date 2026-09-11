@@ -354,12 +354,23 @@ def _fill_pending_orders(
     )
     state.cash = result.new_cash
     state.positions = result.new_positions
+
+    # 回填信号价 —— 没有它就无法事后度量「信号价→成交价」跑掉多少，
+    # 追高上限 (max_chase_pct) 也就只能凭直觉给。挂单里本就带着这个数，
+    # 此前在成交时被丢掉了。按 (code, side) 关联，同一标的可能一买一卖。
+    # 参见 aipha.advisory.chase_calibration
+    intent_by_key = {
+        (o["code"], o.get("side", "")): o for o in active
+    }
     for t in result.sells + result.buys:
+        intent = intent_by_key.get((t.code, t.side), {})
         state.trades.append({
             "date": t.trade_date, "code": t.code, "side": t.side,
             "price": t.price, "shares": t.shares,
             "amount": t.amount, "cost": t.cost,
             "component": t.component,
+            "signal_price": intent.get("signal_price"),
+            "signal_date": intent.get("signal_date", ""),
         })
 
     # 已成交的 codes
@@ -515,11 +526,17 @@ def run_daily(cfg: dict, dry_run: bool = False) -> None:
     _compliance_engine = None
     try:
         from aipha.portfolio.compliance_engine import ComplianceEngine
-        _ce_path = Path("configs/algo_trading_compliance.yml")
-        _compliance_engine = (
-            ComplianceEngine.from_config(_ce_path) if _ce_path.exists()
-            else ComplianceEngine()
-        )
+        from aipha.utils.compliance_config import DEFAULT_COMPLIANCE_CONFIG_PATH
+        _ce_path = DEFAULT_COMPLIANCE_CONFIG_PATH
+        if _ce_path.exists():
+            _compliance_engine = ComplianceEngine.from_config(_ce_path)
+        else:
+            _compliance_engine = ComplianceEngine()
+            logger.warning(
+                "§13.15 合规配置缺失 (%s)，已退回内置默认限额 —— "
+                "配置文件里的限额本次不生效",
+                _ce_path,
+            )
     except Exception as _e:
         logger.error(
             "合规检查引擎构建失败: %s — 阻止本日调仓!",

@@ -779,7 +779,7 @@ class TestVolTargetingOverlay:
         random.seed(42)
         for _ in range(15):
             s._vol_targeter.update(random.gauss(0, 0.03))  # ~47% annualized
-        scale = s._vol_targeter.get_scale()
+        scale = s._vol_targeter.get_current_scale()
         assert scale < 1.0, f"Expected scale < 1.0 with high vol, got {scale}"
 
     def test_low_vol_increases_scale(self):
@@ -793,7 +793,7 @@ class TestVolTargetingOverlay:
         # 模拟低波动日收益序列
         for i in range(15):
             s._vol_targeter.update(0.001 * (1 if i % 2 == 0 else -1))
-        scale = s._vol_targeter.get_scale()
+        scale = s._vol_targeter.get_current_scale()
         assert scale >= 1.0, f"Expected scale >= 1.0 with low vol, got {scale}"
 
     def test_vol_reset_on_start(self):
@@ -801,9 +801,9 @@ class TestVolTargetingOverlay:
         s = self._make_strategy(use_vol_targeting=True)
         s._vol_targeter.update(0.02)
         s._vol_targeter.update(-0.01)
-        assert s._vol_targeter.state.n_observations == 2
+        assert s._vol_targeter.n_observations == 2
         s._on_start_extra()
-        assert s._vol_targeter.state.n_observations == 0
+        assert s._vol_targeter.n_observations == 0
 
 
 class TestCombinedOverlay:
@@ -832,7 +832,7 @@ class TestCombinedOverlay:
         for _ in range(15):
             s._vol_targeter.update(0.015)
         # Override vol scale for deterministic test
-        s._vol_targeter._state.current_scale = 0.8
+        s._vol_targeter._current_scale = 0.8
         combined = s._get_overlay_scale()
         expected = 0.7 * 0.8  # = 0.56
         assert abs(combined - expected) < 1e-6

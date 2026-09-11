@@ -144,7 +144,11 @@ class SignalAggregator:
                 horizon=horizon,
                 confidence=confidence,
                 reasons=list(sig.factors.keys()),
-                signal_sources=list(sig.source_scores.keys()),
+                # 传分数而非仅键名 —— Recommendation.signal_sources 声明为
+                # dict[str, float]，只给键名会丢掉「哪个源给了多少分」，
+                # 事后归因时无从判断是哪一路信号带偏了推荐。
+                # 复制一份: sig.source_scores 后续仍可能被改写。
+                signal_sources=dict(sig.source_scores),
             ))
         return recs
 

@@ -242,6 +242,7 @@ class TestRegimeDetectorHMM:
 
     def test_hmm_init(self) -> None:
         """HMM 模式初始化成功。"""
+        pytest.importorskip("hmmlearn", reason="HMM 模式依赖可选包 hmmlearn")
         cfg = RegimeDetectorConfig(mode=DetectorMode.HMM, hmm_n_states=3)
         detector = RegimeDetector(cfg)
         assert detector._hmm_available

@@ -223,14 +223,20 @@ class TestComputeMaturityConvexity:
 class TestFactorMeta:
     """因子元信息完整性 (3 用例)。"""
 
-    def test_all_eight_factors(self) -> None:
-        """包含 8 个因子 (5 截面 + 3 时序)。"""
-        expected = {
+    def test_factor_meta_covers_all_groups(self) -> None:
+        """8 个基础因子 (5 截面 + 3 时序) + 4 个 BSM IV 因子。
+
+        原用例名叫 test_all_eight_factors 并断言恰好 8 个，
+        Phase 3 / C4 接入 BSM IV 因子后就一直红着。这里按分组断言，
+        既跟上新增，也仍然挡住"顺手塞一个没登记的因子"。
+        """
+        base = {
             "iv_bias", "gamma_convexity", "credit_spread",
             "liquidity_activity", "maturity_convexity",
             "delta_accel", "credit_spread_mom", "liquidity_shock",
         }
-        assert set(FACTOR_META.keys()) == expected
+        bsm_iv = {"iv", "iv_prem", "ivpr", "pricing_bias"}
+        assert set(FACTOR_META.keys()) == base | bsm_iv
 
     def test_meta_keys(self) -> None:
         """每个 meta 有 name_cn/direction/description/economic_logic。"""

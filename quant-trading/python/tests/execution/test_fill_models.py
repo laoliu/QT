@@ -50,6 +50,7 @@ def normal_bar() -> Bar:
         is_suspended=False,
         is_limit_up=False,
         is_limit_down=False,
+        prev_close=10.00,
     )
 
 
@@ -68,6 +69,7 @@ def suspended_bar() -> Bar:
         is_suspended=True,
         is_limit_up=False,
         is_limit_down=False,
+        prev_close=10.00,
     )
 
 
@@ -86,6 +88,7 @@ def limit_up_bar() -> Bar:
         is_suspended=False,
         is_limit_up=True,
         is_limit_down=False,
+        prev_close=10.00,
     )
 
 
@@ -104,6 +107,7 @@ def limit_down_bar() -> Bar:
         is_suspended=False,
         is_limit_up=False,
         is_limit_down=True,
+        prev_close=10.00,
     )
 
 

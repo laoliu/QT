@@ -213,14 +213,19 @@ class TestNormalPath:
         decision = rules.precheck_order(order=_order(side=Side.SELL), bar=_bar())
         assert decision.allowed
 
-    def test_no_prev_close_warns_and_marks_unverified(self) -> None:
-        """prev_close 为 None 时放行但标记为未校验（§13.3）。"""
+    def test_no_prev_close_rejects_with_warning(self) -> None:
+        """prev_close 为 None 时拒单（§13.3 安全关键参数）。
+
+        旧契约是"放行 + 标记未校验"，现已收紧为拒单：涨跌停价算不出来
+        的限价单，交易所那边可能直接废单，也可能以远离预期的价格成交，
+        静默放行等于把数据缺失变成一次盲下单。
+        """
         rules = MarketRulesCNEquity()
         decision = rules.precheck_order(
             order=_order(order_type=OrderType.LIMIT, limit_price=999.0),
             bar=_bar(prev_close=None),
         )
-        assert decision.allowed
+        assert decision.allowed is False
+        assert decision.reason == RejectReason.DATA_MISSING
         assert decision.warning is not None
         assert "prev_close 缺失" in decision.warning
-        assert "未校验" in decision.warning

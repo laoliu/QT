@@ -24,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aipha.utils.paths import KILL_SWITCH_PATH
+
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -123,8 +125,14 @@ def check_config_audit(live_yaml_path: str | Path) -> GateCheck:
 
 
 def check_kill_switch() -> GateCheck:
-    """G6: Kill Switch 机制可用。"""
-    kill_switch_path = _PROJECT_ROOT / "configs" / "kill_switch.flag"
+    """G6: Kill Switch 机制可用。
+
+    路径必须与 ``live_runner`` 实际检查的那个一致，否则这道门禁就是
+    「验证了一个没人读的路径可写」。原先它算的是偏一层的
+    quant-trading/configs/，而且下面还 ``mkdir(parents=True)`` ——
+    等于亲手把错目录建出来，然后报告 Kill Switch 机制健康。
+    """
+    kill_switch_path = KILL_SWITCH_PATH
     # Kill Switch 文件不应存在（存在=已触发停止）
     # 但我们需要验证路径可写
     try:

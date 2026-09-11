@@ -93,10 +93,15 @@ class TestRankNormalizePenalty:
 # ============================================================================
 
 class TestHistoryBufferUsage:
-    """on_bar 中的 _price_history 使用 deque(maxlen=120) 限制历史窗口。"""
+    """_update_history 把价格历史裁到「最长 lookback + _HISTORY_BUFFER」。"""
 
-    def test_history_window_limited_by_deque(self):
-        """价格历史长度不超过 deque maxlen=120。"""
+    def test_history_window_limited_by_lookback(self):
+        """价格历史长度 = max(momentum_lookback+skip, volatility_lookback) + 5。
+
+        原用例写死 120（旧实现的 deque maxlen）。现在窗口由配置里的
+        lookback 算出来，写死常量会在任何人调 lookback 时误报。
+        断言公式本身，才是真正要守住的契约。
+        """
         from aipha.domain.models import Bar
         cfg = EquityRotationConfig()
 
@@ -109,10 +114,11 @@ class TestHistoryBufferUsage:
                 return []
 
         s = _TestStrat()
-        expected_max = 120
+        skip = getattr(cfg, "momentum_skip_recent", 0)
+        expected_max = max(cfg.momentum_lookback + skip, cfg.volatility_lookback) + 5
         ts = datetime(2024, 1, 1, 15)
         ctx = _ctx()
-        for i in range(150):
+        for i in range(expected_max + 30):
             bar = Bar(symbol="A", start_ts=ts, end_ts=ts,
                       open=10.0, high=11.0, low=9.0, close=10.0+i*0.1, volume=1000)
             s.on_bar({"A": bar}, ctx)
@@ -181,11 +187,17 @@ class TestSectorMomentumMinIndustry:
     """SectorMomentumConfig 基础验证。"""
 
     def test_config_defaults(self):
-        """SectorMomentumConfig 默认参数合理。"""
+        """SectorMomentumConfig 默认参数合理。
+
+        原用例断言 ``industry_momentum_lookback``，而这个字段全仓库只出现在
+        这一行 —— 从来没实现过。行业动量窗口就是 ``momentum_lookback``
+        （行业平均动量和行业内个股动量共用它）。补一个没人读的同名配置项
+        只会造出一个"调了不生效"的旋钮，所以按现有字段断言。
+        """
         cfg = SectorMomentumConfig()
         assert cfg.top_k == 25
         assert cfg.top_industries == 6
-        assert cfg.industry_momentum_lookback == 20
+        assert cfg.momentum_lookback == 20
 
     def test_config_custom_top_industries(self):
         """可自定义 top_industries。"""

@@ -90,14 +90,36 @@ class PortfolioConfig:
     stop_on_strategy_breach: bool = True  # 策略触发止损时是否停止
 
     def __post_init__(self) -> None:
-        """§13.1: 从 MarketRulesCNEquity 动态派生费率默认值."""
-        if self.commission_rate == Decimal("-1"):
-            from aipha.market.rules_cn_equity import MarketRulesCNEquity
-            rules = MarketRulesCNEquity()
-            object.__setattr__(self, "commission_rate", rules.commission_rate)
-            object.__setattr__(self, "commission_min", rules.commission_min)
-            object.__setattr__(self, "stamp_tax_rate", rules.stamp_tax_rate)
-            object.__setattr__(self, "transfer_fee_rate", rules.transfer_fee_rate)
+        """§13.1: 从 MarketRulesCNEquity 动态派生费率默认值.
+
+        每个字段**独立**判断哨兵。曾经是五个字段共用 ``commission_rate``
+        一个条件，于是 YAML 只写 ``commission_rate``（文档示例正是这么写的）
+        就会让其余四个哨兵原样漏出去，后果不只是漏算：
+        ``stamp_tax_rate=-1`` 会让卖出变成**负成本**（卖股票倒赚一笔全额），
+        ``slippage_bps=-1`` 变成有利滑点，``commission_min=-1`` 让 5 元
+        最低佣金消失（1000 元成交只收 0.0854 元）。回测因此系统性偏乐观。
+        """
+        from aipha.market.rules_cn_equity import MarketRulesCNEquity
+
+        _SENTINEL = Decimal("-1")
+        rules: MarketRulesCNEquity | None = None
+
+        # (字段名, 规则对象上的来源属性)
+        for field_name, source_attr in (
+            ("commission_rate", "commission_rate"),
+            ("commission_min", "commission_min"),
+            ("stamp_tax_rate", "stamp_tax_rate"),
+            ("transfer_fee_rate", "transfer_fee_rate"),
+        ):
+            if getattr(self, field_name) == _SENTINEL:
+                if rules is None:
+                    rules = MarketRulesCNEquity()
+                object.__setattr__(self, field_name, getattr(rules, source_attr))
+
+        # slippage_bps 是 float，哨兵与来源属性名都跟上面不同，单独处理
+        if self.slippage_bps == -1.0:
+            if rules is None:
+                rules = MarketRulesCNEquity()
             object.__setattr__(self, "slippage_bps", rules.slippage_bps_default)
 
 

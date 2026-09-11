@@ -1,0 +1,43 @@
+# 模拟盘容器 crontab（由 entrypoint.sh 安装后 `cron -f` 前台运行）
+#
+# 时区：容器 TZ=Asia/Shanghai（compose 里设），所有时间都是北京时间。
+#
+# ── 为什么这里要显式写环境变量 ────────────────────────────────
+# cron 不读 login shell 的 profile，跑任务时环境几乎是空的：没有
+# PYTHONPATH、没有 TUSHARE_TOKEN，`import aipha` 直接失败，而 cron 里的
+# ImportError 通常没人看得见 —— 表现就是「任务静默地一天都没跑」。
+# entrypoint.sh 会把容器环境导出到 /etc/environment，这里再显式声明一遍
+# 最关键的两项，两道保险。
+#
+# PYTHONPATH 里的 /app/src 是**历史遗留**：包原先在 src/ 下面，后来上移到
+# /app 旁边（见 aipha/utils/paths.py 的说明）。留着它是为了兼容旧镜像里
+# 仍按 src/ 布局挂载的情况，真正生效的是 /app。
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+PYTHONPATH=/app/src:/app
+PYTHONUNBUFFERED=1
+TZ=Asia/Shanghai
+MAILTO=""
+
+# ── 盘前 08:45（周一至周五）：行情缓存预热 ─────────────────────
+# 外层必须套 timeout：TuShareEquityProvider.get_daily_snapshot() 是无限
+# 重试设计，接口抽风时会一直挂着，把后面的任务全饿死。
+45 8 * * 1-5 timeout 1800 python /app/scripts/ops/data_preheat.py >> /app/logs/cron/data_preheat.log 2>&1
+
+# ── 盘后 15:30（周一至周五）：拉起当日活跃的模拟盘组合 ──────────
+# paper_launcher.py 自己会先检查 Kill Switch / paper_trading_enabled /
+# paper_auto_start 三道闸门；当前 configs/paper/system_settings.json 里
+# paper_auto_start=false，所以这条记录在设置改动之前**不会启动任何组合**。
+30 15 * * 1-5 timeout 7200 python /app/scripts/paper_launcher.py >> /app/logs/cron/paper_launcher.log 2>&1
+
+# ── 盘后 16:10（周一至周五）：因子衰减 / 特征漂移 / 合规撤单率监控 ──
+10 16 * * 1-5 timeout 3600 python /app/scripts/daily_scheduler.py >> /app/logs/cron/daily_scheduler.log 2>&1
+
+# ── 每日 22:15：运维任务（库备份 + NAV 跳变 + 健康体检）──────────
+# 放在最后：此时当天的状态文件都已落盘，备份出来的快照才是完整的一天。
+15 22 * * * timeout 1800 python /app/scripts/ops/daily_ops.py --task all --notify >> /app/logs/cron/daily_ops.log 2>&1
+
+# ── 每周日 04:10：output/ 散落文件盘点（只预览，不动文件）────────
+# 有意不加 --execute：无人值守 + 自动移动文件，迟早会搬走正在用的产物。
+# 这条只把「有哪些散落文件」记进日志，真要归档由人看过之后手动执行。
+10 4 * * 0 timeout 600 python /app/scripts/ops/clean_output.py >> /app/logs/cron/clean_output.log 2>&1

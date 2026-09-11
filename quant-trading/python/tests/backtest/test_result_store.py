@@ -130,12 +130,23 @@ class TestSchemaInit:
         store.close()
 
     def test_schema_version_recorded(self, store: ResultStore):
+        """新建库应把当前 SCHEMA_VERSION 写进 schema_meta。
+
+        断言常量而不是字面量：这条测的是「建库时把版本号落盘了」，
+        不是「版本号恰好等于 7」。写死字面量的话每次 migration 都得回来
+        改测试，而改测试的人无从判断到底该不该改 —— 之前就是这样从 7
+        落后到 9 的。
+        """
+        from aipha.backtest.result_store import SCHEMA_VERSION
+
         cur = store.conn.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         )
         row = cur.fetchone()
         assert row is not None
-        assert row[0] == "7"  # v7 adds paper_category column
+        assert row[0] == str(SCHEMA_VERSION)
+        # 顺手排除「常量还是初版没人维护」：migration 表应覆盖到当前版本
+        assert SCHEMA_VERSION >= 9
 
     def test_tables_exist(self, store: ResultStore):
         cur = store.conn.execute(

@@ -89,19 +89,41 @@ class EquityCandidateInfo:
 CandidateInfo = EquityCandidateInfo
 
 
-def rank_normalize(values: list[float | None]) -> list[float]:
+def rank_normalize(
+    values: list[float | None],
+    *,
+    fill: str = "median",
+) -> list[float]:
     """对值列表做排名归一化（模块级辅助函数）。
 
-    将原始值按排名映射到 [0, 1] 区间。None 值映射为 0.5（中位替代）。
+    将原始值按排名映射到 [0, 1] 区间。缺失值（None / NaN / ±inf）按
+    ``fill`` 处理：
+
+    - ``"median"``（默认）：给中位分 0.5，不奖励也不惩罚
+    - ``"zero"``：给 0 分，等同排最后
+
     这是 EquityRotationStrategy.rank_normalize 静态方法的简化列表接口。
+
+    注意 NaN 必须和 None 走同一条路。之前只判 ``is not None``，NaN 会混进
+    排序里 —— 而 NaN 的所有比较都是 False，sort 不会移动它，结果是
+    "因子缺失的标的拿到了最高分"。对选股策略来说，这等于把数据缺失
+    当成了利好。
     """
     n = len(values)
     if n == 0:
         return []
-    # 过滤出有效值并排序
-    indexed = [(i, v) for i, v in enumerate(values) if v is not None]
+    if fill not in ("median", "zero"):
+        raise ValueError(f"fill 只支持 'median' / 'zero'，收到 {fill!r}")
+
+    missing_score = 0.5 if fill == "median" else 0.0
+
+    # 过滤出有效值并排序（None / NaN / inf 都算缺失）
+    indexed = [
+        (i, float(v)) for i, v in enumerate(values)
+        if v is not None and math.isfinite(v)
+    ]
     indexed.sort(key=lambda x: x[1])
-    result = [0.5] * n  # None → 中位默认
+    result = [missing_score] * n
     for rank, (idx, _) in enumerate(indexed):
         result[idx] = rank / max(len(indexed) - 1, 1)
     return result
@@ -944,9 +966,19 @@ class EquityRotationStrategy(Strategy):
             winsorize_lower: 缩尾下限分位数（默认 2%）
             winsorize_upper: 缩尾上限分位数（默认 98%）
             nan_handling: 缺失值处理策略
-                - "pollute": NaN 污染（默认，任一因子缺失→综合分 NaN）
-                - "median": 缺失因子获中位排名分（宽容模式）
+                - "median"（默认）: 缺失因子获中位排名分（宽容模式）
+                - "pollute": NaN 污染（任一因子缺失→综合分 NaN→rank_sort 剔除）
                 - "skip": 缺失因子不参与评分（保留已有分数）
+
+        Note:
+            此处 docstring 一度把 "pollute" 写成默认值，与签名相反，
+            pead_event 就是照着这句写的（"辅助因子缺失不应排除候选"
+            的注释只有在默认污染时才成立）。默认确实是 "median"。
+
+            另外 "pollute" 不是粘性的：下面第 1000 行，只要后续某个因子
+            以 median/skip 模式调用且该标的有值，已有的 NaN 会被当 0
+            重新累加，污染就没了。要靠 NaN 剔除标的，**所有**因子调用
+            都得传 "pollute"，否则请在调用方显式过滤候选列表。
         """
         if weight <= 0:
             return

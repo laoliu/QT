@@ -1,4 +1,14 @@
-"""配置层 — YAML 配置驱动体系。"""
+"""配置层 — YAML 配置驱动体系 + 环境变量读取。
+
+环境变量读取器（``get_config`` / ``get_tushare_token`` / ``get_cache_dir``
+等）原本有两份：本包和同级的 ``aipha/config.py``。Python 的包优先于同名
+模块，后者从来没被导入过 —— 里面的 ``get_initial_capital`` 等函数对外
+表现为"不存在"。现已合并到这里，``aipha/config.py`` 删除。
+
+注意：``.env`` 文件**不会**被自动加载（``python-dotenv`` 未安装，
+且旧模块里的加载逻辑随包被遮蔽一起失效）。所有配置项都要是真的
+环境变量，否则取到的是下面的默认值。
+"""
 import os as _os
 from pathlib import Path as _Path
 
@@ -35,9 +45,30 @@ def get_tushare_token() -> str:
     if not token:
         raise ValueError(
             "TUSHARE_TOKEN 未配置。"
-            "请在 .env 文件或环境变量中设置 TUSHARE_TOKEN。"
+            "请在环境变量中设置 TUSHARE_TOKEN。"
+            "获取方式：https://tushare.pro/ -> 个人中心 -> 接口TOKEN"
         )
     return token
+
+
+def get_initial_capital() -> float:
+    """获取默认初始资金。"""
+    return float(get_config("DEFAULT_INITIAL_CAPITAL", "1000000"))
+
+
+def get_risk_free_rate() -> float:
+    """获取默认无风险利率。"""
+    return float(get_config("DEFAULT_RISK_FREE_RATE", "0.02"))
+
+
+def get_log_level() -> str:
+    """获取日志级别。"""
+    return get_config("LOG_LEVEL", "INFO")
+
+
+def get_log_dir() -> _Path:
+    """获取日志目录。"""
+    return _Path(get_config("LOG_DIR", "logs"))
 
 
 from aipha.config.config_models import (
@@ -56,6 +87,10 @@ __all__ = [
     "get_config",
     "get_cache_dir",
     "get_tushare_token",
+    "get_initial_capital",
+    "get_risk_free_rate",
+    "get_log_level",
+    "get_log_dir",
     "DataConfig",
     "UniverseConfig",
     "StrategyConfig",

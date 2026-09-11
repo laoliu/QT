@@ -3,9 +3,13 @@
 import numpy as np
 import pandas as pd
 import pytest
-import torch
 
-from aipha.models.gru_ranker import (
+# torch 是可选依赖（深度学习研究线）。裸 import 会让整个模块在收集期
+# ImportError，全量套件因此报 collection error 而不是 skip —— 一个没装
+# 的可选依赖不该看起来像坏掉的测试。
+torch = pytest.importorskip("torch", reason="GRU 排序模型依赖可选包 torch")
+
+from aipha.models.gru_ranker import (  # noqa: E402  (必须在 importorskip 之后)
     GRUConfig,
     GRUNetwork,
     TemporalStockDataset,

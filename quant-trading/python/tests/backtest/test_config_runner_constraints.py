@@ -149,8 +149,15 @@ class TestMultipleConstraintsCombination:
     """多约束组合测试"""
 
     def test_all_constraints_enabled(self):
-        """所有可选约束同时启用"""
+        """所有可选约束同时启用
+
+        max_drawdown 要显式给：§4.3.2 之后默认 1.0 是 no-op，
+        不再构造 DrawdownLimit（见 test_config_runner_risk.py
+        ::TestDrawdownSafetyAutoInjection）。这里测的是「全开时的总数」，
+        所以把回撤约束也真的打开，而不是把期望数字减一。
+        """
         config = _make_config(
+            max_drawdown=0.20,
             max_sector_weight=0.25,
             max_daily_turnover=0.50,
             industry_neutral_enabled=True,
@@ -160,6 +167,21 @@ class TestMultipleConstraintsCombination:
         rm = _build_risk_manager(config)
         # 基础 2 (PositionLimit + DrawdownLimit) + 5 可选
         assert len(rm.constraints) == 7
+
+    def test_drawdown_limit_absent_by_default(self):
+        """不配 max_drawdown 时 DrawdownLimit 不出现（上一条的对照）"""
+        from aipha.risk.constraints import DrawdownLimit
+
+        config = _make_config(
+            max_sector_weight=0.25,
+            max_daily_turnover=0.50,
+            industry_neutral_enabled=True,
+            concentration_enabled=True,
+            liquidity_enabled=True,
+        )
+        rm = _build_risk_manager(config)
+        assert not any(isinstance(c, DrawdownLimit) for c in rm.constraints)
+        assert len(rm.constraints) == 6
 
     def test_risk_disabled_returns_none(self):
         """风控禁用时所有约束不生效"""
@@ -243,6 +265,7 @@ class TestStyleExposureLimitIntegration:
     def test_total_constraint_count_with_style(self):
         """启用所有约束时的总数验证"""
         config = _make_config(
+            max_drawdown=0.20,  # §4.3.2: 默认 1.0 不建 DrawdownLimit，需显式开
             max_sector_weight=0.20,
             max_daily_turnover=0.50,
             concentration_enabled=True,
@@ -310,6 +333,7 @@ class TestForceRedeemExposure:
     def test_total_count_with_force_redeem(self):
         """启用所有 9 种约束时的总数验证"""
         config = _make_config(
+            max_drawdown=0.20,  # §4.3.2: 默认 1.0 不建 DrawdownLimit，需显式开
             max_sector_weight=0.20,
             max_daily_turnover=0.50,
             concentration_enabled=True,

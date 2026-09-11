@@ -95,13 +95,19 @@ class TestSellFillHistory:
 # 5. get_total_market_value: 缺失/空
 # ============================================================
 class TestTotalMarketValueEdge:
-    def test_missing_price(self):
+    def test_missing_price_falls_back_to_avg_cost(self):
+        """缺行情的持仓按均价估值，不按 0 估值。
+
+        按 0 估值等于凭空抹掉一笔真实持仓：NAV 被低估，回撤、风险敞口、
+        仓位上限全部跟着算错，还会触发假的回撤告警。用均价估值只是"不
+        更新"，配一条 warning 让人知道这笔是陈旧估值。
+        """
         pm = PositionManager()
         pm.process_fill(_make_fill("000001.SZ", Side.BUY, 100, 10.0), date(2023, 1, 3))
         pm.process_fill(_make_fill("600000.SH", Side.BUY, 200, 20.0, "O2"), date(2023, 1, 3))
         val = pm.get_total_market_value({"000001.SZ": 11.0})
-        # 000001: 100*11=1100, 600000: 200*0=0
-        assert val == pytest.approx(1100.0)
+        # 000001: 100*11=1100（有行情）, 600000: 200*20=4000（回退均价）
+        assert val == pytest.approx(5100.0)
 
     def test_empty_positions(self):
         pm = PositionManager()

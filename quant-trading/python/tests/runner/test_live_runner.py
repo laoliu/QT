@@ -63,8 +63,15 @@ def make_bar(
     symbol: str = "000001.SZ",
     dt: datetime | None = None,
     price: float = 10.0,
+    prev_close: float | None = None,
 ) -> Bar:
-    """创建测试 Bar"""
+    """创建测试 Bar
+
+    prev_close 默认取 price：§13.3 规定限价单缺 prev_close 一律拒单
+    （DATA_MISSING），不给的话限价单永远撮合不了。以 price 为前收时
+    主板 ±10% 区间是 [price*0.9, price*1.1]，天然容得下本 Bar 的
+    high=price*1.02 / low=price*0.98。
+    """
     if dt is None:
         dt = datetime(2024, 1, 15, 15, 0)
     return Bar(
@@ -76,6 +83,7 @@ def make_bar(
         low=price * 0.98,
         close=price,
         volume=100000.0,
+        prev_close=price if prev_close is None else prev_close,
     )
 
 
@@ -456,37 +464,83 @@ class TestEmergencyStop:
 
         runner.stop()
 
-    def test_kill_switch_file(self, config: RunnerConfig, tmp_path):
-        """kill_switch.flag 文件存在时触发紧急停止"""
-        import os
+    def test_kill_switch_file(self, config: RunnerConfig, tmp_path, monkeypatch):
+        """kill_switch.flag 存在时 on_bar 必须紧急停止 —— 真的走文件检查。
+
+        这条测试以前是假的：它把 ``runner.on_bar`` 整个替换成一个直接调
+        ``emergency_stop()`` 的 stub（原注释写着「临时替换 Path 类不可行，
+        直接调用 emergency_stop」），于是断言的只是「emergency_stop 会把
+        _is_trading_halted 置真」，**文件检查那一行从没被执行过**。
+        正因如此，`live_runner` 里那个偏了一层、指向不存在目录的
+        kill switch 路径一直没被发现 —— 开关其实是断的，测试却是绿的。
+
+        现在路径是模块级常量 ``KILL_SWITCH_PATH``，可以直接 monkeypatch，
+        于是能真正验证「文件在 → 停机」和「文件不在 → 不停机」两侧。
+        """
+        import aipha.runner.live_runner as lr_module
 
         strategy = SimpleTestStrategy()
         runner = LiveRunner.from_paper_mode(config, strategy)
         runner.start()
 
-        # 创建 kill switch 文件
         kill_file = tmp_path / "kill_switch.flag"
+        monkeypatch.setattr(lr_module, "KILL_SWITCH_PATH", kill_file)
+
+        # 文件不存在 → 正常处理，不得停机（否则「总是停机」也能通过）
+        runner.on_bar(make_bar(price=10.0, dt=datetime(2024, 1, 15, 14, 0)))
+        assert runner._is_trading_halted is False
+
+        # 文件出现 → 立即停机
         kill_file.touch()
-
-        # 临时更改检查路径（monkey-patch on_bar 中的路径）
-        original_on_bar = runner.on_bar
-
-        def patched_on_bar(bar):
-            from pathlib import Path
-            import aipha.runner.live_runner as lr_module
-
-            # 临时替换 Path 类不可行，直接调用 emergency_stop
-            runner.emergency_stop("Kill switch file test")
-
-        runner.on_bar = patched_on_bar
-
-        bar = make_bar(price=10.0, dt=datetime(2024, 1, 15, 15, 0))
-        runner.on_bar(bar)
-
+        runner.on_bar(make_bar(price=10.0, dt=datetime(2024, 1, 15, 15, 0)))
         assert runner._is_trading_halted is True
 
         kill_file.unlink()
         runner.stop()
+
+    def test_kill_switch_file_checked_in_on_bars(
+        self, config: RunnerConfig, tmp_path, monkeypatch
+    ):
+        """多标的入口 on_bars 也要检查 kill switch，不能只有 on_bar 挡。"""
+        import aipha.runner.live_runner as lr_module
+
+        strategy = SimpleTestStrategy()
+        runner = LiveRunner.from_paper_mode(config, strategy)
+        runner.start()
+
+        kill_file = tmp_path / "kill_switch.flag"
+        monkeypatch.setattr(lr_module, "KILL_SWITCH_PATH", kill_file)
+
+        bar = make_bar(price=10.0, dt=datetime(2024, 1, 15, 15, 0))
+        runner.on_bars({bar.symbol: bar})
+        assert runner._is_trading_halted is False
+
+        kill_file.touch()
+        runner.on_bars({bar.symbol: bar})
+        assert runner._is_trading_halted is True
+
+        kill_file.unlink()
+        runner.stop()
+
+    def test_kill_switch_path_is_under_project_root(self):
+        """守住路径本身：必须落在项目根的 configs/ 下，且该目录真的存在。
+
+        这是上面那个 bug 的回归护栏 —— 之前常量指向
+        ``quant-trading/configs/``（不存在的目录），运维在项目根建的
+        标志文件永远不会被读到。写方与读方也必须是同一个常量。
+        """
+        from aipha.utils.paths import KILL_SWITCH_PATH, PROJECT_ROOT
+        import aipha.runner.live_runner as lr_module
+        from aipha.runner import combo_orchestrator, live_engine_eod
+
+        assert KILL_SWITCH_PATH == PROJECT_ROOT / "configs" / "kill_switch.flag"
+        assert KILL_SWITCH_PATH.parent.is_dir(), (
+            f"{KILL_SWITCH_PATH.parent} 不存在 —— kill switch 放在这里没人能读到"
+        )
+        # 读方（runner）与写方（orchestrator）必须指同一个文件
+        assert lr_module.KILL_SWITCH_PATH == KILL_SWITCH_PATH
+        assert combo_orchestrator.KILL_SWITCH_PATH == KILL_SWITCH_PATH
+        assert live_engine_eod.KILL_SWITCH_PATH == KILL_SWITCH_PATH
 
 
 class TestPositionReconciliationAtStart:

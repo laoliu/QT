@@ -393,6 +393,7 @@ class TuShareCBProvider:
         retry_interval: float = 3.0,
         log_interval: float = 600.0,
         alert_after: float = 1800.0,
+        max_wait: float | None = None,
     ) -> pd.DataFrame:
         """获取指定交易日的全量 CB 日线快照（缓存优先）。
 
@@ -403,7 +404,7 @@ class TuShareCBProvider:
         行为：
         1. 缓存命中 → 直接返回 DataFrame
         2. 缓存未命中 → 调 gw.call("cb_daily") → 原子写缓存 → 返回
-        3. API 失败 → 每 3s 重试，永不放弃
+        3. API 失败 → 每 3s 重试，默认永不放弃（见 max_wait）
         4. 日志：每次失败不输出，仅每 10 分钟输出一次 "仍在重试"
         5. 30 分钟未成功 → 飞书告警（仅一次）
 
@@ -412,10 +413,27 @@ class TuShareCBProvider:
             retry_interval: 重试间隔（秒），默认 3s
             log_interval: 日志输出间隔（秒），默认 600s (10min)
             alert_after: 超过此秒数发飞书告警，默认 1800s (30min)
+            max_wait: 最长等待秒数，超过则抛 ``TimeoutError``。
+                默认 ``None`` = 不设上限，保持 Paper/Live 的「永不放弃」语义
+                （盘后接口抽风时宁可等，也不要拿半份数据去调仓）。
+                预算在**打接口之前**检查，所以 ``0`` 表示「只用缓存，一次
+                API 都不打」—— 用于「有缓存就用、没有就让调用方走自己的
+                降级路径」的场景（如
+                ``cb_data_enricher.fetch_cb_daily_enriched``）。
+                注意单次 ``gw.call()`` 自身还有内部重试（默认 1s 间隔 ×
+                max_retries，实测可达一分钟以上），所以 max_wait 只能约束
+                「还要不要再起一次调用」，不能把已在途的调用打断。
 
         Returns:
             DataFrame，至少含 ts_code/close/open/pre_close/vol 等列。
-            非交易日或数据确实为空时返回空 DataFrame。
+
+        Raises:
+            TimeoutError: 仅当传了 ``max_wait`` 且已超时。
+
+        注意：**本方法不会返回空 DataFrame**。上游返回空（含非交易日）与
+        API 报错走同一条重试路径 —— 无法区分「今天确实没数据」和「接口这一
+        刻挂了」，而后者返回空会让调仓误判成全市场停牌。需要判非交易日的
+        调用方请先查交易日历，不要靠这里的返回值。
         """
         cache_path = self.cache_dir / f"cb_daily_{trade_date}.parquet"
 
@@ -432,6 +450,16 @@ class TuShareCBProvider:
         attempt = 0
 
         while True:
+            # --- 等待上限：默认 None = 不设上限，行为与历史一致 ---
+            # 放在打接口之前：预算用光后不再起新调用，且 max_wait=0 等价于
+            # 「只用缓存」。
+            elapsed = time.monotonic() - start_ts
+            if max_wait is not None and elapsed >= max_wait:
+                raise TimeoutError(
+                    f"cb_daily {trade_date} 未取到数据: 已等待 {elapsed:.1f}s "
+                    f"(上限 {max_wait:.1f}s, {attempt} 次尝试)"
+                )
+
             attempt += 1
             try:
                 df = self._gateway.call(

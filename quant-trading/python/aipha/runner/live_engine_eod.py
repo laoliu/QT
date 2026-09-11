@@ -70,6 +70,7 @@ from aipha.execution.qmt_account_sync import (
     ReconcileResult,
 )
 from aipha.runner.scorers import get_scorer
+from aipha.utils.paths import KILL_SWITCH_PATH
 # 共享日级工具 — Phase R1 迁移到 daily_utils
 from aipha.runner.daily_utils import (
     load_config,
@@ -176,9 +177,18 @@ class LiveEngineEOD:
         """§13.15: 构建合规检查引擎。"""
         try:
             from aipha.portfolio.compliance_engine import ComplianceEngine
-            config_path = Path("configs/algo_trading_compliance.yml")
+            from aipha.utils.compliance_config import (
+                DEFAULT_COMPLIANCE_CONFIG_PATH,
+            )
+            config_path = DEFAULT_COMPLIANCE_CONFIG_PATH
             if config_path.exists():
                 return ComplianceEngine.from_config(config_path)
+            # 实盘路径：退回默认限额必须留痕，否则生效限额与配置不符且无人知道
+            logger.warning(
+                "§13.15 合规配置缺失 (%s)，实盘退回内置默认限额 —— "
+                "配置文件里的限额本次不生效",
+                config_path,
+            )
             return ComplianceEngine()
         except Exception as e:
             logger.warning("合规检查引擎构建失败: %s", e)
@@ -215,7 +225,9 @@ class LiveEngineEOD:
         weights = self.cfg.get("portfolio_weights", {})
         try:
             # §14.1 Kill Switch 文件检测
-            kill_flag = Path("configs/kill_switch.flag")
+            # 用绝对常量而不是 CWD 相对路径：从别的目录启动进程时
+            # "configs/kill_switch.flag" 会指到别处，开关就失效了。
+            kill_flag = KILL_SWITCH_PATH
             if kill_flag.exists():
                 logger.critical(
                     "Kill Switch 已激活 (%s), 中止实盘!", kill_flag,
@@ -810,6 +822,8 @@ class LiveEngineEOD:
                 "code": intent.code,
                 "shares": intent.shares,
                 "component": intent.component,
+                # 留着给成交记录回填 —— 事后度量追高幅度全靠它
+                "signal_price": intent.signal_price,
             }
             if intent.side == "sell":
                 sells.append(entry)
@@ -886,7 +900,17 @@ class LiveEngineEOD:
             sells, buys, prices, trade_date,
         )
         # 记录交易
+        # signal_price 从意图回填 —— _submit_live_orders 在多处构造返回记录
+        # （提交/拒绝/失败），不逐一穿参，改为按 (code, side) 关联。
+        # 缺了这个字段就无法校准 max_chase_pct，参见
+        # aipha.advisory.chase_calibration
+        signal_px = {
+            (e["code"], side): e.get("signal_price")
+            for side, entries in (("SELL", sells), ("BUY", buys))
+            for e in entries
+        }
         for order in submitted:
+            side = str(order.get("side", "")).upper()
             state.trades.append({
                 "date": trade_date,
                 "code": order["code"],
@@ -896,6 +920,7 @@ class LiveEngineEOD:
                 "component": order.get("component", comp_name),
                 "order_id": order.get("order_id", ""),
                 "status": order.get("status", "unknown"),
+                "signal_price": signal_px.get((order["code"], side)),
             })
         logger.info("[%s] 实盘调仓完成, %d 笔委托",
                     comp_name, len(submitted))

@@ -58,6 +58,53 @@ class VolatilityTargetConfig:
     enabled: bool = True
 
 
+class VolatilityTargetOverlay:
+    """波动率目标仓位叠加器（无状态：每次传入完整收益率序列）。
+
+    与 ``UnifiedPositionSizer`` 内置的波动率目标是同一套算法 —— 本类只是
+    把 §13.2 唯一实现 ``VolTargetScaler`` 包成"传入 returns、返回 scale"
+    的一次性接口，给不在回测循环里逐日喂数的调用方用（临时分析、
+    单独评估某段收益率该配多大仓位）。算法本身不在这里重写。
+
+    数据不足（``len(returns) < lookback_days``）时返回 ``max_scale`` 而不是
+    1.0：本 overlay 的语义是"波动率还没测出来，先按配置上限走"，
+    ``max_scale`` 默认 1.5 意味着起步即加杠杆 —— 用在实盘前请把
+    ``max_scale`` 配成 1.0，或改用逐日喂数的 ``UnifiedPositionSizer``
+    （它在样本不足时返回 1.0）。
+    """
+
+    def __init__(self, config: VolatilityTargetConfig | None = None):
+        self._config = config or VolatilityTargetConfig()
+
+    def compute_scale(self, returns: Sequence[float]) -> float:
+        """根据日收益率序列计算仓位比例。
+
+        Args:
+            returns: 日收益率序列（至少 ``lookback_days`` 条才会真正计算）
+
+        Returns:
+            仓位比例 [min_scale, max_scale]；禁用时 1.0
+        """
+        cfg = self._config
+        if not cfg.enabled:
+            return 1.0
+        if len(returns) < cfg.lookback_days:
+            return cfg.max_scale
+
+        # §13.2: 波动率目标只有 VolTargetScaler 一份实现
+        from aipha.risk.ml_risk_controls import VolTargetScaler
+
+        scaler = VolTargetScaler(
+            vol_target=cfg.target_vol,
+            lookback=cfg.lookback_days,
+            min_scale=cfg.min_scale,
+            max_scale=cfg.max_scale,
+        )
+        for r in returns:
+            scaler.update(r)
+        return scaler.get_current_scale()
+
+
 @dataclass
 class DrawdownControlConfig:
     """回撤控制配置

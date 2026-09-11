@@ -1,0 +1,2 @@
+trade_id,order_id,date,time,symbol,side,qty,price,notional,commission,stamp_tax,transfer_fee,total_fee,reason
+TRD-000001,ORD-000001,2024-01-23,2024-01-23T09:30:00,600000.SH,BUY,100,96.2752,9627.52,5.0,0.0,0.0963,5.0963, [风控调整: 1000->100]

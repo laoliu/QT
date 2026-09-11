@@ -1,0 +1,97 @@
+# 模拟盘容器编排
+#
+# 用法（在 python/docker/ 目录下）::
+#
+#     docker compose -f docker-compose.paper.yml up -d --build
+#     docker compose -f docker-compose.paper.yml logs -f paper
+#     docker compose -f docker-compose.paper.yml exec paper \
+#         python /app/scripts/ops/daily_ops.py --task health --json
+#
+# ── 路径口径 ────────────────────────────────────────────────
+# 本文件在 python/docker/ 下，所以 `../x` 就是 python/x —— 与
+# aipha/utils/paths.py 里的 PROJECT_ROOT（含 configs/ 的那一层）完全对齐。
+# 容器里项目根统一是 /app，并通过 AIPHA_PROJECT_ROOT=/app 显式告诉
+# paths.py，免得它在容器里再去猜。
+#
+# ── logs 挂载为什么是 ../logs 而不是 ../logs/paper ──────────
+# 早先把宿主的 ../logs/paper 挂到容器 /app/logs，于是容器里写
+# logs/cron/*.log、logs/audit/*.jsonl 的代码，实际落到宿主
+# logs/paper/cron/ 与 logs/paper/audit/ —— 而宿主上的分析脚本按
+# logs/audit/ 去找，两边永远对不上，看起来就像「审计日志没写」。
+# 现在整个 ../logs 平挂，容器内外路径一一对应。
+
+services:
+  paper:
+    build:
+      context: ..
+      dockerfile: docker/paper/Dockerfile
+    image: aipha-paper:latest
+    container_name: aipha-paper
+    restart: unless-stopped
+    # cron 需要能写 /etc/environment 并启动守护进程，故以 root 运行；
+    # 容器内不监听任何端口，攻击面只有出网的行情/告警请求。
+    user: root
+    environment:
+      - TZ=Asia/Shanghai
+      # /app/src 是历史遗留（包原先在 src/ 下），真正生效的是 /app。
+      # 保留它以兼容按旧布局挂载的镜像，见 aipha/utils/paths.py。
+      - PYTHONPATH=/app/src:/app
+      - PYTHONUNBUFFERED=1
+      - AIPHA_PROJECT_ROOT=/app
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+      - AKSHARE_TOKEN=${AKSHARE_TOKEN:-}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL:-}
+      - FEISHU_CHAT_ID=${FEISHU_CHAT_ID:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+    volumes:
+      # 代码：挂载而非烤进镜像，改一行策略不用重建镜像
+      - type: bind
+        source: ../aipha
+        target: /app/aipha
+        read_only: true
+      - type: bind
+        source: ../scripts
+        target: /app/scripts
+        read_only: true
+      # 配置读写都要：kill_switch.flag 与 system_settings.json 都在这里，
+      # 挂成只读的话 combo_orchestrator 落 Kill Switch 会直接失败。
+      - type: bind
+        source: ../configs
+        target: /app/configs
+      - type: bind
+        source: ../logs
+        target: /app/logs
+      - type: bind
+        source: ../data
+        target: /app/data
+      # 模拟盘账本单独再挂一条：它是唯一**必须**持久化且可写的目录。
+      # 显式写出来，是为了让「有人把 ../data 改成 read_only」这类事故在
+      # 启动时就暴露，而不是等到某天状态写不进去、重启后按纯现金重算 NAV。
+      - type: bind
+        source: ../data/paper_state
+        target: /app/data/paper_state
+      - type: bind
+        source: ../output
+        target: /app/output
+
+    # 健康检查跑真正的体检任务（磁盘 / 日志可写 / 库可读 / Kill Switch /
+    # 状态新鲜度），而不是 `pgrep cron` —— cron 活着但任务全在失败，
+    # 是这套东西最常见的坏法。
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - /app/scripts/ops/daily_ops.py
+        - --task
+        - health
+      interval: 30m
+      timeout: 120s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"

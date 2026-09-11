@@ -70,7 +70,18 @@ class CNStockCalendar:
         """
         self.calendar_file = calendar_file
         self._trading_days_cache: Optional[set[date]] = None
+        self._is_fallback = False
         self._load_calendar()
+
+    @property
+    def is_fallback(self) -> bool:
+        """当前用的是降级日历（近似）还是精确日历文件。
+
+        降级日历只排除公历固定假期，会把农历假期当成交易日
+        （见 ``_is_obvious_holiday``）。调用方若对交易日数量敏感
+        （年化、T+N、缺数据告警），应据此决定是否降低置信度。
+        """
+        return self._is_fallback
 
     def _load_calendar(self) -> None:
         """加载交易日历数据（优先本地文件，降级为内置数据）"""
@@ -93,6 +104,7 @@ class CNStockCalendar:
                         self._trading_days_cache = {
                             date.fromisoformat(d) for d in data["trading_days"]
                         }
+                        self._is_fallback = False
                     logger.info(
                         f"已加载交易日历: {len(self._trading_days_cache)} 个交易日 "
                         f"(source={data.get('source', 'unknown')}, "
@@ -124,6 +136,7 @@ class CNStockCalendar:
 
         # 使用内置简化数据（生成2000-2030年的工作日，排除明显假期）
         self._trading_days_cache = self._generate_fallback_calendar()
+        self._is_fallback = True
         logger.warning(
             f"使用降级日历（仅工作日近似）: {len(self._trading_days_cache)} 个交易日。"
             f"建议运行 `python scripts/data/generate_calendar.py` 生成精确日历。"
@@ -147,27 +160,27 @@ class CNStockCalendar:
         return trading_days
 
     def _is_obvious_holiday(self, d: date) -> bool:
-        """判断是否是明显假期（简化版，仅硬编码主要节假日）
+        """判断是否是明显假期（降级日历专用，仅公历固定日期节假日）
 
-        注意：春节/端午/中秋为农历节日，日期每年不同。
-        此处使用相对保守但合理的日期窗口，减少误判导致的交易日丢失。
-        精确交易日历应通过 TuShare 等数据源获取。
+        设计原则（R13 提出，此处收紧）：
+        误判"假日为交易日"只会多出一个没有行情的日期（下游取不到 bar，
+        或交易所直接废单），而误判"交易日为假日"会让
+        ``order_validator`` 拒掉合法委托、让 live/paper 引擎**静默跳过**
+        一整个真实交易日。两者代价差一个数量级，所以宁可多算。
 
-        设计原则（R13修复）：
-        - 窄区间优于宽区间：误判"假日为交易日"的影响（回测日期多一天）
-          远小于误判"交易日为假日"的影响（丢失真实数据日期）。
-        - 春节实际假期约 7 天，散布在 1/21 ~ 2/20 区间，
-          此处仅标记 1/28 ~ 2/10 的 14 天窗口（覆盖大多数年份的核心假期）。
-        - 端午/中秋各 3 天假期，使用 ±2 天的窄窗口。
+        据此**不再猜测农历节日**（春节/端午/中秋）。原实现用固定公历窗口
+        近似它们，但农历节日每年漂移 30 天以上，固定窗口在多数年份是
+        错位的 —— 以 2024 年为例，春节实际休市 2/9–2/16，而 1/28~2/10
+        的窗口反而抹掉了 1/29–2/8 这 9 个真实交易日，同时没能盖住
+        2/12–2/16 的真实休市。这不是"精度不够"，是方向性错误。
+
+        结果：降级日历按 2024 年口径给出约 251 个交易日（真实 242），
+        多出的那几天集中在农历假期，属于上面选定的安全方向。
+        需要精确日历时请提供 ``data/calendars/cn_stock_v1.json``
+        （见 ``is_fallback``）。
         """
         # 元旦：1月1日
         if d.month == 1 and d.day == 1:
-            return True
-
-        # 春节：农历新年（核心窗口 1/28 ~ 2/10，共约 14 天）
-        # 实际春节在 1/21 ~ 2/20 之间波动，7 天假期 + 调休
-        # 缩窄到高密度区间，避免丢失大量真实交易日
-        if (d.month == 1 and d.day >= 28) or (d.month == 2 and d.day <= 10):
             return True
 
         # 清明：4月4-6日
@@ -176,16 +189,6 @@ class CNStockCalendar:
 
         # 劳动节：5月1-5日（近年多为5天假期）
         if d.month == 5 and 1 <= d.day <= 5:
-            return True
-
-        # 端午：农历五月初五（窄窗口 6/8 ~ 6/14，共 7 天）
-        # 实际日期在 5/27 ~ 6/25 之间波动，此处取中心区间
-        if d.month == 6 and 8 <= d.day <= 14:
-            return True
-
-        # 中秋：农历八月十五（窄窗口 9/13 ~ 9/19，共 7 天）
-        # 实际日期在 9/7 ~ 10/6 之间波动（与国庆可能重叠），取中心区间
-        if d.month == 9 and 13 <= d.day <= 19:
             return True
 
         # 国庆：10月1-7日

@@ -41,6 +41,7 @@ from aipha.execution.paper_gateway import PaperGateway
 from aipha.execution.slippage import SlippageModel
 from aipha.runner.bar_buffer import BarBuffer, group_bars_by_end_ts
 from aipha.strategy.base import OrderIntent, Strategy, StrategyContext
+from aipha.utils.paths import KILL_SWITCH_PATH
 
 # 可选依赖：风险约束和监控
 try:
@@ -757,11 +758,13 @@ class LiveRunner:
             logger.warning("Runner not running, ignoring bar")
             return
 
-        # Kill switch 文件检查
-        # P2-7 修复: 使用项目根目录相对路径
-        kill_switch_path = Path(__file__).resolve().parents[3] / "configs" / "kill_switch.flag"
-        if kill_switch_path.exists():
-            self.emergency_stop(f"Kill switch file detected: configs/kill_switch.flag")
+        # Kill switch 文件检查（§14.2 L3）
+        # 路径来自 aipha.utils.paths 的唯一常量。原先这里是
+        # parents[3]/configs/kill_switch.flag —— 偏了一层，指向
+        # quant-trading/configs/（该目录不存在），于是**紧急停止开关
+        # 永远不会触发**：运维在项目根建好标志文件，引擎照旧下单。
+        if KILL_SWITCH_PATH.exists():
+            self.emergency_stop(f"Kill switch file detected: {KILL_SWITCH_PATH}")
             return
 
         bars_dict = {bar.symbol: bar}
@@ -820,11 +823,9 @@ class LiveRunner:
             logger.warning("Runner not running, ignoring bars")
             return
 
-        # Kill switch 文件检查
-        # P2-7 修复: 使用项目根目录相对路径
-        kill_switch_path = Path(__file__).resolve().parents[3] / "configs" / "kill_switch.flag"
-        if kill_switch_path.exists():
-            self.emergency_stop(f"Kill switch file detected: configs/kill_switch.flag")
+        # Kill switch 文件检查（§14.2 L3）——同 on_bar，见那里的说明
+        if KILL_SWITCH_PATH.exists():
+            self.emergency_stop(f"Kill switch file detected: {KILL_SWITCH_PATH}")
             return
 
         self._process_bars(bars_dict)

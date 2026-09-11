@@ -27,6 +27,9 @@ from aipha.execution.slippage import (
     SlippageModel,
     SquareRootImpactSlippageModel,
     TieredImpactSlippageModel,
+    # 回测诚实性护栏：滑点配得低到不真实时告警。实现留在 slippage.py
+    # （建模层唯一落点），这里只做转出口，供按 engine_builder 引用的调用方用。
+    _warn_low_slippage,
     create_slippage_model,
 )
 from aipha.market.base import MarketRules

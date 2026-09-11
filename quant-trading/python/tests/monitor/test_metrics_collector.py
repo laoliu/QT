@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.monitor.metrics_collector import MetricsCollector, MetricsConfig
 
 
@@ -178,7 +179,11 @@ class TestMetricsConfig:
         config = MetricsConfig()
         assert config.output_dir == Path("data/metrics")
         assert config.write_interval_sec == 60
-        assert config.sharpe_window == 252
+        # 244 而不是美股惯例的 252：§13.8 规定 A 股年化因子的唯一标准值是
+        # sqrt(244)（见 aipha/market/trading_calendar_constants.py:20，据
+        # 2010-2025 沪深交易日历统计）。断言常量本身，别把 252 改回来。
+        assert config.sharpe_window == TRADING_DAYS_PER_YEAR
+        assert TRADING_DAYS_PER_YEAR == 244
 
     def test_from_dict(self):
         data = {

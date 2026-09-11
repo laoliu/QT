@@ -1,0 +1,3053 @@
+........................................................................ [  0%]
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+..........sss........................................................... [ 16%]
+..........................F............................................. [ 17%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+.............................................E.EEEEEEEEE................ [ 19%]
+........................................................................ [ 19%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 22%]
+...................s.................................................... [ 23%]
+........................................................................ [ 24%]
+........................................................................ [ 24%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+................................................F....................... [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 32%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 34%]
+.............................EEEEEEEEEEEEEFFFFF....FFFF................. [ 35%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+............................F........................................... [ 42%]
+........................................................................ [ 43%]
+.................................................................sssss.. [ 44%]
+...........F............................................................ [ 44%]
+...FF................................................................... [ 45%]
+........................F...........F................................... [ 46%]
+..........................................F.................F........... [ 47%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+............................FFFFFFFFFFFFFFFFFFFFFFFFFF..FFFFFFFFFFFFFFFF [ 50%]
+FFFFFFFFFF........................................F..................... [ 51%]
+........................................................................ [ 52%]
+.................................F...................................... [ 52%]
+........................................................................ [ 53%]
+............................................F........................... [ 54%]
+......F................................................................. [ 54%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 59%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+...............................................F........................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 67%]
+........................................................................ [ 67%]
+.....................................FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF. [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+....................................FFFF................................ [ 72%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+....................sssssssssssssssssssssssssssssssssssssssssssssssssss. [ 74%]
+........................................................................ [ 74%]
+........................................................................ [ 75%]
+......................F................................................. [ 76%]
+........................................................................ [ 77%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........................................................................ [ 87%]
+.................................EEEEFF....FFF.......................... [ 87%]
+........................................................................ [ 88%]
+...........................................FF.FF....F................... [ 89%]
+........................................................................ [ 89%]
+...................................................................s.... [ 90%]
+..........................ss............................................ [ 91%]
+........................................................................ [ 92%]
+.................................FF..................................... [ 92%]
+........................................................................ [ 93%]
+.........F.............................................................. [ 94%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+.....................F.................................................. [ 99%]
+....................................................F................... [ 99%]
+..                                                                       [100%]
+=================================== ERRORS ====================================
+______________ ERROR collecting tests/models/test_gru_ranker.py _______________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\models\test_gru_ranker.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\models\test_gru_ranker.py:6: in <module>
+    ???
+E   ModuleNotFoundError: No module named 'torch'
+______________ ERROR collecting tests/ops/test_cb_data_utils.py _______________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\ops\test_cb_data_utils.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\ops\test_cb_data_utils.py:14: in <module>
+    ???
+E   ModuleNotFoundError: No module named '_cb_data_utils'
+_______________ ERROR collecting tests/ops/test_daily_report.py _______________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\ops\test_daily_report.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\ops\test_daily_report.py:10: in <module>
+    ???
+E   ModuleNotFoundError: No module named 'scripts.ops'
+____________ ERROR collecting tests/ops/test_v2_ml_paper_daily.py _____________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\ops\test_v2_ml_paper_daily.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\ops\test_v2_ml_paper_daily.py:16: in <module>
+    ???
+E   ModuleNotFoundError: No module named 'v2_ml_paper_daily'
+___________ ERROR collecting tests/portfolio/test_vol_targeting.py ____________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\portfolio\test_vol_targeting.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\portfolio\test_vol_targeting.py:8: in <module>
+    ???
+E   ImportError: cannot import name 'VolTargetConfig' from 'aipha.portfolio.vol_targeting' (E:\work\QT\quant-trading\python\aipha\portfolio\vol_targeting.py)
+____________ ERROR collecting tests/risk/test_ml_risk_controls.py _____________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\risk\test_ml_risk_controls.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\risk\test_ml_risk_controls.py:9: in <module>
+    ???
+E   ImportError: cannot import name 'CombinedPositionSizer' from 'aipha.risk.ml_risk_controls' (E:\work\QT\quant-trading\python\aipha\risk\ml_risk_controls.py)
+_____________ ERROR collecting tests/risk/test_position_sizing.py _____________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\risk\test_position_sizing.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\risk\test_position_sizing.py:12: in <module>
+    ???
+E   ImportError: cannot import name 'VolatilityTargetOverlay' from 'aipha.risk.position_sizing' (E:\work\QT\quant-trading\python\aipha\risk\position_sizing.py)
+__________ ERROR collecting tests/risk/test_position_sizing_edge.py ___________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\risk\test_position_sizing_edge.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\risk\test_position_sizing_edge.py:15: in <module>
+    ???
+E   ImportError: cannot import name 'VolatilityTargetOverlay' from 'aipha.risk.position_sizing' (E:\work\QT\quant-trading\python\aipha\risk\position_sizing.py)
+_____________ ERROR collecting tests/scripts/test_data_preheat.py _____________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\scripts\test_data_preheat.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\scripts\test_data_preheat.py:15: in <module>
+    ???
+E   ModuleNotFoundError: No module named 'data_preheat'
+____________________ ERROR collecting tests/test_config.py ____________________
+ImportError while importing test module 'E:\work\QT\quant-trading\python\tests\test_config.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Tools\pyenv-win\versions\3.13.4\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\work\QT\quant-trading\python\tests\test_config.py:9: in <module>
+    ???
+E   ImportError: cannot import name 'get_initial_capital' from 'aipha.config' (E:\work\QT\quant-trading\python\aipha\config\__init__.py)
+___ ERROR at setup of TestDataFingerprint.test_tushare_provider_fingerprint ___
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 17: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_____ ERROR at setup of TestDataFingerprint.test_fingerprint_consistency ______
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 37: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+___ ERROR at setup of TestDataFingerprint.test_fingerprint_different_adjust ___
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 47: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_generate_experiment_fingerprint _
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 61: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_validate_fingerprint_match _
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 86: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_validate_fingerprint_mismatch_config _
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 115: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_fingerprint_serialization __
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 136: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+____ ERROR at setup of TestExperimentFingerprint.test_compare_fingerprints ____
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 162: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_validate_fingerprint_raises _
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 189: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+_ ERROR at setup of TestExperimentFingerprint.test_save_and_load_fingerprint __
+file D:\work\QT\quant-trading\python\tests\data\test_fingerprint.py, line 211: source code not available
+file D:\work\QT\quant-trading\python\tests\data\conftest.py, line 22: source code not available
+E       fixture 'mocker' not found
+>       available fixtures: _class_scoped_runner, _function_scoped_runner, _module_scoped_runner, _package_scoped_runner, _session_scoped_runner, anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, event_loop_policy, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, mock_tushare_api, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_gateway, sample_tushare_data, subtests, synthetic_klines, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory, trending_up_klines, unused_tcp_port, unused_tcp_port_factory, unused_udp_port, unused_udp_port_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\work\QT\quant-trading\python\tests\data\conftest.py:22
+__________ ERROR at setup of TestLLMFactorMiner.test_default_config ___________
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD09F90>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+_ ERROR at setup of TestLLMFactorMiner.test_knowledge_base_default_constraints _
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD0A0D0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+___ ERROR at setup of TestLLMFactorMiner.test_knowledge_base_format_prompt ____
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD16060>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+______ ERROR at setup of TestLLMFactorMiner.test_generate_mining_prompt _______
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD16190>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+_______ ERROR at setup of TestLLMFactorMiner.test_add_manual_candidates _______
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD4AC30>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+________ ERROR at setup of TestLLMFactorMiner.test_parse_llm_response _________
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6ACFD6A0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+___ ERROR at setup of TestLLMFactorMiner.test_validate_candidate_parse_only ___
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6ACFD7B0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+________ ERROR at setup of TestLLMFactorMiner.test_run_campaign_empty _________
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD24550>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+___ ERROR at setup of TestLLMFactorMiner.test_run_campaign_with_candidates ____
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD24750>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+___________ ERROR at setup of TestLLMFactorMiner.test_export_report ___________
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6A9D6E40>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+______ ERROR at setup of TestLLMFactorMiner.test_campaign_result_summary ______
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6A9D6F30>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+____ ERROR at setup of TestLLMFactorMiner.test_factor_candidate_dataclass _____
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD75390>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+__ ERROR at setup of TestLLMFactorMiner.test_ingest_rdagent_nonexistent_dir ___
+
+self = <factors.test_llm_factor_mining.TestLLMFactorMiner object at 0x0000015B6AD75710>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+______________ ERROR at setup of TestPortfolioEnv.test_obs_shape ______________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CCD8410>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB389E510>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[ 1.53216049e-02,  2.45386641e-02, -2.00308161e-03,
+         -4.07347502e-03],
+        [-1.75596513e-02, -1.65....87906393e-03],
+        [-4.46404517e-03,  2.97972672e-02, -3.20180804e-02,
+         -1.65699404e-02]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+____________ ERROR at setup of TestPortfolioEnv.test_action_shape _____________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CCD8550>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB504B4D0>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[-2.06509512e-03, -3.28637771e-02, -3.51708801e-03,
+          3.32294032e-02],
+        [ 4.17729752e-04,  4.61....11627895e-02],
+        [-5.05912006e-02, -5.93214901e-03,  4.82643861e-03,
+         -2.30202805e-02]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+_________ ERROR at setup of TestPortfolioEnv.test_step_returns_tuple __________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CCC83E0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB504BB10>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[ 7.72646582e-03, -4.08942439e-03,  3.51095125e-02,
+          3.14603932e-02],
+        [-9.31611098e-03, -3.01....46000122e-02],
+        [-1.92941073e-02,  3.25693712e-02, -5.68769267e-03,
+          3.18116397e-02]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+_________ ERROR at setup of TestPortfolioEnv.test_episode_terminates __________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CCC8510>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB7E11CD0>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[ 1.35786254e-02, -2.73990980e-03, -1.03879273e-02,
+         -6.81815716e-03],
+        [ 8.56633391e-03,  1.54....78060842e-02],
+        [-8.24441481e-03,  1.82694737e-02,  1.07525978e-02,
+          8.56372435e-03]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+================================== FAILURES ===================================
+_________________ TestCNStockCalendar.test_count_trading_days _________________
+
+self = <test_calendar.TestCNStockCalendar object at 0x0000015B68D5CAA0>
+
+>   ???
+E   assert 240 <= 231
+
+D:\work\QT\quant-trading\python\tests\data\test_calendar.py:156: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.data.calendar:calendar.py:127 使用降级日历（仅工作日近似）: 7110 个交易日。建议运行 `python scripts/data/generate_calendar.py` 生成精确日历。
+____________________ TestFactorMeta.test_all_eight_factors ____________________
+
+self = <factors.test_cb_factors.TestFactorMeta object at 0x0000015B6AA65090>
+
+>   ???
+E   AssertionError: assert {'credit_spre...iv_bias', ...} == {'credit_spre...ctivity', ...}
+E     
+E     Extra items in the left set:
+E     'iv_prem'
+E     'iv'
+E     'ivpr'
+E     'pricing_bias'
+E     Use -v to get more diff
+
+D:\work\QT\quant-trading\python\tests\factors\test_cb_factors.py:233: AssertionError
+___ TestExpandedSearchSpace.test_mining_config_includes_fundamental_fields ____
+
+self = <factors.test_llm_factor_mining.TestExpandedSearchSpace object at 0x0000015B6AD0A210>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:418: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+___ TestExpandedSearchSpace.test_mining_config_includes_extended_operators ____
+
+self = <factors.test_llm_factor_mining.TestExpandedSearchSpace object at 0x0000015B6AD0A350>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+_ TestExpandedSearchSpace.test_mining_config_includes_fundamental_directions __
+
+self = <factors.test_llm_factor_mining.TestExpandedSearchSpace object at 0x0000015B6AD162C0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:434: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+_______ TestExpandedSearchSpace.test_prompt_contains_fundamental_fields _______
+
+self = <factors.test_llm_factor_mining.TestExpandedSearchSpace object at 0x0000015B6AD163F0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:444: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+_____ TestExpandedSearchSpace.test_prompt_contains_hypothesis_requirement _____
+
+self = <factors.test_llm_factor_mining.TestExpandedSearchSpace object at 0x0000015B6AD7CB90>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:452: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+______ TestFeedbackMechanism.test_feedback_prompt_includes_last_campaign ______
+
+self = <factors.test_llm_factor_mining.TestFeedbackMechanism object at 0x0000015B6AD16520>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:496: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+________ TestHypothesisConsistency.test_consistency_prompt_generation _________
+
+self = <factors.test_llm_factor_mining.TestHypothesisConsistency object at 0x0000015B6AD0A990>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+____________ TestHypothesisConsistency.test_filter_by_consistency _____________
+
+self = <factors.test_llm_factor_mining.TestHypothesisConsistency object at 0x0000015B6AD0AAD0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:527: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+______ TestHypothesisConsistency.test_parse_hypothesis_from_llm_response ______
+
+self = <factors.test_llm_factor_mining.TestHypothesisConsistency object at 0x0000015B6AD16650>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\factors\test_llm_factor_mining.py:544: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+aipha\factors\llm_factor_miner.py:301: in __init__
+    self.config = config or MiningConfig()
+                            ^^^^^^^^^^^^^^
+<string>:3: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+cls = <class 'aipha.factors.ic_trap_guard.GuardConfig'>, path = None
+
+    @classmethod
+    def from_registry(cls, path: Path | str | None = None) -> "GuardConfig":
+        """从字段注册表 YAML 加载阈值配置。
+    
+        Raises:
+            FileNotFoundError: 注册表文件不存在（§6.1a 禁止静默降级）
+        """
+        p = Path(path) if path else (
+            Path(__file__).resolve().parents[3] / "configs" / "mining" / "field_registry.yml"
+        )
+        if not p.exists():
+>           raise FileNotFoundError(
+                f"Guard 配置注册表不存在: {p}。"
+                f"请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。"
+                f"禁止使用硬编码默认值替代配置文件（§6.1a）。"
+            )
+E           FileNotFoundError: Guard 配置注册表不存在: E:\work\QT\quant-trading\configs\mining\field_registry.yml。请确保 configs/mining/field_registry.yml 存在且包含 guard_thresholds 节。禁止使用硬编码默认值替代配置文件（§6.1a）。
+
+aipha\factors\ic_trap_guard.py:104: FileNotFoundError
+__________________ TestVolatilityFactor.test_factor_creation __________________
+
+self = <factors.test_volatility.TestVolatilityFactor object at 0x0000015B6B06DF90>
+
+>   ???
+E   assert 15.620499351813308 == 15.874507866387544 ± 1.6e-05
+E     
+E     comparison failed
+E     Obtained: 15.620499351813308
+E     Expected: 15.874507866387544 ± 1.6e-05
+
+D:\work\QT\quant-trading\python\tests\factors\test_volatility.py:22: AssertionError
+_________ TestCB2022NewRulePriceLimit.test_no_prev_close_skips_check __________
+
+self = <test_cb_2022_new_rule.TestCB2022NewRulePriceLimit object at 0x0000015B6B1BDE50>
+rules = MarketRulesConvertibleBond(lot_size=10, t_plus=0, commission_rate=Decimal('0.0000854'), commission_min=Decimal('5'), s...cimal('0.30'), new_rule_date=datetime.date(2022, 8, 1), price_limit_pct=Decimal('0.20'), temp_halt_pct=Decimal('0.30'))
+
+>   ???
+E   AssertionError: assert False is True
+E    +  where False = PrecheckDecision(allowed=False, reason=<CBRejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=127001.SZ, date=2024-01-15), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\market\test_cb_2022_new_rule.py:154: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_convertible_bond:rules_convertible_bond.py:193 CB prev_close 缺失或无效 (symbol=127001.SZ, date=2024-01-15), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+__ TestPrevCloseZeroSkipsCheck.test_limit_order_with_prev_close_zero_passes ___
+
+self = <test_market_rules_edge.TestPrevCloseZeroSkipsCheck object at 0x0000015B6B2A5A90>
+
+>   ???
+E   AssertionError: assert False is True
+E    +  where False = PrecheckDecision(allowed=False, reason=<RejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=000001.SZ), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\market\test_market_rules_edge.py:74: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_cn_equity:rules_cn_equity.py:121 A股 prev_close 缺失或无效 (symbol=000001.SZ, prev_close=0.0), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+__ TestPrevCloseZeroSkipsCheck.test_limit_order_with_prev_close_none_passes ___
+
+self = <test_market_rules_edge.TestPrevCloseZeroSkipsCheck object at 0x0000015B6B2A5BD0>
+
+>   ???
+E   AssertionError: assert False is True
+E    +  where False = PrecheckDecision(allowed=False, reason=<RejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=000001.SZ), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\market\test_market_rules_edge.py:82: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_cn_equity:rules_cn_equity.py:121 A股 prev_close 缺失或无效 (symbol=000001.SZ, prev_close=None), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+________ TestLimitPriceRange.test_without_prev_close_skips_range_check ________
+
+self = <test_rules_cn_equity_v2.TestLimitPriceRange object at 0x0000015B6B291E10>
+
+>   ???
+E   AssertionError: assert False is True
+E    +  where False = PrecheckDecision(allowed=False, reason=<RejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=600000.SH), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\market\test_rules_cn_equity_v2.py:259: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_cn_equity:rules_cn_equity.py:121 A股 prev_close 缺失或无效 (symbol=600000.SH, prev_close=None), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+_______ TestPrevCloseNoneHandling.test_prev_close_none_returns_warning ________
+
+self = <test_rules_convertible_bond.TestPrevCloseNoneHandling object at 0x0000015B6B32B250>
+rules = MarketRulesConvertibleBond(lot_size=10, t_plus=0, commission_rate=Decimal('0.0000854'), commission_min=Decimal('5'), s...cimal('0.30'), new_rule_date=datetime.date(2022, 8, 1), price_limit_pct=Decimal('0.20'), temp_halt_pct=Decimal('0.30'))
+
+>   ???
+E   AssertionError: assert False is True
+E    +  where False = PrecheckDecision(allowed=False, reason=<CBRejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=127075.SZ, date=2023-01-15), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\market\test_rules_convertible_bond.py:308: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_convertible_bond:rules_convertible_bond.py:193 CB prev_close 缺失或无效 (symbol=127075.SZ, date=2023-01-15), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+________________________ test_all_eight_groups_defined ________________________
+
+>   ???
+E   AssertionError: assert {'advanced_al..._driven', ...} == {'advanced_al...omentum', ...}
+E     
+E     Extra items in the left set:
+E     'event_driven'
+E     'composite_momentum'
+E     'fundamental_extended'
+E     Use -v to get more diff
+
+D:\work\QT\quant-trading\python\tests\models\test_feature_groups.py:19: AssertionError
+_____________________ test_get_all_groups_has_eight_keys ______________________
+
+>   ???
+E   AssertionError: assert 11 == 8
+E    +  where 11 = len({'advanced_alpha': ['res_momentum_20d', 'res_volatility_20d', 'cs_rank_res_mom', 'cs_rank_res_vol', 'value_profit_comp...long', 'reversal_composite', 'vol_composite', 'cs_rank_mom_composite_sml', 'cs_rank_mom_composite_mid_long', ...], ...})
+E    +    where {'advanced_alpha': ['res_momentum_20d', 'res_volatility_20d', 'cs_rank_res_mom', 'cs_rank_res_vol', 'value_profit_comp...long', 'reversal_composite', 'vol_composite', 'cs_rank_mom_composite_sml', 'cs_rank_mom_composite_mid_long', ...], ...} = get_all_groups()
+
+D:\work\QT\quant-trading\python\tests\models\test_feature_groups.py:123: AssertionError
+_____________ TestLoadDailyMonitorAlerts.test_reads_recent_files ______________
+
+self = <ops.test_factor_decay_report.TestLoadDailyMonitorAlerts object at 0x0000015B6B6F9950>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_reads_recent_files0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:30: ModuleNotFoundError
+_______________ TestLoadDailyMonitorAlerts.test_skips_old_files _______________
+
+self = <ops.test_factor_decay_report.TestLoadDailyMonitorAlerts object at 0x0000015B6B6F9A90>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_skips_old_files0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:43: ModuleNotFoundError
+__________________ TestLoadDailyMonitorAlerts.test_empty_dir __________________
+
+self = <ops.test_factor_decay_report.TestLoadDailyMonitorAlerts object at 0x0000015B6B709480>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_dir1')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:55: ModuleNotFoundError
+_________________ TestExtractAlerts.test_extract_factor_decay _________________
+
+self = <ops.test_factor_decay_report.TestExtractAlerts object at 0x0000015B6B6F9BD0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:67: ModuleNotFoundError
+__________________ TestExtractAlerts.test_extract_psi_alerts __________________
+
+self = <ops.test_factor_decay_report.TestExtractAlerts object at 0x0000015B6B6F9D10>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:79: ModuleNotFoundError
+______________ TestGenerateDecayReport.test_generates_json_file _______________
+
+self = <ops.test_factor_decay_report.TestGenerateDecayReport object at 0x0000015B6B6F9E50>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_generates_json_file0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:96: ModuleNotFoundError
+__________ TestGenerateDecayReport.test_empty_audit_produces_report ___________
+
+self = <ops.test_factor_decay_report.TestGenerateDecayReport object at 0x0000015B6B6F9F90>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_audit_produces_repo0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:124: ModuleNotFoundError
+_____________ TestFactorDecayReportCli.test_cli_returns_0_no_psi ______________
+
+self = <ops.test_factor_decay_report.TestFactorDecayReportCli object at 0x0000015B6B6FA0D0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_cli_returns_0_no_psi0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:139: ModuleNotFoundError
+____________ TestFactorDecayReportCli.test_cli_returns_1_with_psi _____________
+
+self = <ops.test_factor_decay_report.TestFactorDecayReportCli object at 0x0000015B6B6FA210>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_cli_returns_1_with_psi0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.factor_decay_report'
+
+D:\work\QT\quant-trading\python\tests\ops\test_factor_decay_report.py:157: ModuleNotFoundError
+_____________ TestDailyOpsImportFix.test_sys_path_insert_present ______________
+
+self = <ops.test_paper_ops_infra.TestDailyOpsImportFix object at 0x0000015B6B6FA490>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/scripts/ops/daily_ops.py')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\scripts\\ops\\daily_ops.py'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+______________ TestDailyOpsImportFix.test_project_root_computed _______________
+
+self = <ops.test_paper_ops_infra.TestDailyOpsImportFix object at 0x0000015B6B6FA5D0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/scripts/ops/daily_ops.py')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\scripts\\ops\\daily_ops.py'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+______________ TestDailyOpsImportFix.test_compiles_without_error ______________
+
+self = <ops.test_paper_ops_infra.TestDailyOpsImportFix object at 0x0000015B6B7095B0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\py_compile.py:142: in compile
+    source_bytes = loader.get_data(file)
+                   ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_frozen_importlib_external.SourceFileLoader object at 0x0000015BB3938770>
+path = 'E:\\work\\QT\\quant-trading\\python\\scripts\\ops\\daily_ops.py'
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\scripts\\ops\\daily_ops.py'
+
+<frozen importlib._bootstrap_external>:1217: FileNotFoundError
+__________________ TestDailyOpsImportFix.test_main_callable ___________________
+
+self = <ops.test_paper_ops_infra.TestDailyOpsImportFix object at 0x0000015B6B7096E0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/scripts/ops/daily_ops.py')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\scripts\\ops\\daily_ops.py'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+_______________ TestDockerCrontabFix.test_pythonpath_in_crontab _______________
+
+self = <ops.test_paper_ops_infra.TestDockerCrontabFix object at 0x0000015B6B6FA710>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/crontab')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\crontab'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerCrontabFix.test_crontab_has_paper_launcher _____________
+
+self = <ops.test_paper_ops_infra.TestDockerCrontabFix object at 0x0000015B6B6FA850>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/crontab')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\crontab'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+_______________ TestDockerCrontabFix.test_crontab_has_daily_ops _______________
+
+self = <ops.test_paper_ops_infra.TestDockerCrontabFix object at 0x0000015B6B709810>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:74: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/crontab')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\crontab'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerCrontabFix.test_crontab_has_daily_scheduler ____________
+
+self = <ops.test_paper_ops_infra.TestDockerCrontabFix object at 0x0000015B6B709940>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/crontab')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\crontab'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+______ TestDockerEntrypointEnvExport.test_env_export_to_etc_environment _______
+
+self = <ops.test_paper_ops_infra.TestDockerEntrypointEnvExport object at 0x0000015B6B6FA990>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:86: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/entrypoint.sh')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\entrypoint.sh'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+__________ TestDockerEntrypointEnvExport.test_exports_tushare_token ___________
+
+self = <ops.test_paper_ops_infra.TestDockerEntrypointEnvExport object at 0x0000015B6B6FAAD0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/entrypoint.sh')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\entrypoint.sh'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerEntrypointEnvExport.test_exports_pythonpath ____________
+
+self = <ops.test_paper_ops_infra.TestDockerEntrypointEnvExport object at 0x0000015B6B709A70>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/entrypoint.sh')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\entrypoint.sh'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+_______ TestDockerEntrypointEnvExport.test_cron_starts_after_env_export _______
+
+self = <ops.test_paper_ops_infra.TestDockerEntrypointEnvExport object at 0x0000015B6B709BA0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/paper/entrypoint.sh')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\paper\\entrypoint.sh'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerComposeVolumes.test_logs_volume_not_nested _____________
+
+self = <ops.test_paper_ops_infra.TestDockerComposeVolumes object at 0x0000015B6B6FAC10>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/docker-compose.paper.yml')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\docker-compose.paper.yml'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerComposeVolumes.test_pythonpath_includes_app ____________
+
+self = <ops.test_paper_ops_infra.TestDockerComposeVolumes object at 0x0000015B6B6FAD50>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/docker-compose.paper.yml')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\docker-compose.paper.yml'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerComposeVolumes.test_scripts_volume_mounted _____________
+
+self = <ops.test_paper_ops_infra.TestDockerComposeVolumes object at 0x0000015B6B709CD0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/docker-compose.paper.yml')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\docker-compose.paper.yml'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+____________ TestDockerComposeVolumes.test_configs_volume_mounted _____________
+
+self = <ops.test_paper_ops_infra.TestDockerComposeVolumes object at 0x0000015B6B709E00>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/docker-compose.paper.yml')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\docker-compose.paper.yml'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+__________ TestDockerComposeVolumes.test_paper_state_volume_mounted ___________
+
+self = <ops.test_paper_ops_infra.TestDockerComposeVolumes object at 0x0000015B6B745B50>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\ops\test_paper_ops_infra.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('E:/work/QT/quant-trading/python/docker/docker-compose.paper.yml')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'E:\\work\\QT\\quant-trading\\python\\docker\\docker-compose.paper.yml'
+
+D:\Tools\pyenv-win\versions\3.13.4\Lib\pathlib\_local.py:537: FileNotFoundError
+__________________ TestLoadNavHistory.test_reads_valid_jsonl __________________
+
+self = <ops.test_s4_validator.TestLoadNavHistory object at 0x0000015B6B6FB110>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_reads_valid_jsonl0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:24: ModuleNotFoundError
+_____________ TestLoadNavHistory.test_missing_file_returns_empty ______________
+
+self = <ops.test_s4_validator.TestLoadNavHistory object at 0x0000015B6B6FB250>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_file_returns_empt0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:38: ModuleNotFoundError
+_____________ TestLoadNavHistory.test_invalid_json_lines_skipped ______________
+
+self = <ops.test_s4_validator.TestLoadNavHistory object at 0x0000015B6B708FC0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_invalid_json_lines_skippe0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:45: ModuleNotFoundError
+______________ TestValidateS4.test_no_records_returns_not_passed ______________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B6FB390>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:59: ModuleNotFoundError
+__________________ TestValidateS4.test_sufficient_days_pass ___________________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B6FB4D0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:66: ModuleNotFoundError
+______________ TestValidateS4.test_insufficient_days_in_progress ______________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B709350>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:78: ModuleNotFoundError
+___________________ TestValidateS4.test_nav_zero_is_invalid ___________________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B709220>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:90: ModuleNotFoundError
+_______________ TestValidateS4.test_excessive_change_is_invalid _______________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B745C70>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:102: ModuleNotFoundError
+____________________ TestValidateS4.test_gap_resets_streak ____________________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B655F20>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:116: ModuleNotFoundError
+_______________ TestValidateS4.test_dedup_same_date_keeps_last ________________
+
+self = <ops.test_s4_validator.TestValidateS4 object at 0x0000015B6B655D00>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:134: ModuleNotFoundError
+___________________ TestCheckAllPortfolios.test_scans_dirs ____________________
+
+self = <ops.test_s4_validator.TestCheckAllPortfolios object at 0x0000015B6B6FB610>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_scans_dirs0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:148: ModuleNotFoundError
+________________ TestCheckAllPortfolios.test_portfolio_filter _________________
+
+self = <ops.test_s4_validator.TestCheckAllPortfolios object at 0x0000015B6B6FB750>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_portfolio_filter0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:161: ModuleNotFoundError
+_____________________ TestFormatS4Summary.test_no_results _____________________
+
+self = <ops.test_s4_validator.TestFormatS4Summary object at 0x0000015B6B6FB890>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:179: ModuleNotFoundError
+____________________ TestFormatS4Summary.test_has_results _____________________
+
+self = <ops.test_s4_validator.TestFormatS4Summary object at 0x0000015B6B6FB9D0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:185: ModuleNotFoundError
+________________ TestS4ValidatorCli.test_exit_0_when_all_pass _________________
+
+self = <ops.test_s4_validator.TestS4ValidatorCli object at 0x0000015B6B6FBB10>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_exit_0_when_all_pass0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:208: ModuleNotFoundError
+________________ TestS4ValidatorCli.test_exit_1_when_any_fail _________________
+
+self = <ops.test_s4_validator.TestS4ValidatorCli object at 0x0000015B6B6FBC50>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_exit_1_when_any_fail0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.s4_validator'
+
+D:\work\QT\quant-trading\python\tests\ops\test_s4_validator.py:219: ModuleNotFoundError
+_________________ TestCheckStateStale.test_fresh_state_is_ok __________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B6FBD90>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_fresh_state_is_ok0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:23: ModuleNotFoundError
+________________ TestCheckStateStale.test_stale_state_detected ________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B6FBED0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_stale_state_detected0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:35: ModuleNotFoundError
+_________________ TestCheckStateStale.test_missing_state_file _________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B708B00>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_state_file0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:51: ModuleNotFoundError
+____________ TestCheckStateStale.test_paper_state_json_also_found _____________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B7090F0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_paper_state_json_also_fou0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:61: ModuleNotFoundError
+______________ TestCheckStateStale.test_empty_dir_returns_empty _______________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B747530>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_dir_returns_empty0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:71: ModuleNotFoundError
+__________________ TestCheckStateStale.test_nonexistent_dir ___________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B6558C0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_nonexistent_dir2')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:78: ModuleNotFoundError
+__________________ TestCheckStateStale.test_custom_threshold __________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B6559D0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_custom_threshold0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:88: ModuleNotFoundError
+________________ TestCheckStateStale.test_multiple_portfolios _________________
+
+self = <ops.test_state_stale_checker.TestCheckStateStale object at 0x0000015B6B4DEB50>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_multiple_portfolios0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:99: ModuleNotFoundError
+___________ TestStateStaleCheckerCli.test_cli_returns_0_when_fresh ____________
+
+self = <ops.test_state_stale_checker.TestStateStaleCheckerCli object at 0x0000015B6B76C050>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_cli_returns_0_when_fresh0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:122: ModuleNotFoundError
+___________ TestStateStaleCheckerCli.test_cli_returns_1_when_stale ____________
+
+self = <ops.test_state_stale_checker.TestStateStaleCheckerCli object at 0x0000015B6B76C190>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_cli_returns_1_when_stale0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.state_stale_checker'
+
+D:\work\QT\quant-trading\python\tests\ops\test_state_stale_checker.py:132: ModuleNotFoundError
+______________ TestAllocatorMinWeight.test_min_weight_respected _______________
+
+self = <test_capacity_allocator.TestAllocatorMinWeight object at 0x0000015B6B76E5D0>
+
+>   ???
+E   assert 0.0001 >= 0.02
+
+D:\work\QT\quant-trading\python\tests\portfolio\test_capacity_allocator.py:180: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.portfolio.capacity_allocator:capacity_allocator.py:171 Soft floor ignored for cb: min_weight=2.0% exceeds hard ceiling=0.0% (capital=1000万, limit=0万)
+________________ TestUtilFunctions.test_compute_annualized_vol ________________
+
+self = <test_cross_asset_allocator.TestUtilFunctions object at 0x0000015B6B70E570>
+
+>   ???
+E   assert 0.0025507354446366037 < 1e-10
+E    +  where 0.0025507354446366037 = abs((0.15685994395258057 - (0.010041928905068677 * 15.874507866387544)))
+E    +    where 15.874507866387544 = <built-in function sqrt>(252)
+E    +      where <built-in function sqrt> = math.sqrt
+
+D:\work\QT\quant-trading\python\tests\portfolio\test_cross_asset_allocator.py:125: AssertionError
+_________________ TestTotalMarketValueEdge.test_missing_price _________________
+
+self = <test_position_manager_edge.TestTotalMarketValueEdge object at 0x0000015B6B912E90>
+
+>   ???
+E   assert 5100.0 == 1100.0 ± 0.0011
+E     
+E     comparison failed
+E     Obtained: 5100.0
+E     Expected: 1100.0 ± 0.0011
+
+D:\work\QT\quant-trading\python\tests\portfolio\test_position_manager_edge.py:104: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.portfolio.position_manager:position_manager.py:239 PositionManager: 600000.SH 缺行情, 用均价 20.0000 估值
+_____________________ TestRegimeDetectorHMM.test_hmm_init _____________________
+
+self = <test_regime_detector.TestRegimeDetectorHMM object at 0x0000015B6B988550>
+
+>   ???
+E   assert False
+E    +  where False = <aipha.portfolio.regime_detector.RegimeDetector object at 0x0000015BB3B4D0D0>._hmm_available
+
+D:\work\QT\quant-trading\python\tests\portfolio\test_regime_detector.py:247: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.portfolio.regime_detector:regime_detector.py:147 hmmlearn 不可用，降级到规则模式
+____________________ TestHistoricalVaR.test_annualized_var ____________________
+
+self = <risk.test_var.TestHistoricalVaR object at 0x0000015B6BE2A7B0>
+normal_returns = [-0.0009409032957792835, -0.0012290360033151931, -0.0006131586156766246, 0.007519837250988631, -0.0007758828378288708, -0.014473534143409574, ...]
+
+>   ???
+E   assert 0.22608383070557703 == 0.22976023161398398 ± 2.3e-07
+E     
+E     comparison failed
+E     Obtained: 0.22608383070557703
+E     Expected: 0.22976023161398398 ± 2.3e-07
+
+D:\work\QT\quant-trading\python\tests\risk\test_var.py:110: AssertionError
+_____________________ TestVerifyDbIntegrity.test_valid_db _____________________
+
+self = <test_ops.TestVerifyDbIntegrity object at 0x0000015B6C1D8050>
+tmp_db = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_valid_db0/test.db')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:82: ModuleNotFoundError
+____________________ TestVerifyDbIntegrity.test_missing_db ____________________
+
+self = <test_ops.TestVerifyDbIntegrity object at 0x0000015B6C1D8190>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_db0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:87: ModuleNotFoundError
+____________________ TestVerifyDbIntegrity.test_corrupt_db ____________________
+
+self = <test_ops.TestVerifyDbIntegrity object at 0x0000015B6C11A8B0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_corrupt_db0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:92: ModuleNotFoundError
+__________________ TestBackupDatabase.test_successful_backup __________________
+
+self = <test_ops.TestBackupDatabase object at 0x0000015B6C1D82D0>
+tmp_db = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_successful_backup0/test.db')
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_successful_backup0/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:103: ModuleNotFoundError
+___________________ TestBackupDatabase.test_missing_source ____________________
+
+self = <test_ops.TestBackupDatabase object at 0x0000015B6C1D8410>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_source0')
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_source0/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:122: ModuleNotFoundError
+_________________ TestBackupDatabase.test_backup_creates_dir __________________
+
+self = <test_ops.TestBackupDatabase object at 0x0000015B6C11A9E0>
+tmp_db = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_backup_creates_dir0/test.db')
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_backup_creates_dir0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:131: ModuleNotFoundError
+_______________ TestCleanupOldBackups.test_removes_old_backups ________________
+
+self = <test_ops.TestCleanupOldBackups object at 0x0000015B6C1D8550>
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_removes_old_backups0/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:146: ModuleNotFoundError
+___________________ TestCleanupOldBackups.test_keeps_recent ___________________
+
+self = <test_ops.TestCleanupOldBackups object at 0x0000015B6C1D8690>
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_keeps_recent0/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:160: ModuleNotFoundError
+____________________ TestCleanupOldBackups.test_empty_dir _____________________
+
+self = <test_ops.TestCleanupOldBackups object at 0x0000015B6C11AB10>
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_dir6/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:168: ModuleNotFoundError
+___________________ TestDbBackupMain.test_verify_only_pass ____________________
+
+self = <test_ops.TestDbBackupMain object at 0x0000015B6C1D87D0>
+tmp_db = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_verify_only_pass0/test.db')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:178: ModuleNotFoundError
+___________________ TestDbBackupMain.test_verify_only_fail ____________________
+
+self = <test_ops.TestDbBackupMain object at 0x0000015B6C1D8910>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_verify_only_fail0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:184: ModuleNotFoundError
+____________________ TestDbBackupMain.test_full_backup_cli ____________________
+
+self = <test_ops.TestDbBackupMain object at 0x0000015B6C11AC40>
+tmp_db = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_full_backup_cli0/test.db')
+backup_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_full_backup_cli0/backups')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.db_backup'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:192: ModuleNotFoundError
+____________________ TestLoadPaperNav.test_load_state_json ____________________
+
+self = <test_ops.TestLoadPaperNav object at 0x0000015B6C1D8A50>
+paper_state_dir = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_load_state_json0/paper_state/test_strategy')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:209: ModuleNotFoundError
+________________ TestLoadPaperNav.test_load_nav_history_jsonl _________________
+
+self = <test_ops.TestLoadPaperNav object at 0x0000015B6C1D8B90>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_load_nav_history_jsonl0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:217: ModuleNotFoundError
+______________________ TestLoadPaperNav.test_missing_dir ______________________
+
+self = <test_ops.TestLoadPaperNav object at 0x0000015B6C11AD70>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_missing_dir0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:231: ModuleNotFoundError
+_______________________ TestLoadPaperNav.test_empty_dir _______________________
+
+self = <test_ops.TestLoadPaperNav object at 0x0000015B6C11AEA0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_dir7')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:237: ModuleNotFoundError
+_________________ TestCheckNavDeviation.test_within_threshold _________________
+
+self = <test_ops.TestCheckNavDeviation object at 0x0000015B6C1D8CD0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:249: ModuleNotFoundError
+________________ TestCheckNavDeviation.test_exceeds_threshold _________________
+
+self = <test_ops.TestCheckNavDeviation object at 0x0000015B6C1D8E10>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:256: ModuleNotFoundError
+__________________ TestCheckNavDeviation.test_zero_baseline ___________________
+
+self = <test_ops.TestCheckNavDeviation object at 0x0000015B6C11AFD0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:263: ModuleNotFoundError
+___________________ TestCheckNavDeviation.test_exact_match ____________________
+
+self = <test_ops.TestCheckNavDeviation object at 0x0000015B6C11B100>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:269: ModuleNotFoundError
+________________ TestCheckNavDeviation.test_negative_deviation ________________
+
+self = <test_ops.TestCheckNavDeviation object at 0x0000015B6C0BFBF0>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:276: ModuleNotFoundError
+____________________ TestRunNavCheck.test_empty_state_dir _____________________
+
+self = <test_ops.TestRunNavCheck object at 0x0000015B6C1D8F50>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_state_dir0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:287: ModuleNotFoundError
+____________________ TestRunNavCheck.test_nonexistent_dir _____________________
+
+self = <test_ops.TestRunNavCheck object at 0x0000015B6C1D9090>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_nonexistent_dir5')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:295: ModuleNotFoundError
+________________ TestNavMonitorMain.test_no_state_returns_zero ________________
+
+self = <test_ops.TestNavMonitorMain object at 0x0000015B6C1D91D0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_no_state_returns_zero0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.nav_monitor'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:305: ModuleNotFoundError
+________________ TestCleanOutputScan.test_scan_finds_scattered ________________
+
+self = <test_ops.TestCleanOutputScan object at 0x0000015B6C1D9310>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_scan_finds_scattered0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:322: ModuleNotFoundError
+________________ TestCleanOutputScan.test_classify_file_types _________________
+
+self = <test_ops.TestCleanOutputScan object at 0x0000015B6C1D9450>
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:334: ModuleNotFoundError
+_______________ TestCleanOutputPreview.test_groups_by_category ________________
+
+self = <test_ops.TestCleanOutputPreview object at 0x0000015B6C1D9590>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_groups_by_category0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:349: ModuleNotFoundError
+____________________ TestCleanOutputPreview.test_empty_dir ____________________
+
+self = <test_ops.TestCleanOutputPreview object at 0x0000015B6C1D96D0>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_empty_dir8')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:358: ModuleNotFoundError
+_______________ TestCleanOutputExecute.test_archive_moves_files _______________
+
+self = <test_ops.TestCleanOutputExecute object at 0x0000015B6C1D9810>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_archive_moves_files0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:370: ModuleNotFoundError
+______________ TestCleanOutputExecute.test_delete_removes_files _______________
+
+self = <test_ops.TestCleanOutputExecute object at 0x0000015B6C1D9950>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_delete_removes_files0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:386: ModuleNotFoundError
+______________________ TestCleanOutputMain.test_dry_run _______________________
+
+self = <test_ops.TestCleanOutputMain object at 0x0000015B6C1D9A90>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_dry_run0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:402: ModuleNotFoundError
+____________________ TestCleanOutputMain.test_execute_flag ____________________
+
+self = <test_ops.TestCleanOutputMain object at 0x0000015B6C1D9BD0>
+output_dir_with_scatter = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_execute_flag0/output')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:410: ModuleNotFoundError
+_______________ TestCleanOutputMain.test_clean_dir_returns_zero _______________
+
+self = <test_ops.TestCleanOutputMain object at 0x0000015B6C11B230>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_clean_dir_returns_zero0')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:417: ModuleNotFoundError
+__________________ TestCleanOutputMain.test_nonexistent_dir ___________________
+
+self = <test_ops.TestCleanOutputMain object at 0x0000015B6C11B360>
+tmp_path = WindowsPath('C:/Users/Admin/AppData/Local/Temp/pytest-of-Admin/pytest-76/test_nonexistent_dir6')
+
+>   ???
+E   ModuleNotFoundError: No module named 'scripts.ops.clean_output'
+
+D:\work\QT\quant-trading\python\tests\scripts\test_ops.py:425: ModuleNotFoundError
+_____________ TestVolTargetingOverlay.test_high_vol_reduces_scale _____________
+
+self = <strategy.test_cb_adaptive_factor.TestVolTargetingOverlay object at 0x0000015B6C40D810>
+
+>   ???
+E   TypeError: VolTargetScaler.get_scale() missing 1 required positional argument: 'nav_series'
+
+D:\work\QT\quant-trading\python\tests\strategy\test_cb_adaptive_factor.py:782: TypeError
+____________ TestVolTargetingOverlay.test_low_vol_increases_scale _____________
+
+self = <strategy.test_cb_adaptive_factor.TestVolTargetingOverlay object at 0x0000015B6C40D940>
+
+>   ???
+E   TypeError: VolTargetScaler.get_scale() missing 1 required positional argument: 'nav_series'
+
+D:\work\QT\quant-trading\python\tests\strategy\test_cb_adaptive_factor.py:796: TypeError
+_______________ TestVolTargetingOverlay.test_vol_reset_on_start _______________
+
+self = <strategy.test_cb_adaptive_factor.TestVolTargetingOverlay object at 0x0000015B6C435D90>
+
+>   ???
+E   AttributeError: 'VolTargetScaler' object has no attribute 'state'
+
+D:\work\QT\quant-trading\python\tests\strategy\test_cb_adaptive_factor.py:804: AttributeError
+_______________ TestCombinedOverlay.test_both_overlays_multiply _______________
+
+self = <strategy.test_cb_adaptive_factor.TestCombinedOverlay object at 0x0000015B6C3F6E90>
+
+>   ???
+E   AttributeError: 'VolTargetScaler' object has no attribute '_state'
+
+D:\work\QT\quant-trading\python\tests\strategy\test_cb_adaptive_factor.py:835: AttributeError
+_________________ TestHighDistanceTracker.test_init_defaults __________________
+
+self = <strategy.test_cb_orthogonal_factors.TestHighDistanceTracker object at 0x0000015B6C622350>
+
+>   ???
+E   assert 244 == 252
+E    +  where 244 = <aipha.strategy.cb_orthogonal_factors.HighDistanceTracker object at 0x0000015BB539CAD0>.lookback
+
+D:\work\QT\quant-trading\python\tests\strategy\test_cb_orthogonal_factors.py:155: AssertionError
+________________________ TestPortfolioEnv.test_no_cash ________________________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CCE4EF0>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:77: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB7E12190>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=False)
+data = array([[[-2.79993284e-03, -1.27903065e-02,  5.15294308e-03,
+         -8.34281743e-03],
+        [ 2.18409672e-02,  5.70....03427894e-03],
+        [-1.30736977e-02, -1.59787219e-02, -6.30024960e-03,
+          7.31955515e-03]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+_____________________ TestPortfolioEnv.test_reward_sharpe _____________________
+
+self = <strategy.test_rl_portfolio.TestPortfolioEnv object at 0x0000015B6CC80F30>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:87: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB51C5C70>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.SHARPE: 'sharpe'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[-1.96921802e-03, -4.64581046e-03,  4.43587953e-04,
+         -1.74570736e-02],
+        [ 4.94705653e-03,  3.83....71315719e-03],
+        [ 7.18417391e-03, -1.57746987e-03, -6.41666818e-03,
+          1.66535191e-02]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+_______________________ TestRLTrainer.test_train_short ________________________
+
+self = <strategy.test_rl_portfolio.TestRLTrainer object at 0x0000015B6CCD8910>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB3837020>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[-2.19125394e-02,  9.69548058e-03,  4.71352460e-03,
+         -3.67317628e-03],
+        [-2.75389967e-03, -1.83....22717324e-03],
+        [ 1.22438166e-02,  1.12084839e-02, -5.24282735e-03,
+          5.98330190e-03]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+_________________________ TestRLTrainer.test_evaluate _________________________
+
+self = <strategy.test_rl_portfolio.TestRLTrainer object at 0x0000015B6CCD8A50>
+
+>   ???
+
+D:\work\QT\quant-trading\python\tests\strategy\test_rl_portfolio.py:155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <aipha.strategy.rl_portfolio.PortfolioEnv object at 0x0000015BB3836580>
+config = RLPortfolioConfig(n_assets=3, feature_dim=4, lookback=5, reward_type=<RewardType.LOG_RETURN: 'log_return'>, risk_free_rate=0.02, transaction_cost=0.001, max_drawdown_penalty=0.5, cash_weight=True)
+data = array([[[-1.72491688e-02, -6.86936406e-03,  1.39265489e-02,
+         -3.85036785e-03],
+        [-1.86800193e-02,  2.01....07219666e-02],
+        [ 1.01222442e-02, -1.68172847e-02, -2.95502273e-03,
+         -1.06529100e-03]]], dtype=float32)
+
+    def __init__(self, config: RLPortfolioConfig, data: Optional[np.ndarray] = None):
+        if not _HAS_GYM:
+>           raise ImportError("gymnasium is required: pip install gymnasium")
+E           ImportError: gymnasium is required: pip install gymnasium
+
+aipha\strategy\rl_portfolio.py:88: ImportError
+___________________ TestSectorMomentumConfig.test_defaults ____________________
+
+self = <strategy.test_sector_momentum.TestSectorMomentumConfig object at 0x0000015B6CCD91D0>
+
+>   ???
+E   assert 30 == 25
+E    +  where 30 = SectorMomentumConfig(top_k=30, rebalance_days=10, min_price=5.0, max_price=200.0, min_mv=100000.0, max_mv=inf, min_tur... top_industries=6, weight_momentum=0.3, weight_volatility=0.25, weight_value=0.2, weight_quality=0.15, weight_size=0.1).top_k
+
+D:\work\QT\quant-trading\python\tests\strategy\test_sector_momentum.py:100: AssertionError
+__________ TestRankNormalizePenalty.test_nan_factor_gets_median_fill __________
+
+self = <strategy.test_strategy_regression.TestRankNormalizePenalty object at 0x0000015B6CD78C30>
+
+>   ???
+E   AssertionError: NaN 应被 median-fill 为 0.5
+E   assert 1.0 == 0.5 ± 5.0e-07
+E     
+E     comparison failed
+E     Obtained: 1.0
+E     Expected: 0.5 ± 5.0e-07
+
+D:\work\QT\quant-trading\python\tests\strategy\test_strategy_regression.py:78: AssertionError
+________________ TestRankNormalizePenalty.test_zero_fill_mode _________________
+
+self = <strategy.test_strategy_regression.TestRankNormalizePenalty object at 0x0000015B6CD78D60>
+
+>   ???
+E   TypeError: rank_normalize() got an unexpected keyword argument 'fill'
+
+D:\work\QT\quant-trading\python\tests\strategy\test_strategy_regression.py:82: TypeError
+_________ TestHistoryBufferUsage.test_history_window_limited_by_deque _________
+
+self = <strategy.test_strategy_regression.TestHistoryBufferUsage object at 0x0000015B6CD55810>
+
+>   ???
+E   assert 25 == 120
+E    +  where 25 = len([22.5, 22.6, 22.700000000000003, 22.8, 22.9, 23.0, ...])
+
+D:\work\QT\quant-trading\python\tests\strategy\test_strategy_regression.py:119: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+WARNING  aipha.strategy.equity_rotation_base:equity_rotation_base.py:406 [test_buf] check_index_member=True 但 bar metadata 中缺少 is_index_member 字段，成分股过滤实际未生效。请确认数据加载器是否配置了 base_index，或设置 check_index_member: false 以明确关闭。
+_______________ TestPEADSueNoneFiltered.test_sue_none_excluded ________________
+
+self = <strategy.test_strategy_regression.TestPEADSueNoneFiltered object at 0x0000015B6CD55950>
+
+>   ???
+E   AssertionError: sue=None 应被过滤掉
+E   assert '000001.SZ' not in ['000001.SZ']
+
+D:\work\QT\quant-trading\python\tests\strategy\test_strategy_regression.py:133: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.strategy.pead_event:pead_event.py:191 PEAD: SUE 有效覆盖率仅 0%（0/1），权重变化可能不影响排名
+_____________ TestSectorMomentumMinIndustry.test_config_defaults ______________
+
+self = <strategy.test_strategy_regression.TestSectorMomentumMinIndustry object at 0x0000015B6CD55E50>
+
+>   ???
+E   assert 30 == 25
+E    +  where 30 = SectorMomentumConfig(top_k=30, rebalance_days=10, min_price=5.0, max_price=200.0, min_mv=100000.0, max_mv=inf, min_tur... top_industries=6, weight_momentum=0.3, weight_volatility=0.25, weight_value=0.2, weight_quality=0.15, weight_size=0.1).top_k
+
+D:\work\QT\quant-trading\python\tests\strategy\test_strategy_regression.py:186: AssertionError
+__________________________ test_low_slippage_warning __________________________
+
+caplog = <_pytest.logging.LogCaptureFixture object at 0x0000015BB84B2490>
+
+>   ???
+E   ImportError: cannot import name '_warn_low_slippage' from 'aipha.backtest.engine_builder' (E:\work\QT\quant-trading\python\aipha\backtest\engine_builder.py)
+
+D:\work\QT\quant-trading\python\tests\test_fees_slippage.py:407: ImportError
+_______________________ test_normal_slippage_no_warning _______________________
+
+caplog = <_pytest.logging.LogCaptureFixture object at 0x0000015BB84FEF00>
+
+>   ???
+E   ImportError: cannot import name '_warn_low_slippage' from 'aipha.backtest.engine_builder' (E:\work\QT\quant-trading\python\aipha\backtest\engine_builder.py)
+
+D:\work\QT\quant-trading\python\tests\test_fees_slippage.py:417: ImportError
+________ TestNormalPath.test_no_prev_close_warns_and_marks_unverified _________
+
+self = <test_market_rules_cn_equity.TestNormalPath object at 0x0000015B6F41C2B0>
+
+>   ???
+E   AssertionError: assert False
+E    +  where False = PrecheckDecision(allowed=False, reason=<RejectReason.DATA_MISSING: 'DATA_MISSING'>, warning='prev_close 缺失 (symbol=000001.SZ), 涨跌停检查无法执行 — 订单被拒绝（§13.3 安全关键参数）').allowed
+
+D:\work\QT\quant-trading\python\tests\test_market_rules_cn_equity.py:223: AssertionError
+------------------------------ Captured log call ------------------------------
+WARNING  aipha.market.rules_cn_equity:rules_cn_equity.py:121 A股 prev_close 缺失或无效 (symbol=000001.SZ, prev_close=None), 涨跌停检查无法执行 — 订单被拒绝 §13.3
+______________________ TestSharpeRatio.test_known_value _______________________
+
+self = <test_metrics.TestSharpeRatio object at 0x0000015B6F6D9E50>
+
+    def test_known_value(self):
+        """固定已知输入验证公式正确性"""
+        # 252 天每天 +0.1% 收益
+        rets = np.full(252, 0.001)
+        rf_daily = DEFAULT_RISK_FREE_RATE / DEFAULT_TRADING_DAYS
+        excess_mean = 0.001 - rf_daily
+        std_r = float(np.std(rets, ddof=1))
+        expected = excess_mean * math.sqrt(252) / std_r
+        result = compute_sharpe_ratio(rets)
+        # std=0 for constant → 此例中 std≈0，应返回 0
+        # 实际上全相同值 std=0，所以改用包含变化的数据
+        rets2 = np.array([0.01, -0.005, 0.008, -0.003, 0.006] * 50)
+        r = compute_sharpe_ratio(rets2, risk_free_rate=0.0)
+        # 手算验证
+        mean_r = float(np.mean(rets2))
+        std_v = float(np.std(rets2, ddof=1))
+        expected2 = (mean_r / std_v) * math.sqrt(252)
+>       assert abs(r - expected2) < 1e-10
+E       assert 0.13416054961459878 < 1e-10
+E        +  where 0.13416054961459878 = abs((8.250332796152211 - 8.38449334576681))
+
+tests\utils\test_metrics.py:46: AssertionError
+______________ TestComputeVolatility.test_annualized_volatility _______________
+
+self = <test_vectorized.TestComputeVolatility object at 0x0000015B6F76EC10>
+
+    def test_annualized_volatility(self):
+        """测试年化波动率"""
+        returns = np.array([0.01, -0.02, 0.015, -0.005, 0.02])
+        vol = compute_volatility(returns, annualize=True)
+    
+        daily_std = np.std(returns, ddof=1)
+        expected = daily_std * np.sqrt(252)
+>       assert abs(vol - expected) < 1e-10
+E       assert np.float64(0.004154417776883579) < 1e-10
+E        +  where np.float64(0.004154417776883579) = abs((np.float64(0.25547994050414213) - np.float64(0.2596343582810257)))
+
+tests\utils\test_vectorized.py:61: AssertionError
+============================== warnings summary ===============================
+D:\work\QT\quant-trading\python\tests\data\test_tushare_provider.py:394
+  D:\work\QT\quant-trading\python\tests\data\test_tushare_provider.py:394: PytestUnknownMarkWarning: Unknown pytest.mark.slow - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+
+tests/advisory/test_chase_calibration.py::TestStatHelpers::test_welch_zero_variance_returns_none
+  D:\Tools\pyenv-win\versions\3.13.4\Lib\site-packages\scipy\stats\_axis_nan_policy.py:592: RuntimeWarning: Precision loss occurred in moment calculation due to catastrophic cancellation. This occurs when the data are nearly identical. Results may be unreliable.
+    res = hypotest_fun_out(*samples, **kwds)
+
+tests/execution/test_paper_gateway.py::TestConnection::test_connect
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:87: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestConnection::test_disconnect
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:94: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestConnection::test_mode
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:101: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py: 26 warnings
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:57: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestTradingRules::test_t_plus_0_can_sell_today
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:384: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestFeeModelConsistency::test_fee_includes_transfer_fee
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:721: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestFeeModelConsistency::test_fee_model_matches_direct_calc
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:767: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestFeeModelConsistency::test_sell_first_ordering
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:806: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestSlippageModelIntegration::test_fixed_bps_model_via_protocol
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:871: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestSlippageModelIntegration::test_sqrt_impact_model_via_protocol
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:899: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestSlippageModelIntegration::test_no_model_fallback_to_fixed_bps
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:921: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestSlippageModelIntegration::test_model_overrides_slippage_bps
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:947: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestFillModelSelection::test_next_bar_close_uses_close_price
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:975: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/execution/test_paper_gateway.py::TestFillModelSelection::test_vwap_uses_bar_vwap
+  D:\work\QT\quant-trading\python\tests\execution\test_paper_gateway.py:994: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/factors/test_alpha158.py: 10 warnings
+tests/factors/test_alpha_performance.py: 4 warnings
+  E:\work\QT\quant-trading\python\aipha\factors\alpha158.py:356: Pandas4Warning: The copy keyword is deprecated and will be removed in a future version. Copy-on-Write is active in pandas since 3.0 which utilizes a lazy copy mechanism that defers copies until necessary. Use .copy() to make an eager copy if necessary.
+    result = pd.concat([result, factors_df], axis=1, copy=False)
+
+tests/factors/test_guard_pipeline.py::TestHLZUsesTotalTrials::test_penalty_uses_total_trials
+  D:\Tools\pyenv-win\versions\3.13.4\Lib\site-packages\numpy\lib\_function_base_impl.py:3023: RuntimeWarning: invalid value encountered in divide
+    c /= stddev[:, None]
+
+tests/factors/test_guard_pipeline.py::TestHLZUsesTotalTrials::test_penalty_uses_total_trials
+  D:\Tools\pyenv-win\versions\3.13.4\Lib\site-packages\numpy\lib\_function_base_impl.py:3024: RuntimeWarning: invalid value encountered in divide
+    c /= stddev[None, :]
+
+tests/models/test_predictor.py: 19 warnings
+  D:\Tools\pyenv-win\versions\3.13.4\Lib\site-packages\sklearn\utils\validation.py:2684: UserWarning: X has feature names, but Ridge was fitted without feature names
+    warnings.warn(
+
+tests/models/test_ts_foundation_eval.py::TestTSFoundationEvaluator::test_evaluate_with_custom
+  E:\work\QT\quant-trading\python\aipha\models\ts_foundation_eval.py:218: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+    corr, _ = spearmanr(pf, af)
+
+tests/risk/test_position_reconciler.py::TestPaperGatewayPositionDetails::test_get_position_details_empty
+  D:\work\QT\quant-trading\python\tests\risk\test_position_reconciler.py:157: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/risk/test_position_reconciler.py::TestPaperGatewayPositionDetails::test_get_position_details_with_holdings
+  D:\work\QT\quant-trading\python\tests\risk\test_position_reconciler.py:171: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/risk/test_position_reconciler.py::TestPaperGatewayPositionDetails::test_reconcile_paper_vs_paper
+  D:\work\QT\quant-trading\python\tests\risk\test_position_reconciler.py:208: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+
+tests/runner/test_paper_engine.py::TestPaperEngineE2EIntegration::test_plan_a_5comp_yaml_loads
+  D:\Tools\pyenv-win\versions\3.13.4\Lib\site-packages\yaml\scanner.py:289: RuntimeWarning: coroutine 'PaperEngine.run' was never awaited
+    or self.index-key.index > 1024:
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/runner/test_pillar_orchestrator.py::test_gateway_order_ttl_auto_cancel
+  E:\work\QT\quant-trading\python\tests\runner\test_pillar_orchestrator.py:946: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+    gw = PaperTradingGateway(
+
+tests/test_cb_production_readiness.py::TestPaperGatewayCBMode::test_from_cb_mode_creates_instance
+tests/test_cb_production_readiness.py::TestPaperGatewayCBMode::test_from_cb_mode_custom_capital
+tests/test_cb_production_readiness.py::TestPaperGatewayCBMode::test_from_cb_mode_no_transfer_fee
+  E:\work\QT\quant-trading\python\aipha\execution\paper_gateway.py:103: DeprecationWarning: PaperTradingGateway 已废弃, 请使用 PaperGateway (§13.16)。此类将于 2026 Q3 移除。
+    return cls(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/data/test_calendar.py::TestCNStockCalendar::test_count_trading_days
+FAILED tests/factors/test_cb_factors.py::TestFactorMeta::test_all_eight_factors
+FAILED tests/factors/test_llm_factor_mining.py::TestExpandedSearchSpace::test_mining_config_includes_fundamental_fields
+FAILED tests/factors/test_llm_factor_mining.py::TestExpandedSearchSpace::test_mining_config_includes_extended_operators
+FAILED tests/factors/test_llm_factor_mining.py::TestExpandedSearchSpace::test_mining_config_includes_fundamental_directions
+FAILED tests/factors/test_llm_factor_mining.py::TestExpandedSearchSpace::test_prompt_contains_fundamental_fields
+FAILED tests/factors/test_llm_factor_mining.py::TestExpandedSearchSpace::test_prompt_contains_hypothesis_requirement
+FAILED tests/factors/test_llm_factor_mining.py::TestFeedbackMechanism::test_feedback_prompt_includes_last_campaign
+FAILED tests/factors/test_llm_factor_mining.py::TestHypothesisConsistency::test_consistency_prompt_generation
+FAILED tests/factors/test_llm_factor_mining.py::TestHypothesisConsistency::test_filter_by_consistency
+FAILED tests/factors/test_llm_factor_mining.py::TestHypothesisConsistency::test_parse_hypothesis_from_llm_response
+FAILED tests/factors/test_volatility.py::TestVolatilityFactor::test_factor_creation
+FAILED tests/market/test_cb_2022_new_rule.py::TestCB2022NewRulePriceLimit::test_no_prev_close_skips_check
+FAILED tests/market/test_market_rules_edge.py::TestPrevCloseZeroSkipsCheck::test_limit_order_with_prev_close_zero_passes
+FAILED tests/market/test_market_rules_edge.py::TestPrevCloseZeroSkipsCheck::test_limit_order_with_prev_close_none_passes
+FAILED tests/market/test_rules_cn_equity_v2.py::TestLimitPriceRange::test_without_prev_close_skips_range_check
+FAILED tests/market/test_rules_convertible_bond.py::TestPrevCloseNoneHandling::test_prev_close_none_returns_warning
+FAILED tests/models/test_feature_groups.py::test_all_eight_groups_defined - A...
+FAILED tests/models/test_feature_groups.py::test_get_all_groups_has_eight_keys
+FAILED tests/ops/test_factor_decay_report.py::TestLoadDailyMonitorAlerts::test_reads_recent_files
+FAILED tests/ops/test_factor_decay_report.py::TestLoadDailyMonitorAlerts::test_skips_old_files
+FAILED tests/ops/test_factor_decay_report.py::TestLoadDailyMonitorAlerts::test_empty_dir
+FAILED tests/ops/test_factor_decay_report.py::TestExtractAlerts::test_extract_factor_decay
+FAILED tests/ops/test_factor_decay_report.py::TestExtractAlerts::test_extract_psi_alerts
+FAILED tests/ops/test_factor_decay_report.py::TestGenerateDecayReport::test_generates_json_file
+FAILED tests/ops/test_factor_decay_report.py::TestGenerateDecayReport::test_empty_audit_produces_report
+FAILED tests/ops/test_factor_decay_report.py::TestFactorDecayReportCli::test_cli_returns_0_no_psi
+FAILED tests/ops/test_factor_decay_report.py::TestFactorDecayReportCli::test_cli_returns_1_with_psi
+FAILED tests/ops/test_paper_ops_infra.py::TestDailyOpsImportFix::test_sys_path_insert_present
+FAILED tests/ops/test_paper_ops_infra.py::TestDailyOpsImportFix::test_project_root_computed
+FAILED tests/ops/test_paper_ops_infra.py::TestDailyOpsImportFix::test_compiles_without_error
+FAILED tests/ops/test_paper_ops_infra.py::TestDailyOpsImportFix::test_main_callable
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerCrontabFix::test_pythonpath_in_crontab
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerCrontabFix::test_crontab_has_paper_launcher
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerCrontabFix::test_crontab_has_daily_ops
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerCrontabFix::test_crontab_has_daily_scheduler
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerEntrypointEnvExport::test_env_export_to_etc_environment
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerEntrypointEnvExport::test_exports_tushare_token
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerEntrypointEnvExport::test_exports_pythonpath
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerEntrypointEnvExport::test_cron_starts_after_env_export
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerComposeVolumes::test_logs_volume_not_nested
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerComposeVolumes::test_pythonpath_includes_app
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerComposeVolumes::test_scripts_volume_mounted
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerComposeVolumes::test_configs_volume_mounted
+FAILED tests/ops/test_paper_ops_infra.py::TestDockerComposeVolumes::test_paper_state_volume_mounted
+FAILED tests/ops/test_s4_validator.py::TestLoadNavHistory::test_reads_valid_jsonl
+FAILED tests/ops/test_s4_validator.py::TestLoadNavHistory::test_missing_file_returns_empty
+FAILED tests/ops/test_s4_validator.py::TestLoadNavHistory::test_invalid_json_lines_skipped
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_no_records_returns_not_passed
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_sufficient_days_pass
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_insufficient_days_in_progress
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_nav_zero_is_invalid
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_excessive_change_is_invalid
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_gap_resets_streak
+FAILED tests/ops/test_s4_validator.py::TestValidateS4::test_dedup_same_date_keeps_last
+FAILED tests/ops/test_s4_validator.py::TestCheckAllPortfolios::test_scans_dirs
+FAILED tests/ops/test_s4_validator.py::TestCheckAllPortfolios::test_portfolio_filter
+FAILED tests/ops/test_s4_validator.py::TestFormatS4Summary::test_no_results
+FAILED tests/ops/test_s4_validator.py::TestFormatS4Summary::test_has_results
+FAILED tests/ops/test_s4_validator.py::TestS4ValidatorCli::test_exit_0_when_all_pass
+FAILED tests/ops/test_s4_validator.py::TestS4ValidatorCli::test_exit_1_when_any_fail
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_fresh_state_is_ok
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_stale_state_detected
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_missing_state_file
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_paper_state_json_also_found
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_empty_dir_returns_empty
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_nonexistent_dir
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_custom_threshold
+FAILED tests/ops/test_state_stale_checker.py::TestCheckStateStale::test_multiple_portfolios
+FAILED tests/ops/test_state_stale_checker.py::TestStateStaleCheckerCli::test_cli_returns_0_when_fresh
+FAILED tests/ops/test_state_stale_checker.py::TestStateStaleCheckerCli::test_cli_returns_1_when_stale
+FAILED tests/portfolio/test_capacity_allocator.py::TestAllocatorMinWeight::test_min_weight_respected
+FAILED tests/portfolio/test_cross_asset_allocator.py::TestUtilFunctions::test_compute_annualized_vol
+FAILED tests/portfolio/test_position_manager_edge.py::TestTotalMarketValueEdge::test_missing_price
+FAILED tests/portfolio/test_regime_detector.py::TestRegimeDetectorHMM::test_hmm_init
+FAILED tests/risk/test_var.py::TestHistoricalVaR::test_annualized_var - asser...
+FAILED tests/scripts/test_ops.py::TestVerifyDbIntegrity::test_valid_db - Modu...
+FAILED tests/scripts/test_ops.py::TestVerifyDbIntegrity::test_missing_db - Mo...
+FAILED tests/scripts/test_ops.py::TestVerifyDbIntegrity::test_corrupt_db - Mo...
+FAILED tests/scripts/test_ops.py::TestBackupDatabase::test_successful_backup
+FAILED tests/scripts/test_ops.py::TestBackupDatabase::test_missing_source - M...
+FAILED tests/scripts/test_ops.py::TestBackupDatabase::test_backup_creates_dir
+FAILED tests/scripts/test_ops.py::TestCleanupOldBackups::test_removes_old_backups
+FAILED tests/scripts/test_ops.py::TestCleanupOldBackups::test_keeps_recent - ...
+FAILED tests/scripts/test_ops.py::TestCleanupOldBackups::test_empty_dir - Mod...
+FAILED tests/scripts/test_ops.py::TestDbBackupMain::test_verify_only_pass - M...
+FAILED tests/scripts/test_ops.py::TestDbBackupMain::test_verify_only_fail - M...
+FAILED tests/scripts/test_ops.py::TestDbBackupMain::test_full_backup_cli - Mo...
+FAILED tests/scripts/test_ops.py::TestLoadPaperNav::test_load_state_json - Mo...
+FAILED tests/scripts/test_ops.py::TestLoadPaperNav::test_load_nav_history_jsonl
+FAILED tests/scripts/test_ops.py::TestLoadPaperNav::test_missing_dir - Module...
+FAILED tests/scripts/test_ops.py::TestLoadPaperNav::test_empty_dir - ModuleNo...
+FAILED tests/scripts/test_ops.py::TestCheckNavDeviation::test_within_threshold
+FAILED tests/scripts/test_ops.py::TestCheckNavDeviation::test_exceeds_threshold
+FAILED tests/scripts/test_ops.py::TestCheckNavDeviation::test_zero_baseline
+FAILED tests/scripts/test_ops.py::TestCheckNavDeviation::test_exact_match - M...
+FAILED tests/scripts/test_ops.py::TestCheckNavDeviation::test_negative_deviation
+FAILED tests/scripts/test_ops.py::TestRunNavCheck::test_empty_state_dir - Mod...
+FAILED tests/scripts/test_ops.py::TestRunNavCheck::test_nonexistent_dir - Mod...
+FAILED tests/scripts/test_ops.py::TestNavMonitorMain::test_no_state_returns_zero
+FAILED tests/scripts/test_ops.py::TestCleanOutputScan::test_scan_finds_scattered
+FAILED tests/scripts/test_ops.py::TestCleanOutputScan::test_classify_file_types
+FAILED tests/scripts/test_ops.py::TestCleanOutputPreview::test_groups_by_category
+FAILED tests/scripts/test_ops.py::TestCleanOutputPreview::test_empty_dir - Mo...
+FAILED tests/scripts/test_ops.py::TestCleanOutputExecute::test_archive_moves_files
+FAILED tests/scripts/test_ops.py::TestCleanOutputExecute::test_delete_removes_files
+FAILED tests/scripts/test_ops.py::TestCleanOutputMain::test_dry_run - ModuleN...
+FAILED tests/scripts/test_ops.py::TestCleanOutputMain::test_execute_flag - Mo...
+FAILED tests/scripts/test_ops.py::TestCleanOutputMain::test_clean_dir_returns_zero
+FAILED tests/scripts/test_ops.py::TestCleanOutputMain::test_nonexistent_dir
+FAILED tests/strategy/test_cb_adaptive_factor.py::TestVolTargetingOverlay::test_high_vol_reduces_scale
+FAILED tests/strategy/test_cb_adaptive_factor.py::TestVolTargetingOverlay::test_low_vol_increases_scale
+FAILED tests/strategy/test_cb_adaptive_factor.py::TestVolTargetingOverlay::test_vol_reset_on_start
+FAILED tests/strategy/test_cb_adaptive_factor.py::TestCombinedOverlay::test_both_overlays_multiply
+FAILED tests/strategy/test_cb_orthogonal_factors.py::TestHighDistanceTracker::test_init_defaults
+FAILED tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_no_cash - ...
+FAILED tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_reward_sharpe
+FAILED tests/strategy/test_rl_portfolio.py::TestRLTrainer::test_train_short
+FAILED tests/strategy/test_rl_portfolio.py::TestRLTrainer::test_evaluate - Im...
+FAILED tests/strategy/test_sector_momentum.py::TestSectorMomentumConfig::test_defaults
+FAILED tests/strategy/test_strategy_regression.py::TestRankNormalizePenalty::test_nan_factor_gets_median_fill
+FAILED tests/strategy/test_strategy_regression.py::TestRankNormalizePenalty::test_zero_fill_mode
+FAILED tests/strategy/test_strategy_regression.py::TestHistoryBufferUsage::test_history_window_limited_by_deque
+FAILED tests/strategy/test_strategy_regression.py::TestPEADSueNoneFiltered::test_sue_none_excluded
+FAILED tests/strategy/test_strategy_regression.py::TestSectorMomentumMinIndustry::test_config_defaults
+FAILED tests/test_fees_slippage.py::test_low_slippage_warning - ImportError: ...
+FAILED tests/test_fees_slippage.py::test_normal_slippage_no_warning - ImportE...
+FAILED tests/test_market_rules_cn_equity.py::TestNormalPath::test_no_prev_close_warns_and_marks_unverified
+FAILED tests/utils/test_metrics.py::TestSharpeRatio::test_known_value - asser...
+FAILED tests/utils/test_vectorized.py::TestComputeVolatility::test_annualized_volatility
+ERROR tests/models/test_gru_ranker.py
+ERROR tests/ops/test_cb_data_utils.py
+ERROR tests/ops/test_daily_report.py
+ERROR tests/ops/test_v2_ml_paper_daily.py
+ERROR tests/portfolio/test_vol_targeting.py
+ERROR tests/risk/test_ml_risk_controls.py
+ERROR tests/risk/test_position_sizing.py
+ERROR tests/risk/test_position_sizing_edge.py
+ERROR tests/scripts/test_data_preheat.py
+ERROR tests/test_config.py
+ERROR tests/data/test_fingerprint.py::TestDataFingerprint::test_tushare_provider_fingerprint
+ERROR tests/data/test_fingerprint.py::TestDataFingerprint::test_fingerprint_consistency
+ERROR tests/data/test_fingerprint.py::TestDataFingerprint::test_fingerprint_different_adjust
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_generate_experiment_fingerprint
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_validate_fingerprint_match
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_validate_fingerprint_mismatch_config
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_fingerprint_serialization
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_compare_fingerprints
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_validate_fingerprint_raises
+ERROR tests/data/test_fingerprint.py::TestExperimentFingerprint::test_save_and_load_fingerprint
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_default_config
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_knowledge_base_default_constraints
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_knowledge_base_format_prompt
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_generate_mining_prompt
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_add_manual_candidates
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_parse_llm_response
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_validate_candidate_parse_only
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_run_campaign_empty
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_run_campaign_with_candidates
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_export_report
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_campaign_result_summary
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_factor_candidate_dataclass
+ERROR tests/factors/test_llm_factor_mining.py::TestLLMFactorMiner::test_ingest_rdagent_nonexistent_dir
+ERROR tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_obs_shape
+ERROR tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_action_shape
+ERROR tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_step_returns_tuple
+ERROR tests/strategy/test_rl_portfolio.py::TestPortfolioEnv::test_episode_terminates
+130 failed, 9862 passed, 65 skipped, 85 warnings, 37 errors in 182.10s (0:03:02)

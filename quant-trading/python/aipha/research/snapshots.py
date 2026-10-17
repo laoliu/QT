@@ -275,6 +275,10 @@ def build_tushare_snapshot(
     use_cache: bool = True,
 ) -> TushareSnapshot:
     """Fetch and assemble a frozen snapshot through existing TuShare adapters."""
+    if pit_provider is None and hasattr(equity_provider, "api"):
+        from aipha.data.tushare_pit_provider import TuSharePITProvider
+
+        pit_provider = TuSharePITProvider(equity_provider)
     market = equity_provider.load_daily_bars_range(spec.start_date, spec.end_date, use_cache=use_cache)
     basic = equity_provider.load_daily_basic_range(spec.start_date, spec.end_date, use_cache=use_cache)
     stock = equity_provider.load_stock_basic(use_cache=use_cache)

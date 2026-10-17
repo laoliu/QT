@@ -42,7 +42,18 @@ def run_portfolio_backtest(
     trades: list[dict[str, Any]] = []
     daily: list[dict[str, Any]] = []
     unexecutable = 0
+    execution_attempts = 0
+    unexecutable_reasons: dict[str, int] = {}
     fee_total = 0.0
+    commission_total = 0.0
+    transfer_total = 0.0
+    stamp_total = 0.0
+    slippage_total = 0.0
+
+    def skip_execution(reason: str) -> None:
+        nonlocal unexecutable
+        unexecutable += 1
+        unexecutable_reasons[reason] = unexecutable_reasons.get(reason, 0) + 1
 
     # A monthly signal on close D is queued and evaluated on the next available
     # market session, preserving the signal/execution information boundary.
@@ -87,18 +98,19 @@ def run_portfolio_backtest(
                     delta = deltas[symbol]
                     if delta == 0 or (1 if delta > 0 else -1) != side:
                         continue
+                    execution_attempts += 1
                     row = frame.loc[symbol] if symbol in frame.index else None
                     if row is None or bool(row.get("is_suspended", False)):
-                        unexecutable += 1
+                        skip_execution("missing_or_suspended")
                         continue
                     if side > 0 and bool(row.get("is_limit_up", False)):
-                        unexecutable += 1
+                        skip_execution("limit_up_buy_block")
                         continue
                     if side < 0 and bool(row.get("is_limit_down", False)):
-                        unexecutable += 1
+                        skip_execution("limit_down_sell_block")
                         continue
                     if side < 0 and buy_dates.get(symbol, day) >= day:
-                        unexecutable += 1
+                        skip_execution("t_plus_one")
                         continue
                     requested = int(abs(delta) * scale)
                     qty = (requested // 100) * 100
@@ -106,10 +118,12 @@ def run_portfolio_backtest(
                         qty = min(qty, holdings.get(symbol, 0))
                         qty = (qty // 100) * 100
                     if qty <= 0:
+                        skip_execution("turnover_or_lot_constraint")
                         continue
                     base_price = float(row["open"])
                     slip = config.slippage_bps / 10000
                     fill_price = base_price * (1 + slip if side > 0 else 1 - slip)
+                    slippage_cost = abs(fill_price - base_price) * qty
                     notional = qty * fill_price
                     commission = max(config.commission_min, notional * config.commission_rate)
                     transfer = notional * config.transfer_fee_rate
@@ -120,9 +134,10 @@ def run_portfolio_backtest(
                         qty = min(qty, affordable)
                         qty = (qty // 100) * 100
                         if qty <= 0:
-                            unexecutable += 1
+                            skip_execution("insufficient_cash")
                             continue
                         notional = qty * fill_price
+                        slippage_cost = abs(fill_price - base_price) * qty
                         commission = max(config.commission_min, notional * config.commission_rate)
                         transfer = notional * config.transfer_fee_rate
                         stamp = 0.0
@@ -137,14 +152,19 @@ def run_portfolio_backtest(
                             holdings.pop(symbol, None)
                             buy_dates.pop(symbol, None)
                     fee_total += fees
+                    commission_total += commission
+                    transfer_total += transfer
+                    stamp_total += stamp
+                    slippage_total += slippage_cost
                     signal_id = signal_ids.get(symbol) or f"{current_run_id or current_model_id or 'research'}:{signal_day.date().isoformat()}:{symbol}:exit"
                     trades.append({
                         "trade_date": day.date().isoformat(), "signal_date": signal_day.date().isoformat(),
                         "symbol": symbol, "signal_id": signal_id, "run_id": current_run_id,
                         "model_id": current_model_id,
                         "side": "buy" if side > 0 else "sell", "qty": qty,
-                        "price": fill_price, "notional": notional, "commission": commission,
-                        "transfer_fee": transfer, "stamp_tax": stamp, "slippage_bps": config.slippage_bps,
+                        "price": fill_price, "base_price": base_price, "notional": notional,
+                        "commission": commission, "transfer_fee": transfer, "stamp_tax": stamp,
+                        "slippage_cost": slippage_cost, "slippage_bps": config.slippage_bps,
                     })
         close_values = 0.0
         for symbol, qty in list(holdings.items()):
@@ -177,6 +197,17 @@ def run_portfolio_backtest(
             "portfolio_sharpe": sharpe,
             "portfolio_max_drawdown": float(drawdown.min()) if len(drawdown) else 0.0,
             "portfolio_costs": float(fee_total),
+            "portfolio_total_costs": float(fee_total + slippage_total),
+            "cost_attribution": {
+                "commission": float(commission_total),
+                "transfer_fee": float(transfer_total),
+                "stamp_tax": float(stamp_total),
+                "slippage": float(slippage_total),
+                "total": float(fee_total + slippage_total),
+            },
             "portfolio_turnover": float(traded / config.initial_capital),
+            "execution_attempts": int(execution_attempts),
+            "unexecutable_rate": float(unexecutable / execution_attempts) if execution_attempts else 0.0,
+            "unexecutable_reasons": dict(unexecutable_reasons),
         },
     }

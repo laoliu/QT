@@ -385,6 +385,11 @@ def test_portfolio_replay_executes_next_open_and_obeys_limit_up() -> None:
     assert result["trades"][0]["signal_date"] == "2024-01-30"
     assert result["trades"][0]["side"] == "buy"
     assert result["metrics"]["portfolio_costs"] > 0
+    assert result["metrics"]["cost_attribution"]["total"] == pytest.approx(
+        result["metrics"]["portfolio_total_costs"], rel=1e-12,
+    )
+    assert result["metrics"]["execution_attempts"] >= 1
+    assert "slippage_cost" in result["trades"][0]
 
 
 def test_targets_are_monthly_top_k_and_weight_capped() -> None:

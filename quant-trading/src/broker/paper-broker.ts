@@ -166,7 +166,8 @@ function computeAvailableQty(pos: PortfolioPosition): number {
 
 const CN_BUY_COMMISSION = 0.00025;
 const CN_SELL_COMMISSION = 0.00025;
-const CN_STAMP_DUTY = 0.001; // 0.1% on sell
+// A-share stamp duty has been 0.05% on sell transactions since Aug 2023.
+const CN_STAMP_DUTY = 0.0005;
 /** Per-contract commission for CN exchange options (¥1.7 to be conservative). */
 const CN_OPTION_FEE_PER_CONTRACT = 1.7;
 /** Simplified futures commission: per-lot fee (covers most products). */

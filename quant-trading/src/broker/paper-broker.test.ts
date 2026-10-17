@@ -61,7 +61,7 @@ function makeConfig(overrides?: Partial<QuantTradingConfig>): QuantTradingConfig
 
 async function loadPortfolio(): Promise<Portfolio> {
   try {
-    return JSON.parse(await fs.readFile(path.join(tmpDir, "portfolio.json"), "utf-8"));
+    return JSON.parse(await fs.readFile(path.join(tmpDir, "portfolio-paper.json"), "utf-8"));
   } catch {
     return {
       id: "default",
@@ -77,7 +77,7 @@ async function loadPortfolio(): Promise<Portfolio> {
 
 async function loadOrders(): Promise<Order[]> {
   try {
-    return JSON.parse(await fs.readFile(path.join(tmpDir, "orders.json"), "utf-8"));
+    return JSON.parse(await fs.readFile(path.join(tmpDir, "orders-paper.json"), "utf-8"));
   } catch {
     return [];
   }
@@ -148,6 +148,16 @@ describe("PaperBroker", () => {
         price: 50,
       });
       await new Promise((r) => setTimeout(r, 50));
+
+      // Simulate a prior-day holding so the A-share T+1 rule permits the sell.
+      const pfPath = path.join(makeConfig().dataDir!, "portfolio-paper.json");
+      const pf = JSON.parse(await fs.readFile(pfPath, "utf-8"));
+      const held = pf.positions.find((p: { symbol: string }) => p.symbol === "600519");
+      if (held) {
+        held.todayBuyQty = 0;
+        held.lastBuyDate = "2020-01-01";
+      }
+      await fs.writeFile(pfPath, JSON.stringify(pf, null, 2));
 
       // Sell all
       await broker.placeOrder({

@@ -1,11 +1,10 @@
-"""Aipha ML 排序引擎 — QT Python Bridge 入口。
+"""Legacy compatibility wrapper for the canonical A-share ML bridge.
 
 调用方式: QUANT_CONFIG='{...}' python -m engines.aipha_ml_engine
 
-支持三种模式:
-- train: Walk-Forward 训练
-- predict: 加载模型 → 排序 → 返回 top-k
-- evaluate: IC/IR 评估
+The default TypeScript tool invokes ``aipha.engines.aipha_ml_engine``.
+This module remains import-compatible for old callers but must not advertise
+the retired GRU/ensemble model list.
 """
 from __future__ import annotations
 
@@ -33,8 +32,10 @@ def run(config: dict) -> dict:
         return {
             "ok": True,
             "data": {
-                "models": ["lgbm_ranker", "gru_ranker", "ensemble"],
-                "ensemble_methods": ["rank_average", "weighted_average", "stacking"],
+                "models": ["lgbm", "linear"],
+                "default": "lgbm",
+                "deprecated_entrypoint": True,
+                "canonical_entrypoint": "aipha.engines.aipha_ml_engine",
             },
         }
     else:

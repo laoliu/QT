@@ -101,7 +101,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           data?: Record<string, unknown>;
         error?: string;
       }>(
-        "engines/aipha_ml_engine.py",
+        "aipha/engines/aipha_ml_engine.py",
         {
           action,
           modelType: args.modelType,

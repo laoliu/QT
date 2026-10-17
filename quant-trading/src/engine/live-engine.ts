@@ -222,7 +222,7 @@ export class LiveEngine implements AppService {
       // Seed position cost cache before any fill callbacks can fire
       try {
         const positions = await brokerAdapter.queryPositions();
-        mgr.updatePositionCosts(positions);
+        mgr.updatePositionCosts?.(positions);
       } catch {
         // Non-critical — syncState will retry in 60s
       }
@@ -615,7 +615,7 @@ export class LiveEngine implements AppService {
 
       // Update OrderManager position cost cache so sell fills can find entry prices
       // even for externally-bought positions or after positions are fully sold.
-      this.orderMgr?.updatePositionCosts(positions);
+      this.orderMgr?.updatePositionCosts?.(positions);
 
       // Notify account sync callback (EquityHistory recording)
       this.accountSyncCb?.(account, positions);
@@ -716,8 +716,11 @@ export class LiveEngine implements AppService {
       // Reconnect
       await this.brokerAdapter!.connect();
       this.log("Broker reconnected successfully");
-      this.consecutiveFailures = 0;
-      this.lastSyncError = null;
+      // Do not clear health failures merely because connect() returned.  The
+      // next account/position sync is the authoritative liveness check; a
+      // broker can accept a socket connection while its data endpoints are
+      // still unavailable. syncState() clears the counters only after both
+      // queries succeed.
     } catch (err) {
       this.log(`Broker reconnect failed: ${(err as Error).message}`, "error");
     }

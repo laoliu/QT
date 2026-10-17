@@ -76,11 +76,13 @@ vi.mock("./live-strategy-registry.js", () => ({
 const mockCancelAll = vi.fn();
 const mockSubmitFromSignal = vi.fn().mockResolvedValue({ ok: true });
 const mockCancelExpiredOrders = vi.fn().mockResolvedValue([]);
+const mockUpdatePositionCosts = vi.fn();
 vi.mock("../services/order-manager.js", () => ({
   OrderManager: class MockOrderManager {
     cancelAll = mockCancelAll;
     submitFromSignal = mockSubmitFromSignal;
     cancelExpiredOrders = mockCancelExpiredOrders;
+    updatePositionCosts = mockUpdatePositionCosts;
     constructor(_cfg: unknown, _broker: unknown, _api: unknown) {}
   },
 }));

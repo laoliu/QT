@@ -162,6 +162,18 @@ def test_paper_gateway_boundary_applies_plan_risk_gate() -> None:
         )
 
 
+def test_execution_plan_id_covers_full_target_payload(tmp_path: Path) -> None:
+    raw = _plan().to_dict()
+    original_id = raw["plan_id"]
+    raw["targets"][0]["target_weight"] = 0.1
+    tampered = tmp_path / "tampered-plan.json"
+    tampered.write_text(json.dumps(raw, default=str), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="plan_id does not match"):
+        read_execution_plan(tampered)
+    assert original_id == raw["plan_id"]
+
+
 def test_execute_paper_writes_durable_provenance_receipt(tmp_path: Path, monkeypatch) -> None:
     import json
     from engines.aipha_ml_engine import run

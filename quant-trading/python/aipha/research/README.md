@@ -67,10 +67,12 @@ past dates. The portfolio policy applies `portfolio.max_industry_weight`
 walks the ranked list and skips names that would exceed the cap; when a local
 fixture or external snapshot has no dated industry field, the cap is not
 inferred and the report marks industry exposure as unavailable.
-`PaperGateway.submit_target_plan` consumes the
-generated paper plan, rejects live plans, applies the independent position and
-total-weight risk gate, and carries plan/run/model/signal provenance into every
-submitted order. The `execute_paper` bridge action additionally requires
+Execution plan schema v2 binds `plan_id` to the complete normalized plan,
+including mode, weights, reasons and risk flags; older schema v1 plans are
+rejected and must be re-exported from their source run. `PaperGateway.submit_target_plan`
+consumes the generated paper plan, rejects live plans, applies the independent
+position and total-weight risk gate, and carries plan/run/model/signal
+provenance into every submitted order. The `execute_paper` bridge action additionally requires
 explicit `confirm=true`; it never selects QMT.
 
 The `export` action writes one execution-plan JSON file per rebalance date in

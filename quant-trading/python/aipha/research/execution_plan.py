@@ -25,7 +25,7 @@ class ExecutionPlan:
     plan_id: str
 
     def validate(self, *, allow_live: bool = False) -> None:
-        if self.schema_version != 1:
+        if self.schema_version != 2:
             raise ValueError("unsupported execution plan schema_version")
         if self.mode not in {"paper", "live"}:
             raise ValueError("execution plan mode must be paper or live")
@@ -51,8 +51,15 @@ class ExecutionPlan:
         expected_signal = "signals-" + hashlib.sha256(batch_payload.encode("utf-8")).hexdigest()[:20]
         if self.signal_id != expected_signal:
             raise ValueError("execution plan signal_id does not match target provenance")
-        plan_payload = "|".join([self.run_id, self.model_id, self.signal_id, self.rebalance_date.isoformat()])
-        expected_plan_id = "plan-" + hashlib.sha256(plan_payload.encode("utf-8")).hexdigest()[:20]
+        expected_plan_id = _plan_id(
+            schema_version=self.schema_version,
+            mode=self.mode,
+            run_id=self.run_id,
+            model_id=self.model_id,
+            signal_id=self.signal_id,
+            rebalance_date=self.rebalance_date,
+            targets=self.targets,
+        )
         if self.plan_id != expected_plan_id:
             raise ValueError("execution plan plan_id does not match its contents")
 
@@ -139,9 +146,17 @@ def build_execution_plan(
         raise ValueError("execution plan can contain one rebalance date only")
     batch_payload = "|".join([resolved_run, resolved_model, *signal_ids, rows[0].rebalance_date.isoformat()])
     batch_signal_id = "signals-" + hashlib.sha256(batch_payload.encode("utf-8")).hexdigest()[:20]
-    payload = "|".join([resolved_run, resolved_model, batch_signal_id, rows[0].rebalance_date.isoformat()])
-    plan_id = "plan-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
-    plan = ExecutionPlan(1, mode, resolved_run, resolved_model, batch_signal_id, rows[0].rebalance_date, rows, plan_id)
+    schema_version = 2
+    plan_id = _plan_id(
+        schema_version=schema_version,
+        mode=mode,
+        run_id=resolved_run,
+        model_id=resolved_model,
+        signal_id=batch_signal_id,
+        rebalance_date=rows[0].rebalance_date,
+        targets=rows,
+    )
+    plan = ExecutionPlan(schema_version, mode, resolved_run, resolved_model, batch_signal_id, rows[0].rebalance_date, rows, plan_id)
     plan.validate(allow_live=allow_live)
     return plan
 
@@ -182,6 +197,47 @@ def _execution_plan_from_dict(raw: dict[str, Any], *, allow_live: bool = False) 
     )
     plan.validate(allow_live=allow_live)
     return plan
+
+
+def _plan_id(
+    *,
+    schema_version: int,
+    mode: str,
+    run_id: str,
+    model_id: str,
+    signal_id: str,
+    rebalance_date: date,
+    targets: Iterable[TargetPosition],
+) -> str:
+    """Derive an identifier from the complete plan, including every target."""
+    target_payload = [
+        {
+            "rebalance_date": target.rebalance_date.isoformat(),
+            "symbol": target.symbol,
+            "target_weight": float(target.target_weight),
+            "reason": target.reason,
+            "risk_flags": list(target.risk_flags),
+            "run_id": target.run_id,
+            "model_id": target.model_id,
+            "signal_id": target.signal_id,
+        }
+        for target in sorted(targets, key=lambda item: (item.symbol, item.signal_id))
+    ]
+    canonical = json.dumps(
+        {
+            "schema_version": schema_version,
+            "mode": mode,
+            "run_id": run_id,
+            "model_id": model_id,
+            "signal_id": signal_id,
+            "rebalance_date": rebalance_date.isoformat(),
+            "targets": target_payload,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return "plan-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:20]
 
 
 def read_execution_plans(path: str | Path, *, allow_live: bool = False) -> tuple[ExecutionPlan, ...]:

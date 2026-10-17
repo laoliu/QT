@@ -162,6 +162,8 @@ def load_research_config(path: str | Path) -> ResearchConfig:
     execution = sections["execution"]
     if data.get("provider", "tushare_pit") != "tushare_pit":
         raise ValueError("canonical historical research requires data.provider=tushare_pit")
+    if data.get("adjust", "point_in_time") != "point_in_time":
+        raise ValueError("canonical historical research requires data.adjust=point_in_time")
     if execution.get("mode", "paper") != "paper":
         raise ValueError("research config execution.mode must be paper")
     if universe.get("exclude_st", True) is not True or universe.get("exclude_suspended", True) is not True:
@@ -177,6 +179,7 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         raise ValueError("canonical model.type must be lightgbm_ranker or linear")
     return ResearchConfig(
         data_provider=data["provider"],
+        adjust=data.get("adjust", "point_in_time"),
         feature_version=features.get("version", "cn_equity_v1"),
         universe=universe.get("base_index", "CSI500").lower().replace("csi", "csi"),
         rebalance=portfolio.get("rebalance", "monthly"),

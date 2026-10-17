@@ -26,6 +26,7 @@ class ResearchConfig:
     """Default research policy for A-share low-frequency strategies."""
 
     data_provider: str = "tushare_pit"
+    adjust: str = "point_in_time"
     feature_version: str = "cn_equity_v1"
     universe: str = "csi500"
     rebalance: str = "monthly"
@@ -54,6 +55,8 @@ class ResearchConfig:
     def __post_init__(self) -> None:
         if self.model_type not in {"lightgbm", "elasticnet"}:
             raise ValueError("canonical research pipeline supports model_type=lightgbm or elasticnet")
+        if self.adjust != "point_in_time":
+            raise ValueError("canonical research pipeline requires adjust=point_in_time")
         if self.rebalance != "monthly":
             raise ValueError("canonical research pipeline currently uses monthly rebalance")
         if self.train_years < 1 or self.test_months < 1 or self.n_estimators < 1:
@@ -209,6 +212,7 @@ class ResearchPipeline:
             index_code=index_code,
             benchmark_code=benchmark_code or index_code,
             feature_version=self.config.feature_version,
+            adjust=self.config.adjust,
         )
         snapshot = build_tushare_snapshot(
             equity_provider,

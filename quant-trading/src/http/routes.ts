@@ -28,6 +28,7 @@ import { parseJsonBody } from "./parse-body.js";
 import { todayCST } from "../utils/cst-time.js";
 import { fetchStockNames } from "./routes/daily-pick.js";
 import { listUnifiedStrategies } from "../engine/strategy-registry.js";
+import { registerMLResearchRoutes } from "./ml-research-api.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -572,6 +573,9 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Sector / Fund-Flow / Dragon-Tiger APIs ────────────────────
   registerPythonToolRoutes(deps);
+
+  // ── Canonical A-share ML research API ─────────────────────────
+  registerMLResearchRoutes(api, config, secure);
 
   // ── Trade Plans API ──────────────────────────────────────────
   registerTradePlanRoutes(deps);

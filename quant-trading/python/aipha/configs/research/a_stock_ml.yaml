@@ -6,7 +6,9 @@ data:
   provider: tushare_pit
   snapshot_dir: data/snapshots
   frequency: 1d
-  adjust: qfq
+  # The research snapshot stores raw prices plus a factor known on each
+  # trade date. Do not replace this with a final-history qfq series.
+  adjust: point_in_time
 
 universe:
   base_index: CSI500

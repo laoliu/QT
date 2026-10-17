@@ -5,7 +5,7 @@ data:
   provider: tushare_pit
   snapshot_dir: data/snapshots
   frequency: 1d
-  adjust: qfq
+  adjust: point_in_time
 
 universe:
   base_index: CSI500

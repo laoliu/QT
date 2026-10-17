@@ -22,8 +22,10 @@ import time
 # ===================== CONFIG =====================
 
 # Mac receiver URL (RECEIVER.py running on Mac)
-_BRIDGE_HOST = os.environ.get("OPENCLAW_HOST", "192.168.3.36")
-_BRIDGE_PORT = os.environ.get("BRIDGE_RECEIVER_PORT", "58088")
+_BRIDGE_HOST = os.environ.get("OPENCLAW_HOST", "192.168.3.30")
+# 58088 is excluded on the QMT Windows host (WinError 10013); use the
+# dedicated push-receiver port unless an explicit environment override exists.
+_BRIDGE_PORT = os.environ.get("BRIDGE_RECEIVER_PORT", "18889")
 MAC_RECEIVER_URL = f"http://{_BRIDGE_HOST}:{_BRIDGE_PORT}"
 
 # Log file for debug output

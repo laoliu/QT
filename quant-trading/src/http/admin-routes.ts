@@ -3124,7 +3124,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const receiver = receiverService?.getStatus() ?? {
         running: false,
         pid: null,
-        port: config.receiver?.port ?? 58088,
+        port: config.receiver?.port ?? 18889,
         host: config.receiver?.host ?? "0.0.0.0",
         restartCount: 0,
         startedAt: null,
@@ -3387,7 +3387,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
         provider: config.dataProvider ?? "smart",
         pythonPath: config.pythonPath ?? "python3",
         availableProviders: DATA_PROVIDERS,
-        receiverPort: config.receiver?.port ?? 58088,
+        receiverPort: config.receiver?.port ?? 18889,
         receiverHost: config.receiver?.host ?? "0.0.0.0",
         receiverEnabled: config.receiver?.enabled !== false,
         warehouse: warehouseStats,

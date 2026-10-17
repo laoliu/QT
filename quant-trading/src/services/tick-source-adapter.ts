@@ -234,7 +234,7 @@ export function createDefaultTickSourceAdapter(
   const source = config.tickData?.source ?? "qmt-bridge";
   if (source === "receiver-proxy") {
     if (config.receiver?.enabled === false) return null;
-    const receiverPort = config.receiver?.port ?? 58088;
+    const receiverPort = config.receiver?.port ?? 18889;
     const endpoint = `http://127.0.0.1:${receiverPort}`;
     let initialSeq = 0;
     // Attempt to recover afterSeq from persistent state

@@ -1018,7 +1018,7 @@ export type QuantTradingConfig = {
   receiver?: {
     /** Whether to auto-start RECEIVER.py (default: true when extension is enabled) */
     enabled?: boolean;
-    /** Listen port (default: 58088) */
+    /** Listen port (default: 18889) */
     port?: number;
     /** Listen host (default: "0.0.0.0") */
     host?: string;

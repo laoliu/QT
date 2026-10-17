@@ -3,7 +3,7 @@
  *
  * RECEIVER.py is the Mac-side HTTP server that bridges data requests between
  * the Mac (running OpenClaw) and the Windows QMT machine. It listens on a
- * configurable port (default 58088) and provides endpoints for the Windows
+ * configurable port (default 18889) and provides endpoints for the Windows
  * BRIDGE.py to poll pending requests and push results.
  *
  * This service:
@@ -48,7 +48,7 @@ export class ReceiverService implements OpenClawPluginService {
 
   constructor(private readonly config: QuantTradingConfig) {
     this.host = config.receiver?.host ?? "0.0.0.0";
-    this.port = config.receiver?.port ?? 58088;
+    this.port = config.receiver?.port ?? 18889;
     this.pythonPath = config.pythonPath ?? "python3";
     this.scriptDir = getStrategiesDir();
   }

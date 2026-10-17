@@ -353,7 +353,7 @@
           },
           "port": {
             "type": "number",
-            "description": "Listen port for RECEIVER.py (default: 58088)"
+            "description": "Listen port for RECEIVER.py (default: 18889)"
           },
           "host": {
             "type": "string",

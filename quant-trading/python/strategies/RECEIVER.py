@@ -7,7 +7,7 @@
 # then POSTs results back here.
 #
 # Usage:
-#   python3 RECEIVER.py [--port 58088] [--host 0.0.0.0]
+#   python3 RECEIVER.py [--port 18889] [--host 0.0.0.0]
 #
 # API:
 #   POST /request      <- Mac submits a data request, returns {"id": "..."}
@@ -61,7 +61,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 # ===================== CONFIG =====================
 
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 58088
+DEFAULT_PORT = 18889
 REQUEST_TIMEOUT = 60  # seconds to wait for result before timing out
 REQUEST_EXPIRY = 300  # seconds before a request is cleaned up
 

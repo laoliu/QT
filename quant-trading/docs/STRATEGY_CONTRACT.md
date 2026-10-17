@@ -33,3 +33,5 @@ engine, dataAsOf, signalFormat, signals
 `aipha-ml-ranking` 是 A 股低频多因子研究的唯一默认策略。历史数据必须来自带元数据旁车文件的冻结 TuShare PIT 快照；训练、OOS 预测、组合回测和目标持仓导出均由 `python/aipha/research` 完成。TS 负责调度和 UI，Paper/QMT 只消费目标持仓或执行计划。
 
 Paper 和 QMT 的订单持久化都按 broker 模式分文件保存（`orders-paper.json` / `orders-live.json`），订单和已完成交易记录保留 `runId`、`signalId`、`strategyVersion`、`dataTimestamp`，进程重启后可按同一契约回放和查询。QMT 实盘配置还要求订单来自带 provenance 的执行计划；没有统一元数据的订单会在桥接层被拒绝。
+
+QMT 登录并显示交易连接后，可运行 `python scripts/qmt-readonly-probe.py` 完成只读实机验收；探测只查询账户、持仓和历史订单，然后断开连接。

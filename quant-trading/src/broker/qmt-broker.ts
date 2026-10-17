@@ -252,6 +252,7 @@ export class QMTBroker implements IBrokerAdapter {
       mini_qmt_path: this.qmtCfg.miniQmtPath ?? "",
       account_id: this.qmtCfg.accountId ?? "",
       account_type: this.qmtCfg.accountType ?? "STOCK",
+      require_execution_plan: cfg.tradingAccount?.requireExecutionPlan === true,
     });
 
     // Register event handler for push notifications from Python

@@ -910,6 +910,39 @@ class PaperGateway(TradingGateway):
         )
         return order.order_id
 
+    def submit_target_plan(
+        self,
+        plan: Any,
+        *,
+        prices: dict[str, float],
+        account_value: float,
+        current_positions: dict[str, int] | None = None,
+    ) -> list[str]:
+        """Consume a validated paper execution plan.
+
+        Research exports targets, while this adapter is the only standard
+        bridge that turns them into paper orders.  The plan remains the
+        source of provenance; callers cannot submit a live plan through the
+        paper gateway.
+        """
+        from aipha.research.execution_plan import execute_target_plan
+
+        if getattr(plan, "mode", None) != "paper":
+            raise GatewayError("PaperGateway requires an execution plan with mode=paper", code="PLAN_MODE")
+        if current_positions is None:
+            current_positions = {
+                symbol: int(self._position_mgr.get_qty(symbol))
+                for symbol in self._position_mgr.get_all_symbols()
+            }
+        return execute_target_plan(
+            self,
+            plan,
+            prices=prices,
+            account_value=account_value,
+            current_positions=current_positions,
+            allow_live=False,
+        )
+
     def cancel_order(self, order_id: str) -> bool:
         """撤单 — 解冻资金/持仓。"""
         gw_order = self._orders.get(order_id)

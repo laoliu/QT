@@ -36,6 +36,7 @@ class ResearchConfig:
     purge_days: int = 20
     top_k: int = 30
     max_position_weight: float = 0.05
+    max_industry_weight: float | None = 0.20
     max_daily_turnover: float = 0.30
     model_type: str = "lightgbm"
     objective: str = "lambdarank"
@@ -61,6 +62,8 @@ class ResearchConfig:
             raise ValueError("purge_days must be >= forward_days")
         if not 0 < self.max_position_weight <= 1:
             raise ValueError("max_position_weight must be in (0, 1]")
+        if self.max_industry_weight is not None and not 0 < self.max_industry_weight <= 1:
+            raise ValueError("max_industry_weight must be None or in (0, 1]")
         if not 0 < self.max_daily_turnover <= 2:
             raise ValueError("max_daily_turnover must be in (0, 2]")
 
@@ -105,6 +108,8 @@ def build_target_positions(
     *,
     top_k: int = 30,
     max_position_weight: float = 0.05,
+    max_industry_weight: float | None = None,
+    industry_column: str = "industry",
     run_id: str = "",
     model_id: str = "",
 ) -> list[TargetPosition]:
@@ -124,11 +129,23 @@ def build_target_positions(
     for raw_date, group in normalized.groupby("trade_date", sort=True):
         ranked = group.dropna(subset=["score"]).sort_values(
             ["score", "symbol"], ascending=[False, True],
-        ).head(top_k)
+        )
         if ranked.empty:
             continue
-        weight = min(max_position_weight, 1.0 / len(ranked))
-        for rank, row in enumerate(ranked.itertuples(index=False), start=1):
+        weight = min(max_position_weight, 1.0 / top_k)
+        cap_enabled = max_industry_weight is not None and industry_column in ranked.columns
+        selected: list[Any] = []
+        industry_weights: dict[str, float] = {}
+        for row in ranked.itertuples(index=False):
+            if len(selected) >= top_k:
+                break
+            industry = str(getattr(row, industry_column, "__UNKNOWN__")).strip() or "__UNKNOWN__"
+            if cap_enabled and industry_weights.get(industry, 0.0) + weight > float(max_industry_weight) + 1e-12:
+                continue
+            selected.append(row)
+            if cap_enabled:
+                industry_weights[industry] = industry_weights.get(industry, 0.0) + weight
+        for rank, row in enumerate(selected, start=1):
             rows.append(TargetPosition(
                 rebalance_date=pd.Timestamp(raw_date).date(),
                 symbol=str(row.symbol),
@@ -316,6 +333,7 @@ class ResearchPipeline:
             oos,
             top_k=self.config.top_k,
             max_position_weight=self.config.max_position_weight,
+            max_industry_weight=self.config.max_industry_weight,
             run_id=self.run_id,
             model_id=self.run_id,
         )

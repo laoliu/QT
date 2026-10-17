@@ -59,6 +59,10 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         purge_days=int(model.get("purge_days", 20)),
         top_k=int(portfolio.get("top_k", 30)),
         max_position_weight=float(portfolio.get("max_position_weight", 0.05)),
+        max_industry_weight=(
+            None if portfolio.get("max_industry_weight", 0.20) is None
+            else float(portfolio.get("max_industry_weight", 0.20))
+        ),
         max_daily_turnover=float(portfolio.get("max_daily_turnover", 0.30)),
         model_type=model_aliases[configured_model],
         objective=model.get("objective", "lambdarank"),

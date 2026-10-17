@@ -44,6 +44,14 @@ configurable fees/slippage, daily turnover, T+1, suspension, and
 limit-up/limit-down execution blocks. It is a research/paper accounting engine;
 it does not connect to a broker or submit orders.
 
+The canonical portfolio policy also applies `portfolio.max_industry_weight`
+(default 20%) when the frozen panel contains an `industry` column. Selection
+walks the ranked list and skips names that would exceed the cap; when the panel
+has no industry field, the cap is not inferred and the report marks industry
+exposure as unavailable. `PaperGateway.submit_target_plan` consumes the
+generated paper plan, rejects live plans, and carries plan/run/model/signal
+provenance into every submitted order.
+
 Legacy model folders without `model_manifest.json` are rejected. Use
 `migrate_legacy_model` only with an explicit feature version, column order,
 snapshot identifier, and operator attestation. QMT consumption is available

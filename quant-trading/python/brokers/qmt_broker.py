@@ -127,6 +127,7 @@ class QMTBrokerBridge:
         self.mini_qmt_path: str = init_args.get("mini_qmt_path", "")
         self.account_id: str = init_args.get("account_id", "")
         self.account_type: str = init_args.get("account_type", "STOCK")
+        self.require_execution_plan: bool = bool(init_args.get("require_execution_plan", False))
         self.trader: Optional[Any] = None
         self.account: Optional[Any] = None
         self._quote_handler = QuoteHandler()
@@ -182,6 +183,10 @@ class QMTBrokerBridge:
     def place_order(self, params: dict) -> dict:
         if not self.trader or not self.account:
             raise RuntimeError("Not connected")
+        if self.require_execution_plan and (not params.get("run_id") or not params.get("signal_id")):
+            raise RuntimeError(
+                "QMT live profile requires run_id and signal_id from a validated execution plan"
+            )
         stock_code = params["stock_code"]
         order_type = int(params["order_type"])    # 23=buy, 24=sell
         price_type = int(params.get("price_type", 11))  # 11=限价, 5=市价

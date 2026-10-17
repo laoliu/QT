@@ -316,6 +316,21 @@ def test_targets_are_monthly_top_k_and_weight_capped() -> None:
     assert sum(t.target_weight for t in targets[:4]) == pytest.approx(0.2)
 
 
+def test_targets_apply_industry_cap_when_snapshot_has_industry() -> None:
+    rows = [
+        {"trade_date": "2024-01-31", "symbol": "A", "score": 5.0, "industry": "bank"},
+        {"trade_date": "2024-01-31", "symbol": "B", "score": 4.0, "industry": "bank"},
+        {"trade_date": "2024-01-31", "symbol": "C", "score": 3.0, "industry": "bank"},
+        {"trade_date": "2024-01-31", "symbol": "D", "score": 2.0, "industry": "tech"},
+    ]
+    targets = build_target_positions(
+        pd.DataFrame(rows), top_k=4, max_position_weight=0.25,
+        max_industry_weight=0.50,
+    )
+    assert [target.symbol for target in targets] == ["A", "B", "D"]
+    assert sum(target.target_weight for target in targets if target.symbol in {"A", "B"}) == pytest.approx(0.50)
+
+
 def test_execution_plan_is_paper_only_and_provenance_checked(tmp_path: Path) -> None:
     targets = build_target_positions(pd.DataFrame([
         {"trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0},
@@ -348,6 +363,40 @@ def test_live_plan_executor_attaches_provenance_to_every_order() -> None:
     assert ids and gateway.orders[0].metadata["run_id"] == "run-1"
     assert gateway.orders[0].metadata["model_id"] == "model-1"
     assert gateway.orders[0].metadata["signal_id"]
+
+
+def test_paper_gateway_accepts_only_paper_execution_plans() -> None:
+    from aipha.execution.paper_gateway import PaperGateway
+
+    targets = build_target_positions(pd.DataFrame([{
+        "trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0,
+    }]), top_k=1, max_position_weight=0.5, run_id="run-paper", model_id="model-paper")
+    plan = build_execution_plan(targets, run_id="run-paper", model_id="model-paper")
+
+    class SpyPaperGateway(PaperGateway):
+        def __init__(self):
+            self.orders = []
+
+        def submit_order(self, order):
+            self.orders.append(order)
+            return order.order_id
+
+    gateway = SpyPaperGateway()
+    order_ids = gateway.submit_target_plan(
+        plan, prices={"600000.SH": 10.0}, account_value=100_000,
+        current_positions={},
+    )
+    assert order_ids == [plan.plan_id + ":600000.SH:BUY"]
+    assert gateway.orders[0].metadata["execution_plan_id"] == plan.plan_id
+    assert gateway.orders[0].metadata["run_id"] == "run-paper"
+
+    live_plan = build_execution_plan(targets, mode="live", allow_live=True)
+    from aipha.execution.gateway import GatewayError
+    with pytest.raises(GatewayError, match="mode=paper"):
+        gateway.submit_target_plan(
+            live_plan, prices={"600000.SH": 10.0}, account_value=100_000,
+            current_positions={},
+        )
 
 
 def test_legacy_model_without_manifest_is_rejected(tmp_path: Path) -> None:

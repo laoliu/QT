@@ -153,6 +153,7 @@ def run(config: dict) -> dict:
                 normalized,
                 top_k=cfg.top_k,
                 max_position_weight=cfg.max_position_weight,
+                max_industry_weight=cfg.max_industry_weight,
             )
             metrics = _evaluate_predictions(normalized, targets, cfg)
             return {"ok": True, "data": {"metrics": metrics, "rows": int(len(normalized))}}
@@ -171,6 +172,7 @@ def run(config: dict) -> dict:
                 source,
                 top_k=int(config.get("topN", cfg.top_k)),
                 max_position_weight=cfg.max_position_weight,
+                max_industry_weight=cfg.max_industry_weight,
                 run_id=run_id,
                 model_id=model_id,
             )

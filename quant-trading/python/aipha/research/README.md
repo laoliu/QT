@@ -95,6 +95,11 @@ for online TuShare snapshot construction, use the `ml_ranking` bridge's
 `train_tushare` action. The old `--check-only` rolling-retrainer mode remains
 available for read-only drift and coverage checks.
 
+Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
+read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.
+Adding `--strict` makes CI fail while any applicable ML config lacks a
+canonical snapshot/model manifest or an explicit legacy marker.
+
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
 read-only comparison, `--conflicts` to export keyed row conflicts, or

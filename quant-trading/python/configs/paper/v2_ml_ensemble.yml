@@ -23,6 +23,9 @@ paper_engine:
 # 选股参数
 strategy:
   name: ml_factor
+  # Historical cache-backed ensemble; migrate to canonical PIT snapshots
+  # before enabling this Paper profile without compatibility mode.
+  legacy_ml_compat: true
   parameters:
     top_k: 50
     rebalance_days: 10

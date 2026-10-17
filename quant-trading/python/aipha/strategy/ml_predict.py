@@ -63,6 +63,12 @@ from aipha.strategy.registry import StrategyRegistry
 
 logger = logging.getLogger(__name__)
 
+# Compatibility marker: this configurable strategy remains available for
+# historical configurations, but canonical A-share research must use the
+# versioned ``ml_ranking`` pipeline and its PIT snapshot contract.
+CANONICAL_ENTRYPOINT = "ml_ranking"
+LIFECYCLE = "compatibility"
+
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -132,6 +138,8 @@ class MLPredictStrategy(EquityRotationStrategy):
     """
 
     name = "ml_predict"
+    lifecycle = LIFECYCLE
+    canonical_entrypoint = CANONICAL_ENTRYPOINT
 
     def __init__(self, config: MLStrategyConfig | None = None, **kwargs: Any) -> None:
         super().__init__()

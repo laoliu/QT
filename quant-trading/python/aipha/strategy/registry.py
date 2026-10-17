@@ -125,12 +125,23 @@ class StrategyRegistry:
             ) from e
 
     def list_strategies(self) -> list[str]:
-        """列出所有已注册的策略
-
-        Returns:
-            策略名称列表
-        """
+        """列出所有已注册的策略（包含兼容入口）。"""
         return list(self._strategies.keys())
+
+    def list_discoverable_strategies(self) -> list[str]:
+        """List strategies suitable for new research/discovery surfaces.
+
+        Legacy strategy classes remain constructible by explicit name for old
+        configurations, but ML entries that point at ``ml_ranking`` are hidden
+        from the default discovery surface.
+        """
+        return [
+            name for name, strategy in self._strategies.items()
+            if not (
+                getattr(strategy, "canonical_entrypoint", None) == "ml_ranking"
+                and getattr(strategy, "lifecycle", "compatibility") != "primary"
+            )
+        ]
 
     def clear(self) -> None:
         """清空注册表（主要用于测试）"""
@@ -222,12 +233,13 @@ def create_strategy_from_config(config: dict[str, Any]) -> Strategy:
 
 
 def list_strategies() -> list[str]:
-    """列出所有已注册的策略
-
-    Returns:
-        策略名称列表
-    """
+    """列出所有已注册的策略（包含兼容入口）。"""
     return _registry.list_strategies()
+
+
+def list_discoverable_strategies() -> list[str]:
+    """List strategies exposed to new research/discovery callers."""
+    return _registry.list_discoverable_strategies()
 
 
 def _reset_registry() -> None:

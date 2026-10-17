@@ -17,7 +17,9 @@ def main():
     from aipha.strategy.registry import StrategyRegistry
 
     registry = StrategyRegistry()
-    available = registry.list_strategies()
+    # New screening/discovery callers must use the canonical ML ranking path;
+    # explicitly named compatibility strategies remain loadable by backtests.
+    available = registry.list_discoverable_strategies()
 
     if strategy_name not in available:
         result = {

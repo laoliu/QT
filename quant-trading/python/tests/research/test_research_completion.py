@@ -176,6 +176,17 @@ def test_legacy_ml_engine_only_forwards_canonical_actions() -> None:
     assert "versioned Parquet" in rejected["error"]
 
 
+def test_legacy_ml_strategies_are_hidden_from_new_discovery_surface() -> None:
+    from aipha.strategy.register_all import _reg
+
+    # Explicit construction remains available for historical configs.
+    assert "ml_predict" in _reg.list_strategies()
+    discoverable = _reg.list_discoverable_strategies()
+    assert "ml_predict" not in discoverable
+    assert "ml_factor" not in discoverable
+    assert "ml_factor_ensemble" not in discoverable
+
+
 def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     """Exercise the complete offline TuShare-shaped research contract."""
     pytest.importorskip("lightgbm")

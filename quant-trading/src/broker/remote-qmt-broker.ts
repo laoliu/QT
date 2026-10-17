@@ -193,6 +193,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
         mini_qmt_path: this.cfg.tradingAccount?.qmt?.miniQmtPath ?? "",
         account_id: this.cfg.tradingAccount?.qmt?.accountId ?? "",
         account_type: this.cfg.tradingAccount?.qmt?.accountType ?? "STOCK",
+        require_execution_plan: this.cfg.tradingAccount?.requireExecutionPlan === true,
       });
       this.connected = true;
       console.log(
@@ -239,6 +240,10 @@ export class RemoteQMTBroker implements IBrokerAdapter {
   }
 
   async placeOrder(req: OrderRequest): Promise<Order> {
+    const requirePlan = this.cfg.tradingAccount?.requireExecutionPlan === true;
+    if (requirePlan && (!req.runId || !req.modelId || !req.signalId)) {
+      throw new Error("QMT live profile requires runId, modelId and signalId from a validated execution plan");
+    }
     const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();
     const orderId = randomUUID();
@@ -256,6 +261,10 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       volume: req.quantity,
       strategy_name: req.strategyId ?? "manual",
       order_remark: clientOrderId,
+      run_id: req.runId,
+      model_id: req.modelId,
+      signal_id: req.signalId,
+      strategy_version: req.strategyVersion,
     });
 
     const order: Order = {
@@ -272,6 +281,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       filledQty: 0,
       status: "submitted",
       strategyId: req.strategyId,
+      modelId: req.modelId,
       signalId: req.signalId,
       runId: req.runId,
       strategyVersion: req.strategyVersion,
@@ -322,6 +332,7 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       quantity: update.quantity ?? original.quantity,
       price: update.price ?? original.price,
       strategyId: original.strategyId,
+      modelId: original.modelId,
       signalId: original.signalId,
       runId: original.runId,
       strategyVersion: original.strategyVersion,
@@ -545,10 +556,23 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       filledQty: (r.traded_volume as number) ?? 0,
       avgFillPrice: (r.traded_price as number) ?? undefined,
       status: mapQmtStatus((r.order_status as number) ?? 0),
+      strategyId: (r.strategy_name as string) || undefined,
+      modelId: RemoteQMTBroker.remarkProvenance(r.order_remark, "model_id"),
+      runId: RemoteQMTBroker.remarkProvenance(r.order_remark, "run_id"),
+      signalId: RemoteQMTBroker.remarkProvenance(r.order_remark, "signal_id"),
+      strategyVersion: RemoteQMTBroker.remarkProvenance(r.order_remark, "strategy_version"),
       brokerType: "qmt",
       createdAt: now,
       updatedAt: now,
     };
+  }
+
+  private static remarkProvenance(remark: unknown, key: string): string | undefined {
+    if (typeof remark !== "string") return undefined;
+    const prefix = `${key}=`;
+    const field = remark.split("|").find((part) => part.startsWith(prefix));
+    const value = field?.slice(prefix.length).trim();
+    return value || undefined;
   }
 
   private mapRawPosition(r: Record<string, unknown>): LivePosition {

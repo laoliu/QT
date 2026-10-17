@@ -259,6 +259,7 @@ def _read_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 _trading_trader: Any = None
 _trading_account: Any = None
 _trading_connected = False
+_require_execution_plan = False
 _trading_subscribed_codes: set[str] = set()
 _trading_events_seq = 0          # monotonically increasing event sequence
 _trading_events_buf: list[dict] = []   # ring buffer with seq-tagged events
@@ -377,7 +378,8 @@ def _trading_call_compat(method_names: list[str]) -> tuple[Any, str]:
 
 
 def _trading_connect(params: dict) -> dict:
-    global _trading_trader, _trading_account, _trading_connected
+    global _trading_trader, _trading_account, _trading_connected, _require_execution_plan
+    _require_execution_plan = bool(params.get("require_execution_plan", False))
     if _trading_connected and _trading_trader:
         return {"ok": True, "data": {"status": "already_connected", "account_id": TRADING_ACCOUNT_ID}}
 
@@ -438,7 +440,7 @@ def _trading_connect(params: dict) -> dict:
 
 
 def _trading_disconnect(_params: dict) -> dict:
-    global _trading_trader, _trading_account, _trading_connected
+    global _trading_trader, _trading_account, _trading_connected, _require_execution_plan
     if _trading_trader:
         try:
             _trading_trader.stop()
@@ -447,6 +449,7 @@ def _trading_disconnect(_params: dict) -> dict:
         _trading_trader = None
     _trading_account = None
     _trading_connected = False
+    _require_execution_plan = False
     logger.info("trading: disconnected")
     return {"ok": True, "data": {"status": "disconnected"}}
 
@@ -454,6 +457,10 @@ def _trading_disconnect(_params: dict) -> dict:
 def _trading_place_order(params: dict) -> dict:
     if not _trading_trader or not _trading_account:
         return {"ok": False, "error": "Not connected"}
+    if _require_execution_plan and (
+        not params.get("run_id") or not params.get("model_id") or not params.get("signal_id")
+    ):
+        return {"ok": False, "error": "QMT live profile requires run_id, model_id and signal_id from a validated execution plan"}
     stock_code = params.get("stock_code", "")
     order_type = int(params.get("order_type", 23))
     price_type = int(params.get("price_type", 11))
@@ -461,6 +468,15 @@ def _trading_place_order(params: dict) -> dict:
     volume = int(params.get("volume", 0))
     strategy = params.get("strategy_name", "")
     remark = params.get("order_remark", "")
+    provenance = [
+        f"run_id={params['run_id']}" if params.get("run_id") else "",
+        f"model_id={params['model_id']}" if params.get("model_id") else "",
+        f"signal_id={params['signal_id']}" if params.get("signal_id") else "",
+        f"strategy_version={params['strategy_version']}" if params.get("strategy_version") else "",
+    ]
+    provenance = [item for item in provenance if item]
+    if provenance:
+        remark = f"{remark}|{'|'.join(provenance)}"
     try:
         order_id = _trading_trader.order_stock(
             _trading_account, stock_code, order_type, volume,
@@ -497,6 +513,7 @@ def _serialize_qmt_order(o: Any) -> dict:
         "traded_price": o.traded_price,
         "order_status": o.order_status,
         "strategy_name": o.strategy_name or "",
+        "order_remark": getattr(o, "order_remark", "") or "",
     }
 
 

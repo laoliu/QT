@@ -56,6 +56,7 @@ describe("OrderManager + PaperBroker historical replay", () => {
 
     const metadata = {
       strategyId: "paper-replay-strategy",
+      modelId: "model-paper-replay-1",
       signalId: "signal-paper-replay-1",
       runId: "run-paper-replay-1",
       strategyVersion: "1.0.0",
@@ -95,10 +96,12 @@ describe("OrderManager + PaperBroker historical replay", () => {
       await fs.readFile(path.join(dataDir, "trades-paper.json"), "utf-8"),
     ) as Array<Record<string, unknown>>;
     expect(storedOrders).toHaveLength(2);
+    expect(storedOrders.every((order) => order.modelId === metadata.modelId)).toBe(true);
     expect(storedOrders.every((order) => order.runId === metadata.runId)).toBe(true);
     expect(storedTrades).toHaveLength(1);
     expect(storedTrades[0]).toMatchObject({
       runId: metadata.runId,
+      modelId: metadata.modelId,
       signalId: metadata.signalId,
       strategyVersion: metadata.strategyVersion,
       dataTimestamp: metadata.dataTimestamp,
@@ -111,7 +114,7 @@ describe("OrderManager + PaperBroker historical replay", () => {
     const replayManager = new OrderManager(cfg, replayBroker, null);
     await expect(replayManager.getOrders({ symbol: "AAPL" })).resolves.toHaveLength(2);
     await expect(replayManager.getTrades("AAPL")).resolves.toMatchObject([
-      expect.objectContaining({ runId: metadata.runId, signalId: metadata.signalId }),
+      expect.objectContaining({ modelId: metadata.modelId, runId: metadata.runId, signalId: metadata.signalId }),
     ]);
   });
 });

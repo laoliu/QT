@@ -66,6 +66,7 @@ class BridgeCallback(XtQuantTraderCallback if HAS_XTQUANT else object):
             "traded_price": order.traded_price,
             "order_status": order.order_status,
             "strategy_name": order.strategy_name or "",
+            "order_remark": getattr(order, "order_remark", "") or "",
             "strategy_error_msg": order.strategy_error_msg or "",
             "order_time": order.order_time or "",
         })
@@ -183,9 +184,13 @@ class QMTBrokerBridge:
     def place_order(self, params: dict) -> dict:
         if not self.trader or not self.account:
             raise RuntimeError("Not connected")
-        if self.require_execution_plan and (not params.get("run_id") or not params.get("signal_id")):
+        if self.require_execution_plan and (
+            not params.get("run_id")
+            or not params.get("model_id")
+            or not params.get("signal_id")
+        ):
             raise RuntimeError(
-                "QMT live profile requires run_id and signal_id from a validated execution plan"
+                "QMT live profile requires run_id, model_id and signal_id from a validated execution plan"
             )
         stock_code = params["stock_code"]
         order_type = int(params["order_type"])    # 23=buy, 24=sell
@@ -196,6 +201,7 @@ class QMTBrokerBridge:
         remark = params.get("order_remark", "")
         provenance = [
             f"run_id={params['run_id']}" if params.get("run_id") else "",
+            f"model_id={params['model_id']}" if params.get("model_id") else "",
             f"signal_id={params['signal_id']}" if params.get("signal_id") else "",
             f"strategy_version={params['strategy_version']}" if params.get("strategy_version") else "",
         ]
@@ -394,6 +400,7 @@ class QMTBrokerBridge:
             "traded_price": o.traded_price,
             "order_status": o.order_status,
             "strategy_name": o.strategy_name or "",
+            "order_remark": getattr(o, "order_remark", "") or "",
             "strategy_error_msg": getattr(o, "strategy_error_msg", "") or "",
             "order_time": getattr(o, "order_time", "") or "",
         }

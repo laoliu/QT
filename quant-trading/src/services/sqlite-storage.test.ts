@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   InMemoryStorage,
+  SqliteStorage,
   createStorage,
   CURRENT_SCHEMA_VERSION,
   SCHEMA_SQL,
@@ -208,12 +209,14 @@ describe("InMemoryStorage", () => {
         quantity: 100,
         price: 1850,
         status: "pending",
+        modelId: "model-storage-1",
         createdAt: new Date().toISOString(),
       };
       await storage.upsertOrder(order);
       const orders = await storage.getOrders();
       expect(orders).toHaveLength(1);
       expect(orders[0]!.orderId).toBe("ord-001");
+      expect(orders[0]!.modelId).toBe("model-storage-1");
     });
 
     it("filters orders by status", async () => {
@@ -427,7 +430,7 @@ describe("InMemoryStorage", () => {
 
 describe("Schema", () => {
   it("has current version", () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(1);
+    expect(CURRENT_SCHEMA_VERSION).toBe(2);
   });
 
   it("SQL contains all expected tables", () => {
@@ -447,16 +450,72 @@ describe("Schema", () => {
     expect(SCHEMA_SQL).toContain("idx_trades_symbol");
     expect(SCHEMA_SQL).toContain("idx_alerts_severity");
   });
+
+  it("migrates a v1 SQLite orders table and preserves existing rows", async () => {
+    const dataDir = tmpDir();
+    await fs.mkdir(dataDir, { recursive: true });
+    const dbPath = path.join(dataDir, "legacy.sqlite");
+    const sqliteModule = await import("better-sqlite3");
+    const Database = sqliteModule.default ?? sqliteModule;
+    const legacy = new Database(dbPath);
+    legacy.exec(`
+      CREATE TABLE schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL DEFAULT (datetime('now')));
+      INSERT INTO schema_version (version) VALUES (1);
+      CREATE TABLE orders (
+        order_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, market TEXT, side TEXT NOT NULL,
+        order_type TEXT NOT NULL, quantity INTEGER NOT NULL, price REAL,
+        status TEXT NOT NULL DEFAULT 'pending', strategy_id TEXT, signal_id TEXT,
+        filled_qty INTEGER DEFAULT 0, filled_price REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO orders (order_id, symbol, side, order_type, quantity, status)
+        VALUES ('legacy-order', '600519', 'buy', 'limit', 100, 'filled');
+    `);
+    legacy.close();
+
+    const storage = new SqliteStorage(dbPath);
+    try {
+      await storage.initialize();
+      const migrated = await storage.getOrders();
+      expect(migrated).toHaveLength(1);
+      expect(migrated[0]).toMatchObject({ orderId: "legacy-order", status: "filled" });
+      await storage.upsertOrder({
+        orderId: "new-order", symbol: "000001", side: "buy", orderType: "limit",
+        quantity: 100, status: "submitted", modelId: "model-2", signalId: "signal-2",
+      });
+      await expect(storage.getOrders({ symbol: "000001" })).resolves.toMatchObject([
+        { orderId: "new-order", modelId: "model-2", signalId: "signal-2" },
+      ]);
+    } finally {
+      await storage.close();
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ── Factory ─────────────────────────────────────────────────
 
 describe("createStorage", () => {
-  it("falls back to InMemoryStorage when SQLite unavailable", async () => {
+  it("uses SQLite when available and otherwise falls back to InMemoryStorage", async () => {
     const dir = tmpDir();
-    // better-sqlite3 is not installed in test env, so should fall back
     const storage = await createStorage(dir, true);
-    expect(storage).toBeInstanceOf(InMemoryStorage);
+    if (storage instanceof SqliteStorage) {
+      await storage.upsertOrder({
+        orderId: "sqlite-order",
+        symbol: "600519",
+        side: "buy",
+        orderType: "limit",
+        quantity: 100,
+        status: "submitted",
+        modelId: "model-sqlite",
+      });
+      await expect(storage.getOrders({ symbol: "600519" })).resolves.toMatchObject([
+        { orderId: "sqlite-order", modelId: "model-sqlite" },
+      ]);
+    } else {
+      expect(storage).toBeInstanceOf(InMemoryStorage);
+    }
     await storage.close();
     await fs.rm(dir, { recursive: true, force: true });
   });

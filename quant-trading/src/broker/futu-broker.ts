@@ -320,6 +320,7 @@ export class FutuBroker implements IBrokerAdapter {
       filledQty: 0,
       status: "submitted",
       strategyId: req.strategyId,
+      modelId: req.modelId,
       signalId: req.signalId,
       runId: req.runId,
       strategyVersion: req.strategyVersion,

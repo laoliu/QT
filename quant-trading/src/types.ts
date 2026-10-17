@@ -205,6 +205,7 @@ export type TradingSignal = {
   reason?: string;
   confidence?: number; // 0-1
   strategyId: string;
+  modelId?: string;
   signalId?: string;
   runId?: string;
   strategyVersion?: string;
@@ -421,6 +422,8 @@ export type Order = {
   avgFillPrice?: number; // volume-weighted average fill price
   status: OrderStatus;
   strategyId?: string; // which strategy generated this order
+  /** Research model provenance carried from a validated execution plan. */
+  modelId?: string;
   signalId?: string; // link back to the TradingSignal
   runId?: string;
   strategyVersion?: string;
@@ -477,6 +480,7 @@ export type TradeRecord = {
   netPnl: number;
   holdingDays?: number;
   strategyId?: string;
+  modelId?: string;
   signalId?: string;
   runId?: string;
   strategyVersion?: string;

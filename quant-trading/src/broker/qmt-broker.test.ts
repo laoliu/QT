@@ -103,7 +103,7 @@ describe("QMTBroker", () => {
           price: 1800,
           quantity: 100,
         }),
-      ).rejects.toThrow("requires runId and signalId");
+      ).rejects.toThrow("requires runId, modelId and signalId");
       expect(mockCall).not.toHaveBeenCalledWith("place_order", expect.anything());
     });
 
@@ -118,7 +118,7 @@ describe("QMTBroker", () => {
       };
       const broker = new QMTBroker(gatedConfig);
       await broker.connect();
-      await broker.placeOrder({
+      const order = await broker.placeOrder({
         symbol: "600519",
         market: "cn_stock",
         side: "buy",
@@ -126,14 +126,17 @@ describe("QMTBroker", () => {
         price: 1800,
         quantity: 100,
         strategyId: "aipha-ml-ranking",
+        modelId: "model-qmt-1",
         runId: "run-qmt-1",
         signalId: "signal-qmt-1",
         strategyVersion: "1.0.0",
       });
+      expect(order.modelId).toBe("model-qmt-1");
       expect(mockCall).toHaveBeenCalledWith(
         "place_order",
         expect.objectContaining({
           run_id: "run-qmt-1",
+          model_id: "model-qmt-1",
           signal_id: "signal-qmt-1",
           strategy_version: "1.0.0",
         }),
@@ -356,6 +359,34 @@ describe("QMTBroker", () => {
   });
 
   describe("event handling", () => {
+    it("restores execution provenance from broker order remarks when querying after restart", async () => {
+      mockCall.mockImplementation((method: string) => {
+        if (method === "query_orders") return [{
+          order_id: "QMT-HISTORY-1",
+          stock_code: "600519.SH",
+          order_type: 23,
+          price: 50,
+          order_volume: 100,
+          traded_volume: 100,
+          traded_price: 50,
+          order_status: 57,
+          strategy_name: "aipha-ml-ranking",
+          order_remark: "client-order|run_id=run-history|model_id=model-history|signal_id=signal-history|strategy_version=1.0.0",
+          order_time: "2026-01-05 09:31:00",
+        }];
+        return {};
+      });
+      const broker = new QMTBroker(config);
+      await broker.connect();
+
+      await expect(broker.queryOrders({ symbol: "600519" })).resolves.toMatchObject([{
+        runId: "run-history",
+        modelId: "model-history",
+        signalId: "signal-history",
+      }]);
+      await broker.disconnect();
+    });
+
     it("dispatches fill events to subscribers", async () => {
       const broker = new QMTBroker(config);
       await broker.connect();
@@ -501,6 +532,7 @@ describe("QMTBroker", () => {
       const manager = new OrderManager(cfg, broker, null);
       const metadata = {
         strategyId: "aipha-ml-ranking",
+        modelId: "model-qmt-replay-1",
         signalId: "signal-qmt-replay-1",
         runId: "run-qmt-replay-1",
         strategyVersion: "1.0.0",
@@ -557,8 +589,10 @@ describe("QMTBroker", () => {
       ) as Array<Record<string, unknown>>;
       expect(storedOrders).toHaveLength(2);
       expect(storedOrders.every((order) => order.runId === metadata.runId)).toBe(true);
+      expect(storedOrders.every((order) => order.modelId === metadata.modelId)).toBe(true);
       expect(storedTrades).toHaveLength(1);
       expect(storedTrades[0]).toMatchObject({
+        modelId: metadata.modelId,
         runId: metadata.runId,
         signalId: metadata.signalId,
         strategyVersion: metadata.strategyVersion,
@@ -571,7 +605,7 @@ describe("QMTBroker", () => {
       const replayManager = new OrderManager(cfg, replayBroker, null);
       await expect(replayManager.getOrders({ symbol: "600519" })).resolves.toHaveLength(2);
       await expect(replayManager.getTrades("600519")).resolves.toMatchObject([
-        expect.objectContaining({ runId: metadata.runId, signalId: metadata.signalId }),
+        expect.objectContaining({ modelId: metadata.modelId, runId: metadata.runId, signalId: metadata.signalId }),
       ]);
       await replayBroker.disconnect();
       expect(buyOrderId).toBeTruthy();

@@ -29,6 +29,8 @@ export type OrderRequest = {
   price?: number; // required for limit / stop_limit
   stopPrice?: number; // required for stop / stop_limit
   strategyId?: string;
+  /** Research model provenance (required by a gated QMT execution plan). */
+  modelId?: string;
   signalId?: string;
   runId?: string;
   strategyVersion?: string;

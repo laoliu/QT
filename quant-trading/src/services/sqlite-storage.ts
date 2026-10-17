@@ -21,7 +21,7 @@ import { nowCSTISO } from "../utils/cst-time.js";
 
 // ── Schema ───────────────────────────────────────────────────
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export const SCHEMA_SQL = `
 -- Schema version tracking
@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS orders (
   price       REAL,
   status      TEXT NOT NULL DEFAULT 'pending',
   strategy_id TEXT,
+  model_id    TEXT,
   signal_id   TEXT,
   filled_qty  INTEGER DEFAULT 0,
   filled_price REAL,
@@ -278,6 +279,7 @@ export interface OrderRow {
   price?: number;
   status: string;
   strategyId?: string;
+  modelId?: string;
   signalId?: string;
   filledQty?: number;
   filledPrice?: number;
@@ -848,11 +850,23 @@ export class SqliteStorage implements QuantStorage {
     // Run schema
     (this.db as Record<string, Function>).exec(SCHEMA_SQL);
 
+    // Version 2 adds model provenance without discarding existing orders.
+    const orderColumns = (this.db as Record<string, Function>)
+      .prepare("PRAGMA table_info(orders)")
+      .all() as Array<{ name: string }>;
+    if (!orderColumns.some((column) => column.name === "model_id")) {
+      (this.db as Record<string, Function>).exec("ALTER TABLE orders ADD COLUMN model_id TEXT");
+    }
+
     // Record schema version if not present
     const row = (this.db as Record<string, Function>)
       .prepare("SELECT MAX(version) as v FROM schema_version")
       .get() as { v: number | null } | undefined;
     if (!row?.v) {
+      (this.db as Record<string, Function>)
+        .prepare("INSERT INTO schema_version (version) VALUES (?)")
+        .run(CURRENT_SCHEMA_VERSION);
+    } else if (row.v < CURRENT_SCHEMA_VERSION) {
       (this.db as Record<string, Function>)
         .prepare("INSERT INTO schema_version (version) VALUES (?)")
         .run(CURRENT_SCHEMA_VERSION);
@@ -1012,8 +1026,8 @@ export class SqliteStorage implements QuantStorage {
   async upsertOrder(order: OrderRow): Promise<void> {
     (this.db as Record<string, Function>)
       .prepare(`
-      INSERT OR REPLACE INTO orders (order_id, symbol, market, side, order_type, quantity, price, status, strategy_id, signal_id, filled_qty, filled_price)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO orders (order_id, symbol, market, side, order_type, quantity, price, status, strategy_id, model_id, signal_id, filled_qty, filled_price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
       .run(
         order.orderId,
@@ -1025,6 +1039,7 @@ export class SqliteStorage implements QuantStorage {
         order.price ?? null,
         order.status,
         order.strategyId ?? null,
+        order.modelId ?? null,
         order.signalId ?? null,
         order.filledQty ?? 0,
         order.filledPrice ?? null,
@@ -1064,6 +1079,7 @@ export class SqliteStorage implements QuantStorage {
       price: r.price as number | undefined,
       status: r.status as string,
       strategyId: r.strategy_id as string | undefined,
+      modelId: r.model_id as string | undefined,
       signalId: r.signal_id as string | undefined,
       filledQty: r.filled_qty as number | undefined,
       filledPrice: r.filled_price as number | undefined,

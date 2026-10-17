@@ -112,6 +112,16 @@ def test_execute_paper_writes_durable_provenance_receipt(tmp_path: Path, monkeyp
     result = run({
         "action": "execute_paper",
         "confirm": True,
+        "idempotencyKey": "paper-execution-1",
+        "planPath": str(plan_path),
+        "accountValue": 100_000,
+        "maxPositionWeight": 0.5,
+        "prices": {"600000.SH": 10.0},
+    })
+    replay = run({
+        "action": "execute_paper",
+        "confirm": True,
+        "idempotencyKey": "paper-execution-1",
         "planPath": str(plan_path),
         "accountValue": 100_000,
         "maxPositionWeight": 0.5,
@@ -119,6 +129,8 @@ def test_execute_paper_writes_durable_provenance_receipt(tmp_path: Path, monkeyp
     })
 
     assert result["ok"] is True
+    assert replay["ok"] is True
+    assert replay["data"]["orderIds"] == result["data"]["orderIds"]
     receipt_path = Path(result["data"]["receiptPath"])
     assert receipt_path == data_dir / "research" / "paper-executions.jsonl"
     receipts = [json.loads(line) for line in receipt_path.read_text(encoding="utf-8").splitlines()]
@@ -126,6 +138,7 @@ def test_execute_paper_writes_durable_provenance_receipt(tmp_path: Path, monkeyp
     receipt = receipts[0]
     assert receipt["mode"] == "paper"
     assert receipt["plan_id"] == _plan().plan_id
+    assert receipt["idempotency_key"] == "paper-execution-1"
     assert receipt["run_id"] == "run-completion"
     assert receipt["model_id"] == "model-completion"
     assert receipt["signal_id"]

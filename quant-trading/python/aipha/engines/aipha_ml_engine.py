@@ -237,6 +237,21 @@ def run(config: dict) -> dict:
             if account_value <= 0:
                 raise ValueError("accountValue must be positive")
             cfg = _load_config(config.get("configPath"))
+            idempotency_key = str(config.get("idempotencyKey", "")).strip()
+            receipt_root = Path(os.environ.get("QUANT_DATA_DIR", "data")).expanduser().resolve()
+            receipt_path = receipt_root / "research" / "paper-executions.jsonl"
+            if idempotency_key and receipt_path.is_file():
+                for line in receipt_path.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        existing = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if existing.get("idempotency_key") == idempotency_key:
+                        if existing.get("plan_id") != plan.plan_id:
+                            raise ValueError("idempotencyKey was already used for a different execution plan")
+                        return {"ok": True, "data": existing["response"]}
             from aipha.execution.paper_gateway import PaperGateway
             gateway = PaperGateway.from_cn_equity(initial_capital=account_value)
             order_ids = gateway.submit_target_plan(
@@ -252,8 +267,6 @@ def run(config: dict) -> dict:
             # it lets operators reconcile a retry without routing anything to
             # QMT.
             import datetime as _datetime
-            receipt_root = Path(os.environ.get("QUANT_DATA_DIR", "data")).expanduser().resolve()
-            receipt_path = receipt_root / "research" / "paper-executions.jsonl"
             receipt_path.parent.mkdir(parents=True, exist_ok=True)
             orders = []
             for order_id in order_ids:
@@ -277,12 +290,11 @@ def run(config: dict) -> dict:
                 "run_id": plan.run_id,
                 "model_id": plan.model_id,
                 "signal_id": plan.signal_id,
+                "idempotency_key": idempotency_key,
                 "order_ids": order_ids,
                 "orders": orders,
             }
-            with receipt_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\n")
-            return {"ok": True, "data": {
+            response = {
                 "planId": plan.plan_id,
                 "mode": "paper",
                 "orderIds": order_ids,
@@ -293,7 +305,11 @@ def run(config: dict) -> dict:
                     "signalId": plan.signal_id,
                 },
                 "receiptPath": str(receipt_path),
-            }}
+            }
+            receipt["response"] = response
+            with receipt_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\n")
+            return {"ok": True, "data": response}
         return {"ok": False, "error": f"未知 action: {action}"}
     except Exception as error:
         return {"ok": False, "error": str(error)}

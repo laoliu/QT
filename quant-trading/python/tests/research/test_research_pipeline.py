@@ -29,6 +29,7 @@ from aipha.research.contracts import FinancialSnapshot, TargetPosition
 from aipha.research.pipeline import _filter_historical_universe
 from aipha.research.artifacts import load_verified_selector
 from aipha.research.execution_plan import build_execution_plan, execute_target_plan, read_execution_plan
+from aipha.research.snapshots import frame_content_sha256
 
 
 def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
@@ -429,7 +430,10 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
         "provider": "tushare_pit", "data_snapshot_id": "fixture-v1",
         "feature_version": "cn_equity_v1",
         "start_date": "2022-01-03", "end_date": "2023-05-19",
+        "snapshot_schema_version": 1,
+        "generator_version": "test-fixture/1",
     }
+    fixture.attrs["snapshot_metadata"]["snapshot_content_sha256"] = frame_content_sha256(fixture)
     result = pipeline.run(fixture, tmp_path / "runs", data_snapshot_id="fixture-v1")
     artifact_dir = Path(result["artifact_dir"])
     assert result["data_snapshot_id"] == "fixture-v1"

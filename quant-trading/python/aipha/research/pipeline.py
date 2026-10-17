@@ -723,7 +723,7 @@ def _build_evaluation_diagnostics(
     return diagnostics
 
 
-def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, str]:
+def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
     metadata = frame.attrs.get("snapshot_metadata")
     if not isinstance(metadata, dict):
         raise ValueError("frozen snapshot metadata is required (Parquet sidecar <file>.metadata.json)")
@@ -731,9 +731,25 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, str]:
     missing = required - set(metadata)
     if missing:
         raise ValueError(f"snapshot metadata missing fields: {', '.join(sorted(missing))}")
-    normalized = {key: str(metadata[key]).strip() for key in required}
-    if any(not value for value in normalized.values()):
+    normalized: dict[str, Any] = dict(metadata)
+    for key in required:
+        normalized[key] = str(metadata[key]).strip()
+    if any(not normalized[key] for key in required):
         raise ValueError("snapshot metadata values must be non-empty")
+    if normalized["provider"] == "tushare_pit":
+        # A provider label is not provenance. Direct callers of ResearchPipeline
+        # must carry the same logical-content attestation that Parquet callers
+        # receive from verify_attested_parquet(). This catches a changed frame
+        # even when it was supplied in memory and therefore had no file hash.
+        content_hash = str(metadata.get("snapshot_content_sha256", "")).strip()
+        if not content_hash:
+            raise ValueError("tushare_pit snapshot metadata requires snapshot_content_sha256")
+        from .snapshots import frame_content_sha256
+
+        if frame_content_sha256(frame) != content_hash:
+            raise ValueError("snapshot_content_sha256 does not match the input panel")
+        if not metadata.get("generator_version"):
+            raise ValueError("tushare_pit snapshot metadata requires generator_version")
     return normalized
 
 

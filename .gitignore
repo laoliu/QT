@@ -16,3 +16,8 @@ quant-trading/config.local.json
 *tmp/
 *temp[0-9]*/
 *tmp[0-9]*/
+
+# Runtime data and generated reports
+quant-trading/data/
+quant-trading/output/
+quant-trading/python/output/

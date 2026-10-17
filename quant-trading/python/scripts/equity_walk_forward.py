@@ -35,7 +35,6 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aipha.backtest.config_runner import run_from_config
 from aipha.backtest.validation import (

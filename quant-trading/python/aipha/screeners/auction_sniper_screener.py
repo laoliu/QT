@@ -22,15 +22,9 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any, Optional
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
-sys.path.insert(0, _PYTHON_ROOT)
-
-from aipha.engines.auction_sniper import (
+from engines.auction_sniper import (
     AuctionSniperEngine,
     AuctionSnapshot,
     SniperSignal,

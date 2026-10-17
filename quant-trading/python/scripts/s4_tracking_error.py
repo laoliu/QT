@@ -27,8 +27,8 @@ from pathlib import Path
 import pandas as pd
 
 _PROJ = Path(__file__).resolve().parents[1]
-if str(_PROJ / "src") not in sys.path:
-    sys.path.insert(0, str(_PROJ / "src"))
+if str(_PROJ) not in sys.path:
+    sys.path.insert(0, str(_PROJ))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger("s4_tracking_error")

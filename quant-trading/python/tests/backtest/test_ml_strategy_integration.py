@@ -122,11 +122,11 @@ class TestMLStrategyRegistration:
 class TestMLYamlConfig:
     def test_parse_ml_config(self):
         """验证 ml_predict.yml 可被正确解析。"""
-        from pathlib import Path
 
         import yaml
 
-        config_path = Path("configs/backtest/ml_predict.yml")
+        from aipha.utils.paths import project_path
+        config_path = project_path("configs/backtest/ml_predict.yml")
         if not config_path.exists():
             pytest.skip("ml_predict.yml not found")
 
@@ -142,11 +142,11 @@ class TestMLYamlConfig:
 
     def test_parse_into_run_config(self):
         """验证可从 YAML 构建 BacktestRunConfig。"""
-        from pathlib import Path
 
         import yaml
 
-        config_path = Path("configs/backtest/ml_predict.yml")
+        from aipha.utils.paths import project_path
+        config_path = project_path("configs/backtest/ml_predict.yml")
         if not config_path.exists():
             pytest.skip("ml_predict.yml not found")
 

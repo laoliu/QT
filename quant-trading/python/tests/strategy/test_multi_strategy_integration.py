@@ -13,6 +13,7 @@
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from aipha.utils.paths import project_path
 
 import pytest
 import yaml
@@ -178,7 +179,7 @@ class TestStrategyCreation:
 class TestYAMLConfigLoading:
     """从 YAML 文件加载策略"""
 
-    CONFIG_DIR = Path("configs/cb_strategies")
+    CONFIG_DIR = project_path("configs/cb_strategies")
 
     @pytest.fixture
     def config_files(self) -> list[Path]:
@@ -262,12 +263,12 @@ class TestYAMLConfigLoading:
 
     def test_ensemble_portfolio_config_exists(self):
         """集成组合配置文件存在"""
-        cfg_path = Path("configs/paper/cb_ensemble_portfolio.yml")
+        cfg_path = project_path("configs/paper/cb_ensemble_portfolio.yml")
         assert cfg_path.exists(), "集成组合配置文件不存在"
 
     def test_ensemble_portfolio_config_valid(self):
         """集成组合配置有效"""
-        cfg_path = Path("configs/paper/cb_ensemble_portfolio.yml")
+        cfg_path = project_path("configs/paper/cb_ensemble_portfolio.yml")
         if not cfg_path.exists():
             pytest.skip("集成组合配置文件不存在")
 
@@ -402,7 +403,7 @@ class TestAdaptiveWeightsConfig:
 
     def test_adaptive_weights_config_valid(self):
         """adaptive_weights.yml 有效"""
-        cfg_path = Path("configs/adaptive_weights.yml")
+        cfg_path = project_path("configs/adaptive_weights.yml")
         if not cfg_path.exists():
             pytest.skip("配置文件不存在")
 
@@ -414,7 +415,7 @@ class TestAdaptiveWeightsConfig:
 
     def test_core_portfolio_uses_ensemble(self):
         """核心组合使用集成策略"""
-        cfg_path = Path("configs/adaptive_weights.yml")
+        cfg_path = project_path("configs/adaptive_weights.yml")
         if not cfg_path.exists():
             pytest.skip("配置文件不存在")
 
@@ -430,7 +431,7 @@ class TestAdaptiveWeightsConfig:
 
     def test_all_weather_portfolio(self):
         """全天候组合包含集成策略和防守策略"""
-        cfg_path = Path("configs/adaptive_weights.yml")
+        cfg_path = project_path("configs/adaptive_weights.yml")
         if not cfg_path.exists():
             pytest.skip("配置文件不存在")
 
@@ -447,7 +448,7 @@ class TestAdaptiveWeightsConfig:
 
     def test_legacy_portfolio_preserved(self):
         """兼容旧版配置"""
-        cfg_path = Path("configs/adaptive_weights.yml")
+        cfg_path = project_path("configs/adaptive_weights.yml")
         if not cfg_path.exists():
             pytest.skip("配置文件不存在")
 

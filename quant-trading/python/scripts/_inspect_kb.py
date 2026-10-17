@@ -2,7 +2,9 @@
 import json, sys
 from pathlib import Path
 
-kb_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("output/auto_mining_v2/mutation_kb.json")
+kb_path = Path(sys.argv[1]) if len(sys.argv) > 1 else (
+    Path(__file__).resolve().parents[1] / "output/auto_mining_v2/mutation_kb.json"
+)
 if not kb_path.exists():
     print(f"Not found: {kb_path}")
     sys.exit(1)

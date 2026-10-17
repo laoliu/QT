@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Type, TypeVar
 
-from aipha.strategy.base import Strategy
+from aipha.strategy.base import Strategy, TickStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,22 @@ class StrategyRegistry:
     def clear(self) -> None:
         """清空注册表（主要用于测试）"""
         self._strategies.clear()
+
+
+class TickStrategyRegistry(StrategyRegistry):
+    """Separate namespace so tick strategies cannot enter a bar engine."""
+
+    _instance = None
+
+    def register(self, name=None):
+        parent = super().register(name)
+
+        def decorator(cls):
+            if not issubclass(cls, TickStrategy):
+                raise TypeError("Tick strategies must inherit TickStrategy")
+            return parent(cls)
+
+        return decorator
 
 
 # 全局注册表实例

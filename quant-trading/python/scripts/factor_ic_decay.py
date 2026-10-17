@@ -24,7 +24,7 @@ from pathlib import Path
 
 # 把 src 加入搜索路径
 _ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT / "src"))
+sys.path.insert(0, str(_ROOT))
 
 from aipha.factors.analysis import FactorAnalyzer, FactorAnalysisReport  # noqa: E402
 

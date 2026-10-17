@@ -11,12 +11,21 @@ Covers:
 from __future__ import annotations
 
 import os
+import asyncio
 from pathlib import Path
+from datetime import datetime
+from decimal import Decimal
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 import pytest
 
-from aipha.tracker.cli import _load_config, _should_notify, _write_audit_log
+from aipha.tracker.cli import (
+    _config_data_dir, _load_config, _portfolio_evidence, _should_notify,
+    _write_audit_log,
+)
+from aipha.tracker.models import Holding, PortfolioSnapshot, PortfolioSource
+from aipha.utils.paths import PROJECT_ROOT
 
 
 # =========================================================================
@@ -64,6 +73,118 @@ class TestLoadConfigStrict:
         assert result["data_dir"] == "test_data"
         assert len(result["authors_raw"]) == 1
         assert result["authors_raw"][0]["author_id"] == "test"
+
+    def test_relative_tracker_data_dir_is_project_anchored(self):
+        assert _config_data_dir({"data_dir": "data/tracker"}) == PROJECT_ROOT / "data" / "tracker"
+        assert _config_data_dir({}) == PROJECT_ROOT / "data" / "tracker"
+
+    def test_legacy_fetch_failure_becomes_explicit_evidence(self):
+        author = type("Author", (), {"platform_uid": "uid-1"})()
+        evidence = _portfolio_evidence(author, "ZH1", None)
+        assert evidence.failure_type.value == "fields_missing"
+        assert evidence.evidence_quality.value == "failed"
+        assert evidence.parsed_fields["holdings"] is None
+
+    def test_empty_holdings_are_not_recorded_as_success(self):
+        from datetime import datetime
+
+        author = type("Author", (), {"platform_uid": "uid-1"})()
+        snapshot = PortfolioSnapshot(
+            snapshot_id="s1", source=PortfolioSource.XUEQIU,
+            author_id="a1", author_name="A", portfolio_code="ZH1",
+            snapshot_time=datetime.now(), fetch_time=datetime.now(), holdings=(),
+        )
+        evidence = _portfolio_evidence(author, "ZH1", snapshot)
+        assert evidence.failure_type.value == "fields_missing"
+        assert evidence.parsed_fields["holdings"] == []
+
+
+def test_legacy_fetch_dual_writes_portfolio_and_evidence(tmp_path, monkeypatch):
+    from aipha.tracker import cli
+    from aipha.tracker.evidence import EvidenceStore
+    from aipha.tracker.models import PortfolioSnapshot
+    from aipha.tracker.storage import TrackerStorage
+
+    snapshot = PortfolioSnapshot(
+        snapshot_id="legacy-1", source=PortfolioSource.XUEQIU,
+        author_id="author-1", author_name="Author", portfolio_code="ZH1",
+        snapshot_time=datetime(2026, 10, 17), fetch_time=datetime(2026, 10, 17),
+        holdings=(Holding("600519.SH", "贵州茅台", Decimal("0.25")),),
+    )
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    class BrowserSessionStub(Session):
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        @staticmethod
+        async def random_delay(*args):
+            return None
+
+    class Collector:
+        def __init__(self, session):
+            pass
+
+        async def check_login(self):
+            return True
+
+        async def fetch_portfolio(self, **kwargs):
+            return snapshot
+
+    saved = []
+
+    class StorageStub(TrackerStorage):
+        def __init__(self, data_dir):
+            self.data_dir = Path(data_dir)
+
+        def get_latest_snapshot(self, author_id):
+            return None
+
+        def save_snapshot(self, value):
+            saved.append(value)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("aipha.tracker.browser.base.BrowserSession", BrowserSessionStub)
+    monkeypatch.setattr("aipha.tracker.browser.xueqiu.XueqiuCollector", Collector)
+    monkeypatch.setattr("aipha.tracker.storage.TrackerStorage", StorageStub)
+    # cmd_fetch imports its collaborators lazily, so patch the source modules' symbols.
+    import aipha.tracker.browser.base as browser_base
+    import aipha.tracker.browser.xueqiu as browser_xueqiu
+    import aipha.tracker.storage as storage_module
+
+    monkeypatch.setattr(browser_base, "BrowserSession", BrowserSessionStub)
+    monkeypatch.setattr(browser_xueqiu, "XueqiuCollector", Collector)
+    monkeypatch.setattr(storage_module, "TrackerStorage", StorageStub)
+
+    config = {
+        "data_dir": str(tmp_path / "tracker"),
+        "authors_raw": [{
+            "author_id": "author-1", "name": "Author", "platform": "xueqiu",
+            "platform_uid": "uid-1", "portfolio_codes": ["ZH1"],
+        }],
+        "browser": {"headless": True}, "notification": {}, "audit": {},
+    }
+    asyncio.run(cli.cmd_fetch(SimpleNamespace(author_id=None, dry_run=False), config))
+
+    assert len(saved) == 1
+    assert saved[0].portfolio_code == "ZH1"
+    store = EvidenceStore(tmp_path / "tracker")
+    try:
+        rows = store.get_history("xueqiu_uid-1", limit=5)
+        assert len(rows) == 1
+        assert rows[0].parsed_fields["holdings"][0]["symbol"] == "600519.SH"
+        assert rows[0].parsed_fields["perf_summary"] == {}
+        assert rows[0].source_url == "https://xueqiu.com/P/ZH1"
+    finally:
+        store.close()
 
 
 # =========================================================================
@@ -158,8 +279,43 @@ class TestWriteAuditLog:
         assert content.count("\n") == 2  # two entries
 
     def test_default_log_dir(self, tmp_path, monkeypatch):
-        """When log_dir not specified, defaults to 'logs/audit'."""
-        monkeypatch.chdir(tmp_path)
-        audit_config = {"enabled": True}
-        _write_audit_log(audit_config, "test", "test_event", "detail")
-        assert (tmp_path / "logs" / "audit").exists()
+        """未配置 log_dir 时落在 <项目根>/logs/audit，而不是当前工作目录。
+
+        这条原先是 ``chdir(tmp_path)`` 后断言 ``tmp_path/logs/audit`` 存在
+        —— 它断言的正是 CWD 依赖本身。审计日志跟着启动目录走，等于同一
+        套配置在 cron 和手动执行下写进两棵树，查起来永远缺半截。
+        """
+        import aipha.utils.paths as paths_mod
+
+        fake_root = tmp_path / "root"
+        fake_root.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        monkeypatch.setattr(paths_mod, "PROJECT_ROOT", fake_root)
+        monkeypatch.chdir(elsewhere)
+
+        _write_audit_log({"enabled": True}, "test", "test_event", "detail")
+
+        assert (fake_root / "logs" / "audit").exists()
+        assert not (elsewhere / "logs").exists(), "审计日志漏到了当前工作目录"
+
+    def test_relative_log_dir_is_anchored(self, tmp_path, monkeypatch):
+        """配置里写相对路径也锚到项目根（绝对路径照用，见上面两条）。"""
+        import aipha.utils.paths as paths_mod
+
+        fake_root = tmp_path / "root"
+        fake_root.mkdir()
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+
+        monkeypatch.setattr(paths_mod, "PROJECT_ROOT", fake_root)
+        monkeypatch.chdir(elsewhere)
+
+        _write_audit_log(
+            {"enabled": True, "log_dir": "logs/tracker_audit"},
+            "test", "test_event", "detail",
+        )
+
+        assert (fake_root / "logs" / "tracker_audit").exists()
+        assert not (elsewhere / "logs").exists()

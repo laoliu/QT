@@ -6,7 +6,7 @@ Side（交易方向）、OrderType（订单类型）等。这些模型贯穿数�
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
@@ -16,6 +16,33 @@ class Side(str, Enum):
 
     BUY = "BUY"
     SELL = "SELL"
+
+
+@dataclass(frozen=True, slots=True)
+class DepthLevel:
+    """One order-book level; volume is in shares or contracts."""
+
+    price: float
+    volume: int
+
+
+@dataclass(frozen=True, slots=True)
+class Tick:
+    """Quote snapshot with cumulative session volume and turnover."""
+
+    symbol: str
+    timestamp: datetime
+    price: float
+    volume: int = 0
+    amount: float = 0.0
+    open: float = 0.0
+    high: float = 0.0
+    low: float = 0.0
+    prev_close: float = 0.0
+    bid_levels: list[DepthLevel] = field(default_factory=list)
+    ask_levels: list[DepthLevel] = field(default_factory=list)
+    direction: str = ""
+    trade_count: int = 0
 
 
 class OrderState(str, Enum):

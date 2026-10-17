@@ -3,7 +3,7 @@ import json, re, numpy as np
 from pathlib import Path
 
 for ver in ['auto_mining_v5', 'auto_mining_v6']:
-    data = json.loads(Path(f'output/{ver}/mutation_kb.json').read_text('utf-8'))
+    data = json.loads((Path(__file__).resolve().parents[1] / f'output/{ver}/mutation_kb.json').read_text('utf-8'))
     passed = [e for e in data if e.get('passed')]
     if not passed:
         continue

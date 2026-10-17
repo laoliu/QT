@@ -18,8 +18,9 @@ from typing import Any
 import pandas as pd
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ def main() -> None:
         "decay_alert_threshold": DECAY_ALERT_THRESHOLD,
         "recent_vs_full_ratio": recent_sr / full_sr if full_sr else None,
     }
-    out_path = Path("output/_segment_monitor/csi300_sr_summary.json")
+    out_path = project_path("output/_segment_monitor/csi300_sr_summary.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2, default=str)

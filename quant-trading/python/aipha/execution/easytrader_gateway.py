@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -33,6 +32,8 @@ from enum import Enum
 from typing import Any
 
 from aipha.execution.broker_gateway import BrokerConfig, BrokerGateway, BrokerType
+from aipha.execution.emergency_control import StopAgent
+from aipha.utils.paths import KILL_SWITCH_PATH
 from aipha.execution.gateway import (
     AccountSnapshot,
     ExecutionReport,
@@ -126,6 +127,8 @@ class EasytraderGateway(BrokerGateway):
         self._orders: dict[str, GatewayOrder] = {}
         self._order_entrust_map: dict[str, str] = {}  # order_id -> entrust_no
         self._lock = threading.Lock()
+        self._submission_lock = threading.RLock()
+        self._stop_agent: StopAgent | None = None
         # 最小交易单位（A股=100，可转债=10），可通过 config 设置
         self._lot_size: int = getattr(config, 'lot_size', 100)
 
@@ -225,6 +228,9 @@ class EasytraderGateway(BrokerGateway):
 
     def disconnect(self) -> None:
         """断开连接"""
+        if self._stop_agent is not None:
+            self._stop_agent.close()
+            self._stop_agent = None
         self._stop_poll.set()
 
         if self._poll_thread and self._poll_thread.is_alive():
@@ -266,6 +272,16 @@ class EasytraderGateway(BrokerGateway):
 
             self._conn_state = ConnectionState.LOGGED_IN
             self._consecutive_errors = 0
+            if not self._et_config.dry_run and self._stop_agent is None:
+                self._stop_agent = StopAgent(
+                    KILL_SWITCH_PATH, self.query_open_order_ids, self._cancel_broker_order,
+                    self._submission_lock, label=f"easytrader:{self._et_config.name}",
+                )
+                try:
+                    self._stop_agent.start()
+                except Exception:
+                    self._stop_agent = None
+                    raise
 
             # 启动状态轮询
             self._start_poll_thread()
@@ -275,10 +291,13 @@ class EasytraderGateway(BrokerGateway):
 
         except Exception as e:
             logger.error(f"Login failed: {e}")
+            self._conn_state = ConnectionState.FATAL
             return False
 
     def _start_poll_thread(self) -> None:
         """启动状态轮询线程"""
+        if self._poll_thread is not None and self._poll_thread.is_alive():
+            return
         self._stop_poll.clear()
         self._poll_thread = threading.Thread(
             target=self._poll_loop,
@@ -308,7 +327,7 @@ class EasytraderGateway(BrokerGateway):
                 ):
                     self._trigger_reconnect()
 
-            time.sleep(self._et_config.poll_interval)
+            self._stop_poll.wait(self._et_config.poll_interval)
 
     def _trigger_reconnect(self) -> None:
         """触发异步重连流程"""
@@ -340,7 +359,8 @@ class EasytraderGateway(BrokerGateway):
                 300.0,  # 最大等待 5 分钟
             )
             logger.info(f"重连尝试 {attempt}/{self._max_reconnect_attempts}，等待 {wait_time:.1f}s ...")
-            time.sleep(wait_time)
+            if self._stop_poll.wait(wait_time):
+                return
 
             if self._stop_poll.is_set():
                 return
@@ -429,6 +449,12 @@ class EasytraderGateway(BrokerGateway):
 
     def submit_order(self, order: GatewayOrder) -> str:
         """提交订单"""
+        with self._submission_lock:
+            if KILL_SWITCH_PATH.exists():
+                raise OrderValidationError("Persistent kill switch is active")
+            return self._submit_order_impl(order)
+
+    def _submit_order_impl(self, order: GatewayOrder) -> str:
         # B3 P0: 实盘确认守卫
         if not getattr(self._et_config, 'is_sandbox', True):
             import os
@@ -619,6 +645,30 @@ class EasytraderGateway(BrokerGateway):
         if self._user is None:
             return []
         return self._user.today_entrusts
+
+    def query_open_order_ids(self) -> list[str]:
+        if not self._connected or self._user is None or self._et_config.dry_run:
+            raise GatewayNotConnectedError("A live broker query is required")
+        orders = self._user.today_entrusts
+        if not isinstance(orders, list):
+            raise GatewayNotConnectedError("Broker order query did not return a list")
+        active = []
+        terminal = {"已成", "全部成交", "已撤", "部撤", "废单", "已拒绝"}
+        pending = {"未报", "待报", "已报", "部成", "部分成交", "已报待撤", "部成待撤", "待撤"}
+        for order in orders:
+            status = str(order.get("委托状态", order.get("备注", ""))).strip()
+            if status in terminal:
+                continue
+            order_id = str(order.get("合同编号", ""))
+            if status not in pending or not order_id:
+                raise OrderValidationError("Unrecognized broker order status/id")
+            active.append(order_id)
+        return active
+
+    def _cancel_broker_order(self, order_id: str) -> None:
+        if self._user is None or self._et_config.dry_run:
+            raise GatewayNotConnectedError("No live broker session")
+        self._user.cancel_entrust(order_id)
 
     def query_trades(self) -> list[dict[str, Any]]:
         """查询当日成交"""

@@ -31,7 +31,6 @@ from decimal import Decimal
 from pathlib import Path
 
 # 添加 src
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aipha.backtest.engine import BacktestConfig, BacktestEngine, BacktestResult
 from aipha.data.cb_data_adapter import CBDataAdapter

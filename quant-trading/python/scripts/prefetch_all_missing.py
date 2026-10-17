@@ -29,11 +29,13 @@ from datetime import date, datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT / "src"))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from aipha.utils.paths import project_path
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(_REPO_ROOT / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,10 +43,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-EQUITY_CACHE = Path("data/cache/equity_tushare")
-CB_CACHE = Path("data/cache/cb_tushare")
-ALT_CACHE = Path("data/cache/alternative")
-TUSHARE_CACHE = Path("data/cache/tushare")
+EQUITY_CACHE = project_path("data/cache/equity_tushare")
+CB_CACHE = project_path("data/cache/cb_tushare")
+ALT_CACHE = project_path("data/cache/alternative")
+TUSHARE_CACHE = project_path("data/cache/tushare")
 
 
 def parse_args() -> argparse.Namespace:
@@ -198,7 +200,7 @@ def task_etf():
     from aipha.data.tushare_etf_provider import TuShareETFProvider
     from aipha.data.calendar import CNStockCalendar
 
-    etf_cache = Path("data/cache/etf_tushare")
+    etf_cache = project_path("data/cache/etf_tushare")
     etf_cache.mkdir(parents=True, exist_ok=True)
     provider = TuShareETFProvider(cache_dir=str(etf_cache))
 
@@ -321,7 +323,7 @@ def task_advanced():
     from aipha.data.tushare_gateway import get_tushare_gateway
 
     gw = get_tushare_gateway()
-    adv_cache = Path("data/cache/advanced")
+    adv_cache = project_path("data/cache/advanced")
     adv_cache.mkdir(parents=True, exist_ok=True)
 
     # 1) 业绩预告 forecast — 按月拉取(ann_date)

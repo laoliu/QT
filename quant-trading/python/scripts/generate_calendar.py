@@ -59,7 +59,7 @@ def generate_calendar(output_path: Path | None = None) -> list[str]:
 
     # 保存
     if output_path is None:
-        output_path = Path("data/calendars/cn_stock_v1.json")
+        output_path = Path(__file__).resolve().parents[1] / "data/calendars/cn_stock_v1.json"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

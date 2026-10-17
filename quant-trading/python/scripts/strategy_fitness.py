@@ -58,7 +58,7 @@ sys.path.insert(0, _PYTHON_ROOT)
 
 # ── Progress file ────────────────────────────────────────────────
 
-_LOGS_DIR = os.path.join(os.path.dirname(_PYTHON_ROOT), "logs")
+_LOGS_DIR = os.path.join(_PYTHON_ROOT, "logs")
 _PROGRESS_FILE = os.path.join(_LOGS_DIR, "fitness-progress.json")
 
 

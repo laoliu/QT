@@ -57,8 +57,12 @@ class MetricsConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MetricsConfig:
         """从字典反序列化。"""
+        _out = data.get("output_dir")
         return cls(
-            output_dir=Path(data.get("output_dir", "data/metrics")),
+            # 配置里没写就走项目根，跟上面 dataclass 的默认值保持一致；
+            # 原先这里是 Path("data/metrics")，从别的目录拉起进程时
+            # 指标会悄悄写到另一个地方。
+            output_dir=Path(_out) if _out else project_path("data", "metrics"),
             output_file=data.get("output_file", "live_metrics.json"),
             write_interval_sec=data.get("write_interval_sec", 60),
             max_nav_history=data.get("max_nav_history", 5000),

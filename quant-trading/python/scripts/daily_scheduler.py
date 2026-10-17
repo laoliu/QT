@@ -35,9 +35,9 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any
 
-# --- 确保 src 在 PYTHONPATH -------------------------------------------------
+# --- 确保项目根在 PYTHONPATH -----------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "src"))
+sys.path.insert(0, str(_REPO_ROOT))
 
 from aipha.factors.decay_monitor import DecayMonitor
 from aipha.models.drift_monitor import DriftMonitor, PSI_WARNING

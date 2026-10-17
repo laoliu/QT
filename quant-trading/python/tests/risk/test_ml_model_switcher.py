@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
+from aipha.utils.paths import project_path
 from unittest.mock import MagicMock
 
 import pytest
@@ -211,7 +211,7 @@ class TestPaperEngineC3Integration:
 
     def test_plan_a_c3_enabled(self):
         from aipha.runner.paper_engine import PaperEngineConfig
-        p = Path("configs/paper/plan_a_5comp.yml")
+        p = project_path("configs/paper/plan_a_5comp.yml")
         if not p.exists():
             pytest.skip("plan_a_5comp.yml not found")
         cfg = PaperEngineConfig.from_yaml(p)

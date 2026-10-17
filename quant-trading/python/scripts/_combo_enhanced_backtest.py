@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -39,12 +39,13 @@ logger = logging.getLogger("combo_enhanced")
 logger.setLevel(logging.INFO)
 
 OUTPUT_BASE = ROOT / "output" / "combo_r114_enhanced"
-OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
 
-_fh = logging.FileHandler(OUTPUT_BASE / "run.log", mode="w", encoding="utf-8")
-_fh.setLevel(logging.DEBUG)
-_fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
-logging.getLogger().addHandler(_fh)
+def _setup_file_logging() -> None:
+    OUTPUT_BASE.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(OUTPUT_BASE / "run.log", mode="w", encoding="utf-8")
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
 
 # ── 常量 ──
 TOTAL_CAPITAL = 10_000_000.0
@@ -521,6 +522,7 @@ def main() -> None:
         help="显式复用已有子策略产物；默认正式评估强制重跑。",
     )
     args = parser.parse_args()
+    _setup_file_logging()
 
     logger.info("=" * 60)
     logger.info("R113 增强组合回测 — 开始")

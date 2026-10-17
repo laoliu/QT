@@ -41,7 +41,7 @@ import time
 import urllib.request
 from datetime import datetime
 from typing import Any
-from aipha.utils.paths import PROJECT_ROOT, project_path
+from aipha.utils.paths import PROJECT_ROOT, runtime_project_path
 
 logger = logging.getLogger(__name__)
 
@@ -400,9 +400,6 @@ def _send_via_lark_cli(
 # =========================================================================
 # 告警审计日志 — 本地 JSONL 持久化 (§13.13 告警即生命线)
 # =========================================================================
-_ALERT_AUDIT_DIR = project_path("logs", "audit")
-
-
 def _log_alert_audit(
     title: str, content: str, level: str,
     *, success: bool, channel: str, error: str = "",
@@ -413,9 +410,10 @@ def _log_alert_audit(
     此函数绝不抛出异常，避免干扰告警发送主流程。
     """
     try:
-        _ALERT_AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+        audit_dir = runtime_project_path("logs", "audit")
+        audit_dir.mkdir(parents=True, exist_ok=True)
         today = datetime.now().strftime("%Y%m%d")
-        path = _ALERT_AUDIT_DIR / f"feishu_alerts_{today}.jsonl"
+        path = audit_dir / f"feishu_alerts_{today}.jsonl"
         record = {
             "ts": datetime.now().isoformat(),
             "title": title,

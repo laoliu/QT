@@ -15,6 +15,7 @@ import logging
 import tempfile
 from datetime import date
 from pathlib import Path
+from aipha.utils.paths import project_path
 
 import pytest
 import yaml
@@ -725,7 +726,7 @@ class TestRiskYAMLRoundTrip:
 
     def test_momentum_hs300_config(self):
         """configs/backtest/momentum_hs300.yml should parse risk correctly."""
-        config_path = Path("configs/backtest/momentum_hs300.yml")
+        config_path = project_path("configs/backtest/momentum_hs300.yml")
         if not config_path.exists():
             pytest.skip("momentum_hs300.yml not found")
 
@@ -738,7 +739,7 @@ class TestRiskYAMLRoundTrip:
 
     def test_multifactor_enhance_config(self):
         """configs/backtest/multifactor_enhance.yml risk and stop_loss."""
-        config_path = Path("configs/backtest/multifactor_enhance.yml")
+        config_path = project_path("configs/backtest/multifactor_enhance.yml")
         if not config_path.exists():
             pytest.skip("multifactor_enhance.yml not found")
 
@@ -754,7 +755,7 @@ class TestRiskYAMLRoundTrip:
 
     def test_pead_event_config(self):
         """configs/backtest/pead_event.yml risk fields."""
-        config_path = Path("configs/backtest/pead_event.yml")
+        config_path = project_path("configs/backtest/pead_event.yml")
         if not config_path.exists():
             pytest.skip("pead_event.yml not found")
 
@@ -768,7 +769,7 @@ class TestRiskYAMLRoundTrip:
 
     def test_smallcap_rotation_config(self):
         """configs/backtest/smallcap_rotation.yml risk fields."""
-        config_path = Path("configs/backtest/smallcap_rotation.yml")
+        config_path = project_path("configs/backtest/smallcap_rotation.yml")
         if not config_path.exists():
             pytest.skip("smallcap_rotation.yml not found")
 
@@ -794,7 +795,7 @@ class TestVolumeConstraintConfig:
     ])
     def test_volume_constraint_present(self, config_name):
         """All A-share equity configs should have volume_constraint."""
-        config_path = Path(f"configs/backtest/{config_name}.yml")
+        config_path = project_path(f"configs/backtest/{config_name}.yml")
         if not config_path.exists():
             pytest.skip(f"{config_name}.yml not found")
 

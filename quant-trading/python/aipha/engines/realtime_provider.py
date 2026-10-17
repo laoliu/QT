@@ -15,7 +15,7 @@ realtime_provider — 实时行情接口（miniQMT data_bridge）
 配置来源：
   ~/.openclaw/openclaw.json → plugins.entries.quant-trading.config
       .tradingAccount.qmt.windowsBridgeUrl
-  默认: http://192.168.3.30:58088
+    默认: http://192.168.3.30:18888
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def get_bridge_url() -> str:
     except Exception:
         pass
 
-    return "http://192.168.3.30:58088"
+    return "http://192.168.3.30:18888"
 
 
 def _bridge_post(path: str, body: dict, timeout: int = 10) -> dict:

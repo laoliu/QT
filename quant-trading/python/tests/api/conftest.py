@@ -23,6 +23,18 @@ import pytest
 from aipha.api.app import create_app
 
 
+@pytest.fixture(autouse=True)
+def isolated_api_index(tmp_path, monkeypatch):
+    from aipha.api import deps
+
+    deps.get_result_store.cache_clear()
+    monkeypatch.setattr(deps, "_DB_PATH", tmp_path / "api-index.db")
+    yield
+    if deps.get_result_store.cache_info().currsize:
+        deps.get_result_store().close()
+    deps.get_result_store.cache_clear()
+
+
 @pytest.fixture(scope="session")
 def app():
     """全会话共用的 FastAPI 应用实例。"""

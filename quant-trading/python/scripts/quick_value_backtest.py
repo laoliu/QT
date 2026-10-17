@@ -4,7 +4,6 @@
 策略：每20个交易日调仓，选top_k=30，等权持有，次日开盘价成交。
 """
 import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
 
 import pandas as pd
 import numpy as np

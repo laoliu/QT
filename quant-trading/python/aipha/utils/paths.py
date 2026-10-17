@@ -40,7 +40,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import tempfile
 from pathlib import Path
 
 
@@ -71,6 +73,44 @@ PROJECT_ROOT: Path = _discover_project_root()
 def project_path(*parts: str) -> Path:
     """拼一个项目根下的路径。``project_path("configs", "x.yml")``。"""
     return PROJECT_ROOT.joinpath(*parts)
+
+
+def runtime_project_path(*parts: str) -> Path:
+    """项目运行时路径；pytest 期间将写入隔离的临时树。"""
+    # PYTEST_CURRENT_TEST 在测试结束时会被 pytest 清除，晚到的后台线程
+    # 因此可能误写入真实 logs/。会话标记由 tests/conftest.py 设置，且
+    # 会被子进程继承；单测直接调用时仍支持 PYTEST_CURRENT_TEST。
+    test_id = os.environ.get("PYTEST_CURRENT_TEST")
+    if not (test_id or os.environ.get("AIPHA_TEST_RUNTIME")):
+        return project_path(*parts)
+    test_id = test_id or "pytest-session"
+    key = hashlib.sha256(test_id.encode("utf-8")).hexdigest()[:16]
+    return (
+        Path(tempfile.gettempdir()) / "aipha-pytest-runtime"
+        / str(os.getpid()) / key / Path(*parts)
+    )
+
+
+def resolve_path(value: str | os.PathLike[str] | None, *default: str) -> Path:
+    """把「可能是相对路径」的配置值锚到项目根。
+
+    ``project_path()`` 只管代码里写死的兜底值；配置文件里的路径是另一半
+    —— ``configs/backtest/*.yml`` 里写的是 ``cache_dir: data/cache/tushare``
+    这种仓库相对路径，直接 ``Path(...)`` 就又变成吃当前工作目录了。
+    从 ``python/`` 跑对，从别处跑就读到一个空目录，且不报错。
+
+    绝对路径原样返回（容器里挂到 /data、开发机指到 G:/qtdata 都得照旧）。
+    ``value`` 为空时用 ``default`` 拼一个项目根下的兜底路径。
+    """
+    if value is None or value == "":
+        return PROJECT_ROOT.joinpath(*default)
+    p = Path(value)
+    # 注意不能只看 is_absolute()：Windows 上 ``Path("/custom/logs")``
+    # 是「有根、无盘符」，is_absolute() 返回 False，只判它会把用户显式
+    # 写的根路径拼到项目根后面，变成 E:/custom/logs。带根就当绝对处理。
+    if p.is_absolute() or p.root:
+        return p
+    return PROJECT_ROOT / p
 
 
 # ── 关键路径常量 ──────────────────────────────────────────────

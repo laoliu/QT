@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 _project_root = Path(__file__).resolve().parent.parent
-_src = _project_root / "src"
+_src = _project_root
 if str(_src) not in sys.path:
     sys.path.insert(0, str(_src))
 

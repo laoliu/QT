@@ -27,13 +27,15 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
-load_dotenv()
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_PROJECT_ROOT / ".env")
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 from aipha.data.tushare_gateway import get_tushare_gateway
+from aipha.utils.paths import project_path
 
 # === Global config ===
-CACHE_ROOT = Path('data/cache')
+CACHE_ROOT = project_path('data/cache')
 REF_DIR = CACHE_ROOT / 'reference'
 MKT_DIR = CACHE_ROOT / 'market_ref'
 IDX_DIR = CACHE_ROOT / 'index_ref'

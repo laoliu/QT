@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 _bridge_started = False
 _bridge_lock = threading.Lock()
 
-DEFAULT_PORT = 58088
+DEFAULT_PORT = 18888
 
 
 def _start_bridge_thread(port: int = DEFAULT_PORT) -> bool:

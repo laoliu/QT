@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _PROJ = Path(__file__).resolve().parents[1]
-if str(_PROJ / "src") not in sys.path:
-    sys.path.insert(0, str(_PROJ / "src"))
+if str(_PROJ) not in sys.path:
+    sys.path.insert(0, str(_PROJ))
 
 
 # ── 组件参数 ──────────────────────────────────────────────────

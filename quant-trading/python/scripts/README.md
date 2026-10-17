@@ -3,7 +3,7 @@
 ## 架构概览
 
 ```
-Mac (stock_detail.py 等)  → pull →  Windows (qmt_data_bridge.py :58088)
+Mac (stock_detail.py 等)  → pull →  Windows (qmt_data_bridge.py :18888)
          ↓                                    ↓
    refresh_klines.py                   xtquant (QMT内置)
          ↓
@@ -31,7 +31,7 @@ python qmt_data_bridge.py
 python qmt_data_bridge.py --account YOUR_ACCOUNT_ID
 
 :: 自定义端口
-python qmt_data_bridge.py --port 58088 --host 0.0.0.0
+python qmt_data_bridge.py --port 18888 --host 0.0.0.0
 ```
 
 API 端点：
@@ -91,7 +91,7 @@ sqlite3 ~/.openclaw/extensions/quant-trading/cache/stock_data.db \
 
 | 变量                 | 默认值                   | 说明                           |
 | -------------------- | ------------------------ | ------------------------------ |
-| `WINDOWS_XTDATA_URL` | `http://127.0.0.1:58088` | Windows 桥地址（Mac 端配置）   |
+| `WINDOWS_XTDATA_URL` | `http://127.0.0.1:18888` | Windows 桥地址（Mac 端配置）   |
 | `QMT_PATH`           | 自动搜索                 | QMT 安装路径（Windows 端配置） |
 | `MINI_QMT_PATH`      | 自动搜索                 | miniQMT userdata 路径          |
 | `TRADING_ACCOUNT_ID` | 无                       | 交易账户 ID                    |
@@ -101,14 +101,14 @@ sqlite3 ~/.openclaw/extensions/quant-trading/cache/stock_data.db \
 ## 4. 常用排查
 
 ```bash
-# 检查 58088 端口占用
-lsof -i :58088
+# 检查 18888 端口占用
+lsof -i :18888
 
 # 检查 RECEIVER 进程
 ps aux | grep RECEIVER | grep -v grep
 
 # 检查 Bridge 连通性
-curl -s --connect-timeout 3 http://127.0.0.1:58088/health
+curl -s --connect-timeout 3 http://127.0.0.1:18888/health
 
 # 查看 K 线缓存 DB 大小
 du -h ~/.openclaw/extensions/quant-trading/cache/stock_data.db

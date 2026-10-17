@@ -31,6 +31,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from aipha.backtest.config_runner import run_from_config  # noqa: E402
 from aipha.backtest.result_store import ResultStore  # noqa: E402
+from aipha.utils.paths import project_path, resolve_path  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ def _run_single(
     tmp_yml: Path,
 ) -> SlippageRunResult:
     """加载配置 → 修改滑点 → 写临时 YAML → 调用 run_from_config，返回结果."""
-    base_cfg_path = Path(config_path)
+    base_cfg_path = resolve_path(config_path)
     strategy_name = base_cfg_path.stem
 
     try:
@@ -246,7 +247,7 @@ def run_sensitivity(
     )
 
     # 临时 YAML 存放目录
-    tmp_dir = Path("output") / "cb_slippage_tmp"
+    tmp_dir = project_path("output", "cb_slippage_tmp")
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
     report = SensitivityReport(
@@ -326,7 +327,7 @@ def print_report(report: SensitivityReport) -> None:
 
 def save_report(report: SensitivityReport, path: str) -> None:
     """将报告保存为 JSON."""
-    out = Path(path)
+    out = resolve_path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(report.to_dict(), ensure_ascii=False, indent=2),

@@ -106,7 +106,7 @@ BRIDGE_TIMEOUT = 90
 # 设置 WINDOWS_XTDATA_URL 后会优先使用直连模式，跳过网关中转
 # 留空则使用传统的网关轮询模式
 #
-WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 # 直连模式超时（秒）— xtdata 本地数据一般 10~30s 返回
 # 直连超时：每批 100 ֻԼ 30-60s，留余量
 DIRECT_PULL_TIMEOUT = int(os.environ.get("DIRECT_PULL_TIMEOUT", "90"))

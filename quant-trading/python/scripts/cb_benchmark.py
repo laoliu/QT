@@ -29,7 +29,7 @@ from typing import Any
 
 # 允许从仓库根目录直接运行脚本
 _repo_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_repo_root / "src"))
+sys.path.insert(0, str(_repo_root))
 
 logger = logging.getLogger(__name__)
 

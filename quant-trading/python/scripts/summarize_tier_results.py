@@ -2,7 +2,7 @@
 import json, pathlib
 
 results = {}
-for d in pathlib.Path("output").iterdir():
+for d in (pathlib.Path(__file__).resolve().parents[1] / "output").iterdir():
     if not d.is_dir():
         continue
     sf = d / "summary.json"

@@ -39,7 +39,7 @@ import pandas as pd
 import yaml
 
 from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
-from aipha.utils.paths import PROJECT_ROOT
+from aipha.utils.paths import PROJECT_ROOT, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -316,8 +316,12 @@ def run_multi_strategy_backtest(
     portfolio_cfg = raw_yaml.get("portfolio", {})
     allocation_mode = portfolio_cfg.get("allocation_mode", "fixed_weight")
 
-    effective_output = Path(output_dir) if output_dir else Path(
-        shared.get("output_dir", "output/multi_strategy")
+    effective_output = (
+        resolve_path(output_dir)
+        if output_dir
+        else resolve_path(
+            shared.get("output_dir"), "output", "multi_strategy"
+        )
     )
 
     # 2. 逐策略运行

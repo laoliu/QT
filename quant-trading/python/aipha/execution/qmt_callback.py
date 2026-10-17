@@ -43,23 +43,29 @@ except ImportError:
 class QMTOrderStatus(IntEnum):
     """xtquant 订单状态码。"""
 
-    UNKNOWN = -1
-    PENDING = 0  # 未报
-    SUBMITTED = 2  # 已报
-    PARTIAL = 3  # 部成
-    FILLED = 5  # 已成
-    CANCELING = 6  # 待撤
-    CANCELED = 7  # 已撤
-    REJECTED = 58  # 废单
+    UNKNOWN = 255
+    PENDING = 48  # 未报
+    WAIT_REPORTING = 49
+    SUBMITTED = 50  # 已报
+    CANCELING = 51  # 已报待撤
+    PARTIAL_CANCELING = 52
+    PARTIAL_CANCELED = 53
+    CANCELED = 54  # 已撤
+    PARTIAL = 55  # 部成
+    FILLED = 56  # 已成
+    REJECTED = 57  # 废单
     EXPIRED = 99  # 过期（自定义）
 
 
 _STATUS_MAP: dict[int, OrderStatus] = {
     QMTOrderStatus.PENDING: OrderStatus.PENDING,
+    QMTOrderStatus.WAIT_REPORTING: OrderStatus.PENDING,
     QMTOrderStatus.SUBMITTED: OrderStatus.SUBMITTED,
     QMTOrderStatus.PARTIAL: OrderStatus.PARTIAL_FILLED,
     QMTOrderStatus.FILLED: OrderStatus.FILLED,
     QMTOrderStatus.CANCELING: OrderStatus.PENDING,
+    QMTOrderStatus.PARTIAL_CANCELING: OrderStatus.PARTIAL_FILLED,
+    QMTOrderStatus.PARTIAL_CANCELED: OrderStatus.CANCELED,
     QMTOrderStatus.CANCELED: OrderStatus.CANCELED,
     QMTOrderStatus.REJECTED: OrderStatus.REJECTED,
     QMTOrderStatus.EXPIRED: OrderStatus.EXPIRED,

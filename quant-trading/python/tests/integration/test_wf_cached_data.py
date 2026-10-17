@@ -5,17 +5,17 @@
 """
 from __future__ import annotations
 
-from pathlib import Path
+from aipha.utils.paths import project_path
 
 import pytest
 
 # 检查是否有缓存数据
-_CACHE_DIR = Path("data/cache/tushare")
+_CACHE_DIR = project_path("data/cache/tushare")
 _HAS_CACHE = _CACHE_DIR.exists() and any(_CACHE_DIR.glob("*.parquet"))
 _skip_reason = "需要 data/cache/tushare 中的本地缓存数据"
 
 # 检查 dual_ma.yml 配置
-_DUAL_MA_CFG = Path("configs/backtest/dual_ma.yml")
+_DUAL_MA_CFG = project_path("configs/backtest/dual_ma.yml")
 _HAS_CONFIG = _DUAL_MA_CFG.exists()
 
 

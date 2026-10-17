@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 import tempfile
-from pathlib import Path
+from aipha.utils.paths import project_path
 
 import pytest
 
@@ -183,7 +183,7 @@ class TestYAMLLoadingEdge:
 
     def test_real_config_loads(self):
         """读取真实的 configs/quality_gates.yml 并验证不腐败。"""
-        config_path = Path("configs/quality_gates.yml")
+        config_path = project_path("configs/quality_gates.yml")
         if not config_path.exists():
             pytest.skip("configs/quality_gates.yml not found")
         checker = QualityChecker.from_yaml(config_path)

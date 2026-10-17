@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from aipha.utils.paths import project_path
 
 import pytest
 
@@ -235,7 +236,7 @@ class TestEquityPaperConfigParsing:
     def test_load_equity_multifactor_config(self):
         """equity_multifactor.yml 能正确加载"""
         cfg = PaperEngineConfig.from_yaml(
-            Path("configs/paper/equity_multifactor.yml")
+            project_path("configs/paper/equity_multifactor.yml")
         )
         assert cfg.strategy_name == "multifactor_enhance"
         assert cfg.market_type.value == "a_stock"
@@ -247,7 +248,7 @@ class TestEquityPaperConfigParsing:
     def test_load_equity_pead_config(self):
         """equity_pead.yml 能正确加载"""
         cfg = PaperEngineConfig.from_yaml(
-            Path("configs/paper/equity_pead.yml")
+            project_path("configs/paper/equity_pead.yml")
         )
         assert cfg.strategy_name == "pead_event"
         assert cfg.market_type.value == "a_stock"
@@ -261,7 +262,7 @@ class TestEquityPaperConfigParsing:
             "configs/paper/equity_multifactor.yml",
             "configs/paper/equity_pead.yml",
         ]:
-            cfg = PaperEngineConfig.from_yaml(Path(yml))
+            cfg = PaperEngineConfig.from_yaml(project_path(yml))
             strategy = create_strategy_from_config({
                 "name": cfg.strategy_name,
                 "params": cfg.strategy_params,

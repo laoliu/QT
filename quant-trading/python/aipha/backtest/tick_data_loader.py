@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from datetime import date, datetime
 from pathlib import Path
@@ -52,7 +53,7 @@ def _parse_tick_row(symbol: str, row: dict) -> Tick | None:
             return None
 
         price = float(row.get("price") or row.get("lastPrice") or 0)
-        if price <= 0:
+        if not math.isfinite(price) or price <= 0:
             return None
 
         # 解析盘口

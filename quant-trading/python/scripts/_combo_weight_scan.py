@@ -3,7 +3,7 @@ import pandas as pd, numpy as np, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 def load_nav(path):
     df = pd.read_csv(path)

@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 # 确保 src 在 path 中
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from aipha.backtest.advanced_validation import DeflatedSharpeRatio, DSRResult
 

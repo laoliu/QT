@@ -18,12 +18,14 @@ import logging
 import math
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
-from typing import Any
+from dataclasses import dataclass
+from datetime import date, datetime
 
-from aipha.domain.models import DepthLevel, Side, Tick
-from aipha.execution.fees import FeeModel, TradeFees
+from aipha.domain.models import Fill, IntentType, Side, Tick
+from aipha.execution.fees import (
+    CommissionModel, FeeBreakdown, FeeModel, FeeModelCNEquity,
+    StampTaxModel, TransferFeeModel,
+)
 from aipha.execution.slippage import SlippageModel, create_slippage_model
 from aipha.risk.constraints import CompositeRiskManager
 from aipha.strategy.base import (
@@ -51,6 +53,8 @@ class TickFeatureComputer:
     def update(self, tick: Tick) -> TickFeatures:
         """输入一个 tick，返回当前特征。"""
         buf = self._buffers[tick.symbol]
+        if buf and buf[-1].timestamp.date() != tick.timestamp.date():
+            buf.clear()
         buf.append(tick)
         if len(buf) > self._buffer_size:
             buf.pop(0)
@@ -65,8 +69,8 @@ class TickFeatureComputer:
             spread_bps=self._spread_bps(tick),
             order_book_imbalance=self._book_imbalance(tick),
             realized_vol_bps=self._realized_vol(buf),
-            volume_delta=tick.volume - buf[-2].volume if len(buf) >= 2 else 0,
-            amount_delta=tick.amount - buf[-2].amount if len(buf) >= 2 else 0.0,
+            volume_delta=max(0, tick.volume - buf[-2].volume) if len(buf) >= 2 else 0,
+            amount_delta=max(0.0, tick.amount - buf[-2].amount) if len(buf) >= 2 else 0.0,
         )
 
     def get_recent_ticks(self, symbol: str, n: int = 50) -> list[Tick]:
@@ -74,8 +78,8 @@ class TickFeatureComputer:
 
     def _micro_vwap(self, buf: list[Tick]) -> float:
         recent = buf[-20:]
-        total_amount = sum(t.amount for t in recent if t.amount > 0)
-        total_volume = sum(t.volume for t in recent if t.volume > 0)
+        total_amount = recent[-1].amount - recent[0].amount
+        total_volume = recent[-1].volume - recent[0].volume
         if total_volume > 0:
             return total_amount / total_volume
         return recent[-1].price if recent else 0.0
@@ -96,8 +100,8 @@ class TickFeatureComputer:
         return 0.0
 
     def _book_imbalance(self, tick: Tick) -> float:
-        bid_vol = sum(l.volume for l in tick.bid_levels) if tick.bid_levels else 0
-        ask_vol = sum(l.volume for l in tick.ask_levels) if tick.ask_levels else 0
+        bid_vol = sum(level.volume for level in tick.bid_levels) if tick.bid_levels else 0
+        ask_vol = sum(level.volume for level in tick.ask_levels) if tick.ask_levels else 0
         total = bid_vol + ask_vol
         if total > 0:
             return (bid_vol - ask_vol) / total
@@ -133,8 +137,9 @@ class TickFillModel:
     """
 
     def __init__(self, mode: str = "bbo"):
+        if mode not in {"immediate", "bbo", "next_tick"}:
+            raise ValueError("Unknown tick fill_mode")
         self._mode = mode
-        self._pending: list[dict] = []  # next_tick 模式下的待成交订单
 
     def get_fill_price(self, tick: Tick, side: Side) -> float | None:
         """根据当前 tick 返回成交价。"""
@@ -166,14 +171,22 @@ class TickAggregator:
     """将 tick 聚合为指定间隔的 bar。"""
 
     def __init__(self, interval_seconds: int = 60):
+        if interval_seconds <= 0:
+            raise ValueError("Aggregation interval must be positive")
         self._interval_ms = interval_seconds * 1000
         self._current_bars: dict[str, dict] = {}
+        self._previous: dict[str, Tick] = {}
 
     def add_tick(self, tick: Tick) -> dict | None:
         """添加 tick，返回已完成的 bar（如果时间桶切换），否则 None。"""
         ts_ms = int(tick.timestamp.timestamp() * 1000)
         bucket = (ts_ms // self._interval_ms) * self._interval_ms
         key = tick.symbol
+        previous = self._previous.get(key)
+        same_day = previous is not None and previous.timestamp.date() == tick.timestamp.date()
+        volume = max(0, tick.volume - previous.volume) if same_day else 0
+        amount = max(0.0, tick.amount - previous.amount) if same_day else 0.0
+        self._previous[key] = tick
 
         current = self._current_bars.get(key)
         completed = None
@@ -190,16 +203,16 @@ class TickAggregator:
                 "high": tick.price,
                 "low": tick.price,
                 "close": tick.price,
-                "volume": tick.volume,
-                "amount": tick.amount,
+                "volume": volume,
+                "amount": amount,
                 "count": 1,
             }
         else:
             current["high"] = max(current["high"], tick.price)
             current["low"] = min(current["low"], tick.price)
             current["close"] = tick.price
-            current["volume"] += tick.volume
-            current["amount"] += tick.amount
+            current["volume"] += volume
+            current["amount"] += amount
             current["count"] += 1
 
         return completed
@@ -208,6 +221,7 @@ class TickAggregator:
         """刷出所有未完成的 bar。"""
         bars = list(self._current_bars.values())
         self._current_bars.clear()
+        self._previous.clear()
         return bars
 
 
@@ -245,7 +259,7 @@ class TickTradeRecord:
     qty: int
     price: float
     notional: float
-    fees: TradeFees
+    fees: FeeBreakdown
     tick_timestamp: datetime  # 实际成交的 tick 时间
     reason: str = ""
 
@@ -287,6 +301,7 @@ class TickBacktestResult:
     total_fees_commission: float = 0.0
     total_fees_stamp_tax: float = 0.0
     total_fees_transfer_fee: float = 0.0
+    expired_orders: int = 0
 
     @property
     def total_fees(self) -> float:
@@ -307,12 +322,15 @@ class TickBacktestEngine:
         self._config = config
         self._strategy = strategy
         self._fill_model = TickFillModel(mode=config.fill_mode)
-        self._slippage = slippage_model or create_slippage_model("fixed", bps=config.slippage_bps)
-        self._fee_model = fee_model or FeeModel(
-            commission_rate=config.commission_rate,
-            commission_min=config.commission_min,
-            stamp_tax_rate=config.stamp_tax_rate,
-            transfer_fee_rate=config.transfer_fee_rate,
+        if config.lot_size <= 0 or config.initial_capital <= 0 or config.t_plus_n < 0:
+            raise ValueError("Invalid capital, lot size or settlement period")
+        self._slippage = slippage_model or create_slippage_model(
+            "fixed", slippage_bps=config.slippage_bps,
+        )
+        self._fee_model = fee_model or FeeModelCNEquity(
+            commission=CommissionModel(config.commission_rate, config.commission_min),
+            stamp_tax=StampTaxModel(config.stamp_tax_rate),
+            transfer_fee=TransferFeeModel(config.transfer_fee_rate),
         )
         self._risk_manager = risk_manager
         self._feature_computer = TickFeatureComputer()
@@ -330,6 +348,9 @@ class TickBacktestEngine:
         self._prev_nav = config.initial_capital
         self._total_ticks = 0
         self._last_prices: dict[str, float] = {}
+        self._has_run = False
+        self._pending_orders: list[tuple[OrderIntent, datetime]] = []
+        self._expired_orders = 0
 
     def run(
         self,
@@ -340,10 +361,14 @@ class TickBacktestEngine:
         Args:
             ticks_by_date: {交易日: {symbol: [Tick, ...]}} 时间有序
         """
+        if self._has_run:
+            raise RuntimeError("Create a new engine for each backtest")
+        self._has_run = True
         self._strategy.on_start()
         sorted_dates = sorted(ticks_by_date.keys())
 
         if not sorted_dates:
+            self._strategy.on_end()
             return self._build_result(sorted_dates)
 
         for trading_date in sorted_dates:
@@ -365,6 +390,21 @@ class TickBacktestEngine:
                 self._total_ticks += 1
                 self._last_prices[tick.symbol] = tick.price
 
+                # Match earlier signals before exposing this quote to the
+                # strategy. Equal timestamps and other symbols cannot fill it.
+                waiting = []
+                for intent, submitted_at in self._pending_orders:
+                    if intent.symbol != tick.symbol or tick.timestamp <= submitted_at:
+                        waiting.append((intent, submitted_at))
+                        continue
+                    count_before = len(self._trades)
+                    self._process_intent(intent, tick, trading_date, self._compute_nav())
+                    filled = len(self._trades) - count_before
+                    day_trade_count += filled
+                    if not filled and intent.limit_price is not None:
+                        waiting.append((intent, submitted_at))
+                self._pending_orders = waiting
+
                 # 计算特征
                 features = self._feature_computer.update(tick)
                 recent = self._feature_computer.get_recent_ticks(tick.symbol, 50)
@@ -373,12 +413,16 @@ class TickBacktestEngine:
                 nav = self._compute_nav()
                 context = TickContext(
                     current_time=tick.timestamp,
-                    positions=dict(self._positions),
+                    positions=self._held_positions(),
                     cash=self._cash,
                     nav=nav,
                     tick=tick,
                     features=features,
                     recent_ticks=recent,
+                    metadata={"pending_orders": [
+                        {"symbol": intent.symbol, "side": intent.side.value, "qty": intent.qty}
+                        for intent, _ in self._pending_orders
+                    ]},
                 )
 
                 # 策略决策
@@ -386,9 +430,18 @@ class TickBacktestEngine:
 
                 # 处理订单意图
                 for intent in intents:
+                    if self._config.fill_mode == "next_tick":
+                        if intent.symbol != tick.symbol or intent.intent_type != IntentType.ORDER:
+                            raise ValueError("Tick engine accepts current-symbol explicit orders only")
+                        self._pending_orders.append((intent, tick.timestamp))
+                        continue
+                    count_before = len(self._trades)
                     self._process_intent(intent, tick, trading_date, nav)
-                    day_trade_count += 1
+                    day_trade_count += len(self._trades) - count_before
 
+            # Tick orders are DAY orders: no implicit overnight market orders.
+            self._expired_orders += len(self._pending_orders)
+            self._pending_orders.clear()
             # 日终快照
             nav_after = self._compute_nav()
             daily_ret = (nav_after / self._prev_nav - 1) if self._prev_nav > 0 else 0.0
@@ -400,10 +453,10 @@ class TickBacktestEngine:
                 cash=self._cash,
                 daily_return=daily_ret,
                 cumulative_return=cum_ret,
-                positions=dict(self._positions),
+                positions=self._held_positions(),
                 position_values={
                     s: q * self._last_prices.get(s, 0)
-                    for s, q in self._positions.items()
+                    for s, q in self._held_positions().items()
                 },
                 tick_count=len(all_ticks),
                 trade_count=day_trade_count,
@@ -421,13 +474,17 @@ class TickBacktestEngine:
         nav: float,
     ) -> None:
         """处理单个订单意图。"""
+        if intent.symbol != tick.symbol:
+            raise ValueError("A tick intent must target the current tick symbol")
+        if intent.intent_type != IntentType.ORDER:
+            raise ValueError("Tick engine accepts explicit order intents only")
         qty = intent.qty
 
         # 风控
         if self._risk_manager:
             result = self._risk_manager.check(
                 intent.symbol, qty, intent.side,
-                self._positions, nav, self._last_prices,
+                self._held_positions(), nav, self._last_prices,
             )
             if not result.passed:
                 if result.adjusted_qty and result.adjusted_qty > 0:
@@ -445,28 +502,48 @@ class TickBacktestEngine:
         if fill_price is None:
             return
 
-        # 应用滑点
-        fill_price = self._slippage.apply(
-            fill_price, qty, intent.side, tick.volume,
-        )
-
-        # 计算费用
+        if intent.side == Side.SELL:
+            qty = min(qty, self._positions.get(intent.symbol, 0))
+            if qty <= 0:
+                return
+        order_id = uuid.uuid4().hex[:12]
+        fill = self._slippage.apply(Fill(
+            order_id=order_id, symbol=intent.symbol, side=intent.side,
+            qty=qty, price=fill_price, t_fill=tick.timestamp, model="tick",
+        ))
+        fill_price = fill.price
+        if not math.isfinite(fill_price) or fill_price <= 0:
+            return
+        if intent.limit_price is not None and (
+            (intent.side == Side.BUY and fill_price > intent.limit_price)
+            or (intent.side == Side.SELL and fill_price < intent.limit_price)
+        ):
+            return
+        fees = self._fee_model.calc(fill)
         notional = qty * fill_price
-        trade_date_int = int(trading_date.strftime("%Y%m%d"))
-        fees = self._fee_model.compute(notional, intent.side, trade_date_int)
 
         # 现金检查 + 执行
         if intent.side == Side.BUY:
             total_cost = notional + fees.total
             if total_cost > self._cash:
-                affordable = (self._cash - fees.commission - fees.transfer_fee) / (
-                    fill_price * (1 + self._fee_model._stamp_tax_rate)
-                )
-                qty = (int(affordable) // self._config.lot_size) * self._config.lot_size
+                # Search whole lots using the actual fee model, including minima.
+                low, high = 0, min(qty, int(self._cash / fill_price)) // self._config.lot_size
+                while low < high:
+                    mid = (low + high + 1) // 2
+                    candidate = mid * self._config.lot_size
+                    trial = Fill(order_id, intent.symbol, intent.side, candidate,
+                                 fill_price, tick.timestamp, "tick")
+                    if trial.notional + self._fee_model.calc(trial).total <= self._cash:
+                        low = mid
+                    else:
+                        high = mid - 1
+                qty = low * self._config.lot_size
                 if qty <= 0:
                     return
                 notional = qty * fill_price
-                fees = self._fee_model.compute(notional, intent.side, trade_date_int)
+                fees = self._fee_model.calc(Fill(
+                    order_id, intent.symbol, intent.side, qty, fill_price, tick.timestamp, "tick",
+                ))
                 total_cost = notional + fees.total
 
             self._cash -= total_cost
@@ -486,7 +563,9 @@ class TickBacktestEngine:
                 return
             qty = sell_qty
             notional = qty * fill_price
-            fees = self._fee_model.compute(notional, intent.side, trade_date_int)
+            fees = self._fee_model.calc(Fill(
+                order_id, intent.symbol, intent.side, qty, fill_price, tick.timestamp, "tick",
+            ))
             self._cash += notional - fees.total
             self._positions[intent.symbol] = current - qty
             if self._positions[intent.symbol] <= 0:
@@ -494,7 +573,6 @@ class TickBacktestEngine:
 
         # 记录交易
         trade_id = uuid.uuid4().hex[:12]
-        order_id = uuid.uuid4().hex[:12]
         self._trades.append(TickTradeRecord(
             trade_id=trade_id,
             order_id=order_id,
@@ -527,6 +605,13 @@ class TickBacktestEngine:
         for s in settled:
             self._pending_settlements.remove(s)
 
+    def _held_positions(self) -> dict[str, int]:
+        held = dict(self._positions)
+        for settlement in self._pending_settlements:
+            symbol = settlement["symbol"]
+            held[symbol] = held.get(symbol, 0) + settlement["qty"]
+        return held
+
     def _compute_nav(self) -> float:
         position_value = sum(
             qty * self._last_prices.get(symbol, 0)
@@ -550,7 +635,7 @@ class TickBacktestEngine:
             initial_capital=self._config.initial_capital,
             final_nav=final_nav,
             final_cash=self._cash,
-            final_positions=dict(self._positions),
+            final_positions=self._held_positions(),
             daily_snapshots=self._snapshots,
             trades=self._trades,
             total_trades=len(self._trades),
@@ -558,4 +643,5 @@ class TickBacktestEngine:
             total_fees_commission=self._total_fees_commission,
             total_fees_stamp_tax=self._total_fees_stamp_tax,
             total_fees_transfer_fee=self._total_fees_transfer,
+            expired_orders=self._expired_orders,
         )

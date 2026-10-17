@@ -1,13 +1,14 @@
 """Multi-tier portfolio comparison script."""
 import pandas as pd
 import numpy as np
+from aipha.utils.paths import project_path
 
 # Load daily snapshots
-csi300 = pd.read_csv('output/ml_csi300_ge200b_t1a/daily_snapshots.csv',
+csi300 = pd.read_csv(project_path('output/ml_csi300_ge200b_t1a/daily_snapshots.csv'),
                       parse_dates=['date']).set_index('date')
-csi2000 = pd.read_csv('output/ml_csi2000_ensemble_v2_neutral/daily_snapshots.csv',
+csi2000 = pd.read_csv(project_path('output/ml_csi2000_ensemble_v2_neutral/daily_snapshots.csv'),
                        parse_dates=['date']).set_index('date')
-etf = pd.read_csv('output/etf_cross_v3_11y/daily_snapshots.csv',
+etf = pd.read_csv(project_path('output/etf_cross_v3_11y/daily_snapshots.csv'),
                    parse_dates=['date']).set_index('date')
 
 # Align to common dates

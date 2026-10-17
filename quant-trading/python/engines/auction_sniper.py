@@ -44,11 +44,6 @@ from datetime import datetime
 from typing import Any, Optional
 
 # ── Proxy bypass ──────────────────────────────────────────────────────────────
-for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-           "all_proxy", "ALL_PROXY"):
-    os.environ.pop(_k, None)
-os.environ["no_proxy"] = "*"
-os.environ["NO_PROXY"] = "*"
 
 
 # ── Data structures ───────────────────────────────────────────────────────────

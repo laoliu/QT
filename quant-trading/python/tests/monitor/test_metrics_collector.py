@@ -22,6 +22,7 @@ import pytest
 
 from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 from aipha.monitor.metrics_collector import MetricsCollector, MetricsConfig
+from aipha.utils.paths import project_path
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +153,11 @@ class TestMetricsCollector:
         # 第二天的日收益应基于前一天收盘
         assert summary["nav"]["daily_return_pct"] != 0.0
 
-    def test_max_history_cap(self):
+    def test_max_history_cap(self, tmp_path):
         """超过最大历史长度时截断"""
-        config = MetricsConfig(max_nav_history=10, write_interval_sec=9999)
+        config = MetricsConfig(
+            max_nav_history=10, write_interval_sec=9999, output_dir=tmp_path,
+        )
         collector = MetricsCollector(config=config, initial_capital=100_000)
         for i in range(20):
             collector.update(nav=100_000 + i * 100)
@@ -177,7 +180,10 @@ class TestMetricsCollector:
 class TestMetricsConfig:
     def test_defaults(self):
         config = MetricsConfig()
-        assert config.output_dir == Path("data/metrics")
+        # 锚在项目根，不是 CWD 相对的 Path("data/metrics")：指标由 live/paper
+        # 进程写，那些进程不保证从 python/ 启动，相对路径会把指标散到别处。
+        assert config.output_dir == project_path("data", "metrics")
+        assert config.output_dir.is_absolute()
         assert config.write_interval_sec == 60
         # 244 而不是美股惯例的 252：§13.8 规定 A 股年化因子的唯一标准值是
         # sqrt(244)（见 aipha/market/trading_calendar_constants.py:20，据

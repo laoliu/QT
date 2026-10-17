@@ -23,6 +23,7 @@ from aipha.backtest.config_runner import (
     StrategyConfig,
     UniverseConfig,
     _normalize_config,
+    _isolate_project_output_during_pytest,
     config_to_dict,
     create_config_template,
     load_config,
@@ -106,6 +107,23 @@ class TestConfigParsing:
         assert config.cost.slippage_bps == 5.0
         assert config.initial_capital == 1000000.0
         assert config.random_seed == 42
+
+
+def test_project_backtest_output_is_redirected_only_during_pytest(monkeypatch, tmp_path):
+    from aipha.utils.paths import PROJECT_ROOT
+
+    project_output = PROJECT_ROOT / "output" / "must-not-be-written-by-test"
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/backtest/test_config_runner.py::case")
+    redirected = _isolate_project_output_during_pytest(project_output)
+    assert redirected != project_output
+    assert redirected.is_relative_to(Path(tempfile.gettempdir()))
+    assert not project_output.exists()
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST")
+    assert _isolate_project_output_during_pytest(project_output) == project_output
+    tmp_output = tmp_path / "explicit-output"
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/backtest/test_config_runner.py::case")
+    assert _isolate_project_output_during_pytest(tmp_output) == tmp_output
 
     def test_parse_date_formats(self):
         """Should handle different date formats"""
@@ -691,7 +709,7 @@ class TestRunFromConfig:
         with open(config_path, "w") as f:
             yaml.dump(config_content, f)
 
-        result = run_from_config(config_path)
+        result = run_from_config(config_path, output_dir=tmp_path / "results")
         # If it didn't error, the fill model was created from config
         assert result.config.fill_model.name == "next_bar_close"
         assert result.result is not None
@@ -732,6 +750,28 @@ class TestRunFromConfig:
 
         result = run_from_config(config_path, output_dir=custom_output)
         assert result.output_dir == custom_output
+        assert list((custom_output / "audit").glob("audit_*.jsonl"))
+        assert not (tmp_path / "output" / "audit").exists()
+
+    @pytest.mark.parametrize("explicit_output", [None, "relative-results"])
+    def test_relative_paths_ignore_working_directory(self, tmp_path, monkeypatch, explicit_output):
+        from aipha.backtest.config_runner import run_from_config
+        from aipha.utils import paths
+
+        config_path = self._make_synthetic_config_file(tmp_path)
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        config["output_dir"] = "configured-results"
+        config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.setattr(paths, "PROJECT_ROOT", tmp_path)
+        monkeypatch.chdir(elsewhere)
+        result = run_from_config(config_path.name, output_dir=explicit_output)
+        expected = tmp_path / (explicit_output or "configured-results")
+        assert result.output_dir == expected
+        assert (expected / "fingerprint.json").is_file()
+        assert list((expected / "audit").glob("audit_*.jsonl"))
+        assert not list(elsewhere.iterdir())
 
     def test_run_from_config_unsupported_source(self, tmp_path):
         """Should raise ValueError for unsupported data source"""
@@ -752,7 +792,7 @@ class TestRunFromConfig:
             yaml.dump(config_content, f)
 
         with pytest.raises(ValueError, match="不支持的数据源"):
-            run_from_config(config_path)
+            run_from_config(config_path, output_dir=tmp_path / "results")
 
     def test_run_from_config_data_fingerprint(self, tmp_path):
         """数据指纹应包含实际数据哈希，不是 'none'"""
@@ -1579,7 +1619,7 @@ class TestSyntheticFallbackBlocked:
         p = tmp_path / "test.yml"
         with open(p, "w") as f:
             yaml.dump(config, f)
-        result = run_from_config(p)
+        result = run_from_config(p, output_dir=tmp_path / "results")
         assert result.result is not None, "显式 synthetic 应可正常运行"
 
     def test_tushare_empty_data_raises_runtime_error(self, monkeypatch):

@@ -43,7 +43,7 @@ import pandas as pd
 from scipy import stats as sp_stats
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from aipha.factors.ast_dedup import ASTFactorDeduplicator
@@ -1276,7 +1276,6 @@ def run_daemon(args: argparse.Namespace) -> None:
     rng = random.Random(42)
     engine = MutationEngine(seeds, rng)
     batch_size = args.batch
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
     from aipha.factors.factor_expression_parser import FactorExpressionParser
     parser = FactorExpressionParser()
     # ── 初始化 Guard Pipeline ──

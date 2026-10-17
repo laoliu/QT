@@ -10,6 +10,8 @@ Extracted from config_runner.py for modularity. Handles:
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -951,13 +953,11 @@ def save_run_result(run_result: BacktestRunResult) -> dict[str, Path]:
 
     # ── 写入 SQLite 索引 ──
     try:
-        import tempfile as _tf
-
         from aipha.backtest.result_store import ResultStore, summary_json_to_run_dict
 
-        # 跳过临时目录中的结果（测试环境产出），避免污染生产 DB
-        _tmpdir = Path(_tf.gettempdir()).resolve()
-        if summary_path.resolve().is_relative_to(_tmpdir):
+        # A pytest --basetemp may live outside tempfile.gettempdir(); test runs
+        # must never register synthetic results in the operator's shared index.
+        if _is_test_or_temp_result(summary_path):
             logger.debug("跳过临时目录结果的 SQLite 索引: %s", summary_path)
         else:
             run_dict = summary_json_to_run_dict(summary_path)
@@ -969,6 +969,20 @@ def save_run_result(run_result: BacktestRunResult) -> dict[str, Path]:
         logger.warning("SQLite 索引写入失败: %s", _e)
 
     return paths
+
+
+def _is_test_or_temp_result(summary_path: Path) -> bool:
+    """Whether a run result belongs to pytest or the OS temporary directory."""
+    # PYTEST_CURRENT_TEST 只在单个测试调用期间存在；后台任务/子进程
+    # 可能在它被 pytest 清除后才保存结果。AIPHA_TEST_RUNTIME 由
+    # tests/conftest.py 设置并继承，覆盖整个测试会话。
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("AIPHA_TEST_RUNTIME"):
+        return True
+    try:
+        summary_path.resolve().relative_to(Path(tempfile.gettempdir()).resolve())
+        return True
+    except ValueError:
+        return False
 
 
 # ============================================================================

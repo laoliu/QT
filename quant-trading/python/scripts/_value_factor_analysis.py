@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import sys, os, time, importlib.util
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

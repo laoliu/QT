@@ -8,6 +8,7 @@
 
 from datetime import date, datetime
 from pathlib import Path
+from aipha.utils.paths import project_path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -393,7 +394,7 @@ class TestTuShareProIntegration:
 
     @pytest.mark.slow
     @pytest.mark.skipif(
-        not Path("configs/data/tushare_local.yml").exists(),
+        not project_path("configs/data/tushare_local.yml").exists(),
         reason="需要本地配置文件",
     )
     def test_load_real_data(self):
@@ -401,7 +402,7 @@ class TestTuShareProIntegration:
         import yaml
         
         # 加载本地配置
-        with open("configs/data/tushare_local.yml") as f:
+        with open(project_path("configs", "data", "tushare_local.yml")) as f:
             config = yaml.safe_load(f)
         
         provider = TuShareProBarProvider(

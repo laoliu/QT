@@ -15,6 +15,7 @@ from aipha.config import (
     get_risk_free_rate,
     get_tushare_token,
 )
+from aipha.utils.paths import project_path
 
 
 class TestGetConfig:
@@ -109,9 +110,14 @@ class TestGetCacheDir:
             os.environ.pop("QTDATA_DIR", None)
             default_qtdata = Path("G:/qtdata/cache")
             expected = (
-                default_qtdata if default_qtdata.exists() else Path("data/cache")
+                default_qtdata
+                if default_qtdata.exists()
+                else project_path("data", "cache")
             )
             assert get_cache_dir() == expected
+            # 最后一级兜底必须是绝对路径 —— 相对的 data/cache 会跟着
+            # 启动目录漂移（见 aipha/utils/paths.py 模块 docstring）。
+            assert get_cache_dir().is_absolute()
 
 
 class TestGetLogLevel:
@@ -137,6 +143,15 @@ class TestGetLogDir:
             assert get_log_dir() == Path("/custom/logs")
 
     def test_returns_default(self) -> None:
-        """返回默认路径"""
+        """默认日志目录锚在项目根，不是 CWD 相对的 Path("logs")。"""
         os.environ.pop("LOG_DIR", None)
-        assert get_log_dir() == Path("logs")
+        assert get_log_dir() == project_path("logs")
+
+    def test_relative_config_is_anchored_to_project_root(self) -> None:
+        """LOG_DIR 给相对路径时也锚到项目根。
+
+        绝对路径照用（见 test_returns_configured_path），相对路径不能
+        跟着启动目录走 —— 否则同一套配置在 cron 和手动执行下写到两棵树。
+        """
+        with patch.dict(os.environ, {"LOG_DIR": "logs/live"}):
+            assert get_log_dir() == project_path("logs", "live")

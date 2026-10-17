@@ -29,6 +29,8 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any, Optional
 
+from aipha.utils.paths import runtime_project_path
+
 logger = logging.getLogger(__name__)
 
 # 默认配置回退值（在 yml 未加载时使用）
@@ -156,7 +158,7 @@ class ComplianceEngine:
         treat_limit_down_as_untradeable: bool = True,
         force_redeem_max_exposure: float = 0.30,
         max_order_rate_per_second: float = 5.0,
-        audit_log_dir: str = "logs/audit",
+        audit_log_dir: str | Path | None = None,
         enable_audit_log: bool = True,
     ) -> None:
         self._max_participation = max_participation_rate
@@ -168,7 +170,7 @@ class ComplianceEngine:
         self._limit_up_untradeable = treat_limit_up_as_untradeable
         self._limit_down_untradeable = treat_limit_down_as_untradeable
         self._force_redeem_max = force_redeem_max_exposure
-        self._audit_dir = Path(audit_log_dir)
+        self._audit_dir = Path(audit_log_dir) if audit_log_dir is not None else runtime_project_path("logs", "audit")
         self._enable_audit = enable_audit_log
 
     @classmethod

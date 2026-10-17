@@ -25,7 +25,7 @@ import pandas as pd
 from scipy import stats as sp_stats
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 logging.basicConfig(
     level=logging.INFO,

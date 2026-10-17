@@ -26,15 +26,9 @@ Data flow:
 
 from __future__ import annotations
 
-import os
-import sys
 import traceback
 from datetime import datetime, timedelta
 from typing import Any
-
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
-sys.path.insert(0, _PYTHON_ROOT)
 
 from aipha.engines.lianban import (
     _safe_float,
@@ -42,7 +36,7 @@ from aipha.engines.lianban import (
 )
 from aipha.engines.market_sentiment import sentiment_score
 
-from aipha.data.providers.sector_data import (
+from data_providers.sector_data import (
     fetch_fund_flow_multi,
     fetch_sector_members_multi,
     fetch_zt_pool_multi,

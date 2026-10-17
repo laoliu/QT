@@ -1,6 +1,7 @@
 """Quick runner for cb_adaptive_factor backtests."""
 import sys
-sys.path.insert(0, "src")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from aipha.backtest.config_runner import run_from_config
 

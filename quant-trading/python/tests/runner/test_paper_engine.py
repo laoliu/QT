@@ -25,6 +25,7 @@ from aipha.data.akshare_realtime_provider import MarketType
 from aipha.data.calendar import CNStockCalendar, TradingSession
 from aipha.domain.models import Bar
 from aipha.runner.paper_engine import PaperEngine, PaperEngineConfig
+from aipha.monitor.metrics_collector import MetricsConfig
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ def config(tmp_path: Path) -> PaperEngineConfig:
         slippage_bps=2.0,
         state_dir=tmp_path / "state",
         audit_log_dir=tmp_path / "audit",
+        metrics_config=MetricsConfig(output_dir=tmp_path / "metrics"),
     )
 
 
@@ -651,7 +653,6 @@ pillars:
 
     def test_run_paper_trading_no_crash_with_pillars(self, tmp_path: Path):
         """B4: 有 pillars 时 run_paper_trading 进入 Pillar 模式，不再抛 ValueError"""
-        from unittest.mock import patch
         from aipha.runner.paper_engine import run_paper_trading
 
         yaml_content = """
@@ -669,8 +670,21 @@ pillars:
         # 有 pillars 时进入 Pillar 模式（PillarOrchestrator），
         # 不再抛 "缺少 symbols" 的 ValueError；
         # mock asyncio.run 阻止引擎无限事件循环
-        with patch("asyncio.run"):
+        def close_without_running(coro):
+            coro.close()
+
+        with patch("asyncio.run", side_effect=close_without_running):
             run_paper_trading(yaml_path)  # 不应抛出 ValueError
+
+    @pytest.mark.asyncio
+    async def test_sync_entry_rejects_running_loop_before_creating_coroutine(self):
+        from unittest.mock import Mock
+        from aipha.runner.paper_engine import _run_engine_sync
+
+        engine = type("Engine", (), {"run": Mock()})()
+        with pytest.raises(RuntimeError, match="await PaperEngine.run"):
+            _run_engine_sync(engine)
+        engine.run.assert_not_called()
 
     def test_portfolio_weights_parsed(self, tmp_path: Path):
         """portfolio_weights 正确解析"""

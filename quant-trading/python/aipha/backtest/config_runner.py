@@ -27,6 +27,9 @@ Module structure (post-refactor):
 from __future__ import annotations
 
 import logging
+import hashlib
+import os
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -66,6 +69,7 @@ from aipha.backtest.html_report import (
 from aipha.backtest.quality_gates import QualityChecker, QualityReport
 from aipha.backtest.report import BacktestReport, extract_metrics_dict, generate_report
 from aipha.risk.constraints import MarketRegimeDetector
+from aipha.utils.paths import PROJECT_ROOT, resolve_path
 from aipha.utils.reproducibility import (
     create_fingerprint,
     set_global_seed,
@@ -428,7 +432,7 @@ def run_from_config(
         FileNotFoundError: 配置文件不存在
         ValueError: 配置验证失败
     """
-    config_path = Path(config_path)
+    config_path = resolve_path(config_path)
 
     # 1. 加载与验证
     logger.info(f"加载配置: {config_path}")
@@ -437,6 +441,12 @@ def run_from_config(
     # 1.1 应用运行时覆盖参数（压力测试/扫描场景使用）
     if param_overrides:
         _apply_param_overrides(config, param_overrides)
+
+    # Audit and report writers must share the explicit runtime output directory.
+    effective_output_dir = resolve_path(
+        output_dir if output_dir is not None else config.output_dir,
+    )
+    config.output_dir = str(_isolate_project_output_during_pytest(effective_output_dir))
 
     errors = validate_config(config, strict_mode=strict_mode)
     if errors:
@@ -529,7 +539,7 @@ def run_from_config(
         logger.warning(f"报告生成失败（不影响结果）: {e}")
 
     # 7. 封装结果
-    effective_output_dir = Path(output_dir) if output_dir else Path(config.output_dir)
+    effective_output_dir = Path(config.output_dir)
 
     # 7.1 生成 HTML 报告
     html_path: Path | None = None
@@ -591,6 +601,19 @@ def run_from_config(
         pass  # 非关键路径
 
     return run_result
+
+
+def _isolate_project_output_during_pytest(output_dir: Path) -> Path:
+    """Redirect test backtests away from project artifacts, preserving tmp paths."""
+    test_id = os.environ.get("PYTEST_CURRENT_TEST")
+    if not test_id:
+        return output_dir
+    try:
+        relative = output_dir.resolve().relative_to(PROJECT_ROOT.resolve())
+    except ValueError:
+        return output_dir
+    test_key = hashlib.sha256(test_id.encode("utf-8")).hexdigest()[:16]
+    return Path(tempfile.gettempdir()) / "aipha-pytest-output" / str(os.getpid()) / test_key / relative
 
 
 def _invalidate_catalog_cache() -> None:

@@ -33,6 +33,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from aipha.utils.paths import project_path
+
 from aipha.factors.llm_factor_miner import (
     CampaignResult,
     CandidateSource,
@@ -153,7 +155,7 @@ def run_llm_mining(miner: LLMFactorMiner, direction: str, n_factors: int) -> Cam
     logger.info("解析出 %d 个因子候选", len(candidates))
 
     # 保存原始 LLM 响应
-    llm_log_dir = Path("output/rdagent_pipeline/llm_responses")
+    llm_log_dir = project_path("output/rdagent_pipeline/llm_responses")
     llm_log_dir.mkdir(parents=True, exist_ok=True)
     import time
     ts = int(time.time())

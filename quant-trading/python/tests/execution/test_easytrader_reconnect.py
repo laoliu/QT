@@ -134,9 +134,15 @@ class TestCredentialsPersistence:
         gw._conn_state = ConnectionState.CONNECTED
 
         credentials = {"user": "test_user", "password": "test_pass"}
-        gw.login(credentials)
-
-        assert gw._last_credentials == credentials
+        try:
+            assert gw.login(credentials)
+            first_thread = gw._poll_thread
+            assert gw.login(credentials)
+            assert gw._poll_thread is first_thread
+            assert gw._last_credentials == credentials
+        finally:
+            gw.disconnect()
+        assert not first_thread.is_alive()
 
     def test_login_not_connected_raises(self):
         config = _make_config()

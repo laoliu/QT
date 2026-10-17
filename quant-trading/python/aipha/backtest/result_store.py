@@ -34,7 +34,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
-from aipha.utils.paths import PROJECT_ROOT
+from aipha.utils.paths import PROJECT_ROOT, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
 # python/output/（其它回测产物都在后者）。
 _PROJECT_ROOT = PROJECT_ROOT
 
-# 迁移期兼容：老位置真的有库（见 _resolve_db_path 注释）
+    # 迁移期兼容仅允许显式开启。默认永远使用新位置，避免部署环境在
+    # 新库暂时缺失时静默回到旧库，造成 API 与回测进程各写一份历史。
 _LEGACY_DB_PATH = Path(__file__).resolve().parents[3] / "output" / "backtest_index.db"
 
 
@@ -53,17 +54,18 @@ _LEGACY_DB_PATH = Path(__file__).resolve().parents[3] / "output" / "backtest_ind
 def _resolve_db_path() -> Path:
     env_val = os.environ.get("AIPHA_DB_PATH", "").strip()
     if env_val:
-        return Path(env_val)
+        return resolve_path(env_val)
+
+    output_dir = os.environ.get("AIPHA_OUTPUT_DIR", "").strip()
+    if output_dir:
+        return resolve_path(output_dir) / "backtest_index.db"
 
     correct = _PROJECT_ROOT / "output" / "backtest_index.db"
-    # 路径修正前写下的那个库还在老位置。直接切过去会让整段回测历史在
-    # UI / query_runs 里凭空消失 —— 所以只要新位置还没有库、老位置有，
-    # 就继续用老的，并把话说清楚，等人手工搬过去为止。
-    if not correct.exists() and _LEGACY_DB_PATH.exists():
+    # 仅供迁移窗口人工回滚使用：AIPHA_ALLOW_LEGACY_DB=1。
+    if (not correct.exists() and _LEGACY_DB_PATH.exists()
+            and os.environ.get("AIPHA_ALLOW_LEGACY_DB") == "1"):
         logger.warning(
-            "回测主库仍在旧路径 %s（路径常量曾偏一层）。新位置 %s 尚不存在，"
-            "本次继续读写旧库以免丢失历史；建议停机后手工移过去（连同 "
-            "-wal / -shm），之后本回退分支即失效。",
+            "显式启用旧回测库回退: %s（新位置 %s 尚不存在）。此模式仅供迁移窗口使用。",
             _LEGACY_DB_PATH, correct,
         )
         return _LEGACY_DB_PATH
@@ -296,7 +298,7 @@ class ResultStore:
     """
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self._db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._db_path = Path(db_path) if db_path else _resolve_db_path()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
         self._ensure_schema()

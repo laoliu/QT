@@ -561,8 +561,11 @@ class LiveEngineEOD:
         Returns:
             提交的订单记录列表
         """
-        qmt = self._ensure_qmt()
         submitted: list[dict] = []
+        if KILL_SWITCH_PATH.exists():
+            logger.critical("Kill switch active; refusing EOD submission")
+            return submitted
+        qmt = self._ensure_qmt()
         # 风控: 单笔金额上限
         max_order_amt = self._risk_limits.get("max_order_amount", 2_000_000)
         order_interval = self._risk_limits.get("order_interval_seconds", 1.0)
@@ -601,6 +604,9 @@ class LiveEngineEOD:
                 },
             )
             try:
+                if KILL_SWITCH_PATH.exists():
+                    logger.critical("Kill switch detected during EOD submission")
+                    return submitted
                 oid = qmt.submit_order(order)
                 submitted.append({
                     "order_id": oid, "code": code, "side": "SELL",
@@ -653,6 +659,9 @@ class LiveEngineEOD:
                 },
             )
             try:
+                if KILL_SWITCH_PATH.exists():
+                    logger.critical("Kill switch detected during EOD submission")
+                    return submitted
                 oid = qmt.submit_order(order)
                 submitted.append({
                     "order_id": oid, "code": code, "side": "BUY",

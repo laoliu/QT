@@ -1,12 +1,12 @@
 """QMT/XTData 数据提供者 — 通过 HTTP Bridge 获取数据
 
 通过 QMT Data Bridge (HTTP Server) 获取 K 线、实时报价、板块数据。
-Bridge 服务器独立运行在 Windows 端 (默认 http://127.0.0.1:58088)。
+Bridge 服务器独立运行在 Windows 端 (默认 http://127.0.0.1:18888)。
 
 当 Bridge 不可用时自动降级（返回空数据），不阻塞调用方。
 
 环境变量:
-  WINDOWS_XTDATA_URL: Bridge 服务器地址 (默认 http://127.0.0.1:58088)
+  WINDOWS_XTDATA_URL: Bridge 服务器地址 (默认 http://127.0.0.1:18888)
 
 使用示例::
 
@@ -33,7 +33,7 @@ from aipha.domain.models import Bar
 logger = logging.getLogger(__name__)
 
 # Bridge 默认地址
-_DEFAULT_BRIDGE_URL = "http://127.0.0.1:58088"
+_DEFAULT_BRIDGE_URL = "http://127.0.0.1:18888"
 
 # HTTP 超时 (秒)
 _REQUEST_TIMEOUT = 15

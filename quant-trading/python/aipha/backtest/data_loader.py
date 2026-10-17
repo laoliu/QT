@@ -16,13 +16,12 @@ from __future__ import annotations
 import bisect
 import logging
 from datetime import date
-from pathlib import Path
 
 from decimal import Decimal
 
 from aipha.backtest.config_models import BacktestRunConfig
 from aipha.market.halt_checker import HaltChecker, LimitStatus
-from aipha.utils.paths import project_path
+from aipha.utils.paths import project_path, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -329,8 +328,16 @@ def _load_bars_bulk(
 
     from aipha.domain.models import Bar
 
-    eq_cache = Path(config.data.cache_dir or "data/cache") / ".." / "equity_tushare"
-    eq_cache = project_path("data", "cache", "equity_tushare")
+    # equity 缓存是 bar 缓存的兄弟目录：cache_dir 配的是 data/cache/tushare
+    # （见 configs/backtest/*.yml 与下方 :1194），取其父级再拼 equity_tushare。
+    # 原先兜底值写的是 "data/cache" —— 少了一层，/".."/ 之后解析成
+    # data/equity_tushare，这个目录树里根本不存在（真实位置是
+    # data/cache/equity_tushare，见 :756）。没配 cache_dir 时它一直在读空目录。
+    eq_cache = (
+        resolve_path(config.data.cache_dir).parent / "equity_tushare"
+        if config.data.cache_dir
+        else project_path("data", "cache", "equity_tushare")
+    )
 
     # 1) 确定月份范围
     start_ym = int(config.data.start_date.strftime("%Y%m"))
@@ -1191,7 +1198,7 @@ def _inject_benchmark_bars(
         end_str = config.data.end_date.strftime("%Y%m%d")
 
         # --- 缓存逻辑：先读本地 parquet，仅缺失时调用 API ---
-        cache_dir = Path(config.data.cache_dir or "data/cache/tushare")
+        cache_dir = resolve_path(config.data.cache_dir, "data", "cache", "tushare")
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_path = cache_dir / f"{benchmark_sym}_index_daily.parquet"
 

@@ -3,7 +3,7 @@ import sys
 import json
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aipha.backtest.config_runner import run_from_config
 

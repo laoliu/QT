@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Header, status
 
-from aipha.backtest.result_store import ResultStore
+from aipha.backtest.result_store import ResultStore, _resolve_db_path
+from aipha.utils.paths import resolve_path
 
 # ── Default paths ─────────────────────────────────────────────
-_OUTPUT_DIR = Path(os.environ.get("AIPHA_OUTPUT_DIR", "output"))
-_DB_PATH = _OUTPUT_DIR / "backtest_index.db"
+# 锚到项目根：这里定的是回测主库位置，API 由 uvicorn / docker 从别的
+# 目录拉起时，Path("output") 会建出一个空库，接口于是「一条回测都没有」。
+_OUTPUT_DIR = resolve_path(os.environ.get("AIPHA_OUTPUT_DIR"), "output")
+_DB_PATH = _resolve_db_path()
 
 
 @lru_cache(maxsize=1)

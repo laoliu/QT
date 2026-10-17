@@ -1,8 +1,14 @@
 """Analyze v5 KB status for expert review."""
-import json, re
+import json
+import re
 from collections import Counter
+from pathlib import Path
 
-kb = json.load(open("output/auto_mining_v5/mutation_kb.json"))
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+kb = json.loads(
+    (_PROJECT_ROOT / "output" / "auto_mining_v5" / "mutation_kb.json")
+    .read_text(encoding="utf-8")
+)
 passed = [e for e in kb if e.get("passed")]
 
 # Field distribution

@@ -49,6 +49,8 @@ from aipha.execution.qmt_callback import (
     QMTTickEvent,
     map_qmt_status,
 )
+from aipha.execution.emergency_control import StopAgent
+from aipha.utils.paths import KILL_SWITCH_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,8 @@ logger = logging.getLogger(__name__)
 class QMTConfig(BrokerConfig):
     """QMT 网关专用配置。"""
 
+    broker_type: BrokerType = BrokerType.QMT
+    name: str = "qmt-default"
     mini_qmt_path: str = ""
     account_type: str = "STOCK"  # STOCK / OPTIONS / CREDIT
     auto_reconnect: bool = True
@@ -113,6 +117,8 @@ class QMTGateway(BrokerGateway):
         self._callback: QMTCallback | None = None
         self._orders: dict[str, GatewayOrder] = {}
         self._lock = threading.Lock()
+        self._submission_lock = threading.RLock()
+        self._stop_agent: StopAgent | None = None
         self._exec_callbacks: list[ExecutionCallback] = []
         self._status_callbacks: list[StatusCallback] = []
         self._tick_callbacks: list[TickCallback] = []
@@ -169,6 +175,18 @@ class QMTGateway(BrokerGateway):
             logger.warning("QMT subscribe 返回 %d（可能需要手动订阅）", sub_result)
 
         self._connected = True
+        if self._stop_agent is None:
+            self._stop_agent = StopAgent(
+                KILL_SWITCH_PATH, self.query_open_order_ids, self.cancel_order,
+                self._submission_lock, label=f"qmt:{self._qmt_config.name}",
+            )
+            try:
+                self._stop_agent.start()
+            except Exception:
+                self._stop_agent = None
+                self._connected = False
+                self._trader.stop()
+                raise
         self._running = True
         self._poll_thread = threading.Thread(
             target=self._event_poll_loop, daemon=True, name="qmt-event-poll",
@@ -178,6 +196,9 @@ class QMTGateway(BrokerGateway):
 
     def disconnect(self) -> None:
         """断开 QMT 连接。"""
+        if self._stop_agent is not None:
+            self._stop_agent.close()
+            self._stop_agent = None
         self._running = False
         if self._poll_thread and self._poll_thread.is_alive():
             self._poll_thread.join(timeout=3.0)
@@ -256,6 +277,12 @@ class QMTGateway(BrokerGateway):
 
     def submit_order(self, order: GatewayOrder) -> str:
         """提交订单到 QMT。"""
+        with self._submission_lock:
+            if KILL_SWITCH_PATH.exists():
+                raise GatewayError("Persistent kill switch is active", code="KILL_SWITCH")
+            return self._submit_order_impl(order)
+
+    def _submit_order_impl(self, order: GatewayOrder) -> str:
         self._ensure_connected()
 
         # M-3: 幂等检查
@@ -432,6 +459,24 @@ class QMTGateway(BrokerGateway):
             }
             for o in raw_orders
         ]
+
+    def query_open_order_ids(self) -> list[str]:
+        """Query broker account orders, including orders absent from local cache."""
+        self._ensure_connected()
+        orders = self._trader.query_stock_orders(self._account)
+        if orders is None:
+            raise GatewayError("Broker order query returned no result", code="QUERY_FAIL")
+        active = []
+        for order in orders:
+            status = int(getattr(order, "order_status", -1))
+            if status not in set(range(48, 58)):
+                raise GatewayError("Unknown broker order status", code="QUERY_FAIL")
+            if status not in {53, 54, 56, 57}:
+                order_id = str(getattr(order, "order_id", ""))
+                if not order_id or not order_id.isdigit():
+                    raise GatewayError("Broker order has no usable id", code="QUERY_FAIL")
+                active.append(order_id)
+        return active
 
     def query_trades(self) -> list[dict[str, Any]]:
         self._ensure_connected()

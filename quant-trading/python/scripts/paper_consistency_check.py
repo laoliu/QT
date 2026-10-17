@@ -26,7 +26,9 @@ from typing import Any
 
 import yaml
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from aipha.utils.paths import project_path, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +115,7 @@ class PaperConsistencyChecker:
     """Checks consistency between paper trading config and backtest config."""
 
     def __init__(self, paper_config_path: str) -> None:
-        self.paper_config_path = paper_config_path
+        self.paper_config_path = str(resolve_path(paper_config_path))
         self.paper_config: dict[str, Any] = {}
         self.report = ConsistencyReport(config_path=paper_config_path)
 
@@ -135,8 +137,8 @@ class PaperConsistencyChecker:
         Priority: exact name match > highest version match.
         """
         import re
-        cb_dir = Path("configs/cb_strategies")
-        bt_dir = Path("configs/backtest")
+        cb_dir = project_path("configs", "cb_strategies")
+        bt_dir = project_path("configs", "backtest")
 
         # 1. Exact name match (highest priority)
         for d in [cb_dir, bt_dir]:
@@ -293,8 +295,8 @@ class PaperConsistencyChecker:
 
             # Prefer explicit source_config if provided
             source_cfg = s.get("source_config", "")
-            if source_cfg and Path(source_cfg).exists():
-                bt_path = Path(source_cfg)
+            if source_cfg and resolve_path(source_cfg).exists():
+                bt_path = resolve_path(source_cfg)
             else:
                 bt_path = self._find_backtest_config(sname)
 
@@ -346,7 +348,7 @@ class PaperConsistencyChecker:
                          ("metrics_dir", metrics_dir)]:
             if not d:
                 continue
-            p = Path(d)
+            p = resolve_path(d)
             if not p.exists():
                 # Try to create
                 try:
@@ -409,7 +411,7 @@ def main() -> int:
     overall_pass = True
 
     for cfg_path in configs:
-        if not Path(cfg_path).exists():
+        if not resolve_path(cfg_path).exists():
             print(f"[SKIP] {cfg_path} not found")
             continue
 
@@ -422,7 +424,7 @@ def main() -> int:
             overall_pass = False
 
     # Save
-    out_path = Path(args.output)
+    out_path = resolve_path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(all_reports, f, indent=2, ensure_ascii=False)

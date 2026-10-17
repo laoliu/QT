@@ -26,8 +26,10 @@ from datetime import datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT / "src") not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT / "src"))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from aipha.utils.paths import project_path, resolve_path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,7 +84,7 @@ def main():
         capitals = DEFAULT_CAPITALS
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output = Path(args.output_dir) if args.output_dir else Path(f"output/batch_{ts}")
+    base_output = resolve_path(args.output_dir) if args.output_dir else project_path(f"output/batch_{ts}")
     base_output.mkdir(parents=True, exist_ok=True)
 
     total_runs = len(strat_names) * len(capitals)

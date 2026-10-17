@@ -9,3 +9,4 @@ __pycache__
 quant-trading/src/engine/fitness-worker.mjs
 
 .env
+quant-trading/config.local.json

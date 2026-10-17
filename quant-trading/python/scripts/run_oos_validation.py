@@ -27,8 +27,9 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
-# 添加 src
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from aipha.utils.paths import project_path, resolve_path
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -62,7 +63,7 @@ def load_strategy_config(strategy_name: str) -> dict | None:
     """加载策略的 YAML 配置"""
     import yaml
 
-    config_path = Path(f"configs/cb_strategies/{strategy_name}.yml")
+    config_path = project_path(f"configs/cb_strategies/{strategy_name}.yml")
     if not config_path.exists():
         logger.warning(f"配置文件不存在: {config_path}")
         return None
@@ -96,7 +97,7 @@ def run_backtest_for_period(
             run_from_config,
         )
 
-        config_path = Path(f"configs/cb_strategies/{strategy_name}.yml")
+        config_path = project_path(f"configs/cb_strategies/{strategy_name}.yml")
         if not config_path.exists():
             return None
 
@@ -280,7 +281,7 @@ def run_oos_validation(
         print(f"  OOS/IS Sharpe 比: {ratio_str}")
 
     # 保存结果
-    output = Path(output_path)
+    output = resolve_path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output, "w", encoding="utf-8") as f:

@@ -1,10 +1,13 @@
 """Analyze factor field diversity for expert review."""
 import json
 import re
+from pathlib import Path
 
-factors = json.load(open(
-    "output/auto_mining_v6/independent_factors.json", "r", encoding="utf-8"
-))
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+factors = json.loads(
+    (_PROJECT_ROOT / "output" / "auto_mining_v6" / "independent_factors.json")
+    .read_text(encoding="utf-8")
+)
 
 field_freq: dict[str, int] = {}
 for f in factors:

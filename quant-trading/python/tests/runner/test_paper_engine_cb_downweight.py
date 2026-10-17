@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from aipha.utils.paths import project_path
 from unittest.mock import MagicMock
 
 import pytest
@@ -202,7 +203,7 @@ class TestPlanA5CompC2Config:
     """plan_a_5comp.yml 中 C2 配置 E2E 测试。"""
 
     def test_c2_enabled_in_plan_a(self):
-        yml = Path("configs/paper/plan_a_5comp.yml")
+        yml = project_path("configs/paper/plan_a_5comp.yml")
         if not yml.exists():
             pytest.skip("plan_a_5comp.yml not found")
         cfg = PaperEngineConfig.from_yaml(yml)
@@ -210,7 +211,7 @@ class TestPlanA5CompC2Config:
 
     def test_c2_params_match_expert_consensus(self):
         """R89 专家共识参数: SR<0.5, 4月, 33.3%降权, 3月恢复。"""
-        yml = Path("configs/paper/plan_a_5comp.yml")
+        yml = project_path("configs/paper/plan_a_5comp.yml")
         if not yml.exists():
             pytest.skip("plan_a_5comp.yml not found")
         cfg = PaperEngineConfig.from_yaml(yml)

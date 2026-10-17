@@ -19,7 +19,9 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from aipha.utils.paths import project_path, resolve_path
 
 from aipha.backtest.config_runner import run_from_config
 from aipha.backtest.validation import (
@@ -37,7 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("wf_equity")
 logger.setLevel(logging.INFO)
 
-OUTPUT_BASE = Path("output/wf_equity")
+OUTPUT_BASE = project_path("output/wf_equity")
 
 
 # ============================================================================
@@ -129,7 +131,7 @@ def validate_one(strat: dict) -> dict:
     cfg_path = strat["config_path"]
     logger.info(f"\n{'='*70}\nWF Equity: {name}  ({cfg_path})\n{'='*70}")
 
-    with open(cfg_path, 'r', encoding='utf-8') as f:
+    with open(resolve_path(cfg_path), 'r', encoding='utf-8') as f:
         base_cfg = yaml.safe_load(f)
 
     # Determine overall date range

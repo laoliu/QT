@@ -426,9 +426,60 @@ def cmd_collect(args: argparse.Namespace) -> None:
     import asyncio
     from .collection_orchestrator import CollectionOrchestrator
 
-    orchestrator = CollectionOrchestrator(data_dir=args.data_dir)
     platform = getattr(args, "platform", None)
     account_uid = getattr(args, "account_uid", None)
+    authenticated_xueqiu = getattr(args, "xueqiu_authenticated", False)
+
+    if authenticated_xueqiu:
+        if platform != "xueqiu" or not account_uid:
+            raise SystemExit(
+                "--xueqiu-authenticated requires --platform xueqiu and --account-uid"
+            )
+        portfolio_codes = getattr(args, "portfolio_code", None) or []
+        if not portfolio_codes:
+            raise SystemExit(
+                "--xueqiu-authenticated requires at least one --portfolio-code"
+            )
+
+        async def _collect_authenticated_xueqiu():
+            from .browser.base import BrowserSession
+            from .collectors.xueqiu import XueqiuAuthenticatedCollector
+
+            async with BrowserSession(
+                data_dir=Path(args.data_dir) / "browser",
+                headless=not getattr(args, "headed", False),
+            ) as session:
+                adapter = XueqiuAuthenticatedCollector(
+                    session,
+                    portfolio_codes,
+                    author_id=getattr(args, "author_id", "") or account_uid,
+                    author_name=getattr(args, "author_name", "") or account_uid,
+                )
+                orchestrator = CollectionOrchestrator(
+                    data_dir=args.data_dir,
+                    collector_factory=lambda requested: adapter if requested == "xueqiu" else None,
+                )
+                try:
+                    snapshot = await orchestrator.collect_account(platform, account_uid)
+                    return snapshot
+                finally:
+                    orchestrator.close()
+
+        snapshot = asyncio.run(_collect_authenticated_xueqiu())
+        if snapshot.is_success:
+            print(
+                f"✓ Collected authenticated xueqiu/{account_uid} — "
+                f"{len(snapshot.parsed_fields.get('holdings') or [])} holdings; "
+                "performance not inferred"
+            )
+        else:
+            print(
+                f"✗ Failed xueqiu/{account_uid} — "
+                f"{snapshot.failure_type.value}: {snapshot.error_detail[:100]}"
+            )
+        return
+
+    orchestrator = CollectionOrchestrator(data_dir=args.data_dir)
 
     try:
         if account_uid and platform:
@@ -646,6 +697,20 @@ def main() -> None:
     p_collect = subparsers.add_parser("collect", help="Run automated data collection")
     p_collect.add_argument("--platform", help="Collect only this platform")
     p_collect.add_argument("--account-uid", dest="account_uid", help="Collect a single account (requires --platform)")
+    p_collect.add_argument(
+        "--xueqiu-authenticated", action="store_true",
+        help="Explicitly collect Xueqiu holdings with the persistent Playwright login session",
+    )
+    p_collect.add_argument(
+        "--portfolio-code", action="append", default=[],
+        help="Xueqiu portfolio code (repeat for multiple portfolios)",
+    )
+    p_collect.add_argument("--author-id", default="", help="Optional tracker author ID")
+    p_collect.add_argument("--author-name", default="", help="Optional display name")
+    p_collect.add_argument(
+        "--headed", action="store_true",
+        help="Show the browser window (useful for interactive login)",
+    )
 
     # evidence
     p_evidence = subparsers.add_parser("evidence", help="Show evidence history/summary")

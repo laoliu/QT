@@ -17,7 +17,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +130,7 @@ def main() -> None:
     print(f"建议最大配置: {assessment['max_recommended_wan']} 万")
 
     # 保存
-    out_path = Path("output/_liquidity_monitor/cb_monthly_liquidity.json")
+    out_path = project_path("output/_liquidity_monitor/cb_monthly_liquidity.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(assessment, f, indent=2, default=str)

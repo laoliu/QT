@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 _PROJ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_PROJ / "src"))
+sys.path.insert(0, str(_PROJ))
 
 
 def load_oos(model_dir: str) -> pd.DataFrame:

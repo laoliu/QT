@@ -25,7 +25,7 @@ from pathlib import Path
 
 # 确保项目根目录在路径中
 project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root))
 
 import pandas as pd
 

@@ -1,8 +1,12 @@
 """Print detailed combo results for expert review."""
 import json
+from pathlib import Path
 
-with open("output/combo_r123_full/summary.json") as f:
-    s = json.load(f)
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+s = json.loads(
+    (_PROJECT_ROOT / "output" / "combo_r123_full" / "summary.json")
+    .read_text(encoding="utf-8")
+)
 
 for name in ["R123", "R116", "R123_oldmodel"]:
     c = s["combos"][name]

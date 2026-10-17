@@ -36,6 +36,7 @@ from aipha.data.realtime_stream import BarData, QuoteType, StreamStatus
 from aipha.domain.models import Bar, Side
 from aipha.runner.live_runner import LiveRunner, RunnerMode
 from aipha.runner.paper_engine import PaperEngine, PaperEngineConfig
+from aipha.monitor.metrics_collector import MetricsConfig
 from aipha.runner.state_manager import StateManager
 from aipha.strategy.base import OrderIntent, Strategy, StrategyContext
 
@@ -175,6 +176,7 @@ def tmp_config(tmp_path: Path) -> PaperEngineConfig:
         state_dir=tmp_path / "state",
         state_file="test_state.json",
         audit_log_dir=tmp_path / "audit",
+        metrics_config=MetricsConfig(output_dir=tmp_path / "metrics"),
     )
 
 

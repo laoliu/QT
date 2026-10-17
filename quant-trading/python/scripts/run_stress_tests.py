@@ -32,7 +32,7 @@ from pathlib import Path
 
 # ── 路径设置 ────────────────────────────────────────────────────────────────
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "src"))
+sys.path.insert(0, str(_REPO_ROOT))
 os.chdir(_REPO_ROOT)
 
 logging.basicConfig(

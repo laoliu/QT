@@ -15,7 +15,7 @@
   POST /trading         → 交易指令（下单/撤单/查询/保存策略文件等）
 
 启动:
-  python -m aipha.execution.qmt_data_bridge --port 58088
+  python -m aipha.execution.qmt_data_bridge --port 18888
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 BRIDGE_VERSION = 3
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 58088
+DEFAULT_PORT = 18888
 
 # 环境变量配置
 MINI_QMT_PATH = os.environ.get("MINI_QMT_PATH", "")
@@ -68,30 +68,22 @@ def _xtdata_connect() -> tuple[bool, str]:
     if not HAS_XTDATA:
         return False, "xtdata not available"
     if hasattr(xtdata, "connect"):
-        if _xtquant_userdata:
-            try:
-                xtdata.connect(_xtquant_userdata)
-                return True, ""
-            except TypeError:
-                pass
-            except Exception as e:
-                logger.warning("xtdata.connect(path) warning: %s", e)
+        # xtdata.connect() expects an optional server IP, not a userdata path.
+        # The userdata directory is only used by the trading client below.
         try:
             xtdata.connect()
             return True, ""
         except Exception as e:
-            logger.warning("xtdata.connect() warning: %s", e)
+            logger.warning(
+                "xtdata 行情连接失败: %s。该连接独立于交易连接；请确认 QMT 行情服务已启动，"
+                "并检查本机 TCP 58610 是否处于 LISTENING 状态（netstat -ano | findstr :58610）",
+                e,
+            )
             return False, str(e)
     if hasattr(xtdata, "get_client"):
         try:
             client = xtdata.get_client()
             if client and hasattr(client, "connect"):
-                if _xtquant_userdata:
-                    try:
-                        client.connect(_xtquant_userdata)
-                        return True, ""
-                    except TypeError:
-                        pass
                 client.connect()
                 return True, ""
         except Exception as e:

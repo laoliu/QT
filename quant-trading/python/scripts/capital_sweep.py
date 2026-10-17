@@ -30,6 +30,7 @@ if str(_project_root) not in sys.path:
 
 from aipha.backtest.config_parser import load_config, config_to_dict
 from aipha.backtest.config_runner import run_from_config
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ def run_capital_sweep(
         raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
     capitals = capitals or DEFAULT_CAPITALS
-    output_dir = Path(output_dir) if output_dir else Path("results/capital_sweep")
+    output_dir = Path(output_dir) if output_dir else project_path("results", "capital_sweep")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 加载基准配置
@@ -249,8 +250,8 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="results/capital_sweep",
-        help="输出目录 (默认: results/capital_sweep/)",
+        default=str(project_path("results", "capital_sweep")),
+        help="输出目录 (默认锚定项目根 results/capital_sweep/)",
     )
     parser.add_argument(
         "-v", "--verbose",

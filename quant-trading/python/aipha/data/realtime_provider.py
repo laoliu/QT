@@ -20,7 +20,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BRIDGE_URL = "http://127.0.0.1:58088"
+_DEFAULT_BRIDGE_URL = "http://127.0.0.1:18888"
 
 
 def get_bridge_url() -> str:

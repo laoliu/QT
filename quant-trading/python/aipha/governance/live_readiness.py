@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import importlib
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -239,7 +240,9 @@ def _gate_risk_controls(combo_id: str) -> GateResult:
     """G5: Shared risk controls active and tested."""
     gate = GateResult(gate_id="G5", gate_name="Risk Controls")
     try:
-        from aipha.risk.ml_risk_controls import MddGradientDeleverager
+        module = importlib.import_module("aipha.risk.ml_risk_controls")
+        if not hasattr(module, "MddGradientDeleverager"):
+            raise ImportError("MddGradientDeleverager is missing")
         gate.passed = True
         gate.evidence = "MddGradientDeleverager importable"
     except ImportError:
@@ -250,9 +253,14 @@ def _gate_risk_controls(combo_id: str) -> GateResult:
 def _gate_qmt_integration(combo_id: str) -> GateResult:
     """G6: QMT gateway configured and tested."""
     gate = GateResult(gate_id="G6", gate_name="QMT Gateway")
-    qmt_path = ROOT / "src" / "aipha" / "execution" / "qmt_gateway.py"
-    gate.passed = qmt_path.exists()
-    gate.evidence = "qmt_gateway.py exists" if gate.passed else "qmt_gateway.py missing"
+    qmt_path = ROOT / "aipha" / "execution" / "qmt_gateway.py"
+    test_path = ROOT / "tests" / "execution" / "test_emergency_control.py"
+    gate.passed = qmt_path.is_file() and test_path.is_file()
+    if gate.passed:
+        gate.evidence = "current QMT gateway module and execution control tests are present"
+    else:
+        missing = [str(path) for path in (qmt_path, test_path) if not path.is_file()]
+        gate.evidence = f"missing: {missing}"
     return gate
 
 
@@ -260,7 +268,9 @@ def _gate_alert_system(combo_id: str) -> GateResult:
     """G7: Alert system verified and responsive."""
     gate = GateResult(gate_id="G7", gate_name="Alert System")
     try:
-        from aipha.monitor.feishu_alert import send_trade_daily_report
+        module = importlib.import_module("aipha.monitor.feishu_alert")
+        if not hasattr(module, "send_trade_daily_report"):
+            raise ImportError("send_trade_daily_report is missing")
         gate.passed = True
         gate.evidence = "send_trade_daily_report importable"
     except ImportError:
@@ -269,20 +279,20 @@ def _gate_alert_system(combo_id: str) -> GateResult:
 
 
 def _gate_manual_override(combo_id: str) -> GateResult:
-    """G8: Manual override / kill switch tested."""
+    """G8: Authenticated emergency-stop API and broker worker are present."""
     gate = GateResult(gate_id="G8", gate_name="Manual Override")
-    # Accept if emergency_stop.py exists AND tests pass (indirectly, via file presence)
-    script = ROOT / "scripts" / "ops" / "emergency_stop.py"
-    tests = ROOT / "tests" / "ops" / "test_emergency_stop.py"
-    if script.exists() and tests.exists():
+    required = (
+        ROOT / "aipha" / "api" / "live" / "router.py",
+        ROOT / "aipha" / "api" / "live" / "engine_manager.py",
+        ROOT / "aipha" / "execution" / "emergency_control.py",
+        ROOT / "tests" / "api" / "test_live_stop.py",
+        ROOT / "tests" / "execution" / "test_emergency_control.py",
+    )
+    if all(path.is_file() for path in required):
         gate.passed = True
-        gate.evidence = "emergency_stop kill switch + tests present"
+        gate.evidence = "live stop API, cross-process broker control and regression tests are present"
     else:
-        missing = []
-        if not script.exists():
-            missing.append(str(script))
-        if not tests.exists():
-            missing.append(str(tests))
+        missing = [str(path) for path in required if not path.is_file()]
         gate.evidence = f"missing: {missing}"
     return gate
 
@@ -321,7 +331,6 @@ def _gate_governance_complete(combo_id: str) -> GateResult:
         reg = json.loads(reg_path.read_text(encoding="utf-8"))
         for entry in reg.get("entries", []):
             if entry.get("entry_id") == combo_id:
-                notes = entry.get("notes", "")
                 ps = entry.get("paper_status", "")
                 if ps in ("s4_active", "ready"):
                     gate.passed = True

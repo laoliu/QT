@@ -64,6 +64,109 @@ class TestGuardSelfCheck:
         )
 
 
+# ── 路径锚定：aipha/ 下不得出现 CWD 相对路径 ────────────────────
+#
+# 失效方式是静默的：``Path("configs/x.yml")`` 在 python/ 下跑是对的，
+# 换个启动目录（uvicorn、docker、cron、双击脚本）就指向一个空位置，
+# 不报错，只是从此走「文件不存在」那条分支。Kill Switch 就这么失效过
+# （见 aipha/utils/paths.py 模块 docstring）。
+#
+# 统一出口：写死的兜底值用 ``project_path()``，配置/环境变量传进来的
+# 值用 ``resolve_path()``。本护栏盯着不让新的相对字面量混回来。
+
+# 这些一级目录名出现在路径字面量开头，就说明是相对项目根在写路径
+_ROOT_LEVEL_DIRS = ("configs", "data", "output", "logs", "docs")
+
+# 会把字符串当路径用的构造/调用
+_PATH_SINKS = ("Path", "_Path", "PosixPath", "WindowsPath", "open")
+
+
+def _relative_path_literals(py: Path) -> list[tuple[int, str]]:
+    """返回 ``py`` 里传进路径构造器的 CWD 相对字面量 [(行号, 值)]。"""
+    tree = ast.parse(py.read_text(encoding="utf-8"))
+    found: list[tuple[int, str]] = []
+
+    def is_relative(v: object) -> bool:
+        if not isinstance(v, str) or not v:
+            return False
+        p = Path(v)
+        if p.is_absolute() or p.root or v.startswith(("~", ".")):
+            return False
+        return v.replace("\\", "/").split("/")[0] in _ROOT_LEVEL_DIRS
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = (
+            fn.id if isinstance(fn, ast.Name)
+            else fn.attr if isinstance(fn, ast.Attribute)
+            else ""
+        )
+        if name not in _PATH_SINKS:
+            continue
+        # 包括嵌套的 Path(os.environ.get("X", "configs/y.yml")) 形式
+        for arg in list(node.args) + [kw.value for kw in node.keywords]:
+            for sub in ast.walk(arg):
+                if isinstance(sub, ast.Constant) and is_relative(sub.value):
+                    found.append((sub.lineno, sub.value))
+    return sorted(set(found))
+
+
+class TestPathAnchoring:
+    """aipha/ 下的路径必须锚定到项目根，不得依赖当前工作目录。"""
+
+    def test_no_cwd_relative_path_literals(self):
+        violations: list[str] = []
+        scanned = 0
+        for py in sorted(PKG_ROOT.rglob("*.py")):
+            scanned += 1
+            for lineno, value in _relative_path_literals(py):
+                violations.append(
+                    f"  {py.relative_to(PROJECT_ROOT)}:{lineno}  {value!r}"
+                )
+        assert scanned >= 300, f"扫描范围可能不对，只扫到 {scanned} 个文件"
+        assert not violations, (
+            "以下位置把 CWD 相对路径传给了路径构造器 —— 换个启动目录就会\n"
+            "静默指向空位置。写死的兜底值请用 aipha.utils.paths.project_path()，\n"
+            "配置/环境变量传进来的值请用 resolve_path()：\n"
+            + "\n".join(violations)
+        )
+
+    def test_scanner_detects_a_known_bad_pattern(self):
+        """元测试：扫描器本身得真能认出违规，否则上面那条是假绿。"""
+        import tempfile
+
+        bad = 'from pathlib import Path\np = Path("configs/x.yml")\n'
+        good = (
+            "from aipha.utils.paths import project_path\n"
+            'p = project_path("configs", "x.yml")\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            bad_f = Path(d) / "bad.py"
+            bad_f.write_text(bad, encoding="utf-8")
+            assert _relative_path_literals(bad_f) == [(2, "configs/x.yml")]
+
+            good_f = Path(d) / "good.py"
+            good_f.write_text(good, encoding="utf-8")
+            assert _relative_path_literals(good_f) == []
+
+    def test_absolute_and_rooted_paths_are_not_flagged(self):
+        """绝对路径 / 带根路径是合法的（容器挂载、显式指定盘符）。"""
+        import tempfile
+
+        src = (
+            "from pathlib import Path\n"
+            'a = Path("/mnt/data/cache")\n'
+            'b = Path("G:/qtdata/cache")\n'
+            'c = Path("./data/cache")\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "ok.py"
+            f.write_text(src, encoding="utf-8")
+            assert _relative_path_literals(f) == []
+
+
 # ── §13.1 MarketRules 默认值一致性 ──────────────────────────────
 
 
@@ -515,20 +618,8 @@ class TestYAMLConfigIntegrity:
 class TestStrategyIntegrity:
     """验证策略模块可导入、注册表完整"""
 
-    # 已知导不进来、且暂不修的策略模块。
-    #
-    # tick 微结构那条线缺的不是一个名字，而是整套数据模型：
-    # ``domain/models.py`` 里没有 Tick / DepthLevel，``strategy/base.py``
-    # 里没有 TickContext / TickFeatures / TickStrategy，``strategy/registry.py``
-    # 里没有 TickStrategyRegistry —— 六个符号都是 dcb1308 批量导入时漏掉的，
-    # 和 scripts/ops/ 同源。全树没有任何测试或配置引用这条线，所以按
-    # 「生产正确性优先，长尾后置」放着。
-    #
-    # 这个名单本身被 test_known_broken_list_is_accurate 盯着：修好了不删
-    # 会红，新坏了不加也会红。名单只能是「已登记的债」，不能是垃圾桶。
-    _KNOWN_BROKEN = {
-        "aipha.strategy.tick_strategies",
-    }
+    # Tick contracts are now implemented; no strategy import exceptions remain.
+    _KNOWN_BROKEN: set[str] = set()
 
     @staticmethod
     def _import_all_strategies() -> tuple[int, dict[str, str]]:

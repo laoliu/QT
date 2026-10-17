@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 # §13.2: OrderIntent / IntentType 的唯一定义在 domain/models.py
 # 此处 re-export 保持向后兼容
-from aipha.domain.models import IntentType, OrderIntent  # noqa: F401
+from aipha.domain.models import IntentType, OrderIntent, Tick  # noqa: F401
 
 if TYPE_CHECKING:
     from aipha.domain.models import Bar, Side
@@ -42,6 +42,47 @@ class StrategyContext:
     def get_position(self, symbol: str) -> int:
         """Get current position for symbol (0 if not held)."""
         return self.positions.get(symbol, 0)
+
+
+@dataclass
+class TickFeatures:
+    symbol: str
+    timestamp: datetime
+    last_price: float
+    micro_vwap: float = 0.0
+    short_momentum_pct: float = 0.0
+    medium_momentum_pct: float = 0.0
+    spread_bps: float = 0.0
+    order_book_imbalance: float = 0.0
+    realized_vol_bps: float = 0.0
+    volume_delta: int = 0
+    amount_delta: float = 0.0
+
+
+@dataclass(kw_only=True)
+class TickContext(StrategyContext):
+    tick: Tick
+    features: TickFeatures
+    recent_ticks: list[Tick] = field(default_factory=list)
+
+
+class TickStrategy(ABC):
+    """Tick-only strategy lifecycle, independent of bar registration."""
+
+    name = "TickStrategy"
+
+    @abstractmethod
+    def on_tick(self, context: TickContext) -> list[OrderIntent]:
+        raise NotImplementedError
+
+    def on_start(self) -> None:
+        pass
+
+    def on_fill(self, symbol: str, side: "Side", qty: int, price: float) -> None:
+        pass
+
+    def on_end(self) -> None:
+        pass
 
 
 class Strategy(ABC):

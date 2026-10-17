@@ -18,8 +18,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-# 确保 src 在 path 中
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from aipha.utils.paths import project_path, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def run_batch(
     total = len(targets)
     results: list[dict[str, Any]] = []
 
-    output_dir = Path("output/wf_batch")
+    output_dir = project_path("output", "wf_batch")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for idx, name in enumerate(targets, 1):
@@ -136,6 +137,7 @@ def run_batch(
             })
             continue
 
+        cfg_path = str(resolve_path(cfg_path))
         if not os.path.exists(cfg_path):
             logger.error(f"[{idx}/{total}] 配置文件不存在: {cfg_path}")
             results.append({

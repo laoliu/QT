@@ -5,8 +5,8 @@ qmt_bridge_strategy.py -- QMT 策略包装器，加载后自动启动数据桥 H
 
 用法：
   1. 在 miniQMT 中新建一个策略，把本文件加载进去
-  2. 运行策略后，自动在后台线程启动 HTTP 服务（端口 58088）
-  3. Mac 可通过 POST http://<windows-ip>:58088/klines 拉取 K 线数据
+  2. 运行策略后，自动在后台线程启动 HTTP 服务（端口 18888）
+  3. Mac 可通过 POST http://<windows-ip>:18888/klines 拉取 K 线数据
 
 原理：
   miniQMT 会用内置 Python 3.6 执行本策略。
@@ -32,7 +32,7 @@ if _this_dir not in sys.path:
     sys.path.insert(0, _this_dir)
 
 # 数据桥 HTTP 服务端口（与 qmt_data_bridge.py 中一致）
-BRIDGE_PORT = 58088
+BRIDGE_PORT = int(os.environ.get("SERVE_PORT", "18888"))
 BRIDGE_HOST = "0.0.0.0"
 
 # 全局标记，防止重复启动

@@ -11,7 +11,7 @@
 """
 import os as _os
 from pathlib import Path as _Path
-from aipha.utils.paths import project_path
+from aipha.utils.paths import project_path, resolve_path
 
 
 def get_config(key: str, default: str | None = None) -> str | None:
@@ -28,12 +28,14 @@ def get_cache_dir() -> _Path:
       3. G:/qtdata/cache（默认，如果存在）
       4. 回退到 data/cache（旧版兼容）
     """
+    # 两个环境变量给绝对路径是常态（G:/qtdata、容器里的 /data）；
+    # 万一给了相对路径，也锚到项目根而不是当前工作目录。
     explicit = _os.environ.get("DATA_CACHE_DIR")
     if explicit:
-        return _Path(explicit)
+        return resolve_path(explicit)
     qtdata = _os.environ.get("QTDATA_DIR")
     if qtdata:
-        return _Path(qtdata) / "cache"
+        return resolve_path(qtdata) / "cache"
     default_qtdata = _Path("G:/qtdata/cache")
     if default_qtdata.exists():
         return default_qtdata
@@ -68,8 +70,12 @@ def get_log_level() -> str:
 
 
 def get_log_dir() -> _Path:
-    """获取日志目录。"""
-    return _Path(get_config("LOG_DIR", "logs"))
+    """获取日志目录。
+
+    ``LOG_DIR`` 给绝对路径就照用；给相对路径（或没给）一律锚到项目根，
+    否则日志会跟着启动目录散到不同的树里 —— 排障时「日志哪去了」。
+    """
+    return resolve_path(get_config("LOG_DIR"), "logs")
 
 
 from aipha.config.config_models import (

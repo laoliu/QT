@@ -3,10 +3,15 @@ Shared test fixtures for quant-trading Python tests.
 """
 
 import datetime
+import os
 
 import numpy as np
 import pandas as pd
 import pytest
+
+# Persist for the whole pytest process and inherit into subprocesses/background
+# workers; PYTEST_CURRENT_TEST is intentionally only set around one test call.
+os.environ["AIPHA_TEST_RUNTIME"] = "1"
 
 # 下面三个文件不是 pytest 测试，而是手工联调脚本：它们在模块顶层直接
 # 对 QMT bridge（硬编码的局域网地址）发 HTTP 请求，并在 import 期调用
@@ -19,6 +24,12 @@ collect_ignore = [
     "test_extended_bridge.py",
     "test_real_bridge.py",
 ]
+
+
+@pytest.fixture(autouse=True)
+def isolated_backtest_index(tmp_path, monkeypatch):
+    """Backtest exports must not register synthetic runs in the operator's index."""
+    monkeypatch.setenv("AIPHA_DB_PATH", str(tmp_path / "backtest_index.db"))
 
 
 @pytest.fixture

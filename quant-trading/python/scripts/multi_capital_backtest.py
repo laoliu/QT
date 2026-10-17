@@ -17,8 +17,10 @@ import time
 from pathlib import Path
 
 _PROJ = Path(__file__).resolve().parents[1]
-if str(_PROJ / "src") not in sys.path:
-    sys.path.insert(0, str(_PROJ / "src"))
+if str(_PROJ) not in sys.path:
+    sys.path.insert(0, str(_PROJ))
+
+from aipha.utils.paths import project_path
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -69,7 +71,7 @@ def run_component_at_capital(
 ) -> dict | None:
     """对单个组件在指定资金量下运行回测."""
     cap_tag = f"{capital/10000:.0f}w"
-    out_dir = f"output/_cap_sweep/{comp_name}_{cap_tag}"
+    out_dir = str(project_path("output", "_cap_sweep", f"{comp_name}_{cap_tag}"))
     summary_path = Path(out_dir) / "summary.json"
 
     # 已有结果时直接读取
@@ -275,7 +277,7 @@ def print_summary(results: list[dict]) -> None:
               f"{abs(decay) if baseline_ar else 0:>10.2%} | {grade}")
 
     # 保存 JSON
-    out_path = Path("output/_cap_sweep/summary.json")
+    out_path = project_path("output/_cap_sweep/summary.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(results, f, indent=2, default=str)

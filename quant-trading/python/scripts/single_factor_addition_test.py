@@ -18,8 +18,9 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from aipha.utils.paths import project_path
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ def run_baseline() -> dict:
 def check_factor_availability(factor_name: str) -> bool:
     """检查因子是否存在于模型特征中"""
     import pandas as pd
-    model_dir = Path("models/ml_csi2000_lgb_p3")
+    model_dir = project_path("models/ml_csi2000_lgb_p3")
     meta_path = model_dir / "meta.pkl"
     if not meta_path.exists():
         logger.warning("meta.pkl不存在: %s", meta_path)
@@ -118,7 +119,7 @@ def main() -> None:
     # 保存结果
     out = {"baseline": baseline, "candidates": CANDIDATE_FACTORS,
            "status": "baseline_captured", "next_step": "retrain_with_241_features"}
-    out_path = Path("output/_factor_test/single_factor_plan.json")
+    out_path = project_path("output/_factor_test/single_factor_plan.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2, default=str)

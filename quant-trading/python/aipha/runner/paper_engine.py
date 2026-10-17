@@ -65,7 +65,7 @@ from aipha.risk.ml_risk_controls import (
 from aipha.risk.position_sizing import UnifiedPositionSizer
 from aipha.runner.live_runner import LiveRunner, RunnerConfig, RunnerMode
 from aipha.runner.state_manager import StateManager
-from aipha.utils.paths import project_path
+from aipha.utils.paths import project_path, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -329,8 +329,15 @@ class PaperEngineConfig:
             fill_model_volume_constraint=fill_model_volume_constraint,
             slippage_model_name=engine_data.get("slippage_model", "fixed"),
             slippage_params=engine_data.get("slippage_params", {}),
-            state_dir=Path(engine_data.get("state_dir", "data/paper_state")),
-            audit_log_dir=Path(engine_data.get("audit_log_dir", "logs/paper")),
+            # 与上面 dataclass 的默认值同源：配置里写的相对路径也锚到项目根，
+            # 否则模拟盘状态会随启动目录散到不同的树里 —— 换个目录重启就是
+            # 「持仓凭空清零」。
+            state_dir=resolve_path(
+                engine_data.get("state_dir"), "data", "paper_state"
+            ),
+            audit_log_dir=resolve_path(
+                engine_data.get("audit_log_dir"), "logs", "paper"
+            ),
             universe_config=universe_config,
             monitoring_enabled=engine_data.get("monitoring_enabled", True),
             alert_drawdown_threshold=engine_data.get("alert_drawdown_threshold", 0.08),
@@ -411,7 +418,9 @@ class PaperEngineConfig:
             strategy_name=primary_strategy,
             strategy_params={"strategies": strategies, "weights": weights},
             initial_capital=portfolio.get("initial_capital", 1_000_000.0),
-            state_dir=Path(portfolio.get("state_dir", f"data/paper_state/{portfolio_id}")),
+            state_dir=resolve_path(
+                portfolio.get("state_dir"), "data", "paper_state", portfolio_id
+            ),
             # P1-4: 从 MarketRules 动态派生，不硬编码 (§13.1)
         )
 
@@ -1610,7 +1619,7 @@ def run_paper_trading(config_path: Path) -> None:
         logger.info(f"静态标的（pillar 汇总）: {config.symbols}")
         logger.info(f"初始资金: {config.initial_capital:,.0f}")
 
-        asyncio.run(engine.run())
+        _run_engine_sync(engine)
         return
 
     # 从注册表获取策略
@@ -1655,4 +1664,18 @@ def run_paper_trading(config_path: Path) -> None:
         logger.info(f"标的: {config.symbols}")
     logger.info(f"初始资金: {config.initial_capital:,.0f}")
 
+    _run_engine_sync(engine)
+
+
+def _run_engine_sync(engine: PaperEngine) -> None:
+    """Run the async engine from a sync entry point without leaking a coroutine."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError(
+            "run_paper_trading() cannot be called inside a running event loop; "
+            "await PaperEngine.run() instead"
+        )
     asyncio.run(engine.run())

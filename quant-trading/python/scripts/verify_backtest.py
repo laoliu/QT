@@ -10,7 +10,7 @@ from pathlib import Path
 
 # 确保项目根目录在 sys.path
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 from aipha.backtest.config_runner import run_from_config
 

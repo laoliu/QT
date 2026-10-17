@@ -20,7 +20,6 @@ from datetime import date, datetime
 from pathlib import Path
 from collections import defaultdict
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.run_cb_strategy import create_strategy, build_engine, compute_metrics, load_data
@@ -30,6 +29,7 @@ from aipha.execution.fees import CommissionModel, FeeModelCNEquity, StampTaxMode
 from aipha.execution.fill_models import get_fill_model
 from aipha.execution.slippage import FixedBpsSlippageModel
 from aipha.market.rules_cn_equity import MarketRulesCNEquity
+from aipha.utils.paths import project_path
 
 
 def build_engine_custom(strategy, fill_model_name: str = "next_bar_open",
@@ -224,10 +224,10 @@ def main():
               f"Sharpe={m['sharpe']:>6.3f} 换手={m['annual_turnover_x']:.1f}x | {m['params']}")
 
     # save CSV
-    Path("results").mkdir(exist_ok=True)
+    project_path("results").mkdir(parents=True, exist_ok=True)
     if results_ss:
         keys = [k for k in results_ss[0] if k != "params"] + ["params"]
-        with open("results/verified_small_size_nbo.csv", "w", newline="", encoding="utf-8-sig") as f:
+        with open(project_path("results", "verified_small_size_nbo.csv"), "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(results_ss)

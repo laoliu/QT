@@ -35,7 +35,6 @@ from datetime import datetime
 from pathlib import Path
 
 # 确保项目根目录在 Python 路径中
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 logger = logging.getLogger(__name__)
 

@@ -17,6 +17,8 @@ import os
 import sys
 from pathlib import Path
 
+from aipha.utils.paths import resolve_path
+
 try:
     import yaml
 except ImportError:
@@ -35,7 +37,9 @@ def _load_config(config_dir: str = "configs/tracker") -> dict:
 
     Raises SystemExit if critical config files are not found.
     """
-    config_path = Path(config_dir)
+    # 配置默认值和 YAML 中的相对 data_dir 都以项目根为基准，避免从
+    # uvicorn/任务调度器的其他 cwd 启动时静默读写另一棵目录树。
+    config_path = resolve_path(config_dir)
     settings_file = config_path / "settings.yml"
     authors_file = config_path / "authors.yml"
 
@@ -55,6 +59,54 @@ def _load_config(config_dir: str = "configs/tracker") -> dict:
     authors_data = yaml.safe_load(authors_file.read_text(encoding="utf-8")) or {}
 
     return {**settings, "authors_raw": authors_data.get("authors", [])}
+
+
+def _config_data_dir(config: dict) -> Path:
+    """Resolve tracker storage paths without depending on the process cwd."""
+    return resolve_path(config.get("data_dir"), "data", "tracker")
+
+
+def _portfolio_evidence(author, portfolio_code: str, snapshot):
+    """Convert one legacy portfolio fetch into explicit auditable evidence."""
+    from .evidence import EvidenceQuality, EvidenceSnapshot, FailureType
+
+    account_id = f"xueqiu_{author.platform_uid}"
+    source_url = f"https://xueqiu.com/P/{portfolio_code}"
+    if snapshot is None:
+        return EvidenceSnapshot(
+            account_id=account_id,
+            platform="xueqiu",
+            platform_uid=author.platform_uid,
+            source_url=source_url,
+            parsed_fields={"portfolio_code": portfolio_code, "holdings": None},
+            failure_type=FailureType.FIELDS_MISSING,
+            error_detail="Authenticated portfolio returned no snapshot",
+            evidence_quality=EvidenceQuality.FAILED,
+        )
+    if not snapshot.holdings:
+        return EvidenceSnapshot(
+            account_id=account_id,
+            platform="xueqiu",
+            platform_uid=author.platform_uid,
+            source_url=source_url,
+            parsed_fields={"portfolio_code": portfolio_code, "holdings": []},
+            failure_type=FailureType.FIELDS_MISSING,
+            error_detail="Portfolio page returned zero holdings; snapshot rejected",
+            evidence_quality=EvidenceQuality.FAILED,
+        )
+    return EvidenceSnapshot(
+        account_id=account_id,
+        platform="xueqiu",
+        platform_uid=author.platform_uid,
+        source_url=source_url,
+        parsed_fields={
+            "portfolio_code": portfolio_code,
+            "holdings": [holding.to_dict() for holding in snapshot.holdings],
+            "perf_summary": {},
+        },
+        failure_type=FailureType.NONE,
+        evidence_quality=EvidenceQuality.PARTIAL,
+    )
 
 
 def _parse_authors(raw_list: list[dict]) -> list:
@@ -107,7 +159,7 @@ def _write_audit_log(
         return
     from datetime import datetime as _dt
 
-    log_dir = Path(audit_config.get("log_dir", "logs/audit"))
+    log_dir = resolve_path(audit_config.get("log_dir"), "logs", "audit")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"tracker_{_dt.now():%Y%m%d}.log"
     entry = f"{_dt.now():%Y-%m-%d %H:%M:%S} | {author_id} | {event} | {detail}\n"
@@ -128,6 +180,7 @@ async def cmd_fetch(args: argparse.Namespace, config: dict) -> None:
     from .browser.base import BrowserSession
     from .browser.xueqiu import XueqiuCollector
     from .diff import compute_diff
+    from .evidence import EvidenceStore
     from .models import PortfolioSource
     from .notify.wxpusher import WxPusherNotifier
     from .storage import TrackerStorage
@@ -147,7 +200,7 @@ async def cmd_fetch(args: argparse.Namespace, config: dict) -> None:
 
     dry_run = getattr(args, "dry_run", False)
 
-    data_dir = config.get("data_dir", "data/tracker")
+    data_dir = _config_data_dir(config)
     notify_config = config.get("notification", {}).get("wxpusher", {})
     notify_level = notify_config.get("level", "changes")
     audit_config = config.get("audit", {})
@@ -166,9 +219,10 @@ async def cmd_fetch(args: argparse.Namespace, config: dict) -> None:
         print("🔍 Dry-run mode — will NOT save snapshots or send notifications.")
 
     storage = TrackerStorage(data_dir=data_dir)
+    evidence = EvidenceStore(data_dir=data_dir)
     try:
         async with BrowserSession(
-            data_dir=f"{data_dir}/browser",
+            data_dir=data_dir / "browser",
             headless=browser_config.get("headless", True),
         ) as session:
             collector = XueqiuCollector(session)
@@ -200,6 +254,8 @@ async def cmd_fetch(args: argparse.Namespace, config: dict) -> None:
                         author_id=author.author_id,
                         author_name=author.name,
                     )
+                    if not dry_run:
+                        evidence.save_snapshot(_portfolio_evidence(author, code, snapshot))
                     if snapshot is None:
                         logger.warning("Failed to fetch portfolio %s for %s", code, author.name)
                         _write_audit_log(
@@ -272,6 +328,7 @@ async def cmd_fetch(args: argparse.Namespace, config: dict) -> None:
 
     finally:
         storage.close()
+        evidence.close()
     print("\n✅ Fetch complete.")
 
 
@@ -280,10 +337,10 @@ async def cmd_login(args: argparse.Namespace, config: dict) -> None:
     from .browser.base import BrowserSession
     from .browser.xueqiu import XueqiuCollector
 
-    data_dir = config.get("data_dir", "data/tracker")
+    data_dir = _config_data_dir(config)
 
     async with BrowserSession(
-        data_dir=f"{data_dir}/browser",
+        data_dir=data_dir / "browser",
         headless=False,  # must be headed for interactive login
     ) as session:
         collector = XueqiuCollector(session)
@@ -300,7 +357,7 @@ async def cmd_diff(args: argparse.Namespace, config: dict) -> None:
     """Show latest diffs for all tracked authors."""
     from .storage import TrackerStorage
 
-    data_dir = config.get("data_dir", "data/tracker")
+    data_dir = _config_data_dir(config)
     with TrackerStorage(data_dir=data_dir) as storage:
         authors = _parse_authors(config.get("authors_raw", []))
 
@@ -321,7 +378,7 @@ async def cmd_status(args: argparse.Namespace, config: dict) -> None:
     """Show storage stats and latest snapshots."""
     from .storage import TrackerStorage
 
-    data_dir = config.get("data_dir", "data/tracker")
+    data_dir = _config_data_dir(config)
     with TrackerStorage(data_dir=data_dir) as storage:
         stats = storage.get_stats()
         print("=== Tracker Storage Stats ===")
@@ -350,7 +407,7 @@ async def cmd_plan(args: argparse.Namespace, config: dict) -> None:
     from .models import Confidence, TradePlan, TradeDirection
     from .storage import TrackerStorage
 
-    data_dir = config.get("data_dir", "data/tracker")
+    data_dir = _config_data_dir(config)
 
     sub = args.plan_action
 

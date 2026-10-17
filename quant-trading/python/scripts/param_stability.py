@@ -24,7 +24,6 @@ import time
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aipha.backtest.engine import BacktestConfig, BacktestEngine, BacktestResult
 from aipha.data.cb_data_adapter import CBDataAdapter
@@ -38,6 +37,7 @@ from aipha.execution.fill_models import NextBarOpenFillModel
 from aipha.execution.slippage import FixedBpsSlippageModel
 from aipha.market.rules_cn_equity import MarketRulesCNEquity
 from aipha.market.rules_convertible_bond import MarketRulesConvertibleBond
+from aipha.utils.paths import project_path
 
 import aipha.strategy.small_size  # noqa: F401
 import aipha.strategy.new_bond  # noqa: F401
@@ -343,7 +343,7 @@ def main():
               f"全正={'Y' if s['all_positive_return'] else 'N'}")
 
     # 保存
-    output_path = Path("results/param_stability.json")
+    output_path = project_path("results", "param_stability.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False, default=str)

@@ -28,7 +28,7 @@ import pandas as pd
 
 # 项目根目录
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 logging.basicConfig(
     level=logging.INFO,

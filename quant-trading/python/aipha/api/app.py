@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from aipha.utils.paths import project_path
+from aipha.utils.paths import project_path, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,9 @@ def _bootstrap_paper_registry(app: FastAPI) -> None:
         store = get_result_store()
 
         # 1) Import from paper_registry.json
-        registry_path = Path(
-            os.environ.get("AIPHA_PAPER_REGISTRY", "configs/paper/paper_registry.json")
+        registry_path = resolve_path(
+            os.environ.get("AIPHA_PAPER_REGISTRY"),
+            "configs", "paper", "paper_registry.json",
         )
         if registry_path.exists():
             count = import_paper_registry_from_json(registry_path, store)
@@ -141,8 +142,8 @@ def _bootstrap_users(app: FastAPI) -> None:
         import yaml
         from aipha.api.deps import get_result_store
 
-        auth_path = Path(
-            os.environ.get("AIPHA_AUTH_CONFIG", "configs/auth/users.yml")
+        auth_path = resolve_path(
+            os.environ.get("AIPHA_AUTH_CONFIG"), "configs", "auth", "users.yml"
         )
         if not auth_path.exists():
             logger.warning("Auth config not found: %s, skipping user bootstrap", auth_path)
@@ -217,15 +218,9 @@ async def _lifespan(app: FastAPI):
     except ImportError:
         pass
 
-    # Initialize live engine manager (does NOT auto-start engine;
-    # engine is started via POST /api/v1/live/engine/start)
-    try:
-        from aipha.api.live.engine_manager import get_engine_manager
-        _engine_mgr = get_engine_manager()
-        logger.info("Live engine manager initialized (engine idle, awaiting start)")
-    except Exception as e:
-        logger.warning("Live engine manager init skipped: %s", e)
-        _engine_mgr = None
+    from aipha.api.live.engine_manager import get_engine_manager
+    _engine_mgr = get_engine_manager()
+    logger.info("Live stop controls ready (no engine auto-start)")
 
     yield
 
@@ -277,22 +272,7 @@ def create_app() -> FastAPI:
     from aipha.api.data_hub.router import router as data_router
     from aipha.api.audit.router import router as audit_router
 
-    # aipha.api.live 整个包目前不在树里（engine_manager + router 都缺）。
-    # 之前这里是无条件 import，于是 `import aipha.api.app` 直接
-    # ModuleNotFoundError —— 模块末尾还有一句 `app = create_app()`，
-    # 结果**整个 API 服务连启动都做不到**，其余十几个 router 全被一个
-    # 缺失模块拖死。上面 lifespan 里对 engine_manager 用的就是可选导入
-    # （`:214`），这里跟它保持一致。
-    #
-    # 缺的是「HTTP 启停实盘引擎」这条控制面（app.py:213 提到
-    # POST /api/v1/live/engine/start）。没有测试规格、也没有调用方
-    # （前端的 /quant/api/live/status 由 Node 侧自己实现），凭空补一个
-    # 能下真钱的启停接口不合适，留给人决定。
-    try:
-        from aipha.api.live.router import router as live_router
-    except ImportError as e:
-        live_router = None
-        logger.warning("Live router 不可用，实盘启停接口未注册: %s", e)
+    from aipha.api.live.router import router as live_router
 
     prefix = "/api/v1"
     app.include_router(auth_router, prefix=prefix)
@@ -304,8 +284,7 @@ def create_app() -> FastAPI:
     app.include_router(mining_router, prefix=prefix)
     app.include_router(port_router, prefix=prefix)
     app.include_router(trade_router, prefix=prefix)
-    if live_router is not None:
-        app.include_router(live_router, prefix=prefix)
+    app.include_router(live_router, prefix=prefix)
     app.include_router(sys_router, prefix=prefix)
     app.include_router(data_router, prefix=prefix)
     app.include_router(audit_router, prefix=prefix)

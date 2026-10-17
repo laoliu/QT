@@ -15,7 +15,7 @@
   POST /trading         → 交易指令（下单/撤单/查询/保存策略文件等）
 
 启动:
-  python qmt_data_bridge.py --port 58088
+  python qmt_data_bridge.py --port 18888
   python qmt_data_bridge.py --account YOUR_ACCOUNT_ID
 """
 
@@ -26,6 +26,7 @@ import glob
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -46,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 BRIDGE_VERSION = 3
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 58088
+DEFAULT_PORT = 18888
 
 # 环境变量配置
 QMT_PATH = os.environ.get("QMT_PATH", "")
@@ -135,30 +136,22 @@ def _xtdata_connect() -> tuple[bool, str]:
     if not HAS_XTDATA:
         return False, "xtdata not available"
     if hasattr(xtdata, "connect"):
-        if _xtquant_userdata:
-            try:
-                xtdata.connect(_xtquant_userdata)
-                return True, ""
-            except TypeError:
-                pass
-            except Exception as e:
-                logger.warning("xtdata.connect(path) warning: %s", e)
+        # xtdata.connect() expects an optional server IP, not a userdata path.
+        # The userdata directory is only used by the trading client below.
         try:
             xtdata.connect()
             return True, ""
         except Exception as e:
-            logger.warning("xtdata.connect() warning: %s", e)
+            logger.warning(
+                "xtdata 行情连接失败: %s。该连接独立于交易连接；请确认 QMT 行情服务已启动，"
+                "并检查本机 TCP 58610 是否处于 LISTENING 状态（netstat -ano | findstr :58610）",
+                e,
+            )
             return False, str(e)
     if hasattr(xtdata, "get_client"):
         try:
             client = xtdata.get_client()
             if client and hasattr(client, "connect"):
-                if _xtquant_userdata:
-                    try:
-                        client.connect(_xtquant_userdata)
-                        return True, ""
-                    except TypeError:
-                        pass
                 client.connect()
                 return True, ""
         except Exception as e:
@@ -765,7 +758,23 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        if self.path == "/health":
+        if self.path in ("/", "/index.html"):
+            body = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QMT Data Bridge</title>
+<style>body{font:16px system-ui,sans-serif;max-width:760px;margin:48px auto;padding:0 20px;color:#222}code{background:#f2f4f7;padding:3px 6px;border-radius:4px}li{margin:10px 0}</style>
+</head><body><h1>QMT Data Bridge</h1><p>桥接服务已启动。可用接口：</p><ul>
+<li><a href="/health">GET /health</a> — 服务与 QMT 连接状态</li>
+<li><a href="/trading/events">GET /trading/events</a> — 交易事件</li>
+<li><a href="/debug/klines">GET /debug/klines</a> — K 线诊断信息</li>
+</ul><p>行情和交易接口使用 HTTP POST，请由客户端调用。</p></body></html>""".encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/health":
             xtdata_ok = False
             xtdata_err = ""
             if HAS_XTDATA:
@@ -1245,13 +1254,94 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 
+def _local_ipv4_addresses() -> list[str]:
+    """返回本机可用于监听的非回环 IPv4 地址。"""
+    addresses: set[str] = set()
+    route_address = None
+    try:
+        hostname = socket.gethostname()
+        for item in socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM):
+            address = item[4][0]
+            if address and not address.startswith("127."):
+                addresses.add(address)
+    except OSError:
+        pass
+    # Hostname resolution can omit interfaces on Windows. A UDP connect only
+    # asks the routing table which local address it would use; it sends no data.
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.0.2.1", 9))
+        address = probe.getsockname()[0]
+        if address and not address.startswith("127."):
+            addresses.add(address)
+            route_address = address
+    except OSError:
+        pass
+    finally:
+        probe.close()
+    # Prefer the address Windows would use for outbound traffic: it usually
+    # belongs to the active LAN, unlike virtual adapters also returned above.
+    return ([route_address] if route_address else []) + sorted(addresses - {route_address})
+
+
 def start_bridge_server(
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     enable_trading: bool = True,
 ) -> None:
     """启动 QMT 数据 + 交易桥接 HTTP 服务。"""
-    server = ThreadingHTTPServer((host, port), BridgeHandler)
+    bind_host = host
+    server = None
+    try:
+        server = ThreadingHTTPServer((bind_host, port), BridgeHandler)
+    except OSError as exc:
+        winerror = getattr(exc, "winerror", None)
+        # Some endpoint-security products reject wildcard binds while allowing
+        # a bind to the machine's concrete LAN address. Try that recovery path
+        # before reporting the error to the user.
+        if winerror == 10013 and host in ("0.0.0.0", ""):
+            server = None
+            for candidate in _local_ipv4_addresses():
+                try:
+                    server = ThreadingHTTPServer((candidate, port), BridgeHandler)
+                    bind_host = candidate
+                    logger.warning(
+                        "Windows 拒绝绑定 0.0.0.0:%d，已改用本机局域网地址 %s:%d",
+                        port,
+                        candidate,
+                        port,
+                    )
+                    break
+                except OSError:
+                    continue
+            if server is not None:
+                host = bind_host
+            else:
+                detail = (
+                    "Windows 拒绝绑定此地址/端口（WinError 10013）。请检查端口是否被系统排除或被安全软件策略限制：\n"
+                    "  netsh int ipv4 show excludedportrange protocol=tcp\n"
+                    f"  netstat -ano -p tcp | findstr :{port}\n"
+                    "已尝试本机所有局域网 IPv4 地址，仍无法绑定。"
+                )
+        elif winerror == 10013:
+            detail = (
+                "Windows 拒绝绑定此地址/端口（WinError 10013）。请检查端口是否被系统排除或被安全软件策略限制：\n"
+                "  netsh int ipv4 show excludedportrange protocol=tcp\n"
+                f"  netstat -ano -p tcp | findstr :{port}\n"
+                "如果端口处于排除范围，删除对应的 Windows 端口排除项（需要管理员权限），"
+                "或在项目 .env 中将 SERVE_PORT 改为未占用且未排除的端口后重启；"
+                "更换端口时也要同步更新客户端的 QMT bridge URL。"
+            )
+        elif winerror == 10048:
+            detail = (
+                "该地址/端口已被其他进程占用（WinError 10048）。请用 netstat -ano -p tcp "
+                f"| findstr :{port} 查找进程，停止冲突服务，或更换 SERVE_PORT 并同步客户端 URL。"
+            )
+        else:
+            detail = f"绑定 HTTP 服务地址失败：{exc}"
+        if server is None:
+            logger.error("无法启动 QMT Data Bridge (%s:%d)：%s", host, port, detail)
+            raise OSError(f"无法启动 QMT Data Bridge ({host}:{port})：{detail}") from exc
 
     if enable_trading and TRADING_ACCOUNT_ID:
         t = threading.Thread(
@@ -1263,7 +1353,17 @@ def start_bridge_server(
         logger.info("Trading auto-connect started (account=%s)", TRADING_ACCOUNT_ID)
 
     endpoints = "GET /health /trading/events /debug/klines, POST /klines /quote /tick_download /trading /sector_list /sector_members"
-    logger.info("QMT Data Bridge v%d 启动: http://%s:%d", BRIDGE_VERSION, host, port)
+    if bind_host in ("0.0.0.0", ""):
+        # 0.0.0.0 只表示监听所有网卡，不能直接作为浏览器访问地址。
+        # Put LAN addresses first so the first URL shown is useful from a
+        # different computer (for example a Mac on the same network).
+        advertised_hosts = [*_local_ipv4_addresses(), "127.0.0.1"]
+        advertised_hosts = list(dict.fromkeys(advertised_hosts))
+        logger.info("QMT Data Bridge v%d 启动，浏览器/客户端请使用以下地址:", BRIDGE_VERSION)
+        for advertised_host in advertised_hosts:
+            logger.info("  http://%s:%d", advertised_host, port)
+    else:
+        logger.info("QMT Data Bridge v%d 启动: http://%s:%d", BRIDGE_VERSION, bind_host, port)
     logger.info("Endpoints: %s", endpoints)
     try:
         server.serve_forever()

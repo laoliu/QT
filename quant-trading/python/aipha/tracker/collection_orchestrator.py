@@ -8,12 +8,11 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Callable
 
 from .collectors.base import CollectorResult, LibraryCollector
 from .evidence import (
@@ -37,13 +36,16 @@ _COLLECTOR_REGISTRY: dict[str, type[LibraryCollector]] = {}
 
 def register_collector(cls: type[LibraryCollector]) -> type[LibraryCollector]:
     """Decorator to register a collector class."""
-    # Instantiate to get platform_name
-    _COLLECTOR_REGISTRY[cls.__name__] = cls
+    if not cls.platform_name:
+        raise ValueError("Collector must declare platform_name")
+    _COLLECTOR_REGISTRY[cls.platform_name] = cls
     return cls
 
 
 def get_collector(platform: str) -> LibraryCollector | None:
     """Get a collector instance for the given platform."""
+    if platform in _COLLECTOR_REGISTRY:
+        return _COLLECTOR_REGISTRY[platform]()
     from .collectors.darwinex import DarwinexCollector
     from .collectors.etoro import EtoroCollector
     from .collectors.zulutrade import ZuluTradeCollector
@@ -98,8 +100,13 @@ class CollectionReport:
 class CollectionOrchestrator:
     """Coordinates collection across platforms with evidence storage."""
 
-    def __init__(self, data_dir: str) -> None:
+    def __init__(
+        self,
+        data_dir: str,
+        collector_factory: Callable[[str], object] | None = None,
+    ) -> None:
         self._data_dir = data_dir
+        self._collector_factory = collector_factory
         self._storage = LibraryStorage(data_dir)
         self._evidence = EvidenceStore(data_dir)
 
@@ -107,9 +114,13 @@ class CollectionOrchestrator:
         self, platform: str, platform_uid: str
     ) -> EvidenceSnapshot:
         """Collect data for a single account and store evidence."""
-        collector = get_collector(platform)
+        collector = (
+            self._collector_factory(platform)
+            if self._collector_factory is not None
+            else get_collector(platform)
+        )
         if collector is None:
-            return EvidenceSnapshot(
+            snapshot = EvidenceSnapshot(
                 account_id=f"{platform}_{platform_uid}",
                 platform=platform,
                 platform_uid=platform_uid,
@@ -117,6 +128,8 @@ class CollectionOrchestrator:
                 error_detail=f"No collector available for platform: {platform}",
                 evidence_quality=EvidenceQuality.FAILED,
             )
+            self._evidence.save_snapshot(snapshot)
+            return snapshot
 
         account_id = f"{platform}_{platform_uid}"
         start_ms = time.time()
@@ -159,7 +172,7 @@ class CollectionOrchestrator:
         report = CollectionReport()
 
         # Get accounts from storage
-        accounts = self._storage.search_accounts(platform=platform)
+        accounts = self._storage.search_accounts(platform=platform, limit=limit)
         if not accounts:
             report.errors.append(f"No accounts found for platform: {platform}")
             return report
@@ -230,9 +243,10 @@ class CollectionOrchestrator:
             strategy_tags=tuple(result.strategy_tags) if result.strategy_tags else (existing.strategy_tags if existing else ()),
             requires_login=existing.requires_login if existing else False,
             last_update_seen=result.last_update_seen or now.strftime("%Y-%m-%d"),
-            perf_summary=result.perf_summary,
+            perf_summary=result.perf_summary or (existing.perf_summary if existing else {}),
             followers_copiers=result.followers_copiers or (existing.followers_copiers if existing else 0),
-            fetch_stability=FetchStability.STABLE,
+            fetch_stability=(FetchStability.STABLE if result.evidence_quality == EvidenceQuality.FULL
+                             else FetchStability.UNSTABLE),
             l1_score=existing.l1_score if existing else 0.0,
             l2_promoted=existing.l2_promoted if existing else False,
             notes=existing.notes if existing else "",

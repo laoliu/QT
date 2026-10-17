@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aipha.backtest.engine import BacktestConfig, BacktestEngine, BacktestResult
 from aipha.data.cb_data_adapter import CBDataAdapter
@@ -41,6 +40,7 @@ from aipha.execution.fill_models import NextBarOpenFillModel
 from aipha.execution.slippage import FixedBpsSlippageModel
 from aipha.market.rules_cn_equity import MarketRulesCNEquity
 from aipha.market.rules_convertible_bond import MarketRulesConvertibleBond
+from aipha.utils.paths import project_path
 
 # 导入策略（触发 @register）
 import aipha.strategy.small_size  # noqa: F401
@@ -382,7 +382,7 @@ def run_oos_validation():
     print(f"{'=' * 78}")
 
     # 保存结果
-    output_path = Path("results/oos_validation.json")
+    output_path = project_path("results", "oos_validation.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False, default=str)

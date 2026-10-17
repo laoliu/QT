@@ -25,6 +25,7 @@ from .pipeline import (
 from .artifacts import load_verified_selector
 from .config import load_research_config
 from .execution_plan import ExecutionPlan, build_execution_plan, execute_target_plan, read_execution_plan
+from .migration import migrate_legacy_model
 from .snapshots import (
     SnapshotSpec,
     TushareSnapshot,
@@ -55,6 +56,7 @@ __all__ = [
     "build_execution_plan",
     "execute_target_plan",
     "read_execution_plan",
+    "migrate_legacy_model",
     "validate_feature_frame",
     "validate_market_frame",
     "SnapshotSpec",

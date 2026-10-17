@@ -167,26 +167,26 @@ def execute_target_plan(
     deltas = {symbol: desired.get(symbol, 0) - positions.get(symbol, 0) for symbol in symbols}
     # Sell first so released cash can finance buys under A-share settlement.
     for side in ("SELL", "BUY"):
-      for symbol in symbols:
-        delta = deltas[symbol]
-        if delta == 0 or (side == "BUY" and delta < 0) or (side == "SELL" and delta > 0):
-            continue
-        qty = abs(delta)
-        target = next((item for item in plan.targets if item.symbol == symbol), None)
-        signal_id = target.signal_id if target is not None else plan.signal_id
-        order = GatewayOrder(
-            order_id=f"{plan.plan_id}:{symbol}:{side}",
-            symbol=symbol,
-            side=side,
-            qty=qty,
-            order_type="MARKET",
-            metadata={
-                "execution_plan_id": plan.plan_id,
-                "run_id": plan.run_id,
-                "model_id": plan.model_id,
-                "signal_id": signal_id,
-                "mode": plan.mode,
-            },
-        )
-        order_ids.append(str(gateway.submit_order(order)))
+        for symbol in symbols:
+            delta = deltas[symbol]
+            if delta == 0 or (side == "BUY" and delta < 0) or (side == "SELL" and delta > 0):
+                continue
+            qty = abs(delta)
+            target = next((item for item in plan.targets if item.symbol == symbol), None)
+            signal_id = target.signal_id if target is not None else plan.signal_id
+            order = GatewayOrder(
+                order_id=f"{plan.plan_id}:{symbol}:{side}",
+                symbol=symbol,
+                side=side,
+                qty=qty,
+                order_type="MARKET",
+                metadata={
+                    "execution_plan_id": plan.plan_id,
+                    "run_id": plan.run_id,
+                    "model_id": plan.model_id,
+                    "signal_id": signal_id,
+                    "mode": plan.mode,
+                },
+            )
+            order_ids.append(str(gateway.submit_order(order)))
     return order_ids

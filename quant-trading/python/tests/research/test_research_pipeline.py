@@ -22,6 +22,7 @@ from aipha.research import (
     point_in_time_adjust_prices,
     build_cn_equity_features,
     historical_st_status_from_provider,
+    migrate_legacy_model,
 )
 from aipha.research.backtest import run_portfolio_backtest
 from aipha.research.contracts import FinancialSnapshot, TargetPosition
@@ -346,6 +347,18 @@ def test_live_plan_executor_attaches_provenance_to_every_order() -> None:
 def test_legacy_model_without_manifest_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="manifest missing"):
         load_verified_selector(tmp_path, expected_feature_version="cn_equity_v1")
+
+
+def test_legacy_model_migration_requires_explicit_attestation(tmp_path: Path) -> None:
+    source = tmp_path / "legacy"
+    source.mkdir()
+    (source / "meta.pkl").write_bytes(b"placeholder")
+    with pytest.raises(ValueError, match="acknowledge_legacy"):
+        migrate_legacy_model(
+            source, tmp_path / "migrated", feature_version="cn_equity_v1",
+            feature_columns=["momentum_signal"], model_type="lightgbm",
+            data_snapshot_id="attested-snapshot",
+        )
 
 
 def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> None:

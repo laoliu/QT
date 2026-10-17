@@ -78,6 +78,9 @@ gate. The generic HTTP and polling bridge `place_order` methods are disabled:
 they accept a single raw order and cannot establish membership in a validated
 target plan. Use the plan adapter, which validates the full plan and risk
 limits before it translates targets into broker orders.
+The local Node-to-Python single-order QMT bridge also rejects orders when the
+profile requires plans, even if callers provide matching-looking provenance
+strings; `run_id`, `model_id`, and `signal_id` alone do not prove plan membership.
 
 The old `configs/sample_ml_factor.yaml` shape can be converted with
 `python scripts/migrate_research_config.py`. The command keeps the source
@@ -98,3 +101,10 @@ requires `confirm: true` and accepts only a `mode=paper` execution plan. Each
 request appends an audit record under `<dataDir>/research/ml-ranking-audit.jsonl`.
 The route rejects `mode=live` and `allowLive=true` before invoking Python, so
 it cannot be used as a QMT order shortcut.
+
+Runtime Paper scorers follow the same boundary. Configure
+`feature_snapshot_path` (optionally with a `{trade_date}` placeholder) and
+`feature_version` to consume an attested PIT snapshot. The old cache-backed
+`train_ml_factor` scorer is disabled unless a historical Paper configuration
+explicitly sets `legacy_ml_compat: true`; that flag is a migration marker and
+does not make the legacy model provenance-safe.

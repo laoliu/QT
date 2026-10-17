@@ -69,3 +69,11 @@ The old `configs/sample_ml_factor.yaml` shape can be converted with
 `python scripts/migrate_research_config.py`. The command keeps the source
 unchanged, emits warnings for dropped legacy fields, and always writes a
 TuShare-PIT/paper configuration.
+
+The same canonical bridge is available over the authenticated Node HTTP API
+at `POST /quant/api/research/ml-ranking` (and `GET` for `list_models`).
+Mutating actions require an `Idempotency-Key`; `execute_paper` additionally
+requires `confirm: true` and accepts only a `mode=paper` execution plan. Each
+request appends an audit record under `<dataDir>/research/ml-ranking-audit.jsonl`.
+The route rejects `mode=live` and `allowLive=true` before invoking Python, so
+it cannot be used as a QMT order shortcut.

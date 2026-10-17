@@ -128,10 +128,11 @@ class PairTradingStrategy(BaseStrategy):
             from statsmodels.tsa.stattools import coint
             _, p_value, _ = coint(log_p0, log_p1)
         except Exception:
-            # If statsmodels not available, skip cointegration check
-            p_value = 0.0
+            # Fail closed: without a valid test result we cannot establish
+            # cointegration, so do not treat the pair as safe to trade.
+            p_value = float("nan")
 
-        cointegrated = p_value < self.p.coint_pvalue
+        cointegrated = np.isfinite(p_value) and p_value < self.p.coint_pvalue
 
         # ── Trading logic ──
         close0 = self.data0.close[0]

@@ -77,6 +77,27 @@ describe("Portfolio backtest integration — Screen 5 → Backtest 30万", () =>
   });
 
   describe("step 3: runPortfolioBacktest directly", () => {
+    it("creates an isolated strategy instance for each symbol when given a factory", async () => {
+      let created = 0;
+      const result = await runPortfolioBacktest(
+        () => {
+          created++;
+          return dualMaCrossover(10, 30);
+        },
+        {
+          strategyId: "dual-ma-crossover",
+          symbols: ["600519", "000858"],
+          startDate: ONE_YEAR_AGO,
+          endDate: TODAY,
+          initialCash: 100_000,
+        },
+        demoConfig,
+      );
+
+      expect(created).toBe(2);
+      expect(result.perSymbol).toHaveLength(2);
+    });
+
     it("allocates initialCash equally across all symbols", async () => {
       const strategy = dualMaCrossover(10, 30);
       const result = await runPortfolioBacktest(

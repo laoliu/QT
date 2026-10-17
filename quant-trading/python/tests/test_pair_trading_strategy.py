@@ -93,6 +93,7 @@ class TestPairTradingSignals:
 
     def test_generates_signals_on_cointegrated_pair(self):
         """Should generate spread entry/exit signals."""
+        pytest.importorskip("statsmodels")
         df_a, df_b = _make_cointegrated_pair(days=200, seed=42)
         strategy, _ = self._run_backtest(df_a, df_b)
         signals = strategy.get_signals()
@@ -100,6 +101,7 @@ class TestPairTradingSignals:
 
     def test_signal_structure(self):
         """Signals should have required fields."""
+        pytest.importorskip("statsmodels")
         df_a, df_b = _make_cointegrated_pair(days=200, seed=42)
         strategy, _ = self._run_backtest(df_a, df_b)
         signals = strategy.get_signals()
@@ -110,6 +112,7 @@ class TestPairTradingSignals:
 
     def test_custom_parameters(self):
         """Strategy should accept custom z-score thresholds."""
+        pytest.importorskip("statsmodels")
         df_a, df_b = _make_cointegrated_pair(days=200, seed=42)
         strategy, _ = self._run_backtest(
             df_a, df_b, lookback=30, z_entry=1.5, z_exit=0.3
@@ -167,3 +170,15 @@ class TestPairTradingEdgeCases:
         df_a, df_b = _make_cointegrated_pair(days=30, seed=42)
         strategy, _ = self._run_backtest(df_a, df_b, lookback=60)
         assert isinstance(strategy.get_signals(), list)
+
+    def test_missing_cointegration_test_fails_closed(self, monkeypatch):
+        """A missing/failed test must never be interpreted as cointegration."""
+        stattools = pytest.importorskip("statsmodels.tsa.stattools")
+
+        def unavailable(*args, **kwargs):
+            raise RuntimeError("cointegration test unavailable")
+
+        monkeypatch.setattr(stattools, "coint", unavailable)
+        df_a, df_b = _make_cointegrated_pair(days=200, seed=42)
+        strategy, _ = self._run_backtest(df_a, df_b)
+        assert strategy.get_signals() == []

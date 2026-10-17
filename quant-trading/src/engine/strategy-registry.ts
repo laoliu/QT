@@ -1195,7 +1195,12 @@ export async function runBacktest(
       const mappedParams = fallback.mapParams(request.parameters ?? {});
       const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
       if (request.symbols.length > 1) {
-        return runPortfolioBacktest(builtinStrategy, request, config, sharedProvider);
+        return runPortfolioBacktest(
+          () => resolveBuiltinStrategy(fallback.id, mappedParams),
+          request,
+          config,
+          sharedProvider,
+        );
       }
       return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
     }
@@ -1211,7 +1216,12 @@ export async function runBacktest(
       const mappedParams = fallback.mapParams(request.parameters ?? {});
       const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
       if (request.symbols.length > 1) {
-        return runPortfolioBacktest(builtinStrategy, request, config, sharedProvider);
+        return runPortfolioBacktest(
+          () => resolveBuiltinStrategy(fallback.id, mappedParams),
+          request,
+          config,
+          sharedProvider,
+        );
       }
       return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
     }
@@ -1221,7 +1231,12 @@ export async function runBacktest(
   const builtinStrategy = resolveBuiltinStrategy(request.strategyId, request.parameters);
   // Multi-symbol: run portfolio backtest (equal-weight per symbol)
   if (request.symbols.length > 1) {
-    return runPortfolioBacktest(builtinStrategy, request, config, sharedProvider);
+    return runPortfolioBacktest(
+      () => resolveBuiltinStrategy(request.strategyId, request.parameters),
+      request,
+      config,
+      sharedProvider,
+    );
   }
   return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
 }

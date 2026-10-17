@@ -15,7 +15,7 @@ describe("strategy-registry", () => {
     });
 
     it("each strategy should have required fields", () => {
-      const validEngines = ["builtin", "backtrader", "python"];
+      const validEngines = ["builtin", "backtrader", "python", "vnpy"];
       for (const s of listStrategies()) {
         expect(s.id).toBeTruthy();
         expect(s.name).toBeTruthy();
@@ -127,6 +127,11 @@ describe("strategy-registry", () => {
   });
 
   describe("CTA strategy definitions", () => {
+    it("should expose one canonical definition per strategy ID", () => {
+      const ids = listStrategies().map((s) => s.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
     it("should list cta-trend in registry", () => {
       const strategies = listStrategies();
       const ids = strategies.map((s) => s.id);
@@ -149,6 +154,7 @@ describe("strategy-registry", () => {
       expect(s!.name).toContain("Dual Thrust");
       expect(s!.markets).toContain("futures");
       expect(s!.parameters.some((p) => p.name === "k1")).toBe(true);
+      expect(s!.engine).toBe("builtin");
     });
 
     it("spread-arbitrage definition should have futures market", () => {

@@ -727,7 +727,7 @@ export function t0DayTrading(
       }
 
       // ── Sell signal: fast MA < medium MA + RSI overbought ──
-      if (ctx.position <= 0 && fastMa[i]! < mediumMa[i]! && curRsi > rsiOverbought) {
+      if (ctx.position > 0 && fastMa[i]! < mediumMa[i]! && curRsi > rsiOverbought) {
         return {
           timestamp: bar.timestamp,
           symbol: "",

@@ -4352,9 +4352,22 @@ const vnpyStrategies: StrategyDefinition[] = [
  */
 export { optionStrategies };
 
-export const builtinStrategies: StrategyDefinition[] = [
+const strategyDefinitions = [
   ...builtinTsStrategies,
   ...backtraderStrategies,
   ...ctaStrategies,
   ...vnpyStrategies,
 ];
+
+// Several historical Python strategies now have native builtin equivalents.
+// Keep one public definition per ID and prefer the native implementation so
+// lookup, UI metadata, and default engine routing agree on the same strategy.
+const definitionsById = new Map<string, StrategyDefinition>();
+for (const definition of strategyDefinitions) {
+  const current = definitionsById.get(definition.id);
+  if (!current || (current.engine !== "builtin" && definition.engine === "builtin")) {
+    definitionsById.set(definition.id, definition);
+  }
+}
+
+export const builtinStrategies: StrategyDefinition[] = [...definitionsById.values()];

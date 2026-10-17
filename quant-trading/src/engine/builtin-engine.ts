@@ -527,7 +527,7 @@ export async function runBuiltinBacktest(
  * The portfolio equity curve is the element-wise sum of all per-symbol curves.
  */
 export async function runPortfolioBacktest(
-  strategy: BuiltinStrategy,
+  strategyOrFactory: BuiltinStrategy | (() => BuiltinStrategy),
   request: BacktestRequest,
   config: QuantTradingConfig,
   sharedProvider?: MarketDataProvider,
@@ -542,18 +542,34 @@ export async function runPortfolioBacktest(
   const provider = sharedProvider ?? createDataProvider(config);
   const perSymbolCash = request.initialCash / symbols.length;
 
-  // Run each symbol in parallel — tolerate individual failures
-  const settled = await Promise.allSettled(
-    symbols.map(async (sym) => {
-      const result = await runBuiltinBacktest(
-        strategy,
-        { ...request, symbols: [sym], initialCash: perSymbolCash },
-        config,
-        provider,
-      );
-      return { symbol: sym, result };
-    }),
-  );
+  // Keep execution isolated per symbol. Factory callers get a fresh instance;
+  // legacy callers that pass an instance are run sequentially so init() can
+  // reset its closure state before the next symbol starts.
+  const runOne = async (sym: string) => {
+    // Strategies keep indicator arrays and position state in closures. A
+    // fresh instance is required for every symbol; sharing one instance
+    // across parallel runs makes symbols overwrite each other's state.
+    const strategy =
+      typeof strategyOrFactory === "function" ? strategyOrFactory() : strategyOrFactory;
+    const result = await runBuiltinBacktest(
+      strategy,
+      { ...request, symbols: [sym], initialCash: perSymbolCash },
+      config,
+      provider,
+    );
+    return { symbol: sym, result };
+  };
+  const settled: PromiseSettledResult<{ symbol: string; result: BacktestResult }>[] = [];
+  if (typeof strategyOrFactory === "function") {
+    settled.push(...(await Promise.allSettled(symbols.map(runOne))));
+  } else {
+    for (const sym of symbols) {
+      settled.push(await Promise.resolve(runOne(sym)).then(
+        (value) => ({ status: "fulfilled", value } as const),
+        (reason) => ({ status: "rejected", reason } as const),
+      ));
+    }
+  }
 
   const perSymbolResults: Array<{ symbol: string; result: BacktestResult }> = [];
   const failedSymbols: Array<{ symbol: string; error: string }> = [];
@@ -598,7 +614,8 @@ export async function runPortfolioBacktest(
   const finalValue = investedValue + uninvestedCash;
   const tradingDays = equityCurve.length;
   const years = tradingDays / 252;
-  const annualizedReturn = years > 0 ? (investedValue / actualInitialCash) ** (1 / years) - 1 : 0;
+  const annualizedReturn =
+    years > 0 ? (finalValue / request.initialCash) ** (1 / years) - 1 : 0;
 
   // Portfolio Sharpe from merged equity curve
   const dailyReturns: number[] = [];
@@ -655,7 +672,7 @@ export async function runPortfolioBacktest(
     winRate: avgWinRate,
     totalTrades,
     totalFees,
-    feeImpact: (totalFees / actualInitialCash) * 100,
+    feeImpact: (totalFees / request.initialCash) * 100,
     signals: allSignals,
     equityCurve,
     perSymbol: perSymbolResults,

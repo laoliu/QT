@@ -357,7 +357,9 @@ class ResearchPipeline:
         metrics = _evaluate_predictions(oos, targets, self.config)
         metrics.update(backtest["metrics"])
         metrics["pbo_proxy"] = _pbo_proxy(wf_summary)
-        evaluation_diagnostics = _build_evaluation_diagnostics(source, oos, targets, self.config)
+        evaluation_diagnostics = _build_evaluation_diagnostics(
+            source, oos, targets, self.config, portfolio_returns=backtest["daily_returns"],
+        )
         run_root = Path(output_root) / self.run_id
         run_root.mkdir(parents=True, exist_ok=False)
         from .snapshots import write_attested_parquet
@@ -625,6 +627,8 @@ def _build_evaluation_diagnostics(
     predictions: pd.DataFrame,
     targets: list[TargetPosition],
     config: ResearchConfig,
+    *,
+    portfolio_returns: list[dict[str, Any]] | pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """Build benchmark, long-short, and point-in-time exposure diagnostics."""
     diagnostics: dict[str, Any] = {
@@ -645,7 +649,7 @@ def _build_evaluation_diagnostics(
         benchmark_returns = series.pct_change().dropna()
     if benchmark_returns is not None and not benchmark_returns.empty:
         nav = (1.0 + benchmark_returns).cumprod()
-        diagnostics["benchmark"] = {
+        benchmark_diagnostics: dict[str, Any] = {
             "available": True,
             "total_return": float(nav.iloc[-1] - 1.0),
             "annualized_return": float(nav.iloc[-1] ** (252 / max(1, len(nav))) - 1.0),
@@ -654,6 +658,45 @@ def _build_evaluation_diagnostics(
             ),
             "max_drawdown": float((nav / nav.cummax() - 1.0).min()),
         }
+        if portfolio_returns is not None:
+            strategy = pd.DataFrame(portfolio_returns)
+            if {"trade_date", "daily_return"}.issubset(strategy.columns):
+                strategy["trade_date"] = pd.to_datetime(strategy["trade_date"], errors="coerce")
+                strategy["daily_return"] = pd.to_numeric(strategy["daily_return"], errors="coerce")
+                strategy = strategy.dropna(subset=["trade_date", "daily_return"])
+                strategy_returns = strategy.groupby("trade_date")["daily_return"].last()
+                common_dates = strategy_returns.index.intersection(benchmark_returns.index)
+                if len(common_dates) >= 2:
+                    paired = pd.concat(
+                        [strategy_returns.loc[common_dates], benchmark_returns.loc[common_dates]],
+                        axis=1,
+                        keys=("strategy", "benchmark"),
+                    ).dropna()
+                    active_returns = paired["strategy"] - paired["benchmark"]
+                    tracking_error = compute_annualized_volatility(
+                        active_returns.to_numpy(), trading_days=252,
+                    )
+                    strategy_total = float((1.0 + paired["strategy"]).prod() - 1.0)
+                    benchmark_total = float((1.0 + paired["benchmark"]).prod() - 1.0)
+                    benchmark_diagnostics["relative"] = {
+                        "available": True,
+                        "aligned_days": int(len(paired)),
+                        "strategy_total_return": strategy_total,
+                        "benchmark_total_return": benchmark_total,
+                        "excess_return": strategy_total - benchmark_total,
+                        "tracking_error": tracking_error,
+                        "information_ratio": (
+                            float(active_returns.mean() * 252 / tracking_error)
+                            if tracking_error > 0 else 0.0
+                        ),
+                    }
+                else:
+                    benchmark_diagnostics["relative"] = {
+                        "available": False,
+                        "reason": "insufficient_aligned_strategy_and_benchmark_returns",
+                        "aligned_days": int(len(common_dates)),
+                    }
+        diagnostics["benchmark"] = benchmark_diagnostics
 
     long_short: list[float] = []
     for _, group in predictions.groupby("trade_date", sort=True):

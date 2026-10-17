@@ -515,6 +515,9 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert (artifact_dir / "trades.json").is_file()
     assert report["walk_forward"]["n_folds"] >= 1
     assert report["diagnostics"]["benchmark"]["available"] is True
+    assert report["diagnostics"]["benchmark"]["relative"]["available"] is True
+    assert report["diagnostics"]["benchmark"]["relative"]["aligned_days"] >= 2
+    assert np.isfinite(report["diagnostics"]["benchmark"]["relative"]["excess_return"])
     assert report["diagnostics"]["style_exposures"]["available"] is True
     assert report["diagnostics"]["pbo_method"] in {
         "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",

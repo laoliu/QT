@@ -7,12 +7,7 @@ prediction. The legacy ID remains registered only for compatibility.
 """
 from __future__ import annotations
 
-import sys
-import os
 from typing import Any
-
-# 确保可以导入 screeners 和 aipha
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from .base import BaseScreener, ScreenerResult, register_screener
 

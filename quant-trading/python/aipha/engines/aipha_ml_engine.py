@@ -310,7 +310,13 @@ def run(config: dict) -> dict:
             with receipt_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\n")
             return {"ok": True, "data": response}
-        return {"ok": False, "error": f"未知 action: {action}"}
+        return {
+            "ok": False,
+            "error": (
+                f"未知 action: {action}; use the canonical ml_ranking actions "
+                "with a versioned Parquet snapshot"
+            ),
+        }
     except Exception as error:
         return {"ok": False, "error": str(error)}
 

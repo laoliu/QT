@@ -3,9 +3,18 @@
   "version": "2026.2.22",
   "description": "Quantitative trading application — market data, strategy backtesting, portfolio management, and live broker trading",
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:safety-boundaries": "vitest run src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts"
+  },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
     "xlsx": "^0.18.5"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
 }

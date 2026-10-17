@@ -3105,7 +3105,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       };
 
       // Bridge health (fetch from RECEIVER's /health endpoint)
-      let bridgeHealth = null;
+      let bridgeHealth: unknown = null;
       if (receiver.running) {
         try {
           const resp = await fetch(`http://127.0.0.1:${receiver.port}/health`, {

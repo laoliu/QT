@@ -22,3 +22,8 @@ data/
 quant-trading/data/
 quant-trading/output/
 quant-trading/python/output/
+
+# Pytest isolated basetemp directories and crash dumps
+.pytest-*/
+quant-trading/python/.pytest-*/
+*.dmp

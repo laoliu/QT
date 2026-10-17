@@ -7,12 +7,8 @@
 
 明确**不做**的事：
 
-- **不构造特征**。特征口径必须与训练时逐列一致，所以
-  :func:`add_fundamental_factors` 直接调训练脚本里的那份实现
-  （``scripts/train_ml_factor._add_fundamental_factors``），不在这里另写一
-  遍。推理端自己算一套因子是 train/serve skew 最常见的来源：训练用
-  ``rank(pct=True)``、上线用 z-score，模型看到的分布就变了，回测 IC 再高也
-  不作数。
+- **不构造特征**。规范入口只接受已物化且带 TuShare PIT sidecar 的特征
+  快照。历史面板仍可通过 ``--legacy-compat --add-fundamentals`` 显式回放。
 - **不拉数据**。当日面板由 ``--panel`` 传入（盘前 ``scripts/ops/data_preheat.py``
   灌缓存、训练/特征流水线产出面板）。这个脚本不去猜数据从哪来。
 
@@ -383,7 +379,7 @@ def _make_trade(
 
 
 # ──────────────────────────── 特征 ────────────────────────────
-def add_fundamental_factors(df: pd.DataFrame) -> pd.DataFrame:
+def add_fundamental_factors(df: pd.DataFrame, *, allow_legacy: bool = False) -> pd.DataFrame:
     """在面板上补基本面衍生因子（截面 rank / 变化率 / EP、BP 等）。
 
     实现直接复用训练脚本的 ``_add_fundamental_factors``，**不在推理端另写一
@@ -397,6 +393,12 @@ def add_fundamental_factors(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         同一个 DataFrame（就地新增列后返回，便于链式调用）
     """
+    if not allow_legacy:
+        raise ValueError(
+            "规范 Paper 入口不再从 train_ml_factor 生成特征；"
+            "请传入已物化的 PIT feature snapshot，或显式使用 --legacy-compat 回放旧模型"
+        )
+
     from scripts.train_ml_factor import _add_fundamental_factors
 
     missing_keys = [c for c in ("datetime", "symbol") if c not in df.columns]
@@ -422,10 +424,16 @@ def ensemble_predict(
     model_paths: list[str | Path],
     *,
     method: str = "rank_average",
+    feature_version: str = "cn_equity_v1",
+    allow_legacy: bool = False,
 ) -> pd.Series:
     """多模型集成打分，返回 ``index = df.index`` 的分数 Series（越大越好）。
 
-    两种目录布局都吃：
+    规范模式只接受带 ``model_manifest.json`` 的 canonical selector。旧模型
+    目录和 ``ensemble_meta.pkl`` 组合模型必须显式传 ``allow_legacy=True``，
+    以免历史实验模型悄悄进入默认 Paper 运行链。
+
+    兼容模式支持两种历史目录布局：
 
     - 含 ``ensemble_meta.pkl`` → 按 :class:`aipha.models.ensemble.MultiModelEnsemble`
       整体加载（它自己会处理子模型与 stacking 层）
@@ -454,7 +462,21 @@ def ensemble_predict(
 
     preds: list[pd.Series] = []
     for p in paths:
-        if (p / "ensemble_meta.pkl").is_file():
+        manifest = p / "model_manifest.json"
+        if manifest.is_file():
+            from aipha.research import load_verified_selector
+
+            sel = load_verified_selector(
+                p,
+                expected_feature_version=feature_version,
+            )
+            scores = sel.predict(df)
+        elif not allow_legacy:
+            raise ValueError(
+                f"规范 Paper 入口拒绝无 model_manifest.json 的旧模型: {p}。"
+                "如需历史回放，请显式传 --legacy-compat"
+            )
+        elif (p / "ensemble_meta.pkl").is_file():
             from aipha.models.ensemble import EnsembleConfig, MultiModelEnsemble
 
             ens = MultiModelEnsemble(EnsembleConfig())
@@ -518,6 +540,52 @@ def _latest_slice(panel: pd.DataFrame, date: str | None) -> tuple[pd.DataFrame, 
     return panel[dt == last], last.strftime("%Y%m%d")
 
 
+def _load_feature_panel(
+    panel_path: Path,
+    *,
+    feature_version: str,
+    allow_legacy: bool = False,
+) -> pd.DataFrame:
+    """Load a canonical PIT snapshot, or an explicitly opted-in legacy panel."""
+    if not panel_path.is_file():
+        raise FileNotFoundError(f"feature panel not found: {panel_path}")
+    if not allow_legacy:
+        if panel_path.suffix.lower() != ".parquet":
+            raise ValueError("规范 Paper 入口只接受带 TuShare PIT sidecar 的 Parquet 面板")
+        from aipha.research.snapshots import verify_attested_parquet
+
+        metadata = verify_attested_parquet(
+            panel_path,
+            require_artifact_hash=True,
+            verify_content_hash=True,
+        )
+        if metadata.get("provider") != "tushare_pit":
+            raise ValueError("规范 Paper 面板必须来自 tushare_pit snapshot builder")
+        if metadata.get("feature_version") != feature_version:
+            raise ValueError(
+                f"feature version mismatch: snapshot={metadata.get('feature_version')!r}, "
+                f"requested={feature_version!r}"
+            )
+
+    panel = (
+        pd.read_parquet(panel_path) if panel_path.suffix.lower() == ".parquet"
+        else pd.read_csv(panel_path)
+    )
+    if not allow_legacy:
+        required = {"trade_date", "symbol", "feature_version", "is_index_member", "is_st", "listing_days"}
+        missing = required - set(panel.columns)
+        if missing:
+            raise ValueError(f"TuShare PIT feature snapshot missing columns: {', '.join(sorted(missing))}")
+        versions = panel["feature_version"].dropna().astype(str).unique().tolist()
+        if versions != [feature_version]:
+            raise ValueError(f"row feature_version mismatch: {versions!r}")
+        if "price_adjustment" not in panel or not panel["price_adjustment"].eq("point_in_time_factor").all():
+            raise ValueError("TuShare PIT snapshot must use point_in_time_factor adjusted prices")
+        panel = panel.copy()
+        panel["datetime"] = pd.to_datetime(panel["trade_date"], errors="raise")
+    return panel
+
+
 def _append_nav_history(state_dir: Path, record: dict[str, Any]) -> None:
     """追加一行 nav_history.jsonl —— s4_validator / nav_monitor 读的是这个文件。"""
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -541,7 +609,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument(
         "--add-fundamentals", action="store_true",
-        help="面板里只有原始 daily_basic 列时，先补基本面衍生因子",
+        help="仅兼容模式：面板里只有原始 daily_basic 列时补旧基本面因子",
+    )
+    parser.add_argument(
+        "--feature-version", default="cn_equity_v1",
+        help="规范模型 manifest 要求的 feature_version",
+    )
+    parser.add_argument(
+        "--legacy-compat", action="store_true",
+        help="显式启用旧模型/旧特征函数，仅用于历史回放，不属于默认研究路径",
     )
     parser.add_argument(
         "--execute", action="store_true",
@@ -555,21 +631,27 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     panel_path = Path(args.panel)
-    if not panel_path.is_file():
-        logger.error("面板文件不存在: %s", panel_path)
+    try:
+        panel = _load_feature_panel(
+            panel_path,
+            feature_version=args.feature_version,
+            allow_legacy=args.legacy_compat,
+        )
+    except Exception as exc:
+        logger.error("特征面板校验失败: %s", exc)
         return 2
-
-    panel = (
-        pd.read_parquet(panel_path) if panel_path.suffix == ".parquet"
-        else pd.read_csv(panel_path)
-    )
     if args.add_fundamentals:
-        panel = add_fundamental_factors(panel)
+        panel = add_fundamental_factors(panel, allow_legacy=args.legacy_compat)
 
     today, trade_date = _latest_slice(panel, args.date)
     logger.info("推理截面: %s, %d 只标的", trade_date, len(today))
 
-    scores = ensemble_predict(today, args.model_dir)
+    scores = ensemble_predict(
+        today,
+        args.model_dir,
+        feature_version=args.feature_version,
+        allow_legacy=args.legacy_compat,
+    )
     targets = select_top_k(scores, today, args.top_k)
 
     prices = {}

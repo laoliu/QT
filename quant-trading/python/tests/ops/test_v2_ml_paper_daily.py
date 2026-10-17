@@ -19,6 +19,7 @@ from v2_ml_paper_daily import (
     add_fundamental_factors,
     ensemble_predict,
     execute_rebalance,
+    _load_feature_panel,
     load_state,
     save_state,
 )
@@ -113,8 +114,65 @@ def test_rebalance_empty_targets(sample_state, sample_prices):
 
 # ── Feature Tests ────────────────────────────────────
 def test_add_fundamental_factors(sample_ohlcv):
-    result = add_fundamental_factors(sample_ohlcv.copy())
+    with pytest.raises(ValueError, match="规范 Paper 入口"):
+        add_fundamental_factors(sample_ohlcv.copy())
+
+    result = add_fundamental_factors(sample_ohlcv.copy(), allow_legacy=True)
     assert "cs_rank_pe_ttm" in result.columns
     assert "cs_rank_ep" in result.columns
     assert "pe_ttm_chg_5d" in result.columns
     assert result["cs_rank_pe_ttm"].notna().any()
+
+
+def test_ensemble_predict_rejects_unmanifested_model_by_default(tmp_path, sample_ohlcv):
+    model_dir = tmp_path / "legacy-model"
+    model_dir.mkdir()
+    with pytest.raises(ValueError, match="model_manifest.json"):
+        ensemble_predict(sample_ohlcv.tail(5), [model_dir])
+
+
+def test_ensemble_predict_uses_verified_canonical_model(tmp_path, sample_ohlcv, monkeypatch):
+    model_dir = tmp_path / "canonical-model"
+    model_dir.mkdir()
+    (model_dir / "model_manifest.json").write_text("{}", encoding="utf-8")
+
+    class _Selector:
+        def predict(self, frame):
+            return pd.Series(np.arange(len(frame), dtype=float), index=frame.index)
+
+    monkeypatch.setattr(
+        "aipha.research.load_verified_selector",
+        lambda path, expected_feature_version: _Selector(),
+    )
+    result = ensemble_predict(sample_ohlcv.tail(5), [model_dir])
+    assert result.tolist() == [0.0, 1.0, 2.0, 3.0, 4.0]
+
+
+def test_load_feature_panel_requires_attested_pit_snapshot(tmp_path):
+    from aipha.research.snapshots import write_attested_parquet
+
+    frame = pd.DataFrame({
+        "trade_date": ["2026-03-02"], "symbol": ["000001.SZ"],
+        "open": [10.0], "high": [10.5], "low": [9.8], "close": [10.2],
+        "volume": [1000.0], "amount": [10000.0], "adj_factor": [1.0],
+        "is_suspended": [False], "is_limit_up": [False], "is_limit_down": [False],
+        "is_index_member": [True], "is_st": [False], "listing_days": [500],
+        "price_adjustment": ["point_in_time_factor"],
+        "feature_version": ["cn_equity_v1"],
+    })
+    path = tmp_path / "snapshot.parquet"
+    write_attested_parquet(
+        frame,
+        path,
+        {
+            "provider": "tushare_pit", "feature_version": "cn_equity_v1",
+            "data_snapshot_id": "fixture", "start_date": "2026-03-02",
+            "end_date": "2026-03-02",
+        },
+    )
+    loaded = _load_feature_panel(path, feature_version="cn_equity_v1")
+    assert loaded.loc[0, "datetime"] == pd.Timestamp("2026-03-02")
+
+    path.with_suffix(".metadata.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="sidecar|provider"):
+        _load_feature_panel(path, feature_version="cn_equity_v1")

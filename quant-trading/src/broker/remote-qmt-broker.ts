@@ -241,8 +241,10 @@ export class RemoteQMTBroker implements IBrokerAdapter {
 
   async placeOrder(req: OrderRequest): Promise<Order> {
     const requirePlan = this.cfg.tradingAccount?.requireExecutionPlan === true;
-    if (requirePlan && (!req.runId || !req.modelId || !req.signalId)) {
-      throw new Error("QMT live profile requires runId, modelId and signalId from a validated execution plan");
+    if (requirePlan) {
+      throw new Error(
+        "QMT direct broker orders are disabled; submit a validated execution plan through QMTGateway",
+      );
     }
     const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();

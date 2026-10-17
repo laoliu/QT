@@ -103,22 +103,17 @@ describe("QMTBroker", () => {
           price: 1800,
           quantity: 100,
         }),
-      ).rejects.toThrow("requires runId, modelId and signalId");
+      ).rejects.toThrow("direct broker orders are disabled");
       expect(mockCall).not.toHaveBeenCalledWith("place_order", expect.anything());
     });
 
-    it("forwards execution-plan provenance to the QMT bridge", async () => {
-      mockCall.mockImplementation((method: string) => {
-        if (method === "place_order") return { broker_order_id: "QMT-PROVENANCE" };
-        return {};
-      });
+    it("rejects forged provenance instead of treating it as a validated plan", async () => {
       const gatedConfig: QuantTradingConfig = {
         ...config,
         tradingAccount: { ...config.tradingAccount!, requireExecutionPlan: true },
       };
       const broker = new QMTBroker(gatedConfig);
-      await broker.connect();
-      const order = await broker.placeOrder({
+      await expect(broker.placeOrder({
         symbol: "600519",
         market: "cn_stock",
         side: "buy",
@@ -130,17 +125,8 @@ describe("QMTBroker", () => {
         runId: "run-qmt-1",
         signalId: "signal-qmt-1",
         strategyVersion: "1.0.0",
-      });
-      expect(order.modelId).toBe("model-qmt-1");
-      expect(mockCall).toHaveBeenCalledWith(
-        "place_order",
-        expect.objectContaining({
-          run_id: "run-qmt-1",
-          model_id: "model-qmt-1",
-          signal_id: "signal-qmt-1",
-          strategy_version: "1.0.0",
-        }),
-      );
+      })).rejects.toThrow("direct broker orders are disabled");
+      expect(mockCall).not.toHaveBeenCalledWith("place_order", expect.anything());
     });
 
     it("places a limit buy order", async () => {

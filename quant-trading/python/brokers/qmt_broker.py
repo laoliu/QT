@@ -184,13 +184,13 @@ class QMTBrokerBridge:
     def place_order(self, params: dict) -> dict:
         if not self.trader or not self.account:
             raise RuntimeError("Not connected")
-        if self.require_execution_plan and (
-            not params.get("run_id")
-            or not params.get("model_id")
-            or not params.get("signal_id")
-        ):
+        # This NDJSON bridge accepts only a single raw order and cannot prove
+        # that it belongs to a validated target plan. Provenance strings are
+        # caller-controlled, so gated/live profiles must use
+        # QMTGateway.submit_target_plan instead.
+        if self.require_execution_plan:
             raise RuntimeError(
-                "QMT live profile requires run_id, model_id and signal_id from a validated execution plan"
+                "QMT direct order bridge is disabled; submit a validated execution plan"
             )
         stock_code = params["stock_code"]
         order_type = int(params["order_type"])    # 23=buy, 24=sell

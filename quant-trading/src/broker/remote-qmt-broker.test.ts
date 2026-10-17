@@ -26,10 +26,10 @@ describe("RemoteQMTBroker provenance boundary", () => {
       orderType: "limit",
       price: 1800,
       quantity: 100,
-    })).rejects.toThrow("requires runId, modelId and signalId");
+    })).rejects.toThrow("direct broker orders are disabled");
   });
 
-  it("forwards complete provenance to the Windows bridge", async () => {
+  it("rejects forged provenance instead of forwarding a raw order", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({ ok: true, data: { broker_order_id: "REMOTE-1" } }),
@@ -37,7 +37,7 @@ describe("RemoteQMTBroker provenance boundary", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const broker = new RemoteQMTBroker(config);
-    const order = await broker.placeOrder({
+    await expect(broker.placeOrder({
       symbol: "600519",
       market: "cn_stock",
       side: "buy",
@@ -49,22 +49,8 @@ describe("RemoteQMTBroker provenance boundary", () => {
       runId: "run-remote-1",
       modelId: "model-remote-1",
       signalId: "signal-remote-1",
-    });
-
-    expect(order.modelId).toBe("model-remote-1");
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:18888/trading",
-      expect.objectContaining({
-        method: "POST",
-        body: expect.stringContaining('"model_id":"model-remote-1"'),
-      }),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:18888/trading",
-      expect.objectContaining({
-        body: expect.stringContaining('"run_id":"run-remote-1"'),
-      }),
-    );
+    })).rejects.toThrow("direct broker orders are disabled");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("restores provenance from a QMT order remark", async () => {

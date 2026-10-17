@@ -19,11 +19,11 @@ strategy_data_bridge = importlib.util.module_from_spec(_strategy_data_spec)
 _strategy_data_spec.loader.exec_module(strategy_data_bridge)
 
 
-def test_qmt_bridge_requires_plan_provenance_when_profile_is_gated() -> None:
+def test_qmt_bridge_rejects_raw_orders_when_profile_is_gated() -> None:
     bridge = QMTBrokerBridge({"require_execution_plan": True})
     bridge.trader = object()
     bridge.account = object()
-    with pytest.raises(RuntimeError, match="run_id, model_id and signal_id"):
+    with pytest.raises(RuntimeError, match="direct order bridge is disabled"):
         bridge.place_order({
             "stock_code": "600000.SH",
             "order_type": 23,
@@ -31,7 +31,7 @@ def test_qmt_bridge_requires_plan_provenance_when_profile_is_gated() -> None:
         })
 
 
-def test_qmt_bridge_sends_model_provenance_in_order_remark() -> None:
+def test_qmt_bridge_rejects_forged_provenance_even_when_complete() -> None:
     class FakeTrader:
         def __init__(self):
             self.args = None
@@ -44,25 +44,20 @@ def test_qmt_bridge_sends_model_provenance_in_order_remark() -> None:
     trader = FakeTrader()
     bridge.trader = trader
     bridge.account = object()
-    result = bridge.place_order({
-        "stock_code": "600000.SH",
-        "order_type": 23,
-        "price_type": 11,
-        "price": 10.0,
-        "volume": 100,
-        "strategy_name": "aipha-ml-ranking",
-        "run_id": "run-1",
-        "model_id": "model-1",
-        "signal_id": "signal-1",
-        "strategy_version": "1.0.0",
-    })
-
-    assert result == {"broker_order_id": "12345"}
-    remark = trader.args[-1]
-    assert "run_id=run-1" in remark
-    assert "model_id=model-1" in remark
-    assert "signal_id=signal-1" in remark
-    assert "strategy_version=1.0.0" in remark
+    with pytest.raises(RuntimeError, match="direct order bridge is disabled"):
+        bridge.place_order({
+            "stock_code": "600000.SH",
+            "order_type": 23,
+            "price_type": 11,
+            "price": 10.0,
+            "volume": 100,
+            "strategy_name": "aipha-ml-ranking",
+            "run_id": "run-1",
+            "model_id": "model-1",
+            "signal_id": "signal-1",
+            "strategy_version": "1.0.0",
+        })
+    assert trader.args is None
 
 
 @pytest.mark.parametrize("bridge_module", [data_bridge, strategy_data_bridge], ids=["aipha", "qmt-strategy"])

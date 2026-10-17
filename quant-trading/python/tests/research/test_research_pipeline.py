@@ -579,6 +579,12 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert report["diagnostics"]["benchmark"]["relative"]["aligned_days"] >= 2
     assert np.isfinite(report["diagnostics"]["benchmark"]["relative"]["excess_return"])
     assert report["diagnostics"]["style_exposures"]["available"] is True
+    long_short = report["diagnostics"]["long_short"]
+    assert long_short["available"] is True
+    assert long_short["rebalance_frequency"] == "monthly"
+    assert long_short["gross_exposure"] == 2.0
+    assert np.isfinite(long_short["mean_net_return"])
+    assert long_short["estimated_cost"] >= 0
     assert report["diagnostics"]["pbo_method"] in {
         "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
     }

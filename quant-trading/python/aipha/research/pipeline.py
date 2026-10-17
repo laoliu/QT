@@ -699,26 +699,68 @@ def _build_evaluation_diagnostics(
         diagnostics["benchmark"] = benchmark_diagnostics
 
     long_short: list[float] = []
-    for _, group in predictions.groupby("trade_date", sort=True):
+    long_short_net: list[float] = []
+    long_short_costs: list[float] = []
+    long_members: set[str] = set()
+    short_members: set[str] = set()
+    target_dates = sorted({pd.Timestamp(target.rebalance_date).normalize() for target in targets})
+    prediction_dates = pd.to_datetime(predictions["trade_date"], errors="coerce").dt.normalize()
+    for signal_date in target_dates:
+        group = predictions.loc[prediction_dates == signal_date]
         valid = group.dropna(subset=["score", "fwd_return"])
         if len(valid) < 2:
             continue
         ranked = valid.sort_values("score", ascending=False)
-        top = ranked.head(config.top_k)["fwd_return"].mean()
-        bottom = ranked.tail(config.top_k)["fwd_return"].mean()
+        top_rows = ranked.head(config.top_k)
+        bottom_rows = ranked.tail(config.top_k)
+        top = top_rows["fwd_return"].mean()
+        bottom = bottom_rows["fwd_return"].mean()
         if pd.notna(top) and pd.notna(bottom):
-            long_short.append(float(top - bottom))
+            gross_spread = float(top - bottom)
+            new_long = set(top_rows["symbol"].astype(str))
+            new_short = set(bottom_rows["symbol"].astype(str))
+            cost = 0.0
+            # Each leg is normalized to 100% notional, so this is a 2x gross
+            # long-short diagnostic. Charge entry/exit turnover on both legs;
+            # the short leg is a statistical comparator, not an A-share
+            # shortability claim.
+            for old, new in ((long_members, new_long), (short_members, new_short)):
+                weight = 1.0 / max(len(new), 1)
+                for symbol in old | new:
+                    delta = (weight if symbol in new else 0.0) - (weight if symbol in old else 0.0)
+                    if not delta:
+                        continue
+                    rate = config.commission_rate + config.transfer_fee_rate + config.slippage_bps / 10_000
+                    if delta < 0:
+                        rate += config.stamp_tax_rate
+                    cost += abs(delta) * rate
+            long_short.append(gross_spread)
+            long_short_costs.append(cost)
+            long_short_net.append(gross_spread - cost)
+            long_members, short_members = new_long, new_short
     if long_short:
         ls = pd.Series(long_short, dtype=float)
+        net = pd.Series(long_short_net, dtype=float)
+        ls_nav = (1.0 + net).cumprod()
         diagnostics["long_short"] = {
             "available": True,
             "periods": int(len(ls)),
-            "mean_return": float(ls.mean()),
-            "annualized_return": float((1.0 + ls.mean()) ** 12 - 1.0),
+            "rebalance_frequency": "monthly",
+            "gross_exposure": 2.0,
+            "mean_gross_return": float(ls.mean()),
+            "mean_net_return": float(net.mean()),
+            "annualized_return": float((1.0 + net.mean()) ** 12 - 1.0),
             "volatility": compute_annualized_volatility(
-                ls.to_numpy(), trading_days=12,
+                net.to_numpy(), trading_days=12,
             ),
-            "positive_period_rate": float((ls > 0).mean()),
+            "sharpe": float(
+                net.mean() / net.std(ddof=1) * np.sqrt(12)
+                if len(net) > 1 and net.std(ddof=1) > 0 else 0.0
+            ),
+            "max_drawdown": float((ls_nav / ls_nav.cummax() - 1.0).min()),
+            "estimated_cost": float(sum(long_short_costs)),
+            "mean_period_cost": float(np.mean(long_short_costs)),
+            "positive_period_rate": float((net > 0).mean()),
         }
 
     target_frame = pd.DataFrame([asdict(item) for item in targets])

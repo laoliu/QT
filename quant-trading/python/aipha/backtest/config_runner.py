@@ -612,6 +612,11 @@ def _isolate_project_output_during_pytest(output_dir: Path) -> Path:
         relative = output_dir.resolve().relative_to(PROJECT_ROOT.resolve())
     except ValueError:
         return output_dir
+    # On this repository pytest's --basetemp often lives below PROJECT_ROOT.
+    # Those paths are already isolated test fixtures and must keep their
+    # identity (several tests use the returned output_dir as an assertion).
+    if any(part.startswith(".pytest-") or part.startswith("pytest-") for part in relative.parts):
+        return output_dir
     test_key = hashlib.sha256(test_id.encode("utf-8")).hexdigest()[:16]
     return Path(tempfile.gettempdir()) / "aipha-pytest-output" / str(os.getpid()) / test_key / relative
 

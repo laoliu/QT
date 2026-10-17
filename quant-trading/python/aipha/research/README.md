@@ -49,6 +49,11 @@ configurable fees/slippage, daily turnover, T+1, suspension, and
 limit-up/limit-down execution blocks. It is a research/paper accounting engine;
 it does not connect to a broker or submit orders.
 
+Forward-return labels use the next eligible session's open as entry and the
+close after the configured holding horizon as exit. The canonical signal is
+formed after the close, so `label.skip_days` must be at least one; this keeps
+the training target aligned with the backtest's next-open execution.
+
 The canonical portfolio policy also applies `portfolio.max_industry_weight`
 (default 20%) when the frozen panel contains an `industry` column. Selection
 walks the ranked list and skips names that would exceed the cap; when the panel

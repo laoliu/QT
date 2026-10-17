@@ -442,15 +442,29 @@ def historical_st_status_from_provider(
         history = equity_provider.load_namechange(ts_code=str(symbol), use_cache=use_cache)
         if history is None:
             history = pd.DataFrame()
+        if not history.empty:
+            required_history = {"name", "start_date", "end_date", "ann_date"}
+            missing_history = required_history - set(history.columns)
+            if missing_history:
+                raise ValueError(
+                    "TuShare namechange history is not PIT-complete; missing "
+                    + ", ".join(sorted(missing_history))
+                )
         for raw_date in pd.to_datetime(group["trade_date"]).dt.date:
             is_st = False
             if not history.empty:
                 day = pd.Timestamp(raw_date).date()
                 for record in history.itertuples(index=False):
                     name = str(getattr(record, "name", "")).upper()
+                    announced = getattr(record, "ann_date", pd.NaT)
                     start = getattr(record, "start_date", pd.NaT)
                     end = getattr(record, "end_date", pd.NaT)
                     if "ST" not in name and "退市" not in name:
+                        continue
+                    # A historical effective interval alone does not prove
+                    # that the status was public at the time.  Exclude the
+                    # record until TuShare's announcement date is visible.
+                    if pd.isna(announced) or day < pd.Timestamp(announced).date():
                         continue
                     if pd.notna(start) and day < pd.Timestamp(start).date():
                         continue

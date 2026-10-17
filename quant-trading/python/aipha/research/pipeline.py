@@ -63,6 +63,8 @@ class ResearchConfig:
             raise ValueError("train_years and test_months must be positive")
         if self.forward_days < 1 or self.purge_days < self.forward_days:
             raise ValueError("purge_days must be >= forward_days")
+        if self.label_skip_days < 1:
+            raise ValueError("label_skip_days must be >= 1 because signals are generated after the close")
         if not 0 < self.max_position_weight <= 1:
             raise ValueError("max_position_weight must be in (0, 1]")
         if self.max_industry_weight is not None and not 0 < self.max_industry_weight <= 1:
@@ -81,22 +83,29 @@ def build_forward_labels(
     horizon_days: int = 20,
     skip_days: int = 1,
     price_column: str = "close",
+    entry_column: str = "open",
 ) -> pd.DataFrame:
-    """Create T+1-aligned forward-return and cross-sectional rank labels.
+    """Create forward labels aligned to next-session-open execution.
 
-    The input is never mutated.  The last ``skip_days + horizon_days`` rows of
-    each symbol are dropped because their labels are not observable yet.
+    The entry is ``entry_column`` on the first eligible session (T+skip_days);
+    the exit is ``price_column`` at that session's close for a one-day horizon,
+    or the close of the horizon-th interval after that entry.  For the
+    canonical after-close signal, ``skip_days=1`` therefore measures
+    next-open to the close after 20 trading intervals, matching the model
+    selector's purge horizon.
+    The input is never mutated.
     """
     if horizon_days < 1 or skip_days < 0:
         raise ValueError("horizon_days must be positive and skip_days non-negative")
-    if price_column not in frame.columns:
-        raise ValueError(f"missing label price column: {price_column}")
+    missing = {price_column, entry_column} - set(frame.columns)
+    if missing:
+        raise ValueError(f"missing label price columns: {', '.join(sorted(missing))}")
     out = frame.copy()
     out["trade_date"] = pd.to_datetime(out["trade_date"], errors="raise")
     out = out.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
-    grouped = out.groupby("symbol", sort=False)[price_column]
-    base = grouped.shift(-skip_days)
-    future = grouped.shift(-(skip_days + horizon_days))
+    grouped = out.groupby("symbol", sort=False)
+    base = grouped[entry_column].shift(-skip_days)
+    future = grouped[price_column].shift(-(skip_days + horizon_days))
     out["fwd_return"] = future / base - 1.0
     out = out.dropna(subset=["fwd_return"]).copy()
     out["fwd_return_rank"] = out.groupby("trade_date")["fwd_return"].rank(

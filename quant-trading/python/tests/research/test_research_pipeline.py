@@ -94,6 +94,11 @@ def test_config_rejects_non_paper_and_non_pit_modes(tmp_path: Path) -> None:
         load_research_config(cfg)
 
 
+def test_canonical_config_rejects_same_day_label_entry() -> None:
+    with pytest.raises(ValueError, match="label_skip_days"):
+        ResearchConfig(label_skip_days=0)
+
+
 def test_parquet_bridge_requires_provenance_sidecar(tmp_path: Path) -> None:
     from aipha.engines.aipha_ml_engine import _read_parquet, run
 
@@ -146,7 +151,8 @@ def test_forward_labels_respect_t_plus_one_skip() -> None:
         "volume": [1, 1, 1, 1], "amount": [10, 12, 15, 20],
     })
     labelled = build_forward_labels(frame, horizon_days=1, skip_days=1)
-    assert labelled.iloc[0]["fwd_return"] == pytest.approx(15 / 12 - 1)
+    # Signal after day 0 close enters day 1 open and exits day 2 close.
+    assert labelled.iloc[0]["fwd_return"] == pytest.approx(15 / 11 - 1)
     assert len(labelled) == 2
     assert "fwd_return" not in frame
 
@@ -230,16 +236,32 @@ def test_historical_st_status_uses_namechange_intervals() -> None:
             assert ts_code == "600000.SH"
             return pd.DataFrame({
                 "ts_code": [ts_code], "name": ["ST示例"],
+                "ann_date": ["20240104"],
                 "start_date": [pd.Timestamp("2024-01-03")],
                 "end_date": [pd.Timestamp("2024-01-04")],
             })
 
     market = pd.DataFrame({
-        "ts_code": ["600000.SH"] * 3,
-        "trade_date": ["20240102", "20240103", "20240105"],
+        "ts_code": ["600000.SH"] * 4,
+        "trade_date": ["20240102", "20240103", "20240104", "20240105"],
     })
     result = historical_st_status_from_provider(Provider(), market)
-    assert result["is_st"].tolist() == [False, True, False]
+    # Jan 3 is inside the effective name interval, but the announcement
+    # arrived Jan 4, so the historical panel must not mark it ST beforehand.
+    assert result["is_st"].tolist() == [False, False, True, False]
+
+
+def test_historical_st_status_rejects_history_without_announcement_date() -> None:
+    class Provider:
+        def load_namechange(self, ts_code: str, use_cache: bool = True) -> pd.DataFrame:
+            return pd.DataFrame({
+                "ts_code": [ts_code], "name": ["ST示例"],
+                "start_date": ["20240103"], "end_date": ["20240104"],
+            })
+
+    market = pd.DataFrame({"ts_code": ["600000.SH"], "trade_date": ["20240103"]})
+    with pytest.raises(ValueError, match="not PIT-complete.*ann_date"):
+        historical_st_status_from_provider(Provider(), market)
 
 
 def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, monkeypatch) -> None:

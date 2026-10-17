@@ -784,6 +784,16 @@ def _load_ml_cross_section(comp_cfg: dict, universe: str, trade_date: str) -> An
             feature_version=str(comp_cfg.get("feature_version", "cn_equity_v1")),
         )
 
+    if comp_cfg.get("legacy_ml_compat") is not True:
+        raise RuntimeError(
+            "ML scorer has no canonical feature_snapshot_path. The legacy cache/"
+            "train_ml_factor pipeline is disabled by default; set legacy_ml_compat: true "
+            "only for an explicitly retained historical Paper configuration."
+        )
+    logger.warning(
+        "[ml:%s] using explicitly enabled legacy feature/cache pipeline; migrate this config to feature_snapshot_path",
+        universe,
+    )
     train_ml = _import_train_ml_factor()
 
     # Alpha158 最长窗口 60 天，行为/基本面因子还要更长；留 250 个交易日。

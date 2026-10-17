@@ -32,6 +32,7 @@ portfolio_weights:
 # ── ML CSI2000 (与R122一致) ──
 ml_csi2000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # 历史 Paper 组合；待迁移到 canonical PIT snapshot
   model_dir: "models/ml_csi2000_lgb_fund"
   universe: "csi2000"
   top_k: 50
@@ -50,6 +51,7 @@ ml_csi2000:
 # ── ML CSI1000 Fund 模型 (旧模型, AR=26.3%) ──
 ml_csi1000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # 历史 Paper 组合；待迁移到 canonical PIT snapshot
   model_dir: "models/ml_csi1000_lgb_fund"
   universe: "csi1000"
   top_k: 50

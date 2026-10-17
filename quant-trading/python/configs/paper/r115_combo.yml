@@ -31,6 +31,7 @@ portfolio_weights:
 # ── ML CSI2000 Fund 配置 ──
 ml:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # 历史 Paper 组合；迁移至带哈希的 canonical PIT feature snapshot 后移除此项
   model_dir: "models/ml_csi2000_lgb_fund"
   universe: "csi2000"
   top_k: 50

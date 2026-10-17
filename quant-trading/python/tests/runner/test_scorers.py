@@ -652,6 +652,10 @@ class TestFeatureCoverage:
 
 
 class TestMLScorer:
+    def test_legacy_feature_loader_is_not_an_implicit_fallback(self) -> None:
+        with pytest.raises(RuntimeError, match="disabled by default"):
+            scorers._load_ml_cross_section({}, "csi2000", "20250106")
+
     def _run(
         self,
         comp_cfg: dict,
@@ -660,6 +664,8 @@ class TestMLScorer:
     ) -> list[str]:
         def fake_ranks(model_dir: Path, df: pd.DataFrame) -> pd.Series:
             return pd.Series(rank_by_dir[str(model_dir)])
+
+        comp_cfg = {"legacy_ml_compat": True, **comp_cfg}
 
         with patch.object(scorers, "_load_ml_cross_section", return_value=cross), \
              patch.object(scorers, "_predict_ranks", side_effect=fake_ranks):

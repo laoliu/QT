@@ -925,16 +925,13 @@ class PaperGateway(TradingGateway):
         source of provenance; callers cannot submit a live plan through the
         paper gateway.
         """
-        from aipha.research.execution_plan import execute_target_plan
-
-        if getattr(plan, "mode", None) != "paper":
-            raise GatewayError("PaperGateway requires an execution plan with mode=paper", code="PLAN_MODE")
+        from aipha.research.execution_plan import execute_paper_target_plan
         if current_positions is None:
             current_positions = {
                 symbol: int(self._position_mgr.get_qty(symbol))
                 for symbol in self._position_mgr.get_all_symbols()
             }
-        return execute_target_plan(
+        return execute_paper_target_plan(
             self,
             plan,
             prices=prices,

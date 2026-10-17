@@ -190,3 +190,31 @@ def execute_target_plan(
             )
             order_ids.append(str(gateway.submit_order(order)))
     return order_ids
+
+
+def execute_paper_target_plan(
+    gateway: Any,
+    plan: ExecutionPlan,
+    *,
+    prices: dict[str, float],
+    account_value: float,
+    current_positions: dict[str, int] | None = None,
+) -> list[str]:
+    """Paper-only wrapper for target-plan execution.
+
+    Kept separate from the concrete PaperGateway module so this safety
+    contract can be tested without importing optional native optimizer
+    dependencies used elsewhere by the gateway package.
+    """
+    if getattr(plan, "mode", None) != "paper":
+        from aipha.execution.gateway import GatewayError
+
+        raise GatewayError("PaperGateway requires an execution plan with mode=paper", code="PLAN_MODE")
+    return execute_target_plan(
+        gateway,
+        plan,
+        prices=prices,
+        account_value=account_value,
+        current_positions=current_positions,
+        allow_live=False,
+    )

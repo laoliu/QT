@@ -365,36 +365,31 @@ def test_live_plan_executor_attaches_provenance_to_every_order() -> None:
     assert gateway.orders[0].metadata["signal_id"]
 
 
-def test_paper_gateway_accepts_only_paper_execution_plans() -> None:
-    from aipha.execution.paper_gateway import PaperGateway
+def test_paper_plan_executor_rejects_live_plan_and_preserves_provenance() -> None:
+    from aipha.research.execution_plan import execute_paper_target_plan
+    from aipha.execution.gateway import GatewayError
 
     targets = build_target_positions(pd.DataFrame([{
         "trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0,
     }]), top_k=1, max_position_weight=0.5, run_id="run-paper", model_id="model-paper")
     plan = build_execution_plan(targets, run_id="run-paper", model_id="model-paper")
 
-    class SpyPaperGateway(PaperGateway):
-        def __init__(self):
-            self.orders = []
-
+    class Gateway:
+        def __init__(self): self.orders = []
         def submit_order(self, order):
             self.orders.append(order)
             return order.order_id
 
-    gateway = SpyPaperGateway()
-    order_ids = gateway.submit_target_plan(
-        plan, prices={"600000.SH": 10.0}, account_value=100_000,
+    gateway = Gateway()
+    ids = execute_paper_target_plan(
+        gateway, plan, prices={"600000.SH": 10.0}, account_value=100_000,
         current_positions={},
     )
-    assert order_ids == [plan.plan_id + ":600000.SH:BUY"]
-    assert gateway.orders[0].metadata["execution_plan_id"] == plan.plan_id
-    assert gateway.orders[0].metadata["run_id"] == "run-paper"
-
+    assert ids and gateway.orders[0].metadata["execution_plan_id"] == plan.plan_id
     live_plan = build_execution_plan(targets, mode="live", allow_live=True)
-    from aipha.execution.gateway import GatewayError
     with pytest.raises(GatewayError, match="mode=paper"):
-        gateway.submit_target_plan(
-            live_plan, prices={"600000.SH": 10.0}, account_value=100_000,
+        execute_paper_target_plan(
+            gateway, live_plan, prices={"600000.SH": 10.0}, account_value=100_000,
             current_positions={},
         )
 

@@ -36,6 +36,7 @@ portfolio_weights:
 # ── ML CSI2000 Fund 配置 ──
 ml_csi2000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi2000_lgb_fund"
   universe: "csi2000"
   top_k: 50
@@ -95,6 +96,7 @@ etf:
     - "511010.SH"   # 国债# ── ML CSI1000 Fund 配置（新增）──
 ml_csi1000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi1000_lgb_fund"
   universe: "csi1000"
   top_k: 50

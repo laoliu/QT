@@ -160,6 +160,7 @@ pillars:
   ml:
     name: "ML CSI2000 LGB Fund"
     description: "LightGBM 24-fold WF, risk_controlled_csi2000"
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi2000_lgb_fund"
     market_type: "a_stock"
     weight: 0.300

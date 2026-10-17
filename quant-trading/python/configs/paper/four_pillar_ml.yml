@@ -76,6 +76,7 @@ paper_engine:
 pillars:
   ml_a:
     name: "ML-A (CSI1000 LGB Fund)"
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi1000_lgb_fund"
     market_type: "a_stock"
     top_k: 50
@@ -86,6 +87,7 @@ pillars:
 
   ml_b:
     name: "ML-B (CSI2000 LGB Fund)"
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi2000_lgb_fund"
     market_type: "a_stock"
     top_k: 50

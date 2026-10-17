@@ -27,6 +27,7 @@ pillars:
     name: "ML CSI2000 V3b 6-Model Ensemble"
     market_type: "a_stock"
     weight: 0.40
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi2000_lgb_20d_r40"
     ensemble_predictions:
       - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"
@@ -77,6 +78,7 @@ pillars:
     name: "ML CSI300 GE200B Ensemble"
     market_type: "a_stock"
     weight: 0.15
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi300_lgb_p3_t1a_open"
     oos_predictions_path: "models/ml_csi300_lgb_p3_t1a_open/oos_predictions.parquet"
     universe: "csi300"

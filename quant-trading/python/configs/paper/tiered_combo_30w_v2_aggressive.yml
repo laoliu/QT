@@ -29,6 +29,7 @@ pillars:
     description: "LGB x5 + MASTER V2, rank_average融合"
     market_type: "a_stock"
     weight: 0.60
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi2000_lgb_20d_r40"
     ensemble_predictions:
       - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"

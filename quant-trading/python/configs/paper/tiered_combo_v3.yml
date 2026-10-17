@@ -56,6 +56,7 @@ pillars:
     market_type: "a_stock"
     legacy_ml_compat: true  # 历史 ensemble；canonical 迁移完成后移除
     weight: 0.35
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi2000_lgb_20d_r40"
     ensemble_predictions:
       - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"
@@ -111,6 +112,7 @@ pillars:
     market_type: "a_stock"
     legacy_ml_compat: true  # 历史模型；canonical 迁移完成后移除
     weight: 0.15
+    legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
     model_dir: "models/ml_csi300_lgb_p3_t1a_open"
     oos_predictions_path: "models/ml_csi300_lgb_p3_t1a_open/oos_predictions.parquet"
     universe: "csi300"

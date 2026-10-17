@@ -21,6 +21,7 @@ portfolio_weights:
 # ── ML CSI2000 V3b Ensemble (5 LGB + MASTER V2, ICIR-weighted) ──
 ml_csi2000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi2000_lgb_20d_r40"
   ensemble_predictions:
     - "models/ml_csi2000_lgb_20d_r40/oos_predictions.parquet"
@@ -66,6 +67,7 @@ ml_csi2000:
 # ── ML CSI300 ≥200B (T+1 Open aligned) ──
 ml_csi300_ge200b:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi300_lgb_p3_t1a_open"
   oos_predictions_path: "models/ml_csi300_lgb_p3_t1a_open/oos_predictions.parquet"
   universe: "csi300"

@@ -54,6 +54,7 @@ mdd_gradient:
 # ── ML CSI2000 Fund 配置 ──
 ml_csi2000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi2000_lgb_fund"
   universe: "csi2000"
   top_k: 50
@@ -132,6 +133,7 @@ monitoring:
     check_frequency: quarterly# ── ML CSI1000 Fund 配置 (降权至10%) ──
 ml_csi1000:
   asset_type: "a_stock"
+  legacy_ml_compat: true  # legacy Paper model; migrate to canonical PIT snapshot
   model_dir: "models/ml_csi1000_lgb_fund"
   universe: "csi1000"
   top_k: 50

@@ -296,6 +296,13 @@ class QMTGateway(BrokerGateway):
 
         if getattr(plan, "mode", None) != "live":
             raise GatewayError("QMT requires an execution plan with mode=live", code="PLAN_MODE")
+        if not allow_live or os.environ.get("QUANT_TRADING_ALLOW_LIVE", "").lower() not in {
+            "1", "true", "yes",
+        }:
+            raise GatewayError(
+                "QMT live execution requires QUANT_TRADING_ALLOW_LIVE=true",
+                code="LIVE_GATE",
+            )
         return execute_target_plan(
             self,
             plan,

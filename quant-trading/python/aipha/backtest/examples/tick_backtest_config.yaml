@@ -19,7 +19,7 @@ tick:
   enabled: true
   tick_source: auto        # "parquet" | "bridge" | "auto"
   # tick_cache_dir: "G:/qtdata/cache/tick"   # 可选，默认从环境变量读取
-  bridge_url: "http://127.0.0.1:58088"
+  bridge_url: "http://127.0.0.1:18888"
   fill_mode: bbo           # "immediate" | "bbo" | "next_tick"
   aggregate_interval: 60   # tick 聚合间隔（秒）
   feature_buffer_size: 256

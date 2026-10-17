@@ -39,7 +39,7 @@ _PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _PYTHON_ROOT)
 
 # Bridge URL for xtdata K-line data (Windows QMT data bridge)
-_BRIDGE_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+_BRIDGE_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 
 
 def _safe_float(v, default=0.0):

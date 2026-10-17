@@ -2,7 +2,7 @@
 """Quick test: simulate gateway calling backtest_engine with a small set of stocks."""
 import os, sys, json, time
 
-os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:58088"
+os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:18888"
 os.environ["QUANT_CONFIG"] = json.dumps({
     "action": "run",
     "initial_capital": 100000,

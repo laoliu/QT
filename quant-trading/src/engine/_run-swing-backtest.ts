@@ -70,7 +70,7 @@ if (dataProvider) {
 } else {
   providerConfig.tradingAccount = {
     broker: "remote-qmt",
-    qmt: { windowsBridgeUrl: "http://192.168.3.30:58088" },
+    qmt: { windowsBridgeUrl: "http://192.168.3.30:18888" },
   };
 }
 

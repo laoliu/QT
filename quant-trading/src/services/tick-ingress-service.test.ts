@@ -8,7 +8,7 @@ import type {
 } from "./tick-source-adapter.js";
 
 class FakeTickSourceAdapter implements TickSourceAdapter {
-  readonly endpoint = "http://127.0.0.1:58088";
+  readonly endpoint = "http://127.0.0.1:18888";
   private onEvent: ((event: TickSourceEvent) => void) | null = null;
   private running = false;
   readonly subscribeCalls: string[][] = [];

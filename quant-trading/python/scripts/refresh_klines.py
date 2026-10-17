@@ -30,7 +30,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _PYTHON_ROOT)
 
-WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 KLINE_DAYS = 120
 BATCH_SIZE = 100
 TIMEOUT = 90

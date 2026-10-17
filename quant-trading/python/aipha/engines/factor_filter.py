@@ -575,7 +575,7 @@ def _fetch_qmt_bridge_stocks() -> tuple[dict[str, dict[str, Any]], list[str]]:
     bridge_url = (
         os.environ.get("WINDOWS_XTDATA_URL")
         or _read_qmt_bridge_url()
-        or "http://127.0.0.1:58088"
+        or "http://127.0.0.1:18888"
     )
 
     # Health check

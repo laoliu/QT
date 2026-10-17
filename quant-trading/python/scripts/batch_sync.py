@@ -50,7 +50,7 @@ try:
 except ImportError:
     pass
 
-WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+WINDOWS_XTDATA_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 BATCH_SIZE = 100
 TIMEOUT = 90
 AKSHARE_DELAY = 0.35

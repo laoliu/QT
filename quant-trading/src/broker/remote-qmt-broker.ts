@@ -3,8 +3,8 @@
  * machine running qmt_data_bridge.py via direct HTTP POST.
  *
  * Direct mode (windowsBridgeUrl configured):
- *   Mac (RemoteQMTBroker) → POST http://windows:58088/trading {method, params}
- *   Mac (RemoteQMTBroker) ← GET  http://windows:58088/trading/events (polls)
+ *   Mac (RemoteQMTBroker) → POST http://windows:18888/trading {method, params}
+ *   Mac (RemoteQMTBroker) ← GET  http://windows:18888/trading/events (polls)
  *
  * Fallback mode (no windowsBridgeUrl):
  *   Uses Mac-side trading-bridge-api polling relay for backward compatibility.

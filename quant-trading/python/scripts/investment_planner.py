@@ -418,7 +418,7 @@ def _fetch_tencent_batch(symbols: list[str]) -> dict[str, dict]:
 def _fetch_quotes_via_bridge(symbols: list[str]) -> dict[str, dict]:
     """Fetch real-time quotes through qmt_data_bridge → xtdata.get_full_tick().
 
-    Uses the same bridge (WINDOWS_XTDATA_URL, default :58088) as kline fetching.
+    Uses the same bridge (WINDOWS_XTDATA_URL, default :18888) as kline fetching.
     Endpoint: POST /quote  body: {"codes": ["600519.SH", ...]}
     Returns {plain_symbol: quote_dict} with same shape as _fetch_tencent_batch.
     Returns empty dict if bridge is unreachable or QMT is offline.
@@ -426,7 +426,7 @@ def _fetch_quotes_via_bridge(symbols: list[str]) -> dict[str, dict]:
     if not symbols:
         return {}
 
-    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 
     # Convert plain codes to QMT format (same logic as _fetch_klines_via_bridge)
     qmt_codes = []
@@ -1166,7 +1166,7 @@ def _fetch_klines_via_bridge(symbols: list[str], count: int = 90) -> dict[str, l
     if not symbols:
         return {}
 
-    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+    bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 
     # Convert plain codes to QMT format for bridge
     qmt_codes = []

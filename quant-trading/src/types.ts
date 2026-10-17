@@ -822,7 +822,7 @@ export type QMTBrokerConfig = {
   miniQmtPath?: string; // path to miniQMT data directory, e.g. "C:\\miniQMT"
   accountId?: string; // e.g. "8888000001"
   accountType?: "STOCK" | "FUTURES" | "CREDIT" | "OPTIONS";
-  /** Direct HTTP URL to Windows qmt_data_bridge.py, e.g. "http://192.168.3.30:58088" */
+  /** Direct HTTP URL to Windows qmt_data_bridge.py, e.g. "http://192.168.3.30:18888" */
   windowsBridgeUrl?: string;
 };
 

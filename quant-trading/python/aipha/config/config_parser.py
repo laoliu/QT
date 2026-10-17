@@ -290,7 +290,7 @@ def parse_config(raw: dict[str, Any]) -> BacktestRunConfig:
         enabled=tick_raw.get("enabled", is_tick_mode),
         tick_source=tick_raw.get("tick_source", tick_raw.get("source", "auto")),
         tick_cache_dir=tick_raw.get("tick_cache_dir", tick_raw.get("cache_dir")),
-        bridge_url=tick_raw.get("bridge_url", "http://127.0.0.1:58088"),
+        bridge_url=tick_raw.get("bridge_url", "http://127.0.0.1:18888"),
         fill_mode=tick_raw.get("fill_mode", "bbo"),
         aggregate_interval=tick_raw.get("aggregate_interval", 60),
         feature_buffer_size=tick_raw.get("feature_buffer_size", 256),

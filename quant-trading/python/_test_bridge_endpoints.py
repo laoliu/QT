@@ -20,7 +20,7 @@ def _read_bridge_url_from_config() -> str:
             return url
     except Exception:
         pass
-    return os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:58088")
+    return os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
 
 
 BRIDGE_URL = _read_bridge_url_from_config()

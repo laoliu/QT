@@ -139,7 +139,7 @@ class TickBacktestConfig:
     enabled: bool = False
     tick_source: str = "auto"          # "parquet" | "bridge" | "auto"
     tick_cache_dir: str | None = None  # tick Parquet 缓存目录
-    bridge_url: str = "http://127.0.0.1:58088"
+    bridge_url: str = "http://127.0.0.1:18888"
     fill_mode: str = "bbo"             # "immediate" | "bbo" | "next_tick"
     aggregate_interval: int = 60       # 聚合间隔（秒）
     feature_buffer_size: int = 256     # 特征计算缓冲区大小

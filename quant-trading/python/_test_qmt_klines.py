@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Quick test: can akshare_provider fetch klines via QMT?"""
 import os, sys
-os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:58088"
+os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:18888"
 
 from data_providers.akshare_provider import _fetch_qmt_klines, _read_qmt_bridge_url
 

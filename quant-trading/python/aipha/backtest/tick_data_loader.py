@@ -165,7 +165,7 @@ def load_ticks_from_bridge(
     symbols: list[str],
     start: date,
     end: date,
-    bridge_url: str = "http://127.0.0.1:58088",
+    bridge_url: str = "http://127.0.0.1:18888",
     save_cache: bool = True,
     cache_dir: str | None = None,
 ) -> dict[date, dict[str, list[Tick]]]:
@@ -289,7 +289,7 @@ def load_ticks_by_date(
     end: date,
     source: str = "parquet",
     cache_dir: str | None = None,
-    bridge_url: str = "http://127.0.0.1:58088",
+    bridge_url: str = "http://127.0.0.1:18888",
 ) -> dict[date, dict[str, list[Tick]]]:
     """统一 tick 数据加载入口。
 

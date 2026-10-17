@@ -13,9 +13,9 @@ def _read_bridge_url():
         return (cfg.get("plugins", {}).get("entries", {})
                 .get("quant-trading", {}).get("config", {})
                 .get("tradingAccount", {}).get("qmt", {})
-                .get("windowsBridgeUrl", "http://192.168.3.30:58088"))
+                .get("windowsBridgeUrl", "http://192.168.3.30:18888"))
     except Exception:
-        return "http://192.168.3.30:58088"
+        return "http://192.168.3.30:18888"
 
 BRIDGE = _read_bridge_url().rstrip("/")
 

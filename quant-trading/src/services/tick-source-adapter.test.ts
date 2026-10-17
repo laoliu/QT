@@ -29,7 +29,7 @@ describe("createDefaultTickSourceAdapter", () => {
       tradingAccount: {
         mode: "paper",
         qmt: {
-          windowsBridgeUrl: "http://192.168.3.30:58088",
+          windowsBridgeUrl: "http://192.168.3.30:18888",
         },
       },
     };

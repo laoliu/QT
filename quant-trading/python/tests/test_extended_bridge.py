@@ -11,12 +11,12 @@ if __name__ != "__main__":
     import pytest
 
     pytest.skip(
-        "需要运行中的 QMT bridge（192.168.3.30:58088）；"
+        "需要运行中的 QMT bridge（192.168.3.30:18888）；"
         "手动执行：python tests/test_extended_bridge.py",
         allow_module_level=True,
     )
 
-BASE = "http://192.168.3.30:58088"
+BASE = "http://192.168.3.30:18888"
 passed = 0
 failed = 0
 skipped = 0

@@ -2,7 +2,7 @@
 """Test stock_recommend directly to see stderr output and timing."""
 import os, sys, json, time
 
-os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:58088"
+os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:18888"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 

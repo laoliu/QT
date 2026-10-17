@@ -5,7 +5,7 @@ import subprocess, json, time, os
 
 env = os.environ.copy()
 env["PYTHONIOENCODING"] = "utf-8"
-env["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:58088"
+env["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:18888"
 env["QUANT_CONFIG"] = json.dumps({
     "capital": 500000,
     "strategy": "momentum",

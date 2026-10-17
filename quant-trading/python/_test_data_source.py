@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test fetching klines for an uncommon stock to see which data source is actually used."""
 import os, sys, time
-os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:58088"
+os.environ["WINDOWS_XTDATA_URL"] = "http://127.0.0.1:18888"
 
 sys.path.insert(0, os.path.dirname(__file__))
 from data_providers.akshare_provider import get_klines

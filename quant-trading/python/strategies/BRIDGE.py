@@ -23,8 +23,8 @@ import time
 
 # Mac receiver URL (RECEIVER.py running on Mac)
 _BRIDGE_HOST = os.environ.get("QUANT_TRADING_HOST", "192.168.3.30")
-# 58088 is excluded on the QMT Windows host (WinError 10013); use the
-# dedicated push-receiver port unless an explicit environment override exists.
+# Keep the push receiver separate from the QMT data bridge (18888) unless an
+# explicit environment override exists.
 _BRIDGE_PORT = os.environ.get("BRIDGE_RECEIVER_PORT", "18889")
 MAC_RECEIVER_URL = f"http://{_BRIDGE_HOST}:{_BRIDGE_PORT}"
 
@@ -966,7 +966,7 @@ def init(context):
 
     _init_log_file()
 
-    # Always update context â€” QMT may pass a fresh ContextInfo on re-entry
+    # Always update context ¡ª QMT may pass a fresh ContextInfo on re-entry
     _qmt_context = context
 
     # Robust re-entry guard

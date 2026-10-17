@@ -409,8 +409,8 @@ function toQmtSymbol(symbol: string): string {
  * Fetches market data from Windows QMT via direct HTTP or the trading bridge.
  *
  * Direct mode (windowsBridgeUrl configured):
- *   POST http://windows:58088/quote  → real-time quotes
- *   POST http://windows:58088/klines → K-line data
+ *   POST http://windows:18888/quote  → real-time quotes
+ *   POST http://windows:18888/klines → K-line data
  *
  * Fallback mode: Uses trading-bridge-api polling relay.
  */

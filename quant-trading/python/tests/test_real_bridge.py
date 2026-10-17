@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test real Windows QMT bridge at 192.168.3.30:58088"""
+"""Test real Windows QMT bridge at 192.168.3.30:18888"""
 import urllib.request
 import json
 import sys
@@ -10,12 +10,12 @@ if __name__ != "__main__":
     import pytest
 
     pytest.skip(
-        "需要运行中的 QMT bridge（192.168.3.30:58088）；"
+        "需要运行中的 QMT bridge（192.168.3.30:18888）；"
         "手动执行：python tests/test_real_bridge.py",
         allow_module_level=True,
     )
 
-BASE = "http://192.168.3.30:58088"
+BASE = "http://192.168.3.30:18888"
 
 def get(path, timeout=5):
     resp = urllib.request.urlopen(BASE + path, timeout=timeout)
@@ -44,7 +44,7 @@ try:
         passed += 1  # still counts as reachable
 except Exception as e:
     print("=> FAIL: %s" % e)
-    print("  - Windows 防火墙是否放行 58088 端口？")
+    print("  - Windows 防火墙是否放行 18888 端口？")
     print("  - qmt_data_bridge.py 是否已启动？")
     print("  - miniQMT 客户端是否已登录？")
     failed += 1

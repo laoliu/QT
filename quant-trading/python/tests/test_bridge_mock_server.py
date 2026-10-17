@@ -11,7 +11,7 @@ Usage:
   python3 tests/test_bridge_mock_server.py
 
   # Terminal 2: test Mac scripts
-  WINDOWS_XTDATA_URL=http://127.0.0.1:58088 python3 scripts/stock_detail.py 600519
+  WINDOWS_XTDATA_URL=http://127.0.0.1:18888 python3 scripts/stock_detail.py 600519
 
   # Or run automated tests
   python3 tests/test_bridge_mock_server.py --selftest
@@ -289,7 +289,7 @@ def _selftest(port):
 def main():
     parser = argparse.ArgumentParser(description="Mock QMT Bridge Server for Mac testing")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=58088)
+    parser.add_argument("--port", type=int, default=18888)
     parser.add_argument("--selftest", action="store_true", help="Run self-test then exit")
     args = parser.parse_args()
 

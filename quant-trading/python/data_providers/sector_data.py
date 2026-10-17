@@ -61,7 +61,7 @@ def _read_bridge_url_from_config() -> str:
 WINDOWS_XTDATA_URL = (
     os.environ.get("WINDOWS_XTDATA_URL")
     or _read_bridge_url_from_config()
-    or "http://127.0.0.1:58088"
+    or "http://127.0.0.1:18888"
 )
 TUSHARE_TOKEN = os.environ.get("TUSHARE_TOKEN", "")
 

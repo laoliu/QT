@@ -352,6 +352,10 @@ _processed_ids = set()  # track already-processed request IDs
 
 _trading_connected = False
 _trading_events_queue = []  # events to push back to Mac
+_trading_subscribed_codes = set()
+_trading_order_snapshot = {}
+_trading_quote_last_push = {}
+_TRADING_QUOTE_MIN_INTERVAL = 1.0
 
 
 def _safe_attr(obj, names, default=None):
@@ -391,8 +395,11 @@ def _trading_connect(params):
 
 
 def _trading_disconnect(_params):
-    global _trading_connected
+    global _trading_connected, _trading_order_snapshot, _trading_quote_last_push
     _trading_connected = False
+    _trading_subscribed_codes.clear()
+    _trading_order_snapshot = {}
+    _trading_quote_last_push = {}
     _log("trading: disconnected")
     return {"ok": True, "data": {"status": "disconnected"}}
 
@@ -564,6 +571,40 @@ def _trading_query_order(params):
     return {"ok": False, "error": "Order %s not found" % order_id}
 
 
+def _trading_subscribe_quote(params):
+    """Subscribe QMT quote callbacks and enable periodic event forwarding."""
+    codes = params.get("stock_codes", [])
+    if isinstance(codes, str):
+        codes = [codes]
+    normalized = [_normalize_to_qmt(c) for c in codes if c]
+    if not normalized:
+        return {"ok": True, "data": {"subscribed": sorted(_trading_subscribed_codes)}}
+
+    subscribe = getattr(_qmt_context, "subscribe_quote", None) if _qmt_context is not None else None
+    if subscribe is not None:
+        for code in normalized:
+            try:
+                subscribe(code, "tick", "front_ratio")
+            except TypeError:
+                subscribe(code, "tick")
+            except Exception as exc:
+                return {"ok": False, "error": "subscribe_quote(%s) error: %s" % (code, exc)}
+    elif _qmt_context is None or not hasattr(_qmt_context, "get_full_tick"):
+        return {"ok": False, "error": "QMT context does not expose subscribe_quote/get_full_tick"}
+
+    _trading_subscribed_codes.update(normalized)
+    return {"ok": True, "data": {"subscribed": sorted(_trading_subscribed_codes)}}
+
+
+def _trading_unsubscribe_quote(params):
+    codes = params.get("stock_codes", [])
+    if isinstance(codes, str):
+        codes = [codes]
+    for code in codes:
+        _trading_subscribed_codes.discard(_normalize_to_qmt(code))
+    return {"ok": True, "data": {"subscribed": sorted(_trading_subscribed_codes)}}
+
+
 def _trading_get_quote(params):
     """Fetch real-time quote snapshot via ContextInfo."""
     stock_code = params.get("stock_code", "")
@@ -724,6 +765,8 @@ _TRADING_DISPATCH = {
     "query_orders": _trading_query_orders,
     "query_positions": _trading_query_positions,
     "query_account": _trading_query_account,
+    "subscribe_quote": _trading_subscribe_quote,
+    "unsubscribe_quote": _trading_unsubscribe_quote,
     "get_quote": _trading_get_quote,
     "get_klines": _trading_get_klines,
     "save_strategy_file": _trading_save_strategy_file,
@@ -793,8 +836,81 @@ def _trading_poll_and_execute():
     return 1
 
 
+def _queue_trading_event(event, data):
+    _trading_events_queue.append({"event": event, "data": data})
+    if len(_trading_events_queue) > 5000:
+        del _trading_events_queue[:-5000]
+
+
+def _trading_collect_events():
+    """Collect quote and order changes from QMT on the strategy thread."""
+    if not _trading_connected or _qmt_context is None:
+        return
+
+    now = time.time()
+    if _trading_subscribed_codes and hasattr(_qmt_context, "get_full_tick"):
+        try:
+            ticks = _qmt_context.get_full_tick(sorted(_trading_subscribed_codes)) or {}
+            for code, tick in ticks.items():
+                if not isinstance(tick, dict) or now - _trading_quote_last_push.get(code, 0) < _TRADING_QUOTE_MIN_INTERVAL:
+                    continue
+                _trading_quote_last_push[code] = now
+                _queue_trading_event("quote", {
+                    "stock_code": code,
+                    "last_price": float(tick.get("lastPrice", 0) or 0),
+                    "open": float(tick.get("open", 0) or 0),
+                    "high": float(tick.get("high", 0) or 0),
+                    "low": float(tick.get("low", 0) or 0),
+                    "last_close": float(tick.get("lastClose", 0) or 0),
+                    "volume": float(tick.get("volume", 0) or 0),
+                    "amount": float(tick.get("amount", 0) or 0),
+                    "bid_price": tick.get("bidPrice", [0, 0, 0, 0, 0]),
+                    "ask_price": tick.get("askPrice", [0, 0, 0, 0, 0]),
+                    "time": int(now * 1000),
+                })
+        except Exception as exc:
+            _log("trading: quote collection error: %s" % exc)
+
+    gtdd = globals().get("get_trade_detail_data")
+    if not gtdd:
+        return
+    try:
+        orders = gtdd(TRADING_ACCOUNT_ID, TRADING_ACCOUNT_TYPE, "ORDER") or []
+        current = {}
+        for order in orders:
+            oid = str(_safe_attr(order, ["m_strOrderSysID", "order_id"], ""))
+            if not oid:
+                continue
+            item = {
+                "order_id": oid,
+                "stock_code": str(_safe_attr(order, ["m_strInstrumentID", "stock_code"], "")),
+                "order_type": int(_safe_attr(order, ["m_nOrderDirection", "order_type"], 0) or 0),
+                "price": float(_safe_attr(order, ["m_dOrderPrice", "price"], 0) or 0),
+                "order_volume": int(_safe_attr(order, ["m_nOrderVol", "order_volume"], 0) or 0),
+                "traded_volume": int(_safe_attr(order, ["m_nDealedVol", "traded_volume"], 0) or 0),
+                "traded_price": float(_safe_attr(order, ["m_dDealedPrice", "traded_price"], 0) or 0),
+                "order_status": int(_safe_attr(order, ["m_nOrderStatus", "order_status"], 0) or 0),
+            }
+            current[oid] = item
+            previous = _trading_order_snapshot.get(oid)
+            if previous is not None and item["order_status"] != previous["order_status"]:
+                _queue_trading_event("order_status", item)
+            if previous is not None and item["traded_volume"] > previous["traded_volume"]:
+                _queue_trading_event("fill", {
+                    "order_id": oid,
+                    "stock_code": item["stock_code"],
+                    "traded_price": item["traded_price"],
+                    "traded_volume": item["traded_volume"] - previous["traded_volume"],
+                    "time": int(now * 1000),
+                })
+        _trading_order_snapshot.clear()
+        _trading_order_snapshot.update(current)
+    except Exception as exc:
+        _log("trading: event collection error: %s" % exc)
+
+
 def _trading_push_events():
-    """Push queued real-time events (fills, order_status) to Mac."""
+    """Push queued real-time events (quotes, fills, order_status) to Mac."""
     global _trading_events_queue
     if not _trading_events_queue:
         return
@@ -829,6 +945,11 @@ def _trading_tick(loop_count):
         _trading_poll_and_execute()
     except Exception as e:
         _log("trading poll error: %s" % e)
+
+    try:
+        _trading_collect_events()
+    except Exception as e:
+        _log("trading event collection error: %s" % e)
 
     # Push real-time events
     _trading_push_events()

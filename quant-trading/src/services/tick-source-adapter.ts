@@ -231,7 +231,13 @@ export function createDefaultTickSourceAdapter(
 ): TickSourceAdapter | null {
   if (config.tickData?.enabled === false) return null;
 
-  const source = config.tickData?.source ?? "qmt-bridge";
+  const configuredBridgeUrl = config.tradingAccount?.qmt?.windowsBridgeUrl ?? "";
+  // A receiver-only QMT setup has no direct Windows URL. Prefer the local
+  // RECEIVER proxy when it is configured, while preserving the direct bridge
+  // default for existing configurations.
+  const source =
+    config.tickData?.source ??
+    (configuredBridgeUrl || !config.receiver ? "qmt-bridge" : "receiver-proxy");
   if (source === "receiver-proxy") {
     if (config.receiver?.enabled === false) return null;
     const receiverPort = config.receiver?.port ?? 18889;
@@ -259,7 +265,7 @@ export function createDefaultTickSourceAdapter(
     return new ReceiverProxyTickSource(endpoint, pollIntervalMs, initialSeq);
   }
 
-  const bridgeUrl = config.tradingAccount?.qmt?.windowsBridgeUrl ?? "";
+  const bridgeUrl = configuredBridgeUrl;
   if (!bridgeUrl) return null;
   return new QmtBridgeTickSource(bridgeUrl, pollIntervalMs);
 }

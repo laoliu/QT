@@ -38,6 +38,16 @@ describe("createDefaultTickSourceAdapter", () => {
     expect(adapter?.kind).toBe("qmt-bridge");
   });
 
+  it("defaults to receiver-proxy when only RECEIVER is configured", () => {
+    const config: QuantTradingConfig = {
+      receiver: { enabled: true, port: 58090 },
+    };
+
+    const adapter = createDefaultTickSourceAdapter(config, 3_000);
+    expect(adapter?.kind).toBe("receiver-proxy");
+    expect(adapter?.endpoint).toBe("http://127.0.0.1:58090");
+  });
+
   it("creates receiver-proxy source when selected", () => {
     const config: QuantTradingConfig = {
       tickData: { source: "receiver-proxy" },

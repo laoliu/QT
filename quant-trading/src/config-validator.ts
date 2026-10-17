@@ -59,6 +59,26 @@ export function enforceSafeTradingConfig(
   };
 }
 
+/** Validate a command before the legacy Mac↔Windows QMT relay queues it. */
+export function enforceQmtBridgeRequest(
+  config: QuantTradingConfig,
+  method: string,
+  params: Record<string, unknown>,
+): { allowed: boolean; reason?: string } {
+  const account = config.tradingAccount;
+  const qmtRequested = account?.broker === "qmt" || account?.broker === "remote-qmt";
+  if (!qmtRequested || method !== "place_order") return { allowed: true };
+  // This generic relay carries one raw order, not a validated target plan.
+  // Provenance strings alone are forgeable, so even a live profile cannot use
+  // it as evidence that an order came from the plan validator.
+  void account;
+  void params;
+  return {
+    allowed: false,
+    reason: "QMT direct order relay is disabled; submit through the validated execution-plan adapter",
+  };
+}
+
 const VALID_MARKETS: MarketType[] = [
   "cn_stock",
   "hk_stock",

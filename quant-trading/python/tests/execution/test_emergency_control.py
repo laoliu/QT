@@ -176,6 +176,16 @@ def test_qmt_gateway_blocks_direct_submission(tmp_path, monkeypatch):
     gateway._submit_order_impl.assert_not_called()
 
 
+def test_qmt_gateway_requires_active_validated_plan_for_raw_order(tmp_path, monkeypatch):
+    from aipha.execution import qmt_gateway
+    monkeypatch.setattr(qmt_gateway, "KILL_SWITCH_PATH", tmp_path / "missing.flag")
+    gateway = QMTGateway(QMTConfig(name="test"))
+    gateway._submit_order_impl = Mock()
+    with pytest.raises(GatewayError, match="validated execution plan"):
+        gateway.submit_order(Mock(metadata={"execution_plan_id": "forged-plan"}))
+    gateway._submit_order_impl.assert_not_called()
+
+
 def test_easytrader_gateway_blocks_direct_submission(tmp_path, monkeypatch):
     from aipha.execution import easytrader_gateway
     from aipha.execution.broker_gateway import BrokerType

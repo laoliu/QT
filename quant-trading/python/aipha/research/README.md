@@ -74,7 +74,10 @@ Legacy model folders without `model_manifest.json` are rejected. Use
 `migrate_legacy_model` only with an explicit feature version, column order,
 snapshot identifier, and operator attestation. QMT consumption is available
 through the versioned execution-plan adapter and requires an explicit live
-gate; direct research artifacts are never passed to a broker.
+gate. The generic HTTP and polling bridge `place_order` methods are disabled:
+they accept a single raw order and cannot establish membership in a validated
+target plan. Use the plan adapter, which validates the full plan and risk
+limits before it translates targets into broker orders.
 
 The old `configs/sample_ml_factor.yaml` shape can be converted with
 `python scripts/migrate_research_config.py`. The command keeps the source

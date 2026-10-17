@@ -409,6 +409,9 @@ def _trading_place_order(params):
     if not _trading_connected:
         return {"ok": False, "error": "Not connected"}
 
+    # Raw polling orders cannot prove membership in a validated target plan.
+    return {"ok": False, "error": "direct QMT orders are disabled; submit a validated execution plan"}
+
     po = globals().get("passorder")
     if not po:
         return {"ok": False, "error": "passorder not available in strategy namespace"}

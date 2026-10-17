@@ -457,10 +457,8 @@ def _trading_disconnect(_params: dict) -> dict:
 def _trading_place_order(params: dict) -> dict:
     if not _trading_trader or not _trading_account:
         return {"ok": False, "error": "Not connected"}
-    if _require_execution_plan and (
-        not params.get("run_id") or not params.get("model_id") or not params.get("signal_id")
-    ):
-        return {"ok": False, "error": "QMT live profile requires run_id, model_id and signal_id from a validated execution plan"}
+    # Raw HTTP orders cannot prove membership in a validated target plan.
+    return {"ok": False, "error": "direct QMT orders are disabled; submit a validated execution plan"}
     stock_code = params.get("stock_code", "")
     order_type = int(params.get("order_type", 23))
     price_type = int(params.get("price_type", 11))

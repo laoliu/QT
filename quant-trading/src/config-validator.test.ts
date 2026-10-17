@@ -2,13 +2,25 @@
  * Unit tests for config-validator — validates QuantTradingConfig field checks.
  */
 import { describe, expect, it } from "vitest";
-import { enforceSafeTradingConfig, validateConfig, type ConfigIssue } from "./config-validator.js";
+import { enforceQmtBridgeRequest, enforceSafeTradingConfig, validateConfig, type ConfigIssue } from "./config-validator.js";
 
 function issuesAt(issues: ConfigIssue[], path: string) {
   return issues.filter((i) => i.path === path);
 }
 
 describe("config-validator", () => {
+  describe("QMT bridge order gate", () => {
+    const live = { tradingAccount: { mode: "live", broker: "remote-qmt", requireExecutionPlan: true } } as any;
+    it("rejects raw relay orders even when provenance strings are supplied", () => {
+      expect(enforceQmtBridgeRequest(live, "place_order", {})).toMatchObject({ allowed: false });
+      expect(enforceQmtBridgeRequest(live, "place_order", {
+        run_id: "r", model_id: "m", signal_id: "s",
+      })).toMatchObject({ allowed: false });
+    });
+    it("does not block non-order data relay methods", () => {
+      expect(enforceQmtBridgeRequest(live, "query_positions", {})).toEqual({ allowed: true });
+    });
+  });
   it("forces an accidental local live/QMT override back to paper", () => {
     const raw = {
       tradingAccount: {

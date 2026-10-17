@@ -29,6 +29,7 @@ import { todayCST } from "../utils/cst-time.js";
 import { fetchStockNames } from "./routes/daily-pick.js";
 import { listUnifiedStrategies } from "../engine/strategy-registry.js";
 import { registerMLResearchRoutes } from "./ml-research-api.js";
+import { enforceQmtBridgeRequest } from "../config-validator.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -317,7 +318,15 @@ export function registerQuantRoutes(deps: RouteDeps): void {
       const { handleTradingPostRequest, handleTradingPollRequest } =
         await import("./trading-bridge-api.js");
       if (req.method === "POST") {
-        const body = await parseJsonBody(req);
+        const body = await parseJsonBody(req) as Record<string, unknown>;
+        const method = typeof body.method === "string" ? body.method : "";
+        const params = body.params && typeof body.params === "object" && !Array.isArray(body.params)
+          ? body.params as Record<string, unknown> : {};
+        const gate = enforceQmtBridgeRequest(config, method, params);
+        if (!gate.allowed) {
+          json(res, { status: "error", code: "EXECUTION_PLAN_REQUIRED", error: gate.reason }, 403);
+          return;
+        }
         json(res, handleTradingPostRequest(body));
       } else {
         const pending = handleTradingPollRequest();

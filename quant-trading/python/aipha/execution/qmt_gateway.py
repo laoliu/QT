@@ -118,6 +118,10 @@ class QMTGateway(BrokerGateway):
         self._orders: dict[str, GatewayOrder] = {}
         self._lock = threading.Lock()
         self._submission_lock = threading.RLock()
+        # Set only while submit_target_plan is translating one fully validated
+        # plan. Legacy callers may still reach submit_order directly, so the
+        # gateway itself must enforce the plan-only invariant.
+        self._active_execution_plan_id: str | None = None
         self._stop_agent: StopAgent | None = None
         self._exec_callbacks: list[ExecutionCallback] = []
         self._status_callbacks: list[StatusCallback] = []
@@ -280,6 +284,12 @@ class QMTGateway(BrokerGateway):
         with self._submission_lock:
             if KILL_SWITCH_PATH.exists():
                 raise GatewayError("Persistent kill switch is active", code="KILL_SWITCH")
+            plan_id = self._active_execution_plan_id
+            if not plan_id or order.metadata.get("execution_plan_id") != plan_id:
+                raise GatewayError(
+                    "QMT accepts orders only while consuming a validated execution plan",
+                    code="EXECUTION_PLAN_REQUIRED",
+                )
             return self._submit_order_impl(order)
 
     def submit_target_plan(
@@ -303,14 +313,21 @@ class QMTGateway(BrokerGateway):
                 "QMT live execution requires QUANT_TRADING_ALLOW_LIVE=true",
                 code="LIVE_GATE",
             )
-        return execute_target_plan(
-            self,
-            plan,
-            prices=prices,
-            account_value=account_value,
-            current_positions=current_positions,
-            allow_live=allow_live,
-        )
+        with self._submission_lock:
+            if self._active_execution_plan_id is not None:
+                raise GatewayError("another QMT execution plan is being submitted", code="PLAN_BUSY")
+            self._active_execution_plan_id = str(plan.plan_id)
+            try:
+                return execute_target_plan(
+                    self,
+                    plan,
+                    prices=prices,
+                    account_value=account_value,
+                    current_positions=current_positions,
+                    allow_live=allow_live,
+                )
+            finally:
+                self._active_execution_plan_id = None
 
     def _submit_order_impl(self, order: GatewayOrder) -> str:
         self._ensure_connected()

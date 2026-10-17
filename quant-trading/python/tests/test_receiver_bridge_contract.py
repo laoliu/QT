@@ -70,3 +70,19 @@ def test_receiver_dispatch_rejects_missing_qmt_quote_context():
     assert result["ok"] is False
     assert "QMT context" in result["error"]
 
+
+def test_receiver_polling_bridge_rejects_raw_qmt_orders():
+    _reset_state(FakeContext())
+    called = []
+    bridge.passorder = lambda *args: called.append(args)
+    try:
+        result = bridge._TRADING_DISPATCH["place_order"]({
+            "stock_code": "600519.SH", "order_type": 23, "volume": 100,
+            "run_id": "forged-run", "model_id": "forged-model", "signal_id": "forged-signal",
+        })
+        assert result["ok"] is False
+        assert "direct QMT orders" in result["error"]
+        assert called == []
+    finally:
+        del bridge.passorder
+

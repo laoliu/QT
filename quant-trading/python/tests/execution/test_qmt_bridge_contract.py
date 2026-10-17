@@ -66,7 +66,7 @@ def test_qmt_bridge_sends_model_provenance_in_order_remark() -> None:
 
 
 @pytest.mark.parametrize("bridge_module", [data_bridge, strategy_data_bridge], ids=["aipha", "qmt-strategy"])
-def test_http_data_bridge_enforces_and_forwards_model_provenance(bridge_module) -> None:
+def test_http_data_bridge_rejects_raw_orders_even_with_forged_provenance(bridge_module) -> None:
     class FakeTrader:
         def __init__(self):
             self.args = None
@@ -87,7 +87,7 @@ def test_http_data_bridge_enforces_and_forwards_model_provenance(bridge_module) 
             "volume": 100,
         })
         assert rejected["ok"] is False
-        assert "model_id" in rejected["error"]
+        assert "direct QMT orders" in rejected["error"]
 
         result = bridge_module._trading_place_order({
             "stock_code": "600000.SH",
@@ -101,9 +101,9 @@ def test_http_data_bridge_enforces_and_forwards_model_provenance(bridge_module) 
             "signal_id": "signal-http-1",
             "strategy_version": "1.0.0",
         })
-        assert result == {"ok": True, "data": {"broker_order_id": "67890"}}
-        remark = trader.args[-1]
-        assert "model_id=model-http-1" in remark
+        assert result["ok"] is False
+        assert "direct QMT orders" in result["error"]
+        assert trader.args is None
     finally:
         bridge_module._trading_trader = None
         bridge_module._trading_account = None

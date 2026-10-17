@@ -437,6 +437,19 @@ export class OrderManager {
     riskOverrides?: { maxOrderValue?: number; maxPositionPct?: number; capitalBudget?: number; skipMarketHours?: boolean },
     marketContext?: MarketContext,
   ): Promise<SubmitResult> {
+    // QMT/remote-QMT live profiles are plan-only. Enforce the provenance
+    // contract before account queries, confirmations, or broker calls so
+    // every alternate caller (basket, conditional, HTTP, or strategy code)
+    // fails closed in the same way as the legacy live_trading tool.
+    const planRequired = this.cfg.tradingAccount?.requireExecutionPlan === true
+      && (this.broker.brokerType === "qmt" || this.broker.brokerType === "remote-qmt");
+    if (planRequired && (!req.runId || !req.modelId || !req.signalId)) {
+      return {
+        ok: false,
+        reason: "QMT 实盘订单必须来自带 run_id、model_id、signal_id 的已校验执行计划",
+        ruleId: "EXECUTION_PLAN_REQUIRED",
+      };
+    }
     // Get current account state for risk checks
     let account: BrokerAccount;
     let positions: LivePosition[];

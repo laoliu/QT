@@ -208,6 +208,26 @@ async function loadTrades(): Promise<TradeRecord[]> {
 
 describe("OrderManager", () => {
   describe("submit()", () => {
+    it("rejects QMT orders without execution-plan provenance before broker IO", async () => {
+      const cfg = makeConfig({
+        tradingAccount: {
+          mode: "live",
+          broker: "qmt",
+          requireExecutionPlan: true,
+          riskLimits: { maxOrderValue: 500_000, maxPositionPct: 0.3, maxDailyLoss: 50_000 },
+        },
+      } as Partial<QuantTradingConfig>);
+      const broker = makeBrokerMock(makeAccount({ brokerType: "qmt" }));
+      const manager = new OrderManager(cfg, broker, null);
+      const result = await manager.submit({
+        symbol: "600519", market: "cn_stock", side: "buy", orderType: "limit",
+        quantity: 100, price: 50,
+      });
+
+      expect(result).toMatchObject({ ok: false, ruleId: "EXECUTION_PLAN_REQUIRED" });
+      expect(broker.placeOrder).not.toHaveBeenCalled();
+    });
+
     it("places a valid buy order through broker", async () => {
       const cfg = makeConfig();
       const broker = makeBrokerMock();

@@ -84,6 +84,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                     choices=["close", "open"],
                     help="Price field for return label: close or open")
     p.add_argument("--output", default=None)
+    p.add_argument(
+        "--legacy-compat", action="store_true",
+        help="显式运行历史缓存特征训练链路；新研究请使用 ml_ranking / research_retrain.py",
+    )
     # --- 正则化参数 (B-01 fix: 降低 IS-OOS Sharpe 衰减) ---
     p.add_argument("--reg-alpha", type=float, default=0.1,
                     help="L1 regularization (default: 0.1)")
@@ -191,6 +195,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             args.legacy_model,
         )
     return args
+
+
+def validate_cli_mode(args: argparse.Namespace) -> None:
+    """Require an explicit opt-in before invoking the historical trainer."""
+    if not args.legacy_compat:
+        raise SystemExit(
+            "train_ml_factor is a legacy cache-backed pipeline and is disabled by default; "
+            "use ml_ranking train_tushare or scripts/research_retrain.py, or pass "
+            "--legacy-compat to deliberately run a historical training job"
+        )
 
 
 def _apply_adj_factor(
@@ -1120,6 +1134,7 @@ def simulate_portfolio(
 def main() -> None:
     """主入口。"""
     args = parse_args()
+    validate_cli_mode(args)
     t_start = time.time()
 
     # 1) 加载数据

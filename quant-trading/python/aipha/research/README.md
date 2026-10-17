@@ -87,6 +87,14 @@ The old `configs/sample_ml_factor.yaml` shape can be converted with
 unchanged, emits warnings for dropped legacy fields, and always writes a
 TuShare-PIT/paper configuration.
 
+The historical cache-backed trainer is opt-in: `python scripts/train_ml_factor.py`
+and the CSI1000/CSI2000 rolling retrainers refuse to train unless passed
+`--legacy-compat`. For new offline runs, use
+`python scripts/research_retrain.py --data-path <attested-snapshot.parquet>`;
+for online TuShare snapshot construction, use the `ml_ranking` bridge's
+`train_tushare` action. The old `--check-only` rolling-retrainer mode remains
+available for read-only drift and coverage checks.
+
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
 read-only comparison, `--conflicts` to export keyed row conflicts, or

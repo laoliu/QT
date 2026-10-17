@@ -237,6 +237,7 @@ def run_retrain(end_date: str) -> int:
     cmd = [
         sys.executable,
         str(_project_root / "scripts" / "train_ml_factor.py"),
+        "--legacy-compat",
         "--universe", UNIVERSE,
         "--model", MODEL_TYPE,
         "--start", TRAIN_START,

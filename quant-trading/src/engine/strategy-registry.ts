@@ -122,22 +122,7 @@ const vnpyBuiltinFallback: Record<
     id: "dual-ma-crossover",
     mapParams: (p) => ({ fastPeriod: p.fast_window ?? 10, slowPeriod: p.slow_window ?? 30 }),
   },
-  "vnpy-boll-channel": {
-    id: "bollinger-breakout",
-    mapParams: (p) => ({ period: p.boll_window ?? 18, stdDevMultiplier: p.boll_dev ?? 3.4 }),
-  },
-  "vnpy-king-keltner": {
-    id: "keltner-channel",
-    mapParams: (p) => ({ emaPeriod: p.kk_period ?? 40, atrMultiplier: p.kk_dev ?? 2.0 }),
-  },
-  "vnpy-atr-rsi": {
-    id: "rsi-reversal",
-    mapParams: (p) => ({ period: p.rsi_period ?? 5, oversold: p.rsi_entry ?? 16, overbought: 84 }),
-  },
-  "vnpy-multi-timeframe": {
-    id: "cta-trend",
-    mapParams: (p) => ({ trendPeriod: p.slow_period ?? 20 }),
-  },
+
 };
 
 /** Fallback: backtrader strategy → builtin equivalent (used when backtrader is not installed). */
@@ -154,49 +139,25 @@ const backtraderBuiltinFallback: Record<
     mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 30, overbought: p.overbought ?? 70 }),
   },
   "kdj": {
-    id: "rsi-reversal",
-    mapParams: (p) => ({ period: p.period ?? 9, oversold: p.oversold ?? 20, overbought: p.overbought ?? 80 }),
+    id: "cta-kdj",
+    mapParams: (p) => ({
+      period: p.k_period ?? p.period ?? 9,
+      kSmooth: p.d_period ?? 3,
+      dPeriod: p.j_smooth ?? 3,
+      overbought: p.overbought ?? 80,
+      oversold: p.oversold ?? 20,
+    }),
   },
   "turtle": {
     id: "turtle-breakout",
     mapParams: (p) => ({ entryPeriod: p.entry_period ?? 20, exitPeriod: p.exit_period ?? 10 }),
   },
-  "grid": {
-    id: "grid-trading",
-    mapParams: (p) => ({ gridSize: p.grid_size ?? 5, numGrids: p.num_grids ?? 4 }),
-  },
-  "pair-trading": {
-    id: "mean-reversion-zscore",
-    mapParams: (p) => ({ lookback: p.lookback ?? 60, entryZ: p.entry_z ?? 2.0, exitZ: p.exit_z ?? 0.5 }),
-  },
-  "auction": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.lookback ?? 20 }),
-  },
-  "dragon-return": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.lookback ?? 10 }),
-  },
-  "mean-reversion-cn": {
-    id: "mean-reversion",
-    mapParams: (p) => ({ period: p.period ?? 20, stdDev: p.std_dev ?? 2 }),
-  },
-  "multi-factor": {
-    id: "scored",
-    mapParams: (p) => ({ ...p }),
-  },
+
   "bollinger": {
-    id: "bollinger-breakout",
-    mapParams: (p) => ({ period: p.period ?? 20, stdDevMultiplier: p.devfactor ?? 2.0 }),
+    id: "mean-reversion",
+    mapParams: (p) => ({ period: p.period ?? 20, stdDev: p.devfactor ?? 2.0 }),
   },
-  "dragon_master": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.target_board ?? 3 }),
-  },
-  "lianban_relay": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.min_boards ?? 2 }),
-  },
+
   // ── CTA趋势策略 (Python) ──
   "ema-cross": {
     id: "dual-ma-crossover",
@@ -222,30 +183,17 @@ const backtraderBuiltinFallback: Record<
     id: "dema-crossover",
     mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
   },
-  "tema-cross": {
-    id: "dema-crossover",
-    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
-  },
+
   "aroon": {
     id: "aroon-trend",
     mapParams: (p) => ({ period: p.period ?? 25 }),
   },
-  "vortex": {
-    id: "dmi-adx",
-    mapParams: (p) => ({ period: p.period ?? 14 }),
-  },
-  "cci": {
-    id: "cci-divergence",
-    mapParams: (p) => ({ cciPeriod: p.period ?? 20 }),
-  },
+
   "trix": {
     id: "trix-momentum",
     mapParams: (p) => ({ period: p.period ?? 15, signalPeriod: p.signal_period ?? 9 }),
   },
-  "momentum": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.period ?? 12 }),
-  },
+
   "dmi": {
     id: "dmi-adx",
     mapParams: (p) => ({ period: p.period ?? 14 }),
@@ -256,13 +204,10 @@ const backtraderBuiltinFallback: Record<
     mapParams: (p) => ({ emaPeriod: p.ema_period ?? 20, atrPeriod: p.atr_period ?? 20, atrMultiplier: p.atr_mult ?? 2.0 }),
   },
   "donchian-breakout": {
-    id: "donchian-mid-reversion",
-    mapParams: (p) => ({ period: p.upper_period ?? 20 }),
+    id: "momentum-breakout",
+    mapParams: (p) => ({ lookback: p.upper_period ?? 20 }),
   },
-  "atr-channel": {
-    id: "atr-trailing",
-    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 14, mult: p.atr_mult ?? 2.5 }),
-  },
+
   "envelope": {
     id: "ma-envelope",
     mapParams: (p) => ({ period: p.ma_period ?? 20, percent: p.pct ?? 3.0 }),
@@ -272,10 +217,7 @@ const backtraderBuiltinFallback: Record<
     mapParams: (p) => ({ rangePeriod: p.breakout_period ?? 20 }),
   },
   // ── CTA指标策略 (Python) ──
-  "stochastic": {
-    id: "stochastic-rsi",
-    mapParams: (p) => ({ rsiPeriod: p.k_period ?? 14, stochPeriod: p.k_period ?? 14 }),
-  },
+
   "williams-r": {
     id: "williams-r",
     mapParams: (p) => ({ period: p.period ?? 14, overbought: p.overbought ?? -20, oversold: p.oversold ?? -80 }),
@@ -288,85 +230,27 @@ const backtraderBuiltinFallback: Record<
     id: "mfi-oscillator",
     mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 20, overbought: p.overbought ?? 80 }),
   },
-  "cmf": {
-    id: "cmf-divergence",
-    mapParams: (p) => ({ period: p.period ?? 20 }),
-  },
-  "adl": {
-    id: "obv-trend",
-    mapParams: (p) => ({ maPeriod: p.ma_period ?? 20 }),
-  },
+
   "roc": {
     id: "roc-momentum",
     mapParams: (p) => ({ period: p.period ?? 12 }),
   },
-  "vwap": {
-    id: "vwap-reversion",
-    mapParams: (p) => ({ period: p.period ?? 20 }),
-  },
+
   "adaptive-ma": {
     id: "kama-trend",
     mapParams: (p) => ({ period: p.period ?? 10, fastPeriod: p.fast_period ?? 2, slowPeriod: p.slow_period ?? 30 }),
   },
   // ── CTA形态策略 (Python) ──
-  "engulfing": {
-    id: "double-bottom",
-    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
-  },
-  "hammer": {
-    id: "double-bottom",
-    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
-  },
-  "doji": {
-    id: "double-bottom",
-    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
-  },
-  "morning-star": {
-    id: "double-bottom",
-    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
-  },
-  "three-soldiers": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: 10 }),
-  },
-  "harami": {
-    id: "double-bottom",
-    mapParams: (p) => ({ lookback: p.trend_period ?? 10 }),
-  },
+
   // ── 组合策略 (Python) ──
-  "macd-rsi-combo": {
-    id: "macd-confirmation",
-    mapParams: (p) => ({ fastPeriod: p.macd_fast ?? 12, slowPeriod: p.macd_slow ?? 26, signalPeriod: p.macd_signal ?? 9 }),
-  },
-  "bollinger-rsi-combo": {
-    id: "bollinger-breakout",
-    mapParams: (p) => ({ period: p.bb_period ?? 20, stdDevMultiplier: p.bb_dev ?? 2.0 }),
-  },
-  "ma-volume-combo": {
-    id: "volume-confirmation",
-    mapParams: (p) => ({ volumeMaPeriod: p.slow_period ?? 30, volumeMultiplier: p.vol_mult ?? 1.5 }),
-  },
-  "kdj-macd-combo": {
-    id: "cta-kdj",
-    mapParams: (p) => ({ period: p.k_period ?? 9, kSmooth: 3, dPeriod: p.d_period ?? 3 }),
-  },
+
   // ── 高阶组合策略 (Python) ──
-  "ichimoku-adx-combo": {
-    id: "ichimoku",
-    mapParams: (p) => ({ tenkanPeriod: p.tenkan_period ?? 9, kijunPeriod: p.kijun_period ?? 26 }),
-  },
+
   "multi-tf-ma": {
     id: "triple-ma-crossover",
     mapParams: (p) => ({ shortPeriod: p.short_period ?? 5, midPeriod: p.medium_period ?? 20, longPeriod: p.long_period ?? 60 }),
   },
-  "volatility-breakout": {
-    id: "volatility-target",
-    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 14 }),
-  },
-  "regime-switch": {
-    id: "mean-reversion",
-    mapParams: (p) => ({ period: p.ema_slow ?? 30, stdDev: 2 }),
-  },
+
   "dual-thrust": {
     id: "dual-thrust",
     mapParams: (p) => ({ lookback: p.lookback ?? 4, k1: p.k1 ?? 0.5, k2: p.k2 ?? 0.5 }),

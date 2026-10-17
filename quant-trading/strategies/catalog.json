@@ -544,9 +544,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "rsi-reversal",
+        "canonicalId": "cta-kdj",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
       }
     },
     {
@@ -593,10 +593,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "mean-reversion-zscore",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -618,10 +617,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "grid-trading",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -640,10 +638,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -662,10 +659,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -684,10 +680,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "mean-reversion",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -707,10 +702,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "scored",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -730,9 +724,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "bollinger-breakout",
+        "canonicalId": "mean-reversion",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
       }
     },
     {
@@ -751,10 +745,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -773,10 +766,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -797,7 +789,7 @@
       "migration": {
         "status": "retired",
         "sourceEngine": "qmt",
-        "note": "QMT 连板接力脚本依赖外部 miniQMT 实时逻辑，没有经过验证的统一 builtin 等价物；保留源码仅供历史参考，统一运行目录已退役。"
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -818,7 +810,7 @@
       "migration": {
         "status": "retired",
         "sourceEngine": "qmt",
-        "note": "QMT 5 分钟 EMA 日内策略没有与统一日线 builtin 策略保持语义等价的实现；保留源码仅供历史参考，统一运行目录已退役。"
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -839,7 +831,7 @@
       "migration": {
         "status": "retired",
         "sourceEngine": "qmt",
-        "note": "板块协同大单追涨依赖 QMT tick、板块和大单状态，当前没有可验证的统一 builtin 等价物；保留源码仅供历史参考，统一运行目录已退役。"
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -956,10 +948,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "dema-crossover",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1000,10 +991,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "dmi-adx",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1022,10 +1012,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "cci-divergence",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1066,10 +1055,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1127,9 +1115,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "donchian-mid-reversion",
+        "canonicalId": "momentum-breakout",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
       }
     },
     {
@@ -1148,10 +1136,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "atr-trailing",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1214,10 +1201,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "stochastic-rsi",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1296,10 +1282,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "cmf-divergence",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1318,10 +1303,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "obv-trend",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1362,10 +1346,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "vwap-reversion",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1406,10 +1389,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "double-bottom",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1428,10 +1410,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "double-bottom",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1450,10 +1431,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "double-bottom",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1472,10 +1452,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "double-bottom",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1494,10 +1473,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1516,10 +1494,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "double-bottom",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1538,10 +1515,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "macd-confirmation",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1560,10 +1536,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "bollinger-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1582,10 +1557,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "volume-confirmation",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1604,10 +1578,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "cta-kdj",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1626,10 +1599,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "ichimoku",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1670,10 +1642,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "volatility-target",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -1692,10 +1663,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "mean-reversion",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2744,10 +2714,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "rsi-reversal",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2767,10 +2736,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "bollinger-breakout",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2813,10 +2781,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "keltner-channel",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2836,10 +2803,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "cta-trend",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2860,7 +2826,7 @@
       "migration": {
         "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "No unified builtin equivalent is available; new runs are rejected and the legacy entry is hidden from the unified runtime catalog."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2879,10 +2845,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {
@@ -2901,10 +2866,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "No semantically equivalent unified builtin implementation is available; new runs are rejected and the legacy entry is retained for historical reference."
       }
     },
     {

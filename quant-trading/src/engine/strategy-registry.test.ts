@@ -16,10 +16,14 @@ describe("strategy-registry", () => {
     it("should account for every compatibility strategy", () => {
       const compatibility = catalog.entries.filter((entry) => entry.lifecycle === "compatibility");
       expect(compatibility.length).toBeGreaterThan(0);
+      const builtinIds = new Set(listStrategies().map((strategy) => strategy.id));
       for (const entry of compatibility) {
         expect(entry.migration?.status).toMatch(/^(migrated_to_builtin|retired)$/);
         if (entry.migration?.status === "migrated_to_builtin") {
           expect(entry.migration.canonicalId).toBeTruthy();
+          expect(builtinIds.has(entry.migration.canonicalId!)).toBe(true);
+          expect(getStrategy(entry.id)?.canonicalStrategyId).toBe(entry.migration.canonicalId);
+          expect(getStrategy(entry.id)?.availableEngines).toEqual(["builtin"]);
         }
       }
     });
@@ -200,8 +204,30 @@ describe("strategy-registry", () => {
       ).rejects.toThrow("旧引擎入口已关闭");
     });
 
+    it("should execute every migrated catalog alias through its canonical builtin", async () => {
+      const migrated = catalog.entries.filter((entry) => entry.migration?.status === "migrated_to_builtin");
+      for (const entry of migrated) {
+        const result = await runBacktest(
+          {
+            strategyId: entry.id,
+            symbols: ["000300"],
+            startDate: "2024-01-01",
+            endDate: "2024-03-31",
+            initialCash: 100_000,
+          },
+          { dataProvider: "demo" },
+        );
+        expect(result.engine, entry.id).toBe("builtin");
+        expect(result.runEnvelope?.engine, entry.id).toBe("builtin");
+        expect(result.runEnvelope?.strategyId, entry.id).toBe(entry.id);
+      }
+    }, 60_000);
+
     it("should reject a formally retired legacy strategy", async () => {
-      for (const strategyId of ["sector-synergy", "qmt-lianban-relay", "qmt-dual-ma-5m", "sector-synergy-chase"]) {
+      const retired = catalog.entries
+        .filter((entry) => entry.migration?.status === "retired")
+        .map((entry) => entry.id);
+      for (const strategyId of retired) {
         await expect(
           runBacktest(
             {

@@ -1006,6 +1006,49 @@ class TuShareEquityProvider:
             mapping[row["ts_code"]] = row["industry_name"]
         return mapping
 
+    def load_sw_industry_history(
+        self,
+        level: str = "L1",
+        use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """Return dated Shenwan classification membership intervals.
+
+        Unlike :meth:`load_sw_industry_mapping`, this method preserves the
+        source ``in_date``/``out_date`` interval so historical snapshots do
+        not project today's classification onto the past.
+        """
+        cache_path = self.cache_dir / f"sw_industry_history_{level}.parquet"
+        if use_cache and cache_path.exists():
+            cached = self._safe_read_parquet(cache_path)
+            if cached is not None and {"ts_code", "industry_name", "in_date", "out_date"} <= set(cached.columns):
+                return cached
+
+        index_df = self._retry_call(self.api.index_classify, level=level, src="SW2021")
+        if index_df is None or index_df.empty:
+            return pd.DataFrame(columns=["ts_code", "industry_code", "industry_name", "in_date", "out_date"])
+        rows: list[pd.DataFrame] = []
+        for item in index_df.itertuples(index=False):
+            index_code = str(getattr(item, "index_code"))
+            industry_name = str(getattr(item, "industry_name"))
+            members = self._retry_call(self.api.index_member, index_code=index_code)
+            if members is None or members.empty:
+                continue
+            required = {"con_code", "in_date", "out_date"}
+            if not required <= set(members.columns):
+                raise ValueError(
+                    "TuShare index_member history must include con_code, in_date and out_date"
+                )
+            frame = members[["con_code", "in_date", "out_date"]].copy()
+            frame = frame.rename(columns={"con_code": "ts_code"})
+            frame["industry_code"] = index_code
+            frame["industry_name"] = industry_name
+            rows.append(frame)
+        if not rows:
+            return pd.DataFrame(columns=["ts_code", "industry_code", "industry_name", "in_date", "out_date"])
+        history = pd.concat(rows, ignore_index=True)
+        self._atomic_write_parquet(history, cache_path)
+        return history
+
     # ------------------------------------------------------------------
     # 财务指标（fina_indicator）
     # ------------------------------------------------------------------

@@ -249,10 +249,18 @@ def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -
         "announce_date": ["2024-01-02", "2024-01-04"],
         "metric_name": ["roe", "roe"], "value": [0.1, 0.2],
     })
+    industries = pd.DataFrame({
+        "ts_code": ["600000.SH", "600000.SH", "600001.SH"],
+        "industry_code": ["801010.SI", "801020.SI", "801010.SI"],
+        "industry_name": ["农林牧渔", "采掘", "农林牧渔"],
+        "in_date": ["20200101", "20240103", "20200101"],
+        "out_date": ["20240102", None, None],
+    })
     snapshot = assemble_tushare_snapshot(
         market, daily_basic=None, stock_basic=stock,
         index_snapshots={"20240101": ["600000.SH"], "20240103": ["600001.SH"]},
         st_status=status, limit_prices=limits, financial_snapshots=facts,
+        industry_history=industries,
         spec=SnapshotSpec("20240102", "20240103"),
     )
     panel = snapshot.panel.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
@@ -263,7 +271,24 @@ def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -
     assert panel.loc[0, "roe"] == pytest.approx(0.1)
     assert pd.isna(panel.loc[1, "roe"])
     assert bool(panel.loc[2, "is_limit_up"]) is True
+    assert panel.loc[0, "industry"] == "农林牧渔"
+    assert panel.loc[2, "industry"] == "采掘"
     assert snapshot.metadata["provider"] == "tushare_pit"
+
+
+def test_historical_industry_rejects_overlapping_classifications() -> None:
+    from aipha.research.snapshots import _historical_industry
+
+    with pytest.raises(ValueError, match="ambiguous historical industry"):
+        _historical_industry(
+            pd.Series(["2024-01-03"]), pd.Series(["600000.SH"]),
+            pd.DataFrame({
+                "ts_code": ["600000.SH", "600000.SH"],
+                "industry_name": ["农林牧渔", "采掘"],
+                "in_date": ["20200101", "20240101"],
+                "out_date": [None, None],
+            }),
+        )
 
 
 def test_point_in_time_adjustment_rejects_missing_future_factor() -> None:

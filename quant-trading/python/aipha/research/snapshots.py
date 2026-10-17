@@ -263,6 +263,7 @@ def assemble_tushare_snapshot(
     st_status: pd.DataFrame | None = None,
     limit_prices: pd.DataFrame | None = None,
     financial_snapshots: pd.DataFrame | None = None,
+    industry_history: pd.DataFrame | None = None,
     spec: SnapshotSpec,
 ) -> TushareSnapshot:
     """Normalize provider outputs into the pipeline's Market/Feature panel.
@@ -320,6 +321,8 @@ def assemble_tushare_snapshot(
     if not basic.empty:
         out = out.merge(basic, on=["ts_code", "trade_date"], how="left", suffixes=("", "_basic"))
     out["is_index_member"] = _historical_membership(out["trade_date"], out["ts_code"], index_snapshots)
+    if industry_history is not None and not industry_history.empty:
+        out["industry"] = _historical_industry(out["trade_date"], out["ts_code"], industry_history)
     out["adj_factor"] = pd.to_numeric(out.get("adj_factor", 1.0), errors="coerce")
     if out["adj_factor"].isna().any():
         raise ValueError("TuShare adj_factor is required for every market row")
@@ -498,6 +501,49 @@ def _historical_membership(
     return pd.Series(result, index=trade_dates.index, dtype=bool)
 
 
+def _historical_industry(
+    trade_dates: pd.Series,
+    symbols: pd.Series,
+    history: pd.DataFrame,
+) -> pd.Series:
+    """Map industry membership by its historical effective interval.
+
+    Current ``stock_basic.industry`` or today's SW member list is not a valid
+    substitute. A missing interval stays null; ambiguous simultaneous L1
+    classifications fail closed instead of choosing one arbitrarily.
+    """
+    required = {"ts_code", "industry_name", "in_date", "out_date"}
+    missing = required - set(history.columns)
+    if missing:
+        raise ValueError(f"historical industry data missing columns: {', '.join(sorted(missing))}")
+    intervals = history[list(required)].copy()
+    intervals["ts_code"] = intervals["ts_code"].astype(str)
+    intervals["industry_name"] = intervals["industry_name"].astype(str).str.strip()
+    intervals["in_date"] = pd.to_datetime(intervals["in_date"], format="%Y%m%d", errors="coerce")
+    intervals["out_date"] = pd.to_datetime(intervals["out_date"], format="%Y%m%d", errors="coerce")
+    if intervals["in_date"].isna().any():
+        raise ValueError("historical industry intervals require valid in_date values")
+    if (intervals["out_date"].notna() & (intervals["out_date"] < intervals["in_date"])).any():
+        raise ValueError("historical industry out_date cannot precede in_date")
+    by_symbol = {symbol: group for symbol, group in intervals.groupby("ts_code", sort=False)}
+    labels: list[str | None] = []
+    for raw_date, symbol in zip(trade_dates, symbols):
+        candidates = by_symbol.get(str(symbol))
+        day = pd.Timestamp(raw_date)
+        if candidates is None:
+            labels.append(None)
+            continue
+        visible = candidates.loc[
+            (candidates["in_date"] <= day)
+            & (candidates["out_date"].isna() | (candidates["out_date"] >= day))
+        ]
+        names = visible["industry_name"].dropna().unique().tolist()
+        if len(names) > 1:
+            raise ValueError(f"ambiguous historical industry assignment for {symbol} on {day.date()}")
+        labels.append(names[0] if names else None)
+    return pd.Series(labels, index=trade_dates.index, dtype="string")
+
+
 def build_tushare_snapshot(
     equity_provider: Any,
     spec: SnapshotSpec,
@@ -546,10 +592,13 @@ def build_tushare_snapshot(
     start_year = int(spec.start_date[:4])
     end_year = int(spec.end_date[:4])
     snapshots = equity_provider.load_index_members_snapshots(spec.index_code, start_year, end_year, use_cache=use_cache)
+    industry_loader = getattr(equity_provider, "load_sw_industry_history", None)
+    industry_history = industry_loader(level="L1", use_cache=use_cache) if callable(industry_loader) else None
     return assemble_tushare_snapshot(
         market, daily_basic=basic, stock_basic=stock,
         index_snapshots=snapshots, st_status=st_status,
-        limit_prices=limit_prices, financial_snapshots=financial_snapshots, spec=spec,
+        limit_prices=limit_prices, financial_snapshots=financial_snapshots,
+        industry_history=industry_history, spec=spec,
     )
 
 

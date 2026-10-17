@@ -6,8 +6,8 @@ creates forward labels, trains the configured walk-forward model, replays the
 monthly portfolio at next-session open, and writes an immutable run folder.
 For live TuShare research, call `ResearchPipeline.run_tushare(...)`; it builds
 the snapshot from the equity/PIT adapters, historical name-change ST status,
-same-day adjustment factors, limit prices, and (when available) the benchmark
-index bars before training.
+same-day adjustment factors, dated Shenwan industry membership intervals,
+limit prices, and (when available) the benchmark index bars before training.
 
 The Python bridge accepts `train`, `train_tushare`, `predict`, `evaluate`,
 `export`, `execute_paper`, and `list_models`. `train_tushare` materializes a frozen PIT
@@ -60,11 +60,14 @@ close after the configured holding horizon as exit. The canonical signal is
 formed after the close, so `label.skip_days` must be at least one; this keeps
 the training target aligned with the backtest's next-open execution.
 
-The canonical portfolio policy also applies `portfolio.max_industry_weight`
+The canonical TuShare snapshot maps Shenwan L1 membership using the historical
+`in_date`/`out_date` interval; it does not reuse today's industry mapping for
+past dates. The portfolio policy applies `portfolio.max_industry_weight`
 (default 20%) when the frozen panel contains an `industry` column. Selection
-walks the ranked list and skips names that would exceed the cap; when the panel
-has no industry field, the cap is not inferred and the report marks industry
-exposure as unavailable. `PaperGateway.submit_target_plan` consumes the
+walks the ranked list and skips names that would exceed the cap; when a local
+fixture or external snapshot has no dated industry field, the cap is not
+inferred and the report marks industry exposure as unavailable.
+`PaperGateway.submit_target_plan` consumes the
 generated paper plan, rejects live plans, applies the independent position and
 total-weight risk gate, and carries plan/run/model/signal provenance into every
 submitted order. The `execute_paper` bridge action additionally requires

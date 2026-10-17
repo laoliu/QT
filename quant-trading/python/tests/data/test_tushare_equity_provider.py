@@ -232,6 +232,26 @@ class TestLoadIndexMembers:
         assert len(r2) == 2
 
 
+class TestLoadHistoricalIndustry:
+    def test_keeps_effective_membership_dates(self, provider):
+        provider.api.index_classify.return_value = pd.DataFrame({
+            "index_code": ["801010.SI", "801020.SI"],
+            "industry_name": ["农林牧渔", "采掘"],
+        })
+        provider.api.index_member.side_effect = [
+            pd.DataFrame({"con_code": ["600000.SH"], "in_date": ["20200101"], "out_date": ["20240102"]}),
+            pd.DataFrame({"con_code": ["600000.SH"], "in_date": ["20240103"], "out_date": [None]}),
+        ]
+
+        history = provider.load_sw_industry_history(use_cache=False)
+
+        assert set(history.columns) == {
+            "ts_code", "industry_code", "industry_name", "in_date", "out_date",
+        }
+        assert history["industry_name"].tolist() == ["农林牧渔", "采掘"]
+        assert history["in_date"].tolist() == ["20200101", "20240103"]
+
+
 # ── Financial statements ─────────────────────────────────
 
 

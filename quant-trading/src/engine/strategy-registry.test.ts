@@ -201,18 +201,20 @@ describe("strategy-registry", () => {
     });
 
     it("should reject a formally retired legacy strategy", async () => {
-      await expect(
-        runBacktest(
-          {
-            strategyId: "sector-synergy",
-            symbols: ["000300"],
-            startDate: "2024-01-01",
-            endDate: "2024-12-31",
-            initialCash: 100_000,
-          },
-          { dataProvider: "demo" },
-        ),
-      ).rejects.toThrow("已正式退役");
+      for (const strategyId of ["sector-synergy", "qmt-lianban-relay", "qmt-dual-ma-5m", "sector-synergy-chase"]) {
+        await expect(
+          runBacktest(
+            {
+              strategyId,
+              symbols: ["000300"],
+              startDate: "2024-01-01",
+              endDate: "2024-12-31",
+              initialCash: 100_000,
+            },
+            { dataProvider: "demo" },
+          ),
+        ).rejects.toThrow("已正式退役");
+      }
     });
   });
 

@@ -29,16 +29,9 @@ from aipha.portfolio.covariance import (
     ensure_positive_definite,
 )
 
-# 凸优化器
-from aipha.portfolio.convex_optimizer import (
-    BlackLittermanOptimizer,
-    ConvexMaxSharpeOptimizer,
-    ConvexMinVarianceOptimizer,
-    ConvexRiskParityOptimizer,
-    MeanVarianceOptimizer,
-    OptimizationConstraints,
-    create_optimizer,
-)
+# 凸优化器通过 __getattr__ 延迟导入。PaperGateway、回测和基础持仓管理
+# 不需要 cvxpy；包初始化阶段加载它会触发可选原生 solver（例如 HiGHS）
+# 并让离线 Paper/fixture 环境承担无关的二进制依赖。
 
 # 合规
 from aipha.portfolio.compliance_engine import ComplianceGuard
@@ -78,3 +71,24 @@ __all__ = [
     # 合规
     "ComplianceGuard",
 ]
+
+
+_LAZY_CONVEX = {
+    "OptimizationConstraints",
+    "ConvexMinVarianceOptimizer",
+    "ConvexRiskParityOptimizer",
+    "ConvexMaxSharpeOptimizer",
+    "MeanVarianceOptimizer",
+    "BlackLittermanOptimizer",
+    "create_optimizer",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_CONVEX:
+        from aipha.portfolio import convex_optimizer
+
+        value = getattr(convex_optimizer, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(name)

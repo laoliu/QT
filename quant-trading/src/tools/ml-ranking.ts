@@ -6,6 +6,8 @@
  *   train       — Walk-forward training from a frozen local Parquet panel
  *   evaluate    — IC/ICIR and cost-estimated evaluation
  *   export      — Export ranked target positions for paper review
+ *   execute_paper — Submit a confirmed paper execution plan through the
+ *                   canonical PaperGateway boundary
  *   list_models — Available model types
  */
 import type { QuantTradingRuntime } from "../runtime.js";
@@ -23,13 +25,14 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
       "• action=predict — 校验特征版本后加载模型并排序\n" +
       "• action=evaluate — 评估 OOS RankIC/ICIR 与成本估计\n" +
       "• action=export — 导出目标持仓 JSON（仅供 Paper 审阅）\n" +
+      "• action=execute_paper — 在显式 confirm=true 后提交 Paper 计划\n" +
       "• action=list_models — 列出规范模型类型",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["predict", "train", "train_tushare", "evaluate", "export", "list_models"],
+          enum: ["predict", "train", "train_tushare", "evaluate", "export", "execute_paper", "list_models"],
           description: "操作类型",
         },
         modelType: {
@@ -90,6 +93,16 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
         },
         runId: { type: "string", description: "来源研究 run ID（export）" },
         modelId: { type: "string", description: "来源模型 ID（export）" },
+        planPath: { type: "string", description: "Paper 执行计划路径（execute_paper）" },
+        prices: {
+          type: "object",
+          description: "Paper 执行价格映射（execute_paper）",
+          additionalProperties: { type: "number" },
+        },
+        accountValue: { type: "number", description: "Paper 执行账户资产（execute_paper）" },
+        confirm: { type: "boolean", description: "显式确认 Paper 执行" },
+        maxPositionWeight: { type: "number", description: "单票权重风控上限" },
+        maxTotalWeight: { type: "number", description: "总目标权重风控上限" },
       },
       required: ["action"],
     },
@@ -122,6 +135,12 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           featureColumns: args.featureColumns,
           runId: args.runId,
           modelId: args.modelId,
+          planPath: args.planPath,
+          prices: args.prices,
+          accountValue: args.accountValue,
+          confirm: args.confirm,
+          maxPositionWeight: args.maxPositionWeight,
+          maxTotalWeight: args.maxTotalWeight,
           topN: (args.topN as number) ?? 30,
           modelParams: args.modelParams,
         },

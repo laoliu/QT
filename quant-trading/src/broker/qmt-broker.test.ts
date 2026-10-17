@@ -5,6 +5,9 @@
  * event handling, and symbol normalisation without connecting to real QMT.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { QuantTradingConfig, OrderStatus } from "../types.js";
 
 // ── Mock PersistentPythonProcess ────────────────────────────────
@@ -30,6 +33,7 @@ vi.mock("./paper-broker.js", () => ({
 }));
 
 import { QMTBroker } from "./qmt-broker.js";
+import { OrderManager } from "../services/order-manager.js";
 
 const config: QuantTradingConfig = {
   dataDir: "/tmp/oc-qmt-test",
@@ -440,6 +444,137 @@ describe("QMTBroker", () => {
       });
 
       expect(cb).not.toHaveBeenCalled();
+    });
+
+    it("replays QMT order and trade history through OrderManager after restart", async () => {
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-quant-qmt-replay-"));
+      const cfg = {
+        ...config,
+        dataDir,
+        tradingAccount: {
+          ...config.tradingAccount!,
+          riskLimits: {
+            maxOrderValue: 500_000,
+            maxPositionPct: 0.3,
+            maxDailyLoss: 50_000,
+            maxTotalLoss: 200_000,
+            confirmationThreshold: 1_000_000,
+            stopLossPct: 0,
+            priceLimitPct: 0,
+          },
+        },
+      } as QuantTradingConfig;
+      let brokerOrderNo = 0;
+      mockCall.mockImplementation((method: string) => {
+        if (method === "place_order") {
+          brokerOrderNo += 1;
+          return { broker_order_id: `QMT-REPLAY-${brokerOrderNo}` };
+        }
+        if (method === "query_account") {
+          return {
+            account_id: "test-account",
+            cash: 500_000,
+            frozen_cash: 0,
+            total_asset: 500_000,
+            market_value: 50_000,
+            profit: 0,
+            profit_ratio: 0,
+          };
+        }
+        if (method === "query_positions") {
+          return [{
+            stock_code: "600519.SH",
+            stock_name: "贵州茅台",
+            volume: 1_000,
+            can_use_volume: 1_000,
+            frozen_volume: 0,
+            today_buy_volume: 0,
+            avg_price: 50,
+            market_value: 50_000,
+          }];
+        }
+        return {};
+      });
+
+      const broker = new QMTBroker(cfg);
+      await broker.connect();
+      const manager = new OrderManager(cfg, broker, null);
+      const metadata = {
+        strategyId: "aipha-ml-ranking",
+        signalId: "signal-qmt-replay-1",
+        runId: "run-qmt-replay-1",
+        strategyVersion: "1.0.0",
+        dataTimestamp: 1_735_689_600_000,
+      };
+      const buy = await manager.submit({
+        symbol: "600519",
+        market: "cn_stock",
+        side: "buy",
+        orderType: "limit",
+        quantity: 100,
+        price: 50,
+        ...metadata,
+      }, { skipMarketHours: true });
+      expect(buy.ok).toBe(true);
+      const buyOrderId = buy.ok ? buy.order.orderId : "";
+      eventHandler?.("fill", {
+        order_id: "QMT-REPLAY-1",
+        stock_code: "600519.SH",
+        traded_price: 50,
+        traded_volume: 100,
+        traded_amount: 5_000,
+        commission: 1,
+        time: "2026-01-05 09:31:00",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      const sell = await manager.submit({
+        symbol: "600519",
+        market: "cn_stock",
+        side: "sell",
+        orderType: "limit",
+        quantity: 100,
+        price: 55,
+        ...metadata,
+      }, { skipMarketHours: true });
+      expect(sell.ok).toBe(true);
+      eventHandler?.("fill", {
+        order_id: "QMT-REPLAY-2",
+        stock_code: "600519.SH",
+        traded_price: 55,
+        traded_volume: 100,
+        traded_amount: 5_500,
+        commission: 1,
+        time: "2026-01-06 09:31:00",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      const storedOrders = JSON.parse(
+        await fs.readFile(path.join(dataDir, "orders-live.json"), "utf-8"),
+      ) as Array<Record<string, unknown>>;
+      const storedTrades = JSON.parse(
+        await fs.readFile(path.join(dataDir, "trades-live.json"), "utf-8"),
+      ) as Array<Record<string, unknown>>;
+      expect(storedOrders).toHaveLength(2);
+      expect(storedOrders.every((order) => order.runId === metadata.runId)).toBe(true);
+      expect(storedTrades).toHaveLength(1);
+      expect(storedTrades[0]).toMatchObject({
+        runId: metadata.runId,
+        signalId: metadata.signalId,
+        strategyVersion: metadata.strategyVersion,
+        dataTimestamp: metadata.dataTimestamp,
+      });
+
+      await broker.disconnect();
+      const replayBroker = new QMTBroker(cfg);
+      await replayBroker.connect();
+      const replayManager = new OrderManager(cfg, replayBroker, null);
+      await expect(replayManager.getOrders({ symbol: "600519" })).resolves.toHaveLength(2);
+      await expect(replayManager.getTrades("600519")).resolves.toMatchObject([
+        expect.objectContaining({ runId: metadata.runId, signalId: metadata.signalId }),
+      ]);
+      await replayBroker.disconnect();
+      expect(buyOrderId).toBeTruthy();
     });
   });
 

@@ -34,18 +34,28 @@ def _read_parquet(path: str | None):
     target = Path(path).expanduser().resolve()
     if not target.is_file() or target.suffix.lower() not in {".parquet", ".pq"}:
         raise ValueError(f"dataPath must point to an existing Parquet file: {target}")
+    from aipha.research.snapshots import verify_attested_parquet
+
     import pandas as pd
 
-    frame = pd.read_parquet(target)
+    # Canonical PIT files must be content-attested.  Legacy/non-PIT fixtures
+    # continue to require a sidecar but are not silently treated as TuShare
+    # snapshots just because they carry a provider string.
     sidecar = target.with_suffix(".metadata.json")
     if not sidecar.is_file():
         raise ValueError(
             f"snapshot metadata sidecar required: {sidecar} "
             "(provider, data_snapshot_id, feature_version)"
         )
-    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
-    if not isinstance(metadata, dict):
+    raw_metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+    if not isinstance(raw_metadata, dict):
         raise ValueError("snapshot metadata sidecar must contain a JSON object")
+    metadata = verify_attested_parquet(
+        target,
+        require_artifact_hash=str(raw_metadata.get("provider", "")) == "tushare_pit",
+        verify_content_hash=bool(raw_metadata.get("snapshot_content_sha256")),
+    )
+    frame = pd.read_parquet(target)
     frame.attrs["snapshot_metadata"] = metadata
     return frame
 
@@ -207,6 +217,45 @@ def run(config: dict) -> dict:
             return {"ok": True, "data": {
                 "outputPath": str(output), "executionPlanPath": str(plan_path),
                 "count": len(targets), "runEnvelope": envelope,
+            }}
+        if action == "execute_paper":
+            # Standard Paper-only execution boundary.  A plan must be
+            # explicitly confirmed and is never routed to QMT from here.
+            from aipha.research.execution_plan import read_execution_plan
+            if config.get("confirm") is not True:
+                raise ValueError("execute_paper requires confirm=true")
+            plan_path = config.get("planPath")
+            if not plan_path:
+                raise ValueError("planPath is required")
+            plan = read_execution_plan(plan_path, allow_live=False)
+            if plan.mode != "paper":
+                raise ValueError("execute_paper accepts paper plans only")
+            prices = config.get("prices")
+            if not isinstance(prices, dict):
+                raise ValueError("prices must be an object keyed by symbol")
+            account_value = float(config.get("accountValue", 0))
+            if account_value <= 0:
+                raise ValueError("accountValue must be positive")
+            cfg = _load_config(config.get("configPath"))
+            from aipha.execution.paper_gateway import PaperGateway
+            gateway = PaperGateway.from_cn_equity(initial_capital=account_value)
+            order_ids = gateway.submit_target_plan(
+                plan,
+                prices={str(key): float(value) for key, value in prices.items()},
+                account_value=account_value,
+                max_position_weight=float(config.get("maxPositionWeight", cfg.max_position_weight)),
+                max_total_weight=float(config.get("maxTotalWeight", 1.0)),
+            )
+            return {"ok": True, "data": {
+                "planId": plan.plan_id,
+                "mode": "paper",
+                "orderIds": order_ids,
+                "count": len(order_ids),
+                "provenance": {
+                    "runId": plan.run_id,
+                    "modelId": plan.model_id,
+                    "signalId": plan.signal_id,
+                },
             }}
         return {"ok": False, "error": f"未知 action: {action}"}
     except Exception as error:

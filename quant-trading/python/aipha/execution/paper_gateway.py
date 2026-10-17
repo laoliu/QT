@@ -917,6 +917,8 @@ class PaperGateway(TradingGateway):
         prices: dict[str, float],
         account_value: float,
         current_positions: dict[str, int] | None = None,
+        max_position_weight: float = 1.0,
+        max_total_weight: float = 1.0,
     ) -> list[str]:
         """Consume a validated paper execution plan.
 
@@ -926,18 +928,29 @@ class PaperGateway(TradingGateway):
         paper gateway.
         """
         from aipha.research.execution_plan import execute_paper_target_plan
+        # Target-plan sizing is based on the caller's as-of prices.  Seed the
+        # gateway quote cache before submit_order estimates frozen cash; the
+        # fallback price must never silently turn a valid plan into an
+        # insufficient-funds rejection.
+        self._latest_prices.update({str(symbol): float(price) for symbol, price in prices.items()})
         if current_positions is None:
             current_positions = {
                 symbol: int(self._position_mgr.get_qty(symbol))
                 for symbol in self._position_mgr.get_all_symbols()
             }
+        # ``submit_order`` freezes a 5% safety buffer above notional.  Size a
+        # fully invested target against the corresponding investable NAV so a
+        # valid 100% plan remains executable after the buffer is reserved.
+        from aipha.execution.trading_ops import BUY_FREEZE_BUFFER
+        investable_account_value = account_value / float(BUY_FREEZE_BUFFER)
         return execute_paper_target_plan(
             self,
             plan,
             prices=prices,
-            account_value=account_value,
+            account_value=investable_account_value,
             current_positions=current_positions,
-            allow_live=False,
+            max_position_weight=max_position_weight,
+            max_total_weight=max_total_weight,
         )
 
     def cancel_order(self, order_id: str) -> bool:

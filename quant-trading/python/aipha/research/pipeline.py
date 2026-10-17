@@ -346,9 +346,13 @@ class ResearchPipeline:
         evaluation_diagnostics = _build_evaluation_diagnostics(source, oos, targets, self.config)
         run_root = Path(output_root) / self.run_id
         run_root.mkdir(parents=True, exist_ok=False)
-        source.to_parquet(run_root / "input_snapshot.parquet", index=False)
-        (run_root / "input_snapshot.metadata.json").write_text(
-            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8",
+        from .snapshots import write_attested_parquet
+
+        input_path, _, input_metadata = write_attested_parquet(
+            source,
+            run_root / "input_snapshot.parquet",
+            metadata,
+            artifact_type="research_input_snapshot",
         )
         selector.save(run_root / "model")
         _write_model_manifest(
@@ -358,9 +362,19 @@ class ResearchPipeline:
             feature_cols=selector.config.feature_cols,
             model_config_hash=self.config.model_config_hash(),
         )
-        oos.to_parquet(run_root / "oos_predictions.parquet", index=False)
-        (run_root / "oos_predictions.metadata.json").write_text(
-            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8",
+        oos_metadata = {
+            "provider": "aipha_research",
+            "data_snapshot_id": data_snapshot_id,
+            "feature_version": self.config.feature_version,
+            "start_date": str(oos["trade_date"].min()),
+            "end_date": str(oos["trade_date"].max()),
+            "parent_snapshot_content_sha256": metadata.get("snapshot_content_sha256", ""),
+        }
+        _, _, oos_artifact_metadata = write_attested_parquet(
+            oos,
+            run_root / "oos_predictions.parquet",
+            oos_metadata,
+            artifact_type="oos_predictions",
         )
         pd.DataFrame(backtest["daily_returns"]).to_parquet(
             run_root / "portfolio_returns.parquet", index=False,
@@ -397,6 +411,10 @@ class ResearchPipeline:
             "execution_plans": execution_plans,
             "feature_missing_rate": _feature_missing_rate(source),
             "snapshot_metadata": metadata,
+            "artifact_attestation": {
+                "input_snapshot": input_metadata,
+                "oos_predictions": oos_artifact_metadata,
+            },
             "diagnostics": {
                 "pbo_proxy": metrics["pbo_proxy"],
                 "pbo": metrics.get("pbo"),
@@ -432,6 +450,10 @@ class ResearchPipeline:
             oos_end=max(oos["trade_date"]),
             data_snapshot_id=data_snapshot_id,
             metrics=metrics,
+            artifact_attestation={
+                "input_snapshot": input_metadata,
+                "oos_predictions": oos_artifact_metadata,
+            },
         )
         return {"run_id": self.run_id, "artifact_dir": str(run_root), **report}
 
@@ -445,6 +467,7 @@ class ResearchPipeline:
         oos_end: date,
         data_snapshot_id: str | None = None,
         metrics: dict[str, float] | None = None,
+        artifact_attestation: dict[str, Any] | None = None,
     ) -> Path:
         """Write an immutable run manifest next to model/report artifacts."""
         root = Path(output_dir)
@@ -467,6 +490,7 @@ class ResearchPipeline:
             "portfolio_returns": "portfolio_returns.parquet",
             "targets": "target_positions.json",
             "execution_plans": "execution_plans/",
+            "artifact_attestation": artifact_attestation or {},
         }
         path = root / "run_manifest.json"
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8")

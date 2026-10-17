@@ -2,13 +2,40 @@
  * Unit tests for config-validator — validates QuantTradingConfig field checks.
  */
 import { describe, expect, it } from "vitest";
-import { validateConfig, type ConfigIssue } from "./config-validator.js";
+import { enforceSafeTradingConfig, validateConfig, type ConfigIssue } from "./config-validator.js";
 
 function issuesAt(issues: ConfigIssue[], path: string) {
   return issues.filter((i) => i.path === path);
 }
 
 describe("config-validator", () => {
+  it("forces an accidental local live/QMT override back to paper", () => {
+    const raw = {
+      tradingAccount: {
+        mode: "live" as const,
+        broker: "remote-qmt" as const,
+        autoStart: true,
+        confirmationRequired: false,
+      },
+    };
+    const result = enforceSafeTradingConfig(raw, {});
+    expect(result.forcedPaper).toBe(true);
+    expect(result.config.tradingAccount?.mode).toBe("paper");
+    expect(result.config.tradingAccount?.broker).toBe("paper");
+    expect(result.config.tradingAccount?.autoStart).toBe(false);
+    expect(result.config.tradingAccount?.confirmationRequired).toBe(true);
+    expect(raw.tradingAccount.mode).toBe("live");
+  });
+
+  it("preserves live only behind the explicit environment gate", () => {
+    const result = enforceSafeTradingConfig({
+      tradingAccount: { mode: "live", broker: "qmt", autoStart: true },
+    }, { QUANT_TRADING_ALLOW_LIVE: "true" });
+    expect(result.forcedPaper).toBe(false);
+    expect(result.config.tradingAccount?.mode).toBe("live");
+    expect(result.config.tradingAccount?.requireExecutionPlan).toBe(true);
+  });
+
   it("returns empty for valid empty config", () => {
     expect(validateConfig({})).toEqual([]);
   });

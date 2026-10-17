@@ -48,6 +48,11 @@ from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
+# Compatibility marker: the strategy is retained for historical backtests,
+# while new research must use ``aipha.research`` / ``ml_ranking``.
+CANONICAL_ENTRYPOINT = "ml_ranking"
+LIFECYCLE = "compatibility"
+
 
 # ---------------------------------------------------------------------------
 # 默认回退权重（无 ML 模型时用线性打分）
@@ -125,6 +130,8 @@ class MLFactorStrategy(EquityRotationStrategy):
     """ML 多因子选股策略。"""
 
     name = "ml_factor"
+    lifecycle = LIFECYCLE
+    canonical_entrypoint = CANONICAL_ENTRYPOINT
 
     def __init__(
         self, config: MLFactorConfig | None = None, **kwargs: Any,

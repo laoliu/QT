@@ -72,9 +72,49 @@ class ExecutionPlan:
         self.validate(allow_live=allow_live)
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        target.write_text(
+            json.dumps(self.to_dict(), ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
         return target
 
+
+def validate_execution_risk(
+    plan: ExecutionPlan,
+    *,
+    prices: dict[str, float],
+    account_value: float,
+    max_position_weight: float = 1.0,
+    max_total_weight: float = 1.0,
+    max_symbols: int = 500,
+) -> None:
+    """Apply broker-independent risk checks before translating a plan to orders.
+
+    This is intentionally separate from a broker's order risk gate.  It makes
+    the research-to-Paper boundary fail closed even when a caller bypasses the
+    Node order manager and invokes ``PaperGateway`` directly.
+    """
+    if account_value <= 0:
+        raise ValueError("account_value must be positive")
+    if not 0 < max_position_weight <= 1:
+        raise ValueError("max_position_weight must be in (0, 1]")
+    if not 0 < max_total_weight <= 1:
+        raise ValueError("max_total_weight must be in (0, 1]")
+    if len(plan.targets) > max_symbols:
+        raise ValueError("execution plan exceeds max_symbols risk limit")
+    total = 0.0
+    for target in plan.targets:
+        weight = float(target.target_weight)
+        if weight > max_position_weight + 1e-12:
+            raise ValueError(
+                f"target weight for {target.symbol} exceeds max_position_weight"
+            )
+        total += weight
+        price = float(prices.get(target.symbol, 0.0))
+        if price <= 0:
+            raise ValueError(f"missing positive price for {target.symbol}")
+    if total > max_total_weight + 1e-9:
+        raise ValueError("execution plan total target weight exceeds risk limit")
 
 def build_execution_plan(
     targets: Iterable[TargetPosition],
@@ -143,6 +183,8 @@ def execute_target_plan(
     account_value: float,
     current_positions: dict[str, int] | None = None,
     allow_live: bool = False,
+    max_position_weight: float = 1.0,
+    max_total_weight: float = 1.0,
 ) -> list[str]:
     """Translate a validated target plan into broker orders.
 
@@ -151,8 +193,13 @@ def execute_target_plan(
     the single adapter used by the QMT plan-consumption method.
     """
     plan.validate(allow_live=allow_live)
-    if account_value <= 0:
-        raise ValueError("account_value must be positive")
+    validate_execution_risk(
+        plan,
+        prices=prices,
+        account_value=account_value,
+        max_position_weight=max_position_weight,
+        max_total_weight=max_total_weight,
+    )
     positions = dict(current_positions or {})
     desired: dict[str, int] = {}
     for target in plan.targets:
@@ -199,6 +246,8 @@ def execute_paper_target_plan(
     prices: dict[str, float],
     account_value: float,
     current_positions: dict[str, int] | None = None,
+    max_position_weight: float = 1.0,
+    max_total_weight: float = 1.0,
 ) -> list[str]:
     """Paper-only wrapper for target-plan execution.
 
@@ -217,4 +266,6 @@ def execute_paper_target_plan(
         account_value=account_value,
         current_positions=current_positions,
         allow_live=False,
+        max_position_weight=max_position_weight,
+        max_total_weight=max_total_weight,
     )

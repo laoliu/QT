@@ -10,7 +10,7 @@ same-day adjustment factors, limit prices, and (when available) the benchmark
 index bars before training.
 
 The Python bridge accepts `train`, `train_tushare`, `predict`, `evaluate`,
-`export`, and `list_models`. `train_tushare` materializes a frozen PIT
+`export`, `execute_paper`, and `list_models`. `train_tushare` materializes a frozen PIT
 snapshot through the configured TuShare adapters before training. Historical
 Parquet inputs require a sibling metadata file named
 `<stem>.metadata.json` (for example `daily.metadata.json`) with:
@@ -33,6 +33,11 @@ Financial features must already have been joined by announcement date. The
 long-form financial snapshots. A sidecar with another provider, mismatched
 feature version, or mismatched date range is rejected.
 
+TuShare sidecars written by the canonical snapshot builder also include the
+generator version, logical content SHA-256 and Parquet artifact SHA-256. A
+TuShare input with a missing or mismatched artifact hash is rejected by the
+bridge; a provider string alone is not treated as proof of provenance.
+
 Runs write `run_manifest.json`, `report.json`, a version-checked model folder,
 `oos_predictions.parquet` and its metadata sidecar, `portfolio_returns.parquet`,
 `trades.json`, `target_positions.json`, and one validated paper execution plan
@@ -49,11 +54,18 @@ The canonical portfolio policy also applies `portfolio.max_industry_weight`
 walks the ranked list and skips names that would exceed the cap; when the panel
 has no industry field, the cap is not inferred and the report marks industry
 exposure as unavailable. `PaperGateway.submit_target_plan` consumes the
-generated paper plan, rejects live plans, and carries plan/run/model/signal
-provenance into every submitted order.
+generated paper plan, rejects live plans, applies the independent position and
+total-weight risk gate, and carries plan/run/model/signal provenance into every
+submitted order. The `execute_paper` bridge action additionally requires
+explicit `confirm=true`; it never selects QMT.
 
 Legacy model folders without `model_manifest.json` are rejected. Use
 `migrate_legacy_model` only with an explicit feature version, column order,
 snapshot identifier, and operator attestation. QMT consumption is available
 through the versioned execution-plan adapter and requires an explicit live
 gate; direct research artifacts are never passed to a broker.
+
+The old `configs/sample_ml_factor.yaml` shape can be converted with
+`python scripts/migrate_research_config.py`. The command keeps the source
+unchanged, emits warnings for dropped legacy fields, and always writes a
+TuShare-PIT/paper configuration.

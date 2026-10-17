@@ -12,6 +12,53 @@ export interface ConfigIssue {
   severity: "error" | "warning";
 }
 
+/**
+ * Apply the runtime live-trading gate before services are constructed.
+ *
+ * A host may merge an ignored ``config.local.json`` before the plugin sees
+ * ``pluginConfig``.  Validation alone only reports that state; this function
+ * makes the safe default effective by forcing paper mode unless the operator
+ * explicitly sets QUANT_TRADING_ALLOW_LIVE=true.  The returned object is a
+ * copy, so callers cannot accidentally rewrite the user's persisted config.
+ */
+export function enforceSafeTradingConfig(
+  config: QuantTradingConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): { config: QuantTradingConfig; forcedPaper: boolean; reason?: string } {
+  const account = config.tradingAccount;
+  if (!account) return { config, forcedPaper: false };
+  const requestedLive = account.mode === "live" ||
+    account.broker === "qmt" || account.broker === "remote-qmt" || account.autoStart === true;
+  const allowLive = /^(1|true|yes)$/i.test(env.QUANT_TRADING_ALLOW_LIVE ?? "");
+  if (!requestedLive || allowLive) {
+    if (requestedLive && allowLive) {
+      return {
+        config: {
+          ...config,
+          tradingAccount: { ...account, requireExecutionPlan: true },
+        },
+        forcedPaper: false,
+      };
+    }
+    return { config, forcedPaper: false };
+  }
+  return {
+    config: {
+      ...config,
+      tradingAccount: {
+        ...account,
+        mode: "paper",
+        broker: "paper",
+        autoStart: false,
+        confirmationRequired: true,
+        requireExecutionPlan: true,
+      },
+    },
+    forcedPaper: true,
+    reason: "live/QMT configuration requires QUANT_TRADING_ALLOW_LIVE=true",
+  };
+}
+
 const VALID_MARKETS: MarketType[] = [
   "cn_stock",
   "hk_stock",

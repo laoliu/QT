@@ -793,7 +793,12 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "retired",
+        "sourceEngine": "qmt",
+        "note": "QMT 连板接力脚本依赖外部 miniQMT 实时逻辑，没有经过验证的统一 builtin 等价物；保留源码仅供历史参考，统一运行目录已退役。"
+      }
     },
     {
       "id": "qmt-dual-ma-5m",
@@ -809,7 +814,12 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "retired",
+        "sourceEngine": "qmt",
+        "note": "QMT 5 分钟 EMA 日内策略没有与统一日线 builtin 策略保持语义等价的实现；保留源码仅供历史参考，统一运行目录已退役。"
+      }
     },
     {
       "id": "sector-synergy-chase",
@@ -825,7 +835,12 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "retired",
+        "sourceEngine": "qmt",
+        "note": "板块协同大单追涨依赖 QMT tick、板块和大单状态，当前没有可验证的统一 builtin 等价物；保留源码仅供历史参考，统一运行目录已退役。"
+      }
     },
     {
       "id": "ema-cross",

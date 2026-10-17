@@ -32,6 +32,7 @@ vi.mock("../broker/paper-broker.js", () => ({
 }));
 
 import { OrderManager } from "./order-manager.js";
+import { todayCST } from "../utils/cst-time.js";
 
 // ── Fixtures ────────────────────────────────────────────────────
 
@@ -189,7 +190,7 @@ afterEach(async () => {
 
 async function loadOrders(): Promise<Order[]> {
   try {
-    return JSON.parse(await fs.readFile(path.join(tmpDir, "orders.json"), "utf-8"));
+    return JSON.parse(await fs.readFile(path.join(tmpDir, "orders-paper.json"), "utf-8"));
   } catch {
     return [];
   }
@@ -197,7 +198,7 @@ async function loadOrders(): Promise<Order[]> {
 
 async function loadTrades(): Promise<TradeRecord[]> {
   try {
-    return JSON.parse(await fs.readFile(path.join(tmpDir, "trades.json"), "utf-8"));
+    return JSON.parse(await fs.readFile(path.join(tmpDir, "trades-paper.json"), "utf-8"));
   } catch {
     return [];
   }
@@ -693,7 +694,7 @@ describe("OrderManager", () => {
 
     it("sums today's trade PnLs", async () => {
       const cfg = makeConfig();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayCST();
 
       // Write pre-existing trade records
       const trades: TradeRecord[] = [
@@ -728,7 +729,7 @@ describe("OrderManager", () => {
           entryOrderId: "order-2",
         },
       ];
-      await fs.writeFile(path.join(tmpDir, "trades.json"), JSON.stringify(trades));
+      await fs.writeFile(path.join(tmpDir, "trades-paper.json"), JSON.stringify(trades));
 
       const broker = makeBrokerMock();
       const mgr = new OrderManager(cfg, broker, null);
@@ -1039,7 +1040,7 @@ describe("OrderManager", () => {
 
       // Check avgFillPrice is VWAP: (99*100 + 101*100) / 200 = 100
       const orders = JSON.parse(
-        await fs.readFile(path.join(tmpDir, "orders.json"), "utf-8"),
+        await fs.readFile(path.join(tmpDir, "orders-paper.json"), "utf-8"),
       ) as Order[];
       const order = orders.find((o) => o.orderId === orderId);
       expect(order).toBeDefined();

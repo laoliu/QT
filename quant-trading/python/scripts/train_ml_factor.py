@@ -1,4 +1,10 @@
-"""ML 选股模型训练 + 评估端到端脚本。
+"""Legacy ML 选股模型训练脚本。
+
+.. deprecated::
+   The canonical entry point is ``ml_ranking`` / ``aipha.research``.  This
+   module remains for compatibility with historical factor-analysis jobs; it
+   is not part of the default A-share research API and its non-canonical model
+   choices are intentionally kept out of the new model registry.
 
 用法:
     python scripts/train_ml_factor.py --universe csi500
@@ -22,6 +28,7 @@ import os
 import sys
 import time
 from pathlib import Path
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -35,6 +42,16 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("train_ml_factor")
+CANONICAL_ENTRYPOINT = "ml_ranking"
+LEGACY_ENTRYPOINT = True
+
+if __name__ != "__main__":
+    warnings.warn(
+        "scripts.train_ml_factor is a legacy compatibility module; use "
+        "aipha/engines/aipha_ml_engine.py or the ml_ranking tool",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
 
 def parse_args() -> argparse.Namespace:

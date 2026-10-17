@@ -69,7 +69,7 @@ import type {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runPythonScript, setPythonBridgeLogger } from "./src/bridge/python-bridge.js";
-import { validateConfig } from "./src/config-validator.js";
+import { enforceSafeTradingConfig, validateConfig } from "./src/config-validator.js";
 import { createDataProvider } from "./src/data/market-data-provider.js";
 import { LiveEngine } from "./src/engine/live-engine.js";
 import { TickFeatureStore } from "./src/engine/tick-feature-store.js";
@@ -240,7 +240,14 @@ const quantTradingApp = {
   description:
     "Quantitative trading toolkit: market data, strategy backtesting, portfolio management, trading signals, and live broker trading for stocks, futures, and funds.",
   start(api: QuantTradingRuntime) {
-    const config = api.pluginConfig as QuantTradingConfig;
+    const rawConfig = api.pluginConfig as QuantTradingConfig;
+    const safety = enforceSafeTradingConfig(rawConfig);
+    const config = safety.config;
+    if (safety.forcedPaper) {
+      api.logger.warn(
+        `[quant-trading] ${safety.reason}; runtime forced to paper mode`,
+      );
+    }
 
     // ── Config validation — surface misconfigurations early ──────
     const issues = validateConfig(config);

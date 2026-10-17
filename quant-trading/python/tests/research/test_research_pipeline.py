@@ -445,6 +445,24 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     plan = read_execution_plan(artifact_dir / plan_paths[0])
     assert plan.mode == "paper"
     assert plan.run_id == result["run_id"]
+    # The same frozen plan is consumable by the PaperGateway boundary.  This
+    # closes the offline chain after target generation and verifies that order
+    # provenance survives the broker-neutral handoff.
+    from aipha.execution.paper_gateway import PaperGateway
+    paper = PaperGateway.from_cn_equity(initial_capital=cfg.initial_capital)
+    prices = {target.symbol: 10.0 for target in plan.targets}
+    paper_orders = paper.submit_target_plan(
+        plan,
+        prices=prices,
+        account_value=cfg.initial_capital,
+        max_position_weight=cfg.max_position_weight,
+    )
+    assert paper_orders
+    first_order = paper.get_order(paper_orders[0])
+    assert first_order is not None
+    assert first_order.metadata["run_id"] == result["run_id"]
+    assert first_order.metadata["model_id"] == result["run_id"]
+    assert first_order.metadata["signal_id"]
     manifest = json.loads((artifact_dir / "run_manifest.json").read_text(encoding="utf-8"))
     report = json.loads((artifact_dir / "report.json").read_text(encoding="utf-8"))
     assert manifest["data_snapshot_id"] == "fixture-v1"

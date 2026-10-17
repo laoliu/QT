@@ -17,6 +17,109 @@ import pandas as pd
 import numpy as np
 
 
+# These values are part of the on-disk provenance contract.  They are kept
+# here rather than in a caller so that every TuShare snapshot writer uses the
+# same attestation format.
+SNAPSHOT_SCHEMA_VERSION = 1
+SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/1"
+
+
+def frame_content_sha256(frame: pd.DataFrame) -> str:
+    """Return a deterministic digest for a normalized tabular snapshot.
+
+    The digest is deliberately independent of Parquet engine metadata.  It is
+    used to detect a changed row/column value after a snapshot has been
+    materialized, while ``artifact_sha256`` below detects byte-level file
+    tampering.
+    """
+    normalized = frame.copy()
+    for column in normalized.columns:
+        if pd.api.types.is_datetime64_any_dtype(normalized[column]):
+            normalized[column] = normalized[column].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    # Stable column and row order makes the digest reproducible across
+    # providers that return the same data in a different order.
+    normalized = normalized.reindex(sorted(normalized.columns), axis=1)
+    sort_columns = [c for c in ("trade_date", "symbol", "ts_code") if c in normalized.columns]
+    if sort_columns:
+        normalized = normalized.sort_values(sort_columns, kind="mergesort")
+    normalized = normalized.reset_index(drop=True)
+    payload = normalized.to_json(
+        orient="split", date_format="iso", double_precision=15,
+        force_ascii=False, default_handler=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def attest_snapshot_metadata(frame: pd.DataFrame, metadata: dict[str, Any]) -> dict[str, Any]:
+    """Add generator/schema/content provenance to snapshot metadata."""
+    result = dict(metadata)
+    result.update({
+        "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "generator_version": SNAPSHOT_GENERATOR_VERSION,
+        "snapshot_content_sha256": frame_content_sha256(frame),
+        "row_count": int(len(frame)),
+        "column_count": int(len(frame.columns)),
+    })
+    return result
+
+
+def write_attested_parquet(
+    frame: pd.DataFrame,
+    path: str | Path,
+    metadata: dict[str, Any],
+    *,
+    artifact_type: str = "snapshot",
+) -> tuple[Path, Path, dict[str, Any]]:
+    """Write a Parquet artifact and a sidecar containing verifiable hashes."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(target, index=False)
+    sidecar = target.with_suffix(".metadata.json")
+    sidecar_metadata = attest_snapshot_metadata(frame, metadata)
+    sidecar_metadata.update({
+        "artifact_type": artifact_type,
+        "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+    })
+    sidecar.write_text(
+        json.dumps(sidecar_metadata, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    return target, sidecar, sidecar_metadata
+
+
+def verify_attested_parquet(
+    path: str | Path,
+    *,
+    require_artifact_hash: bool = False,
+    verify_content_hash: bool = True,
+) -> dict[str, Any]:
+    """Verify a Parquet sidecar and return its metadata.
+
+    A provider name alone is not trusted.  Canonical PIT callers must carry a
+    file hash; when present, the logical content hash is checked as well.
+    """
+    target = Path(path).expanduser().resolve()
+    sidecar = target.with_suffix(".metadata.json")
+    if not sidecar.is_file():
+        raise ValueError(f"snapshot metadata sidecar required: {sidecar}")
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        raise ValueError("snapshot metadata sidecar must contain a JSON object")
+    artifact_hash = str(metadata.get("artifact_sha256", "")).strip()
+    if require_artifact_hash and not artifact_hash:
+        raise ValueError("attested snapshot sidecar requires artifact_sha256")
+    if artifact_hash:
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != artifact_hash:
+            raise ValueError("snapshot artifact_sha256 does not match Parquet contents")
+    if verify_content_hash and metadata.get("snapshot_content_sha256"):
+        frame = pd.read_parquet(target)
+        actual_content = frame_content_sha256(frame)
+        if actual_content != str(metadata["snapshot_content_sha256"]):
+            raise ValueError("snapshot_content_sha256 does not match Parquet rows")
+    return metadata
+
+
 @dataclass(frozen=True, slots=True)
 class SnapshotSpec:
     start_date: str
@@ -30,14 +133,12 @@ class SnapshotSpec:
 @dataclass(frozen=True, slots=True)
 class TushareSnapshot:
     panel: pd.DataFrame
-    metadata: dict[str, str]
+    metadata: dict[str, Any]
 
     def write(self, path: str | Path) -> tuple[Path, Path]:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        self.panel.to_parquet(target, index=False)
-        sidecar = target.with_suffix(".metadata.json")
-        sidecar.write_text(json.dumps(self.metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+        target, sidecar, attested = write_attested_parquet(
+            self.panel, path, self.metadata, artifact_type="tushare_pit_snapshot",
+        )
         return target, sidecar
 
 
@@ -157,6 +258,7 @@ def assemble_tushare_snapshot(
         "benchmark_code": spec.benchmark_code,
         "adjust": spec.adjust,
     }
+    metadata = attest_snapshot_metadata(panel, metadata)
     panel.attrs["snapshot_metadata"] = metadata
     return TushareSnapshot(panel=panel, metadata=metadata)
 

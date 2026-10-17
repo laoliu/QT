@@ -47,6 +47,9 @@ from aipha.utils.paths import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
+CANONICAL_ENTRYPOINT = "ml_ranking"
+LIFECYCLE = "experimental"
+
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -87,6 +90,8 @@ class MultiPeriodEnsembleStrategy(EquityRotationStrategy):
     """多周期 ML 预测集成策略。"""
 
     name = "ml_factor_ensemble"
+    lifecycle = LIFECYCLE
+    canonical_entrypoint = CANONICAL_ENTRYPOINT
 
     def __init__(
         self,

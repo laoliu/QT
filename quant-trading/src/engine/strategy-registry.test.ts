@@ -13,6 +13,16 @@ describe("strategy-registry", () => {
       expect(catalog.entries.find((entry) => entry.id === catalog.defaultResearchStrategy)?.engine).toBe("aipha");
       expect(catalog.defaultResearchStrategy).toBe("aipha-ml-ranking");
     });
+    it("should account for every compatibility strategy", () => {
+      const compatibility = catalog.entries.filter((entry) => entry.lifecycle === "compatibility");
+      expect(compatibility.length).toBeGreaterThan(0);
+      for (const entry of compatibility) {
+        expect(entry.migration?.status).toMatch(/^(migrated_to_builtin|retired)$/);
+        if (entry.migration?.status === "migrated_to_builtin") {
+          expect(entry.migration.canonicalId).toBeTruthy();
+        }
+      }
+    });
     it("should return built-in strategies", () => {
       const strategies = listStrategies();
       expect(strategies.length).toBeGreaterThanOrEqual(3);
@@ -58,6 +68,14 @@ describe("strategy-registry", () => {
       expect(strategy?.engine).toBe("aipha");
       expect(strategy?.signalFormat).toBe("target_position");
       expect(strategy?.dataRequirements).toContain("fundamentals_pit");
+    });
+    it("should expose legacy IDs as builtin aliases", () => {
+      const strategy = getStrategy("macd");
+      expect(strategy?.engine).toBe("builtin");
+      expect(strategy?.canonicalStrategyId).toBe("macd-trend");
+      expect(strategy?.migrationStatus).toBe("migrated_to_builtin");
+      expect(strategy?.availableEngines).toEqual(["builtin"]);
+      expect(getStrategy("sector-synergy")).toBeUndefined();
     });
   });
 
@@ -151,6 +169,50 @@ describe("strategy-registry", () => {
       );
       expect(result.strategyId).toBe("spread-arbitrage");
       expect(result.finalValue).toBeGreaterThan(0);
+    });
+
+    it("should run a migrated legacy ID through builtin and reject the old engine", async () => {
+      const result = await runBacktest(
+        {
+          strategyId: "macd",
+          symbols: ["000300"],
+          startDate: "2024-01-01",
+          endDate: "2024-12-31",
+          initialCash: 100_000,
+          parameters: { fast_period: 5, slow_period: 20 },
+        },
+        { dataProvider: "demo" },
+      );
+      expect(result.engine).toBe("builtin");
+      expect(result.runEnvelope?.engine).toBe("builtin");
+      await expect(
+        runBacktest(
+          {
+            strategyId: "macd",
+            symbols: ["000300"],
+            startDate: "2024-01-01",
+            endDate: "2024-12-31",
+            initialCash: 100_000,
+            engine: "backtrader",
+          },
+          { dataProvider: "demo" },
+        ),
+      ).rejects.toThrow("旧引擎入口已关闭");
+    });
+
+    it("should reject a formally retired legacy strategy", async () => {
+      await expect(
+        runBacktest(
+          {
+            strategyId: "sector-synergy",
+            symbols: ["000300"],
+            startDate: "2024-01-01",
+            endDate: "2024-12-31",
+            initialCash: 100_000,
+          },
+          { dataProvider: "demo" },
+        ),
+      ).rejects.toThrow("已正式退役");
     });
   });
 

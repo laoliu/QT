@@ -1005,6 +1005,10 @@ export class OrderManager {
         commission,
         netPnl,
         strategyId: order?.strategyId,
+        signalId: order?.signalId ?? entryOrder?.signalId,
+        runId: order?.runId ?? entryOrder?.runId,
+        strategyVersion: order?.strategyVersion ?? entryOrder?.strategyVersion,
+        dataTimestamp: order?.dataTimestamp ?? entryOrder?.dataTimestamp,
         entryOrderId,
         exitOrderId: fill.orderId,
       };

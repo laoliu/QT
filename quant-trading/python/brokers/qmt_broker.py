@@ -151,7 +151,10 @@ class QMTBrokerBridge:
             log.warning("xtdata init failed (quotes may be unavailable): %s", e)
 
         # ── 2) Connect XtQuantTrader (trading channel) ───────────
-        self.trader = XtQuantTrader(self.mini_qmt_path, session_id=int(time.time()) % 10000)
+        # xtquant versions expose the second constructor argument as either
+        # ``session`` or ``session_id``.  Pass it positionally so the bridge
+        # works with both the bundled miniQMT runtime and pip-installed builds.
+        self.trader = XtQuantTrader(self.mini_qmt_path, int(time.time()) % 10000)
         callback = BridgeCallback()
         self.trader.register_callback(callback)
         self.trader.start()
@@ -186,6 +189,14 @@ class QMTBrokerBridge:
         volume = int(params["volume"])
         strategy = params.get("strategy_name", "")
         remark = params.get("order_remark", "")
+        provenance = [
+            f"run_id={params['run_id']}" if params.get("run_id") else "",
+            f"signal_id={params['signal_id']}" if params.get("signal_id") else "",
+            f"strategy_version={params['strategy_version']}" if params.get("strategy_version") else "",
+        ]
+        provenance = [item for item in provenance if item]
+        if provenance:
+            remark = f"{remark}|{'|'.join(provenance)}"
 
         order_id = self.trader.order_stock(
             self.account,

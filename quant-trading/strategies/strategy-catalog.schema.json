@@ -20,7 +20,18 @@
           "timeframes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
           "dataRequirements": { "type": "array", "items": { "enum": ["ohlcv", "fundamentals_pit", "features", "index_membership_pit", "ticks", "order_book"] } },
           "signalFormat": { "enum": ["trading_signal", "target_position", "order_intent"] },
-          "lifecycle": { "enum": ["primary", "compatibility", "experimental", "live_only"] }
+          "lifecycle": { "enum": ["primary", "compatibility", "experimental", "live_only"] },
+          "migration": {
+            "type": "object",
+            "required": ["status", "sourceEngine", "note"],
+            "properties": {
+              "status": { "enum": ["migrated_to_builtin", "retired"] },
+              "canonicalId": { "type": "string", "minLength": 1 },
+              "sourceEngine": { "enum": ["builtin", "backtrader", "vnpy", "qmt", "aipha"] },
+              "note": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
         },
         "additionalProperties": true
       }

@@ -353,7 +353,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "supertrend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "hull-ma-crossover",
@@ -485,7 +491,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "macd-trend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "rsi",
@@ -505,7 +517,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "rsi-reversal",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "kdj",
@@ -523,7 +541,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "rsi-reversal",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "turtle",
@@ -543,7 +567,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "turtle-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "pair-trading",
@@ -561,7 +591,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "mean-reversion-zscore",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "grid",
@@ -580,7 +616,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "grid-trading",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "auction",
@@ -596,7 +638,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "dragon-return",
@@ -612,7 +660,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "mean-reversion-cn",
@@ -628,7 +682,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "mean-reversion",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "multi-factor",
@@ -645,7 +705,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "scored",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "bollinger",
@@ -661,7 +727,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "bollinger-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "dragon_master",
@@ -677,7 +749,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "lianban_relay",
@@ -693,7 +771,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "qmt-lianban-relay",
@@ -757,7 +841,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dual-ma-crossover",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "adx-trend",
@@ -773,7 +863,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dmi-adx",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "parabolic-sar",
@@ -821,7 +917,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dema-crossover",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "tema-cross",
@@ -837,7 +939,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dema-crossover",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "aroon",
@@ -853,7 +961,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "aroon-trend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vortex",
@@ -869,7 +983,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dmi-adx",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "cci",
@@ -885,7 +1005,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "cci-divergence",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "trix",
@@ -901,7 +1027,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "trix-momentum",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "momentum",
@@ -917,7 +1049,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "dmi",
@@ -933,7 +1071,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dmi-adx",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "keltner-channel",
@@ -965,7 +1109,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "donchian-mid-reversion",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "atr-channel",
@@ -981,7 +1131,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "atr-trailing",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "envelope",
@@ -997,7 +1153,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "ma-envelope",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "price-channel-breakout",
@@ -1013,7 +1175,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "range-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "stochastic",
@@ -1029,7 +1197,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "stochastic-rsi",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "williams-r",
@@ -1061,7 +1235,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "obv-trend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "mfi",
@@ -1077,7 +1257,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "mfi-oscillator",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "cmf",
@@ -1093,7 +1279,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "cmf-divergence",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "adl",
@@ -1109,7 +1301,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "obv-trend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "roc",
@@ -1125,7 +1323,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "roc-momentum",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vwap",
@@ -1141,7 +1345,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "vwap-reversion",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "adaptive-ma",
@@ -1157,7 +1367,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "kama-trend",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "engulfing",
@@ -1173,7 +1389,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "double-bottom",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "hammer",
@@ -1189,7 +1411,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "double-bottom",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "doji",
@@ -1205,7 +1433,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "double-bottom",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "morning-star",
@@ -1221,7 +1455,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "double-bottom",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "three-soldiers",
@@ -1237,7 +1477,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "harami",
@@ -1253,7 +1499,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "double-bottom",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "macd-rsi-combo",
@@ -1269,7 +1521,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "macd-confirmation",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "bollinger-rsi-combo",
@@ -1285,7 +1543,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "bollinger-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "ma-volume-combo",
@@ -1301,7 +1565,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "volume-confirmation",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "kdj-macd-combo",
@@ -1317,7 +1587,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "cta-kdj",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "ichimoku-adx-combo",
@@ -1333,7 +1609,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "ichimoku",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "multi-tf-ma",
@@ -1349,7 +1631,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "triple-ma-crossover",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "volatility-breakout",
@@ -1365,7 +1653,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "volatility-target",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "regime-switch",
@@ -1381,7 +1675,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "mean-reversion",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "dual-thrust",
@@ -2404,7 +2704,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "dual-ma-crossover",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vnpy-atr-rsi",
@@ -2421,7 +2727,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "rsi-reversal",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vnpy-boll-channel",
@@ -2438,7 +2750,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "bollinger-breakout",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vnpy-turtle",
@@ -2455,7 +2773,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "turtle-breakout",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vnpy-king-keltner",
@@ -2472,7 +2796,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "keltner-channel",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "vnpy-multi-timeframe",
@@ -2489,7 +2819,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "cta-trend",
+        "sourceEngine": "vnpy",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "sector-synergy",
@@ -2505,7 +2841,12 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "retired",
+        "sourceEngine": "backtrader",
+        "note": "No unified builtin equivalent is available; new runs are rejected and the legacy entry is hidden from the unified runtime catalog."
+      }
     },
     {
       "id": "lianban-relay",
@@ -2521,7 +2862,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "dragon-master",
@@ -2537,7 +2884,13 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "compatibility"
+      "lifecycle": "compatibility",
+      "migration": {
+        "status": "migrated_to_builtin",
+        "canonicalId": "momentum-breakout",
+        "sourceEngine": "backtrader",
+        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+      }
     },
     {
       "id": "aipha-ml-ranking",

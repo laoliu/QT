@@ -277,6 +277,10 @@ export class QMTBroker implements IBrokerAdapter {
   }
 
   async placeOrder(req: OrderRequest): Promise<Order> {
+    const requirePlan = this.cfg.tradingAccount?.requireExecutionPlan === true;
+    if (requirePlan && (!req.runId || !req.signalId)) {
+      throw new Error("QMT live profile requires runId and signalId from a validated execution plan");
+    }
     const now = nowCSTISO();
     const clientOrderId = req.clientOrderId ?? randomUUID();
     const orderId = randomUUID(); // local UUID
@@ -296,6 +300,9 @@ export class QMTBroker implements IBrokerAdapter {
       volume: req.quantity,
       strategy_name: req.strategyId ?? "manual",
       order_remark: clientOrderId,
+      run_id: req.runId,
+      signal_id: req.signalId,
+      strategy_version: req.strategyVersion,
     });
 
     const order: Order = {

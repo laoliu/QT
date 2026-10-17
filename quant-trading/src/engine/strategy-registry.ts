@@ -1050,9 +1050,25 @@ type CatalogEntry = {
   dataRequirements: StrategyDefinition["dataRequirements"];
   signalFormat: StrategyDefinition["signalFormat"];
   lifecycle: StrategyDefinition["lifecycle"];
+  migration?: {
+    status: "migrated_to_builtin" | "retired";
+    canonicalId?: string;
+    sourceEngine: StrategyDefinition["engine"];
+    note: string;
+  };
 };
 const canonicalCatalog = catalog as { schemaVersion: "1.0"; defaultResearchStrategy: string; entries: CatalogEntry[] };
 const catalogById = new Map(canonicalCatalog.entries.map((entry) => [entry.id, entry]));
+
+const legacyMigrationById = new Map(
+  canonicalCatalog.entries
+    .filter((entry) => entry.migration)
+    .map((entry) => [entry.id, entry.migration!]),
+);
+
+function legacyMigration(id: string) {
+  return legacyMigrationById.get(id);
+}
 
 const aiphaResearchDefinition: StrategyDefinition = {
   id: canonicalCatalog.defaultResearchStrategy,
@@ -1171,6 +1187,7 @@ export function listStrategies(): StrategyDefinition[] {
   const available = builtinStrategies.filter(
     (s) =>
       !s.disabled &&
+      legacyMigration(s.id)?.status !== "retired" &&
       (s.engine === "backtrader" || s.engine === "vnpy" || s.engine === "aipha" || strategyMap.has(s.id)),
   ).map(normalizeStrategyDefinition);
   return [...available, ...composedDefinitions.values(), ...ruleDefinitions.values()].map(normalizeStrategyDefinition);
@@ -1183,7 +1200,7 @@ export async function listUnifiedStrategies(config: QuantTradingConfig): Promise
     ...optionStrategies.map(normalizeStrategyDefinition),
     ...composedDefinitions.values(),
     ...ruleDefinitions.values(),
-  ];
+  ].filter((entry) => entry.migrationStatus !== "retired");
   const python = await runPythonScript<StrategyDefinition[]>(
     "engines/backtrader_engine.py",
     { action: "list_strategies" },
@@ -1195,6 +1212,7 @@ export async function listUnifiedStrategies(config: QuantTradingConfig): Promise
   const byId = new Map(local.map((entry) => [entry.id, entry]));
   byId.set(aiphaResearchDefinition.id, normalizeStrategyDefinition(aiphaResearchDefinition));
   for (const entry of python.data) {
+    if (legacyMigration(entry.id)?.status === "retired") continue;
     if (!entry?.id || byId.has(entry.id)) continue;
     byId.set(entry.id, normalizeStrategyDefinition({
       ...entry,
@@ -1221,6 +1239,7 @@ export function getStrategy(id: string): StrategyDefinition | undefined {
 /** Fill engine-neutral catalog fields for legacy definitions without changing their IDs or parameters. */
 export function normalizeStrategyDefinition(strategy: StrategyDefinition): StrategyDefinition {
   const catalogEntry = catalogById.get(strategy.id);
+  const migration = catalogEntry?.migration;
   const lifecycle = strategy.lifecycle ?? (strategy.engine === "builtin" ? "primary" : "compatibility");
   const requirements = strategy.dataRequirements ?? (strategy.engine === "aipha"
     ? ["features", "ohlcv", "fundamentals_pit", "index_membership_pit"] as const
@@ -1228,7 +1247,10 @@ export function normalizeStrategyDefinition(strategy: StrategyDefinition): Strat
   const format = strategy.signalFormat ?? (strategy.engine === "aipha" ? "target_position" : "trading_signal");
   return {
     ...strategy,
-    engine: strategy.engine,
+    // Compatibility IDs are now aliases over the canonical builtin runtime.
+    // Retired IDs remain discoverable through the manifest but are hidden from
+    // runtime listings and rejected by runBacktest.
+    engine: migration?.status === "migrated_to_builtin" ? "builtin" : strategy.engine,
     entryFile: catalogEntry?.source ?? strategy.entryFile,
     category: strategy.category ?? "technical",
     markets: strategy.markets?.length ? [...strategy.markets] : (catalogEntry?.markets?.length ? [...catalogEntry.markets] : ["cn_stock"]),
@@ -1236,7 +1258,11 @@ export function normalizeStrategyDefinition(strategy: StrategyDefinition): Strat
     dataRequirements: catalogEntry?.dataRequirements?.length ? [...catalogEntry.dataRequirements] : [...requirements],
     signalFormat: catalogEntry?.signalFormat ?? format,
     lifecycle: catalogEntry?.lifecycle ?? lifecycle,
-    availableEngines: strategy.availableEngines?.length ? [...strategy.availableEngines] : [strategy.engine],
+    availableEngines: migration?.status === "migrated_to_builtin"
+      ? ["builtin"]
+      : strategy.availableEngines?.length ? [...strategy.availableEngines] : [strategy.engine],
+    ...(migration?.canonicalId ? { canonicalStrategyId: migration.canonicalId } : {}),
+    ...(migration ? { migrationStatus: migration.status, migrationNote: migration.note } : {}),
   };
 }
 
@@ -1258,7 +1284,10 @@ export async function runBacktest(
   const runId = request.runId ?? randomUUID();
   const result = await runBacktestInner({ ...request, runId }, config, sharedProvider);
   const definition = getStrategy(request.strategyId);
-  const engine = request.engine ?? definition?.engine ?? config.backtestEngine ?? "aipha";
+  const migration = legacyMigration(request.strategyId);
+  const engine = migration?.status === "migrated_to_builtin"
+    ? "builtin"
+    : request.engine ?? definition?.engine ?? config.backtestEngine ?? "aipha";
   const effectiveRunId = request.runId ?? result.runId ?? runId;
   const strategyVersion = result.strategyVersion ?? definition?.version ?? "1.0.0";
   const dataAsOf = result.dataAsOf ?? result.equityCurve.at(-1)?.date ?? request.endDate;
@@ -1296,6 +1325,35 @@ async function runBacktestInner(
   config: QuantTradingConfig,
   sharedProvider?: MarketDataProvider,
 ): Promise<BacktestResult> {
+  const migration = legacyMigration(request.strategyId);
+  if (migration?.status === "retired") {
+    throw new Error(
+      `策略 "${request.strategyId}" 已正式退役，不能再启动旧引擎回测。${migration.note}`,
+    );
+  }
+  if (migration?.status === "migrated_to_builtin") {
+    if (request.engine && request.engine !== "builtin") {
+      throw new Error(
+        `策略 "${request.strategyId}" 已迁移到 builtin；请移除 engine=${request.engine}，旧引擎入口已关闭。`,
+      );
+    }
+    const fallback = backtraderBuiltinFallback[request.strategyId] ?? vnpyBuiltinFallback[request.strategyId];
+    const canonicalId = migration.canonicalId ?? fallback?.id;
+    if (!canonicalId) {
+      throw new Error(`策略 "${request.strategyId}" 的迁移记录缺少 canonicalId`);
+    }
+    const mappedParams = fallback?.mapParams(request.parameters ?? {}) ?? request.parameters;
+    const builtinStrategy = resolveBuiltinStrategy(canonicalId, mappedParams);
+    if (request.symbols.length > 1) {
+      return runPortfolioBacktest(
+        () => resolveBuiltinStrategy(canonicalId, mappedParams),
+        { ...request, engine: "builtin" },
+        config,
+        sharedProvider,
+      );
+    }
+    return runBuiltinBacktest(builtinStrategy, { ...request, engine: "builtin" }, config, sharedProvider);
+  }
   const strategy = getStrategy(request.strategyId);
   const engine = request.engine ?? strategy?.engine ?? config.backtestEngine ?? "builtin";
 

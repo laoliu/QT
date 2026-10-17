@@ -59,6 +59,10 @@ function loadProjectConfig(): QuantTradingConfig {
         // for live, while retaining safe non-trading local settings.
         delete parsed.tradingAccount;
         console.warn("[config] ignored live/QMT config.local.json override; set QUANT_TRADING_ALLOW_LIVE=true explicitly");
+      } else if (localLiveProfile && account) {
+        // A live profile is always provenance-gated, even if an old local
+        // file omitted the newer safety flag.
+        account.requireExecutionPlan = true;
       }
       merge(config, parsed);
     } catch {

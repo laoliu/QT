@@ -162,6 +162,11 @@ export type StrategyDefinition = {
   signalFormat?: "trading_signal" | "target_position" | "order_intent";
   lifecycle?: "primary" | "compatibility" | "experimental" | "live_only";
   availableEngines?: BacktestEngine[];
+  /** Canonical builtin strategy used when this entry is a legacy alias. */
+  canonicalStrategyId?: string;
+  /** Explicit migration state for old cross-language strategy IDs. */
+  migrationStatus?: "migrated_to_builtin" | "retired";
+  migrationNote?: string;
 };
 
 export type StrategyDataRequirement = "ohlcv" | "fundamentals_pit" | "features" | "index_membership_pit" | "ticks" | "order_book";
@@ -472,6 +477,10 @@ export type TradeRecord = {
   netPnl: number;
   holdingDays?: number;
   strategyId?: string;
+  signalId?: string;
+  runId?: string;
+  strategyVersion?: string;
+  dataTimestamp?: number;
   entryOrderId: string;
   exitOrderId?: string;
 };
@@ -897,6 +906,8 @@ export type TradingAccountConfig = {
   riskLimits?: RiskLimitsConfig;
   /** Require human confirmation for orders exceeding riskLimits.confirmationThreshold */
   confirmationRequired?: boolean;
+  /** Live QMT safety gate: require run/signal provenance from a validated execution plan. */
+  requireExecutionPlan?: boolean;
   /** Channel name/id to send confirmation messages */
   confirmationChannel?: string;
   futu?: FutuBrokerConfig;

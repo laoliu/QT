@@ -108,7 +108,7 @@ function makeBrokerMock(
   let orderCounter = 0;
 
   const broker = {
-    brokerType: "paper" as const,
+    brokerType: account.brokerType,
     connected: true,
     _fillCbs: fillCbs,
     _statusCbs: statusCbs,
@@ -137,7 +137,10 @@ function makeBrokerMock(
         status: "submitted" as OrderStatus,
         strategyId: req.strategyId,
         signalId: req.signalId,
-        brokerType: "paper",
+        runId: req.runId,
+        strategyVersion: req.strategyVersion,
+        dataTimestamp: req.dataTimestamp,
+        brokerType: account.brokerType,
         createdAt: now,
         updatedAt: now,
         submittedAt: now,
@@ -1096,6 +1099,112 @@ describe("OrderManager", () => {
       expect(trades[0].symbol).toBe("600519");
       expect(trades[0].netPnl).toBeDefined();
       expect(trades[0].strategyId).toBeUndefined(); // manual order, no strategy
+    });
+  });
+
+  describe("historical replay metadata", () => {
+    it.each([
+      ["paper", "paper", "orders-paper.json"],
+      ["qmt", "qmt", "orders-live.json"],
+    ] as const)("persists and replays unified metadata for %s", async (_label, brokerType, ordersFile) => {
+      const cfg = makeConfig({
+        tradingAccount: {
+          mode: brokerType === "qmt" ? "live" : "paper",
+          broker: brokerType,
+          qmt: brokerType === "qmt" ? { miniQmtPath: "C:\\qmt", accountId: "demo" } : undefined,
+          riskLimits: {
+            maxOrderValue: 500_000,
+            maxPositionPct: 0.3,
+            maxDailyLoss: 50_000,
+            maxTotalLoss: 200_000,
+            confirmationThreshold: 100_000,
+            stopLossPct: 0,
+            priceLimitPct: 0,
+          },
+        },
+      } as Partial<QuantTradingConfig>);
+      const account = makeAccount({ brokerType, cash: 500_000 });
+      const broker = makeBrokerMock(account, [makePosition("600519", { avgCost: 50, currentPrice: 50, marketValue: 5_000 })]);
+      const manager = new OrderManager(cfg, broker, null);
+      const runId = `run-${brokerType}-replay`;
+      const strategyVersion = "2.1.0";
+
+      const buy = await manager.submit({
+        symbol: "600519",
+        market: "cn_stock",
+        side: "buy",
+        orderType: "limit",
+        quantity: 100,
+        price: 50,
+        strategyId: "aipha-ml-ranking",
+        signalId: `${runId}:buy`,
+        runId,
+        strategyVersion,
+        dataTimestamp: 1_735_689_600_000,
+      });
+      expect(buy.ok).toBe(true);
+      const buyOrderId = buy.ok ? buy.order.orderId : "";
+      broker._simulateFill({
+        fillId: `${brokerType}-buy-fill`,
+        orderId: buyOrderId,
+        symbol: "600519",
+        side: "buy",
+        price: 50,
+        quantity: 100,
+        commission: 1,
+        timestamp: "2026-01-05T09:31:00.000Z",
+      });
+
+      const sell = await manager.submit({
+        symbol: "600519",
+        market: "cn_stock",
+        side: "sell",
+        orderType: "limit",
+        quantity: 100,
+        price: 55,
+        strategyId: "aipha-ml-ranking",
+        signalId: `${runId}:sell`,
+        runId,
+        strategyVersion,
+        dataTimestamp: 1_735_776_000_000,
+      });
+      expect(sell.ok).toBe(true);
+      const sellOrderId = sell.ok ? sell.order.orderId : "";
+      broker._simulateFill({
+        fillId: `${brokerType}-sell-fill`,
+        orderId: sellOrderId,
+        symbol: "600519",
+        side: "sell",
+        price: 55,
+        quantity: 100,
+        commission: 1,
+        timestamp: "2026-01-06T09:31:00.000Z",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      const storedOrders = JSON.parse(await fs.readFile(path.join(tmpDir, ordersFile), "utf-8")) as Order[];
+      expect(storedOrders).toHaveLength(2);
+      expect(storedOrders.every((order) => order.runId === runId)).toBe(true);
+      expect(storedOrders.every((order) => order.strategyVersion === strategyVersion)).toBe(true);
+
+      const storedTrades = JSON.parse(
+        await fs.readFile(path.join(tmpDir, brokerType === "qmt" ? "trades-live.json" : "trades-paper.json"), "utf-8"),
+      ) as TradeRecord[];
+      expect(storedTrades).toHaveLength(1);
+      expect(storedTrades[0]).toMatchObject({
+        strategyId: "aipha-ml-ranking",
+        runId,
+        strategyVersion,
+        signalId: `${runId}:sell`,
+      });
+
+      // A fresh manager represents a process restart/replay and must recover
+      // the same historical metadata from disk without broker cache state.
+      const replayManager = new OrderManager(cfg, makeBrokerMock(account, [makePosition("600519", { avgCost: 50, currentPrice: 50, marketValue: 5_000 })]), null);
+      await expect(replayManager.getOrders()).resolves.toHaveLength(2);
+      await expect(replayManager.getTrades()).resolves.toMatchObject([
+        expect.objectContaining({ runId, strategyVersion }),
+      ]);
     });
   });
 });

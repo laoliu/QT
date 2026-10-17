@@ -84,6 +84,58 @@ describe("QMTBroker", () => {
   });
 
   describe("placeOrder", () => {
+    it("rejects orders without execution-plan provenance when the live gate is enabled", async () => {
+      const gatedConfig: QuantTradingConfig = {
+        ...config,
+        tradingAccount: { ...config.tradingAccount!, requireExecutionPlan: true },
+      };
+      const broker = new QMTBroker(gatedConfig);
+      await expect(
+        broker.placeOrder({
+          symbol: "600519",
+          market: "cn_stock",
+          side: "buy",
+          orderType: "limit",
+          price: 1800,
+          quantity: 100,
+        }),
+      ).rejects.toThrow("requires runId and signalId");
+      expect(mockCall).not.toHaveBeenCalledWith("place_order", expect.anything());
+    });
+
+    it("forwards execution-plan provenance to the QMT bridge", async () => {
+      mockCall.mockImplementation((method: string) => {
+        if (method === "place_order") return { broker_order_id: "QMT-PROVENANCE" };
+        return {};
+      });
+      const gatedConfig: QuantTradingConfig = {
+        ...config,
+        tradingAccount: { ...config.tradingAccount!, requireExecutionPlan: true },
+      };
+      const broker = new QMTBroker(gatedConfig);
+      await broker.connect();
+      await broker.placeOrder({
+        symbol: "600519",
+        market: "cn_stock",
+        side: "buy",
+        orderType: "limit",
+        price: 1800,
+        quantity: 100,
+        strategyId: "aipha-ml-ranking",
+        runId: "run-qmt-1",
+        signalId: "signal-qmt-1",
+        strategyVersion: "1.0.0",
+      });
+      expect(mockCall).toHaveBeenCalledWith(
+        "place_order",
+        expect.objectContaining({
+          run_id: "run-qmt-1",
+          signal_id: "signal-qmt-1",
+          strategy_version: "1.0.0",
+        }),
+      );
+    });
+
     it("places a limit buy order", async () => {
       mockCall.mockImplementation((method: string) => {
         if (method === "place_order") return { broker_order_id: "QMT-001" };

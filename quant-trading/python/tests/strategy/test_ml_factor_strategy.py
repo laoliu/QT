@@ -288,6 +288,10 @@ class TestEnsembleConfig:
         assert len(cfg.oos_predictions_paths) == 2
         assert cfg.ensemble_method == "weighted_average"
 
+    def test_model_artifacts_require_legacy_compatibility(self):
+        with pytest.raises(ValueError, match="legacy_ml_compat=true"):
+            MLFactorStrategy(config=MLFactorConfig(model_path="models/old"))
+
 
 class TestEnsembleOOSScore:
     """多模型 OOS 集成打分测试。"""

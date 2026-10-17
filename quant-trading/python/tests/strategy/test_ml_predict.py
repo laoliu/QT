@@ -133,6 +133,7 @@ class TestInitialization:
             top_k=20,
             rebalance_days=5,
             model_path="nonexistent.pkl",
+            legacy_ml_compat=True,
             feature_columns=["pe_ttm", "pb"],
         )
         s = MLPredictStrategy(config=cfg)
@@ -447,13 +448,16 @@ class TestModelLoading:
 
         s = MLPredictStrategy(
             model_path=model_path,
+            legacy_ml_compat=True,
             feature_columns=["pe_ttm", "pb"],
         )
         assert s._model_loaded
         assert s._model_feature_names == ["pe_ttm", "pb"]
 
     def test_load_nonexistent_path(self):
-        s = MLPredictStrategy(model_path="/nonexistent/model.pkl")
+        s = MLPredictStrategy(
+            model_path="/nonexistent/model.pkl", legacy_ml_compat=True,
+        )
         assert not s._model_loaded
 
     def test_predict_with_model(self, tmp_path):
@@ -462,6 +466,7 @@ class TestModelLoading:
 
         s = MLPredictStrategy(
             model_path=model_path,
+            legacy_ml_compat=True,
             feature_columns=["pe_ttm", "pb"],
             winsorize=False,
         )
@@ -481,6 +486,7 @@ class TestModelLoading:
 
         s = MLPredictStrategy(
             model_path=model_path,
+            legacy_ml_compat=True,
             feature_columns=["pe_ttm"],
         )
         # 模型加载成功但 predict 会失败

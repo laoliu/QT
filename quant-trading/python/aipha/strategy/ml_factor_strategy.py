@@ -105,6 +105,7 @@ class MLFactorConfig(EquityRotationConfig):
     )
 
     # --- 预训练模型路径 ---
+    legacy_ml_compat: bool = False
     model_path: str = ""
     model_type: str = "lightgbm"  # "lightgbm" | "double_ensemble"
 
@@ -159,6 +160,20 @@ class MLFactorStrategy(EquityRotationStrategy):
         self._model_ready = False
         self._last_train_bar: int = -9999
         self._ohlcv_buffer: dict[str, list[dict]] = {}
+
+        if (
+            not self._config.legacy_ml_compat
+            and (
+                self._config.model_path
+                or self._config.oos_predictions_path
+                or self._config.oos_predictions_paths
+            )
+        ):
+            raise ValueError(
+                "ml_factor is a compatibility strategy; loading model_path or "
+                "OOS predictions requires legacy_ml_compat=true. Use the "
+                "canonical ml_ranking pipeline for new A-share research."
+            )
 
         # 加载 OOS 预测（优先），或预训练模型
         self._oos_scores: dict[str, dict[str, float]] = {}

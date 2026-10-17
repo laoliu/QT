@@ -79,10 +79,16 @@ class TestMLStrategyCreation:
         """model_path 指向不存在的文件 → 自动回退线性打分。"""
         cfg = self._make_run_config(
             model_path="/nonexistent/model.pkl",
+            legacy_ml_compat=True,
         )
         strategy = _create_strategy(cfg)
         assert isinstance(strategy, MLPredictStrategy)
         assert not strategy._model_loaded  # 文件不存在
+
+    def test_model_path_requires_explicit_legacy_compatibility(self):
+        cfg = self._make_run_config(model_path="/nonexistent/model.pkl")
+        with pytest.raises(ValueError, match="legacy_ml_compat=true"):
+            _create_strategy(cfg)
 
     def test_target_symbols_injected(self):
         """config_runner 会自动注入 target_symbols。"""

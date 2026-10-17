@@ -105,6 +105,7 @@ class MLStrategyConfig(EquityRotationConfig):
     """ML 预测策略配置。"""
 
     # --- ML 模型 ---
+    legacy_ml_compat: bool = False
     model_path: str = ""
     feature_columns: list[str] = field(
         default_factory=lambda: list(_DEFAULT_META_FEATURES)
@@ -150,6 +151,12 @@ class MLPredictStrategy(EquityRotationStrategy):
             valid_fields = {f.name for f in MLStrategyConfig.__dataclass_fields__.values()}
             filtered = {k: v for k, v in kwargs.items() if k in valid_fields}
             self._config = MLStrategyConfig(**filtered)
+        if self._config.model_path and not self._config.legacy_ml_compat:
+            raise ValueError(
+                "ml_predict is a compatibility strategy; model_path requires "
+                "legacy_ml_compat=true. Use the canonical ml_ranking pipeline "
+                "for new A-share research."
+            )
         self._model: Any | None = None
         self._model_feature_names: list[str] | None = None
         self._model_loaded = False

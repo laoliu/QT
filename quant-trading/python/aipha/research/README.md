@@ -95,6 +95,11 @@ for online TuShare snapshot construction, use the `ml_ranking` bridge's
 `train_tushare` action. The old `--check-only` rolling-retrainer mode remains
 available for read-only drift and coverage checks.
 
+The historical `ml_factor` and `ml_predict` strategy classes also require
+`legacy_ml_compat: true` whenever a model path or precomputed OOS prediction
+file is configured. Their feature paths are retained for reproducible old
+backtests; the canonical `aipha-ml-ranking` strategy remains the default.
+
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
 read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.
 Adding `--strict` makes CI fail while any applicable ML config lacks a

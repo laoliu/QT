@@ -588,6 +588,10 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert report["diagnostics"]["pbo_method"] in {
         "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
     }
+    assert report["diagnostics"]["selection_pbo_method"] in {
+        "cscv_top_k_selection", "unavailable_insufficient_oos", "unavailable",
+    }
+    assert report["diagnostics"]["selection_pbo_candidates"]
     model_manifest = json.loads((artifact_dir / "model" / "model_manifest.json").read_text(encoding="utf-8"))
     assert "momentum_signal" in model_manifest["feature_columns"]
     assert "is_limit_up" not in model_manifest["feature_columns"]

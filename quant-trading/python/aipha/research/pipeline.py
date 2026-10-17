@@ -435,6 +435,9 @@ class ResearchPipeline:
                 "pbo_proxy": metrics["pbo_proxy"],
                 "pbo": metrics.get("pbo"),
                 "pbo_method": metrics.get("pbo_method", "unavailable"),
+                "selection_pbo": metrics.get("selection_pbo"),
+                "selection_pbo_method": metrics.get("selection_pbo_method", "unavailable"),
+                "selection_pbo_candidates": metrics.get("selection_pbo_candidates", []),
                 "is_oos_decay": wf_summary.get("is_oos_decay_per_fold", []),
                 **evaluation_diagnostics,
             },
@@ -525,6 +528,11 @@ def _evaluate_predictions(
     top_returns: list[float] = []
     bottom_returns: list[float] = []
     quintile_returns: dict[int, list[float]] = {index: [] for index in range(1, 6)}
+    # A fixed, pre-declared Top-K grid is a more meaningful CSCV candidate set
+    # than rank buckets alone: it represents the portfolio-size choice that
+    # can be selected during research. It is independent of observed returns.
+    top_k_grid = _top_k_candidate_grid(config.top_k)
+    top_k_returns: dict[int, list[float]] = {candidate: [] for candidate in top_k_grid}
     for _, group in predictions.groupby("trade_date", sort=True):
         valid = group.dropna(subset=["score", "fwd_return"])
         if len(valid) < 3:
@@ -535,6 +543,11 @@ def _evaluate_predictions(
         ranked = valid.sort_values("score", ascending=False)
         top_returns.append(float(ranked.head(config.top_k)["fwd_return"].mean()))
         bottom_returns.append(float(ranked.tail(config.top_k)["fwd_return"].mean()))
+        for candidate in top_k_grid:
+            top_k_returns[candidate].append(
+                float(ranked.head(candidate)["fwd_return"].mean())
+                if len(ranked) >= candidate else float("nan"),
+            )
         ranked = ranked.copy()
         ranked["quintile"] = pd.qcut(
             ranked["score"].rank(method="first", ascending=False),
@@ -574,6 +587,7 @@ def _evaluate_predictions(
     ic_mean = float(np.mean(daily_ic)) if daily_ic else 0.0
     ic_std = float(np.std(daily_ic, ddof=1)) if len(daily_ic) > 1 else 0.0
     formal_pbo, pbo_method = _compute_quintile_cscv(quintile_returns)
+    selection_pbo, selection_pbo_method = _compute_candidate_cscv(top_k_returns)
     return {
         "rank_ic": ic_mean,
         "icir": ic_mean / ic_std if ic_std > 0 else 0.0,
@@ -586,7 +600,47 @@ def _evaluate_predictions(
         "top_k_mean_forward_return_net_estimated_cost": top_mean - turnover_cost,
         "pbo": formal_pbo,
         "pbo_method": pbo_method,
+        "selection_pbo": selection_pbo,
+        "selection_pbo_method": selection_pbo_method,
+        "selection_pbo_candidates": sorted(top_k_returns),
     }
+
+
+def _top_k_candidate_grid(top_k: int) -> tuple[int, ...]:
+    """Return the fixed Top-K candidates used by the selection PBO test."""
+    base = max(1, int(top_k))
+    candidates = {max(5, base // 2), base, base * 2, base * 4}
+    return tuple(sorted(candidates))
+
+
+def _compute_candidate_cscv(
+    candidate_returns: dict[int, list[float]],
+) -> tuple[float | None, str]:
+    """Compute CSCV over fixed Top-K portfolio-size candidates.
+
+    This is a parameter-selection PBO diagnostic. It does not measure
+    arbitrary model/factor search; callers should report the candidate set
+    alongside the value and keep it fixed before looking at outcomes.
+    """
+    if len(candidate_returns) < 2:
+        return None, "unavailable_insufficient_candidates"
+    frame = pd.DataFrame(candidate_returns).sort_index(axis=1).dropna(how="any")
+    if len(frame) < 8 or frame.shape[1] < 2:
+        return None, "unavailable_insufficient_oos"
+    partitions = min(16, len(frame))
+    if partitions % 2:
+        partitions -= 1
+    if partitions < 4:
+        return None, "unavailable_insufficient_oos"
+    try:
+        from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
+
+        result = PBOAnalyzer(PBOConfig(num_subsamples=partitions)).compute(
+            frame.to_numpy(dtype=float),
+        )
+        return float(result.pbo), "cscv_top_k_selection"
+    except (ValueError, ImportError):
+        return None, "unavailable"
 
 
 def _compute_quintile_cscv(

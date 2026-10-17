@@ -42,7 +42,9 @@ Runs write `run_manifest.json`, `report.json`, a version-checked model folder,
 `oos_predictions.parquet` and its metadata sidecar, `portfolio_returns.parquet`,
 `trades.json`, `target_positions.json`, and one validated paper execution plan
 per rebalance date. Reports include the walk-forward PBO proxy plus formal
-CSCV PBO when enough OOS quintile observations exist, long-short diagnostics,
+CSCV PBO when enough OOS observations exist. The report separates the
+quintile-portfolio diagnostic (`pbo`) from the fixed Top-K parameter-selection
+diagnostic (`selection_pbo` and its candidate grid). It also includes long-short diagnostics,
 benchmark comparison, and causal style exposures when the snapshot contains
 the required columns. The portfolio replay models board lots, cash,
 configurable fees/slippage, daily turnover, T+1, suspension, and

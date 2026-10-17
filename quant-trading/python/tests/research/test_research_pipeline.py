@@ -60,6 +60,8 @@ def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
                 "listing_days": 1000,
                 "feature_version": "cn_equity_v1",
                 "momentum_signal": signal,
+                "momentum_20": signal,
+                "volatility_20": abs(signal),
                 "benchmark_close": 100.0 + dates.get_loc(dt),
             })
     return pd.DataFrame(rows)
@@ -410,6 +412,7 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert (artifact_dir / "trades.json").is_file()
     assert report["walk_forward"]["n_folds"] >= 1
     assert report["diagnostics"]["benchmark"]["available"] is True
+    assert report["diagnostics"]["style_exposures"]["available"] is True
     assert report["diagnostics"]["pbo_method"] in {
         "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
     }

@@ -575,6 +575,7 @@ def _build_evaluation_diagnostics(
         "benchmark": {"available": False},
         "long_short": {"available": False},
         "exposures": {"available": False},
+        "style_exposures": {"available": False},
     }
     # A provider may add a benchmark close/return to the frozen snapshot.  We
     # never fetch it here, which keeps the run reproducible and offline.
@@ -619,6 +620,37 @@ def _build_evaluation_diagnostics(
         }
 
     target_frame = pd.DataFrame([asdict(item) for item in targets])
+    style_columns = [
+        column for column in (
+            "log_market_cap", "factor_pe_ttm", "factor_pb", "momentum_20",
+            "volatility_20", "average_turnover_value_20",
+        ) if column in source.columns
+    ]
+    if not target_frame.empty and style_columns:
+        source_dates = pd.to_datetime(source["trade_date"])
+        style_rows: list[dict[str, Any]] = []
+        for _, group in target_frame.groupby("rebalance_date", sort=True):
+            signal_date = pd.Timestamp(group["rebalance_date"].iloc[0])
+            visible = source.loc[(source_dates <= signal_date) & source["symbol"].isin(group["symbol"])]
+            latest = visible.sort_values("trade_date").drop_duplicates("symbol", keep="last")
+            weights = group.set_index("symbol")["target_weight"]
+            total_weight = float(weights.sum())
+            if latest.empty or total_weight <= 0:
+                continue
+            exposure: dict[str, float] = {}
+            for column in style_columns:
+                values = pd.to_numeric(latest.set_index("symbol")[column], errors="coerce")
+                aligned = values.reindex(weights.index).dropna()
+                if not aligned.empty:
+                    exposure[column] = float((aligned * weights.reindex(aligned.index)).sum() / total_weight)
+            if exposure:
+                style_rows.append({"rebalance_date": signal_date.date().isoformat(), "weighted_means": exposure})
+        if style_rows:
+            diagnostics["style_exposures"] = {
+                "available": True,
+                "columns": style_columns,
+                "by_rebalance": style_rows,
+            }
     industry_col = next((c for c in ("industry", "sector", "sw_industry") if c in source.columns), None)
     if not target_frame.empty and industry_col:
         source_dates = pd.to_datetime(source["trade_date"])

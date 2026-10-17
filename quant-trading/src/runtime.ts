@@ -7,14 +7,6 @@ export type Logger = {
   debug?(message: string): void;
 };
 
-export type AnyAgentTool = {
-  name: string;
-  label?: string;
-  description: string;
-  parameters: unknown;
-  execute(toolCallId: string, params: unknown): Promise<unknown>;
-};
-
 export type AppService = {
   id: string;
   start(ctx?: AppServiceContext): Promise<void>;
@@ -38,12 +30,9 @@ export type QuantTradingRuntime = {
   name: string;
   source: "quant-trading";
   pluginConfig: Record<string, unknown>;
-  config: { gateway?: { auth?: { token?: string } } };
+  config: Record<string, unknown>;
   logger: Logger;
   runtime: { subagent: { run: (...args: any[]) => Promise<any>; waitForRun: (...args: any[]) => Promise<any>; getSessionMessages: (...args: any[]) => Promise<any> } };
-  registerTool(tool: AnyAgentTool, options?: { names?: string[] }): void;
-  registerCommand(command: Record<string, unknown>): void;
-  registerCli(handler: unknown, options?: Record<string, unknown>): void;
   registerService(service: AppService): void;
   registerHttpRoute(route: RouteRegistration): void;
   getPositions?(): Promise<unknown>;

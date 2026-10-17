@@ -167,7 +167,7 @@ setInterval(function(){document.getElementById('clock').textContent=new Date().t
 
 // Restore stock pool from localStorage
 (function(){
-  var saved=localStorage.getItem('openclaw-rec-symbols');
+  var saved=localStorage.getItem('quant-trading-rec-symbols');
   if(saved){document.getElementById('rec-symbols').value=saved}
   // Show stale-results banner when user manually changes the pool after an analysis
   var symInput=document.getElementById('rec-symbols');

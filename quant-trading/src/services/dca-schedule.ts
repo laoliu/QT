@@ -320,7 +320,7 @@ export class DcaScheduleService {
   // ── Persistence ────────────────────────────────────────────
 
   private dataPath(): string {
-    const dir = this.cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = this.cfg.dataDir ?? path.join(process.cwd(), "data");
     return path.join(dir, "dca-plans.json");
   }
 

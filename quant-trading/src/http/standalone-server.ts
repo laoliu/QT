@@ -1,9 +1,8 @@
 /**
  * Standalone HTTP server for quant-trading routes.
  *
- * When the OpenClaw gateway (龙虾) is not running, this lightweight
- * Node.js HTTP server can serve the admin UI and API routes independently
- * on a configurable port (e.g. 18891).
+ * This lightweight Node.js HTTP server serves the admin UI and API routes
+ * independently on a configurable port (e.g. 18891).
  *
  * Routes are collected via {@link createRouteCollector} which wraps
  * `api.registerHttpRoute` to intercept registrations.
@@ -22,18 +21,12 @@ export interface CollectedRoute {
 let _server: http.Server | undefined;
 
 /**
- * Create a route collector that intercepts `api.registerHttpRoute` calls
- * and stores the routes for the standalone server.
+ * Create a route collector that stores application routes for the standalone server.
  *
  * Usage:
  * ```ts
  * const collector = createRouteCollector();
- * const origRegister = api.registerHttpRoute.bind(api);
- * api.registerHttpRoute = (params) => {
- *   origRegister(params);          // still register with gateway
- *   collector.collect(params);     // also collect for standalone
- * };
- * // ... after all routes registered ...
+ * // Register routes through the collector while bootstrapping the application.
  * startStandaloneServer(collector.routes, port, logger);
  * ```
  */

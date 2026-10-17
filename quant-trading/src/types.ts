@@ -842,7 +842,7 @@ export type TradingAccountConfig = {
   mode: "paper" | "live";
   broker?: BrokerType;
   accountId?: string;
-  /** Auto-start the live engine when the gateway starts (default: false) */
+  /** Auto-start the live engine when the application starts (default: false) */
   autoStart?: boolean;
   /** Position sizing configuration (default: fixed_amount ¥10000). */
   positionSizing?: PositionSizingConfig;
@@ -908,7 +908,7 @@ export type QuantTradingConfig = {
   /**
    * Cross-machine signal webhook configuration.
    * Enables the POST /quant/api/signal endpoint so a remote machine
-   * (e.g. a Windows QMT trading PC) can push signals to this OpenClaw
+   * (e.g. a Windows QMT trading PC) can push signals to this Quant Trading
    * instance over HTTP (typically via Tailscale VPN).
    */
   signalWebhook?: SignalWebhookConfig;
@@ -942,19 +942,9 @@ export type QuantTradingConfig = {
   };
 
   /**
-   * OpenClaw iframe proxy port.
-   * When set, a reverse proxy is started on this port that strips
-   * X-Frame-Options / CSP headers and optionally injects the gateway
-   * token, allowing the admin panel to embed the OpenClaw chat UI
-   * via iframe.  Example: 18890.
-   */
-  openclawProxyPort?: number;
-
-  /**
    * Standalone HTTP server port.
    * When set, a lightweight Node.js HTTP server is started on this port
-   * that serves all `/quant/*` routes independently of the OpenClaw gateway.
-   * Useful when the gateway (龙虾) is not running.  Example: 18891.
+   * that serves all `/quant/*` routes independently. Example: 18891.
    */
   standalonePort?: number;
 

@@ -1034,9 +1034,9 @@ def _fetch_klines_bridge(symbol: str, days: int, as_of_date: str | None = None) 
     """Fetch K-line from Windows QMT data bridge (fastest path)."""
     bridge_url = os.environ.get("WINDOWS_XTDATA_URL", "").rstrip("/")
     if not bridge_url:
-        # Try reading from openclaw config
+        # Try reading from quant-trading config
         try:
-            cfg_path = os.path.expanduser("~/.openclaw/openclaw.json")
+            cfg_path = os.path.expanduser("~/.quant-trading/quant-trading.json")
             with open(cfg_path) as f:
                 cfg = json.load(f)
             bridge_url = (cfg.get("plugins", {}).get("entries", {})

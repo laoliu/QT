@@ -179,7 +179,7 @@ export function createStockScreenTool(
             const fsM = await import("node:fs/promises");
             const osM = await import("node:os");
             const pathM = await import("node:path");
-            const dir = config.dataDir ?? pathM.join(osM.homedir(), ".openclaw", "quant-trading");
+            const dir = config.dataDir ?? pathM.join(osM.homedir(), "data");
             const raw = await fsM.readFile(pathM.join(dir, "watchlist.json"), "utf-8");
             const wl = JSON.parse(raw) as string[];
             if (wl.length === 0) {

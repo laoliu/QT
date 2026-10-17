@@ -382,7 +382,7 @@ async function generateWatchlistUpdate(
     const fs = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
-    const dir = _config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = _config.dataDir ?? path.join(process.cwd(), "data");
     const watchlistPath = path.join(dir, "watchlist.json");
     const raw = await fs.readFile(watchlistPath, "utf-8");
     const watchlist = JSON.parse(raw) as string[];
@@ -1470,7 +1470,7 @@ async function generateAfterMarketReview(
     const { default: fs } = await import("node:fs/promises");
     const { default: os } = await import("node:os");
     const { default: path } = await import("node:path");
-    const dir = _config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = _config.dataDir ?? path.join(process.cwd(), "data");
     const watchlistPath = path.join(dir, "watchlist.json");
     const raw = await fs.readFile(watchlistPath, "utf-8");
     const watchlist = JSON.parse(raw) as string[];

@@ -65,8 +65,8 @@ DEFAULT_PORT = 18889
 REQUEST_TIMEOUT = 60  # seconds to wait for result before timing out
 REQUEST_EXPIRY = 300  # seconds before a request is cleaned up
 
-# Gateway proxy — forward /quant/api/trading-* to the local OpenClaw gateway
-GATEWAY_URL = "http://127.0.0.1:" + os.environ.get("APP_PORT", "18789")
+# Gateway proxy — forward /quant/api/trading-* to the local Quant Trading gateway
+GATEWAY_URL = "http://127.0.0.1:" + os.environ.get("APP_PORT", "18891")
 
 # ===================== REQUEST STORE =====================
 
@@ -173,7 +173,7 @@ def _cleanup_old():
 # ===================== GATEWAY PROXY =====================
 
 def _proxy_to_gateway(method, path, body=None, timeout=15):
-    """Forward a request to the local OpenClaw gateway and return (status, body_bytes)."""
+    """Forward a request to the local Quant Trading gateway and return (status, body_bytes)."""
     import urllib.request
     import urllib.error
     url = GATEWAY_URL + path

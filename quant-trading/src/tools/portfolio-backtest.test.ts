@@ -31,7 +31,7 @@ function fakeApi(): QuantTradingRuntime {
 }
 
 describe("portfolio_backtest tool", () => {
-  // Use a temp dataDir so tests don't pick up real ~/.openclaw portfolio
+  // Use a temp dataDir so tests don't pick up real ~/.quant-trading portfolio
   const tool = createPortfolioBacktestTool(fakeApi(), {
     dataProvider: "demo",
     dataDir: path.join(os.tmpdir(), `qt-test-${Date.now()}`),

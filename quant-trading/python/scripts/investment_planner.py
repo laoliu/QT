@@ -2620,7 +2620,7 @@ def _screen_fitness_optimal(risk_profile: dict, top_n: int = 20, aipha_strategie
     import sqlite3 as _sql
 
     home = os.path.expanduser("~")
-    db_path = os.path.join(home, ".openclaw", "extensions", "quant-trading", "cache", "quant-trading.db")
+    db_path = os.path.join(home, ".quant-trading", "extensions", "quant-trading", "cache", "quant-trading.db")
     if not os.path.exists(db_path):
         print("[fitness_optimal] 数据库不存在", file=sys.stderr)
         return []

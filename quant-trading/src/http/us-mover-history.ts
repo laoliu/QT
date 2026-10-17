@@ -23,7 +23,7 @@ interface UsMoverHistoryEntry {
 }
 
 function getHistoryPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "us-mover-history.json");
 }
 

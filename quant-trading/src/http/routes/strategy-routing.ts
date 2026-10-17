@@ -721,7 +721,7 @@ export function registerStrategyRoutingRoutes(deps: AdminRouteDeps): void {
 
         // Load trade records
         const tradesDir =
-          config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          config.dataDir ?? path.join(process.cwd(), "data");
         let trades: TradeRecord[] = [];
         try {
           trades = JSON.parse(

@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS financial_data (
 
 def _get_financial_db() -> sqlite3.Connection:
     """Get SQLite connection for financial data cache."""
-    cache_dir = Path.home() / ".openclaw" / "extensions" / "quant-trading" / "cache"
+    cache_dir = Path.home() / ".quant-trading" / "extensions" / "quant-trading" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     db_path = cache_dir / "financial_data.db"
     conn = sqlite3.connect(str(db_path), timeout=10)

@@ -68,7 +68,7 @@ const RESPONSE_TTL_MS = 10 * 60 * 1000; // 响应 10 分钟保留
 
 // ── 磁盘缓存：bridge 返回的 K 线数据持久化 ──────────────────────────
 
-const CACHE_DIR = path.join(os.homedir(), ".openclaw", "extensions", "quant-trading", "cache");
+const CACHE_DIR = path.join(process.cwd(), "data", "cache");
 const CACHE_FILE = path.join(CACHE_DIR, "kline-bridge-cache.json");
 
 // 磁盘缓存 TTL：当天交易日内有效（过期后下次会重新从 bridge 请求）

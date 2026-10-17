@@ -345,7 +345,7 @@ export class PortfolioRiskOverlay {
     config?: Partial<RiskOverlayConfig>;
     log?: (msg: string, level?: string) => void;
   } = {}) {
-    this.dataDir = opts.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    this.dataDir = opts.dataDir ?? path.join(process.cwd(), "data");
     this.logFn = opts.log ?? (() => {});
 
     // Merge user config over defaults

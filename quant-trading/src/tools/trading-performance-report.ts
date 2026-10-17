@@ -22,7 +22,7 @@ import { generatePerformanceReport } from "../services/trading-performance-repor
 import type { QuantTradingConfig, TradeRecord } from "../types.js";
 
 function getTradesPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "trades.json");
 }
 

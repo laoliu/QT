@@ -226,7 +226,7 @@ def _load_universe_from_spot(universe: str) -> list[dict]:
         import sqlite3
         data_dir = os.environ.get(
             "QUANT_DATA_DIR",
-            os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"),
+            os.path.join(os.getcwd(), "data"),
         )
         db_path = os.path.join(data_dir, "quant-trading.db")
         if not os.path.exists(db_path):
@@ -344,7 +344,7 @@ def _load_klines_from_cache(code: str, days: int) -> list[dict]:
     try:
         import sqlite3
         data_dir = os.environ.get("QUANT_DATA_DIR",
-                                   os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"))
+                                   os.path.join(os.getcwd(), "data"))
         db_path = os.path.join(data_dir, "quant-trading.db")
         if not os.path.exists(db_path):
             return []
@@ -371,7 +371,7 @@ def _load_fundamentals_from_cache(code: str) -> dict:
     try:
         import sqlite3
         data_dir = os.environ.get("QUANT_DATA_DIR",
-                                   os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"))
+                                   os.path.join(os.getcwd(), "data"))
         db_path = os.path.join(data_dir, "quant-trading.db")
         if not os.path.exists(db_path):
             return {}
@@ -541,7 +541,7 @@ def _discover_offline(strategy: str, universe: str, limit: int, t_start: float,
         import sqlite3
         data_dir = os.environ.get(
             "QUANT_DATA_DIR",
-            os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"),
+            os.path.join(os.getcwd(), "data"),
         )
         db_path = os.path.join(data_dir, "quant-trading.db")
         if not os.path.exists(db_path):
@@ -751,7 +751,7 @@ def _discover(req: dict) -> dict:
         try:
             import sqlite3 as _sq3
             _data_dir = os.environ.get("QUANT_DATA_DIR",
-                os.path.join(os.path.expanduser("~"), ".openclaw", "quant-data"))
+                os.path.join(os.getcwd(), "data"))
             _db_path = os.path.join(_data_dir, "quant-trading.db")
             if os.path.exists(_db_path):
                 _conn = _sq3.connect(_db_path)

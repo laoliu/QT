@@ -120,7 +120,7 @@ def _get_db_path() -> str:
     data_dir = os.environ.get("QUANT_DATA_DIR", "")
     if not data_dir:
         home = os.path.expanduser("~")
-        data_dir = os.path.join(home, ".openclaw", "quant-data")
+        data_dir = os.path.join(os.getcwd(), "data")
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, "quant-trading.db")
 

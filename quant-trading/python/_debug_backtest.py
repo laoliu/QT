@@ -4,7 +4,7 @@ import sqlite3, os, sys, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 
-CACHE_DB = os.path.expanduser("~/.openclaw/extensions/quant-trading/cache/stock_data.db")
+CACHE_DB = os.path.expanduser("~/data/cache/stock_data.db")
 
 def fetch_from_cache(symbol, start_date, end_date, market=None):
     conn = sqlite3.connect(CACHE_DB)

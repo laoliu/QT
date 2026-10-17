@@ -1301,7 +1301,7 @@ export function registerDailyPickRoutes(deps: AdminRouteDeps): void {
 
   // ── Daily Pick History (server-side storage) ─────────────────
   const historyDir = path.join(
-    config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading"),
+    config.dataDir ?? path.join(process.cwd(), "data"),
     "daily-pick-history",
   );
 

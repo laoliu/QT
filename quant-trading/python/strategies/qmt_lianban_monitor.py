@@ -8,7 +8,7 @@ qmt_lianban_monitor.py — QMT 连板接力实盘监控 (二进三)
   1. 每日开盘前从 Mac 获取二板候选列表 (screener结果)
   2. 盘中订阅候选股 1 分钟 K 线
   3. 实时监控封板状态 (是否触及涨停价、封板稳定性)
-  4. 满足条件时通过 HTTP webhook 推送信号到 Mac OpenClaw
+  4. 满足条件时通过 HTTP webhook 推送信号到 Mac Quant Trading
   5. (可选) 通过 xttrader 直接自动下单
 
 信号逻辑:
@@ -19,7 +19,7 @@ qmt_lianban_monitor.py — QMT 连板接力实盘监控 (二进三)
 
 配置:
   - SCREEN_MODE: "remote" (从Mac获取候选) / "manual" (手动指定)
-  - SIGNAL_MODE: "http" (推送到OpenClaw) / "file" (写信号文件)
+  - SIGNAL_MODE: "http" (推送到Quant Trading) / "file" (写信号文件)
   - AUTO_ORDER:  True (通过xttrader自动下单) / False (仅信号)
 """
 
@@ -71,20 +71,20 @@ COOLDOWN_AFTER_SIGNAL = 600      # 同一股票信号间隔 (秒)
 STOP_LOSS_PCT = -0.05            # 亏损 5% 止损
 EMERGENCY_SELL_AT_LIMIT_DOWN = True  # 跌停紧急卖出
 
-# Mac OpenClaw 连接
-_OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_APP_PORT = os.environ.get("APP_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
-OPENCLAW_WEBHOOK_URL = f"{_OPENCLAW_BASE}/quant/api/signal"
-OPENCLAW_WEBHOOK_SECRET = os.environ.get("OPENCLAW_SIGNAL_SECRET", "qmt-signal-secret-2026")
-OPENCLAW_TIMEOUT_SECS = 5
+# Mac Quant Trading 连接
+_QUANT_TRADING_HOST = os.environ.get("QUANT_TRADING_HOST", "127.0.0.1")
+_APP_PORT = os.environ.get("APP_PORT", "18891")
+_QUANT_TRADING_BASE = f"http://{_QUANT_TRADING_HOST}:{_APP_PORT}"
+QUANT_TRADING_WEBHOOK_URL = f"{_QUANT_TRADING_BASE}/quant/api/signal"
+QUANT_TRADING_WEBHOOK_SECRET = os.environ.get("QUANT_TRADING_SIGNAL_SECRET", "qmt-signal-secret-2026")
+QUANT_TRADING_TIMEOUT_SECS = 5
 
 # 候选列表 API (Mac 端 screener 结果)
-OPENCLAW_CANDIDATES_URL = f"{_OPENCLAW_BASE}/quant/api/stocklist"
+QUANT_TRADING_CANDIDATES_URL = f"{_QUANT_TRADING_BASE}/quant/api/stocklist"
 
 # 信号文件路径
 SIGNALS_PATH = os.path.join(
-    os.path.expanduser("~"), ".openclaw", "quant-trading", "signals.json",
+    os.path.expanduser("~"), "data", "signals.json",
 )
 MAX_SIGNALS = 500
 
@@ -160,13 +160,13 @@ def _post_signal_http(signal):
 
     body = json.dumps(signal, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    if OPENCLAW_WEBHOOK_SECRET:
-        headers["X-Signal-Secret"] = OPENCLAW_WEBHOOK_SECRET
+    if QUANT_TRADING_WEBHOOK_SECRET:
+        headers["X-Signal-Secret"] = QUANT_TRADING_WEBHOOK_SECRET
     req = urllib.request.Request(
-        OPENCLAW_WEBHOOK_URL, data=body, headers=headers, method="POST",
+        QUANT_TRADING_WEBHOOK_URL, data=body, headers=headers, method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=OPENCLAW_TIMEOUT_SECS) as resp:
+        with urllib.request.urlopen(req, timeout=QUANT_TRADING_TIMEOUT_SECS) as resp:
             print(f"[{STRATEGY_ID}] Webhook OK: {resp.read().decode()[:120]}")
     except Exception as e:
         print(f"[{STRATEGY_ID}] Webhook 失败: {e}")
@@ -199,7 +199,7 @@ def _emit_signal(symbol, direction, price, reason, confidence=0.8):
 
 
 def _fetch_candidates_from_mac() -> list:
-    """Fetch relay candidates from Mac OpenClaw screener.
+    """Fetch relay candidates from Mac Quant Trading screener.
 
     Expects the Mac screener to have run and posted results to
     /quant/api/stocklist with metadata including lian_ban_count.
@@ -208,8 +208,8 @@ def _fetch_candidates_from_mac() -> list:
     import urllib.error
 
     try:
-        req = urllib.request.Request(OPENCLAW_CANDIDATES_URL, method="GET")
-        with urllib.request.urlopen(req, timeout=OPENCLAW_TIMEOUT_SECS) as resp:
+        req = urllib.request.Request(QUANT_TRADING_CANDIDATES_URL, method="GET")
+        with urllib.request.urlopen(req, timeout=QUANT_TRADING_TIMEOUT_SECS) as resp:
             body = resp.read().decode("utf-8")
             data = json.loads(body)
             stocks = data.get("data", [])

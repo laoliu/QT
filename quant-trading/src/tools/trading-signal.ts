@@ -9,7 +9,7 @@ import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 
 function getSignalsPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "signals.json");
 }
 

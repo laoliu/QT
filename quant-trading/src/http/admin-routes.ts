@@ -1981,7 +1981,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
 
         const executePct = Math.min(100, Math.max(10, toFiniteNumber(body.execute_pct, 60)));
         const strategyName =
-          typeof body.strategy_name === "string" ? body.strategy_name : "openclaw_scheduled";
+          typeof body.strategy_name === "string" ? body.strategy_name : "quant-trading_scheduled";
 
         const engine = getEngine();
         const broker = engine.broker;
@@ -3085,11 +3085,11 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     handler: secure(async (_req, res) => {
       const engine = getEngine();
 
-      // Gateway info
-      const gateway = {
+      // Application info
+      const application = {
         running: true,
         pid: process.pid,
-        port: Number(process.env["APP_PORT"] || 18789),
+        port: Number(process.env["APP_PORT"] || config.standalonePort || 18891),
         version: process.env["APP_VERSION"] || "unknown",
         uptime: formatUptime(process.uptime()),
       };
@@ -3143,7 +3143,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       ].map((id) => ({ id }));
 
       json(res, {
-        gateway,
+        application,
         receiver,
         bridgeHealth,
         engine: engineStatus,
@@ -3829,7 +3829,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const { default: fs } = await import("node:fs/promises");
       const { default: path } = await import("node:path");
       const { default: os } = await import("node:os");
-      const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+      const dir = config.dataDir ?? path.join(process.cwd(), "data");
       const filePath = path.join(dir, "decision-log.json");
       interface DLogEntry {
         timestamp: string;
@@ -4070,9 +4070,9 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       }
 
       json(res, {
-        gateway: {
+        application: {
           pid: process.pid,
-          port: Number(process.env["APP_PORT"] || 18789),
+          port: Number(process.env["APP_PORT"] || config.standalonePort || 18891),
           version: process.env["APP_VERSION"] || "unknown",
           uptime: formatUptime(process.uptime()),
           memoryMB: Math.round(process.memoryUsage().heapUsed / 1048576),

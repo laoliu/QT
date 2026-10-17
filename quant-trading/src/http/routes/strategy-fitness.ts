@@ -63,7 +63,7 @@ async function writeProgress(config: QuantTradingConfig, data: Record<string, un
 
 // ── DB helpers (same schema as Python) ───────────────────────────
 function getDbPath(): string {
-  const dataDir = process.env.QUANT_DATA_DIR || path.join(os.homedir(), ".openclaw", "quant-data");
+  const dataDir = process.env.QUANT_DATA_DIR || path.join(process.cwd(), "data");
   return path.join(dataDir, "quant-trading.db");
 }
 

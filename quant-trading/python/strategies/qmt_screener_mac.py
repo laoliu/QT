@@ -25,7 +25,7 @@ K 线数据来源（二选一）:
 手动运行（从 strategies/ 目录）:
     python3 qmt_screener_mac.py [--save-only]
 
-通过 OpenClaw Discord /选股 命令触发（commands/index.ts 调用）:
+通过 Quant Trading Discord /选股 命令触发（commands/index.ts 调用）:
     python3 qmt_screener_mac.py --save-only
 
 依赖（与 screener_engine 共享）:
@@ -83,8 +83,8 @@ KLINE_DAYS = 120
 # 股票池（空字符串 = ȫ A 股；可以用 "hs300"/"zz500"/"zz1000"/"cyb"/"kc50" 等）
 UNIVERSE = ""
 
-# 推送到 OpenClaw 网关的 URL
-OPENCLAW_STOCKLIST_URL = "http://127.0.0.1:18789/quant/api/stocklist"
+# 推送到 Quant Trading 网关的 URL
+QUANT_TRADING_STOCKLIST_URL = "http://127.0.0.1:18891/quant/api/stocklist"
 
 # ── QMT 数据桥配置（USE_QMT_BRIDGE=True 时生效）─────────────────────
 #
@@ -94,8 +94,8 @@ OPENCLAW_STOCKLIST_URL = "http://127.0.0.1:18789/quant/api/stocklist"
 #
 USE_QMT_BRIDGE = os.environ.get("USE_QMT_BRIDGE", "true").lower() in ("1", "true", "yes")
 
-# Mac OpenClaw 网关地址（数据桥中转用；localhost 即足够，网关本机跑）
-GATEWAY_URL = "http://127.0.0.1:18789"
+# Mac Quant Trading 网关地址（数据桥中转用；localhost 即足够，网关本机跑）
+GATEWAY_URL = "http://127.0.0.1:18891"
 
 # 等待 Windows 返回 K 线数据的最长时间（秒）
 BRIDGE_TIMEOUT = 90
@@ -949,17 +949,17 @@ def screen_a_shares() -> tuple[list[str], list[dict]]:
 
 
 # =====================================================================
-# 推送到 OpenClaw 网关
+# 推送到 Quant Trading 网关
 # =====================================================================
 
 def push_to_gateway(stocks: list[str]) -> bool:
     """
-    POST 股票列表到 OpenClaw 网关 /quant/api/stocklist。
+    POST 股票列表到 Quant Trading 网关 /quant/api/stocklist。
     Windows QMT 在 before_trading_start 中通过 GET 拉取。
     """
     body = json.dumps(stocks, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
-        OPENCLAW_STOCKLIST_URL,
+        QUANT_TRADING_STOCKLIST_URL,
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -987,7 +987,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save-only",
         action="store_true",
-        help="只打印 JSON 结果到 stdout，不推送到网关（供 OpenClaw /选股 命令使用）",
+        help="只打印 JSON 结果到 stdout，不推送到网关（供 Quant Trading /选股 命令使用）",
     )
     args_parsed = parser.parse_args()
 

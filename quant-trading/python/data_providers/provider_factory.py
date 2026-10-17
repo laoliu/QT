@@ -122,12 +122,12 @@ def _get_tushare_token() -> str:
     token = os.environ.get("TUSHARE_TOKEN", "")
     if token:
         return token
-    # Try reading from openclaw config
+    # Try reading from quant-trading config
     import json
     home = os.path.expanduser("~")
-    for cfg_dir in [".openclaw-dev", ".openclaw"]:
+    for cfg_dir in [".quant-trading-dev", ".quant-trading"]:
         try:
-            cfg_path = os.path.join(home, cfg_dir, "openclaw.json")
+            cfg_path = os.path.join(home, cfg_dir, "quant-trading.json")
             with open(cfg_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             token = (cfg.get("plugins", {})
@@ -152,9 +152,9 @@ def _get_jqdata_creds() -> tuple[str, str]:
         return username, password
     import json
     home = os.path.expanduser("~")
-    for cfg_dir in [".openclaw-dev", ".openclaw"]:
+    for cfg_dir in [".quant-trading-dev", ".quant-trading"]:
         try:
-            cfg_path = os.path.join(home, cfg_dir, "openclaw.json")
+            cfg_path = os.path.join(home, cfg_dir, "quant-trading.json")
             with open(cfg_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
             jq_cfg = (cfg.get("plugins", {})

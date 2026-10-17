@@ -45,7 +45,7 @@ const ordersMutex = new AsyncMutex();
 // ── File helpers ─────────────────────────────────────────────────
 
 function dataDir(config: QuantTradingConfig): string {
-  return config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return config.dataDir ?? path.join(process.cwd(), "data");
 }
 
 function portfolioPath(config: QuantTradingConfig): string {

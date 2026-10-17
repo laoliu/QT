@@ -1,7 +1,7 @@
 ---
 name: financial-data-hub
 description: "Comprehensive financial data decision guide for the quant-trading extension. Helps the agent decide which data tool to use based on the user's question: 12 core data tools (market_data, macro_data, earnings_calendar, etc.) plus 30+ specialized analysis tools (stock_screen, stock_recommend, chip_accumulation, backtest, strategy_composer, strategy_explorer, strategy_router, strategy_optimizer, strategy_health, lianban_analysis, live_trading, portfolio, trading_signal, conditional_order, trade_journal, watchlist, favorites, price_alert, options_data, options_strategy, options_trading, risk_analysis, stochastic_pricing, performance_attribution, value_investing, financial_calculator, fund_flow, sector_synergy, dragon_tiger, sector_analysis, news_summary, polymarket_odds, cfo_assistant, data_analysis, data_cache, scheduled_task, macro_data, earnings_calendar, institutional_flow, social_sentiment, correlation_analysis, breakout_monitor, position_sizing, dca_schedule, portfolio_rebalance) for backtesting, strategy optimization, options trading, real-time trading, position management, and risk management."
-metadata: { "openclaw": { "emoji": "📊", "requires": { "plugins": ["quant-trading"] } } }
+metadata: { "quant-trading": { "emoji": "📊", "requires": { "plugins": ["quant-trading"] } } }
 ---
 
 # Financial Data Hub — Agent Decision Guide

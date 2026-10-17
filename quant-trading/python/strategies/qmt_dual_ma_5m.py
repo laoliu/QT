@@ -7,7 +7,7 @@ qmt_dual_ma_5m.py   QMT 5
   - 5 K (EMA12)(EMA26)
   -     
   -  ~/data/signals.json
-  - OpenClaw  +  + 
+  - Quant Trading  +  +
 
 
   1.  QuanTX miniQMT 
@@ -27,7 +27,7 @@ qmt_dual_ma_5m.py   QMT 5
     "reason": "EMA12EMA26 "
   }
 
-OpenClaw signals.json 
+Quant Trading signals.json
   Windows: C:\\Users\\<>\\data\\signals.json
   macOS:   ~/data/signals.json
 """
@@ -41,11 +41,11 @@ import math
 #  
 # 
 
-STRATEGY_ID   = "qmt-dual-ma-5m"       #  OpenClaw 
+STRATEGY_ID   = "qmt-dual-ma-5m"       #  Quant Trading
 FAST_PERIOD   = 12                      #  EMA 
 SLOW_PERIOD   = 26                      #  EMA 
 SIGNAL_COOLDOWN_SECS = 300              # 
-CONFIDENCE    = 0.8                     # 0-1 OpenClaw 
+CONFIDENCE    = 0.8                     # 0-1 Quant Trading
 
 # .
 # SCREEN_MODE="auto"     _screen_stocks()  xtdata 
@@ -72,30 +72,30 @@ SCREEN_DAYS       = 5           # N  K
 SCREEN_MA_PERIOD  = 20          # N  MA
 
 #   
-#   "file":  QMT  OpenClaw  signals.json
-#   "http": QMT  WindowsOpenClaw  Mac/ HTTP 
+#   "file":  QMT  Quant Trading  signals.json
+#   "http": QMT  WindowsQuant Trading  Mac/ HTTP
 SIGNAL_MODE = "http"   #  "file" 
 
 #  HTTP SIGNAL_MODE="http" 
-# Mac  IP + 端口，通过环境变量 OPENCLAW_HOST / APP_PORT 配置
+# Mac  IP + 端口，通过环境变量 QUANT_TRADING_HOST / APP_PORT 配置
 # 支持 Tailscale / 局域网 / VPN 等多种网络拓扑
-_OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_APP_PORT = os.environ.get("APP_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
+_QUANT_TRADING_HOST = os.environ.get("QUANT_TRADING_HOST", "127.0.0.1")
+_APP_PORT = os.environ.get("APP_PORT", "18891")
+_QUANT_TRADING_BASE = f"http://{_QUANT_TRADING_HOST}:{_APP_PORT}"
 
-OPENCLAW_WEBHOOK_URL    = f"{_OPENCLAW_BASE}/quant/api/signal"
-OPENCLAW_WEBHOOK_SECRET = "qmt-signal-secret-2026"  #  openclaw.json signalWebhook.secret 
-OPENCLAW_TIMEOUT_SECS  = 5               # HTTP 
+QUANT_TRADING_WEBHOOK_URL    = f"{_QUANT_TRADING_BASE}/quant/api/signal"
+QUANT_TRADING_WEBHOOK_SECRET = "qmt-signal-secret-2026"  #  quant-trading.json signalWebhook.secret
+QUANT_TRADING_TIMEOUT_SECS  = 5               # HTTP
 
 # Mac  GET /quant/api/stocklist   SCREEN_MODE="remote" 
-OPENCLAW_STOCKLIST_URL = f"{_OPENCLAW_BASE}/quant/api/stocklist"
+QUANT_TRADING_STOCKLIST_URL = f"{_QUANT_TRADING_BASE}/quant/api/stocklist"
 
-# OpenClaw signals.json Windows 
-SIGNALS_PATH = os.path.join(os.path.expanduser("~"), ".openclaw", "quant-trading", "signals.json")
+# Quant Trading signals.json Windows
+SIGNALS_PATH = os.path.join(os.path.expanduser("~"), "data", "signals.json")
 MAX_SIGNALS  = 500   # signals.json 
 
 # 
-#  OpenClaw  
+#  Quant Trading
 # 
 
 def _load_signals():
@@ -129,27 +129,27 @@ def _build_signal_payload(symbol: str, direction: str, price: float, reason: str
 
 def _post_signal_http(signal: dict):
     """
-     HTTP POST  OpenClaw 
+     HTTP POST  Quant Trading
 
-    Windows QMT  Mac OpenClaw  VPN Tailscale
-     18789  OpenClaw 
+    Windows QMT  Mac Quant Trading  VPN Tailscale
+     18789  Quant Trading
     """
     import urllib.request
     import urllib.error
 
     body = json.dumps(signal, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    if OPENCLAW_WEBHOOK_SECRET:
-        headers["X-Signal-Secret"] = OPENCLAW_WEBHOOK_SECRET
+    if QUANT_TRADING_WEBHOOK_SECRET:
+        headers["X-Signal-Secret"] = QUANT_TRADING_WEBHOOK_SECRET
 
     req = urllib.request.Request(
-        OPENCLAW_WEBHOOK_URL,
+        QUANT_TRADING_WEBHOOK_URL,
         data=body,
         headers=headers,
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=OPENCLAW_TIMEOUT_SECS) as resp:
+        with urllib.request.urlopen(req, timeout=QUANT_TRADING_TIMEOUT_SECS) as resp:
             resp_body = resp.read().decode("utf-8")
             print(f"[{STRATEGY_ID}] Webhook OK: {resp_body[:120]}")
     except urllib.error.HTTPError as e:
@@ -160,10 +160,10 @@ def _post_signal_http(signal: dict):
 
 def _write_signal(symbol: str, direction: str, price: float, reason: str):
     """
-     OpenClaw
+     Quant Trading
 
     SIGNAL_MODE="file" :  signals.json
-    SIGNAL_MODE="http" : HTTP POST  OpenClaw 
+    SIGNAL_MODE="http" : HTTP POST  Quant Trading
     """
     signal = _build_signal_payload(symbol, direction, price, reason)
 
@@ -310,7 +310,7 @@ def _calc_ema(closes: list, period: int) -> list:
 
 def _fetch_remote_stocklist() -> list:
     """
-     Mac  GET OPENCLAW_STOCKLIST_URL  
+     Mac  GET QUANT_TRADING_STOCKLIST_URL
 
     Mac  qmt_screener_mac.py  POST /quant/api/stocklist
      Windows QMT  before_trading_start  
@@ -319,8 +319,8 @@ def _fetch_remote_stocklist() -> list:
     import urllib.request, urllib.error
 
     try:
-        req = urllib.request.Request(OPENCLAW_STOCKLIST_URL, method="GET")
-        with urllib.request.urlopen(req, timeout=OPENCLAW_TIMEOUT_SECS) as resp:
+        req = urllib.request.Request(QUANT_TRADING_STOCKLIST_URL, method="GET")
+        with urllib.request.urlopen(req, timeout=QUANT_TRADING_TIMEOUT_SECS) as resp:
             body = resp.read().decode("utf-8")
             data = json.loads(body)
             stocks = data.get("data", [])
@@ -377,13 +377,13 @@ def before_trading_start(context, data):
 def handlebar(context):
     """
     5K
-    / OpenClaw
+    / Quant Trading
     """
     now_ts = time.time()
     stock_list = getattr(context, "_stock_list", STOCK_LIST)
 
     for qmt_code in stock_list:
-        # OpenClaw 
+        # Quant Trading
         pure_code = qmt_code.split(".")[0]
 
         #   K  
@@ -474,8 +474,8 @@ if __name__ == "__main__":
 
     if mode_override == "http":
         print("==   HTTP  ==")
-        print(f"Webhook URL   : {OPENCLAW_WEBHOOK_URL}")
-        print(f"Webhook Secret: {'(set)' if OPENCLAW_WEBHOOK_SECRET else '(none)'}")
+        print(f"Webhook URL   : {QUANT_TRADING_WEBHOOK_URL}")
+        print(f"Webhook Secret: {'(set)' if QUANT_TRADING_WEBHOOK_SECRET else '(none)'}")
         payload = _build_signal_payload("600519", "buy", 1888.88, " HTTP")
         print(f"\n payload: {json.dumps(payload, ensure_ascii=False, indent=2)}\n")
         _post_signal_http(payload)
@@ -483,7 +483,7 @@ if __name__ == "__main__":
         print("==   file  ==")
         print(f"signals.json : {SIGNALS_PATH}")
         _write_signal("600519", "buy", 1888.88, "")
-        print(" OpenClaw ")
+        print(" Quant Trading ")
         sigs = _load_signals()
         print(f" signals.json  {len(sigs)} ")
         print(json.dumps(sigs[-1], ensure_ascii=False, indent=2))

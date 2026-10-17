@@ -6,7 +6,7 @@ description: >-
   板块轮动、资金流向分析、价值投资、趋势交易时使用此skill。
   涵盖完整的研报级个股分析、板块分析、组合管理、风控模型。
 metadata:
-  openclaw:
+  quant-trading:
     emoji: "📊"
     always: true
     requires:

@@ -50,7 +50,7 @@ class BridgeConfig:
     @classmethod
     def from_env(cls) -> BridgeConfig:
         """Load configuration from environment variables."""
-        host = os.environ.get("OPENCLAW_HOST", os.environ.get("BRIDGE_RECEIVER_HOST", ""))
+        host = os.environ.get("QUANT_TRADING_HOST", os.environ.get("BRIDGE_RECEIVER_HOST", ""))
         port = int(os.environ.get("BRIDGE_RECEIVER_PORT", "58089"))
         return cls(
             receiver_host=host,

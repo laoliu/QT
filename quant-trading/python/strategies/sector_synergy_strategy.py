@@ -2,7 +2,7 @@
 """
 sector_synergy_strategy — 板块协同大单追涨策略 (QMT tick驱动)
 
-借鉴自板块协同大单追涨思路，融入 openclaw quant-trading 体系。
+借鉴自板块协同大单追涨思路，融入 quant-trading quant-trading 体系。
 与 qmt_lianban_monitor（封板后确认）互补，本策略在封板前的 6%~9% 区间介入。
 
 买入条件（全部同时满足）：
@@ -24,7 +24,7 @@ sector_synergy_strategy — 板块协同大单追涨策略 (QMT tick驱动)
   - 板块涨停数据支持两种模式：
     a) "file" 模式：读外部 hot_sectors.json（兼容同事的辅助程序）
     b) "api" 模式：通过 engines/market_sentiment 在线获取
-  - 信号输出到 OpenClaw webhook（与 qmt_lianban_monitor 共用通道）
+  - 信号输出到 Quant Trading webhook（与 qmt_lianban_monitor 共用通道）
 """
 
 from __future__ import annotations
@@ -97,11 +97,11 @@ ORDER_ACCOUNT_ID = ""
 
 # 信号输出 (复用 qmt_lianban_monitor 的 webhook)
 SIGNAL_MODE = "http"         # "http" | "file"
-_OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_APP_PORT = os.environ.get("APP_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
-OPENCLAW_WEBHOOK_URL = f"{_OPENCLAW_BASE}/quant/api/signal"
-OPENCLAW_WEBHOOK_SECRET = os.environ.get("OPENCLAW_SIGNAL_SECRET", "qmt-signal-secret-2026")
+_QUANT_TRADING_HOST = os.environ.get("QUANT_TRADING_HOST", "127.0.0.1")
+_APP_PORT = os.environ.get("APP_PORT", "18891")
+_QUANT_TRADING_BASE = f"http://{_QUANT_TRADING_HOST}:{_APP_PORT}"
+QUANT_TRADING_WEBHOOK_URL = f"{_QUANT_TRADING_BASE}/quant/api/signal"
+QUANT_TRADING_WEBHOOK_SECRET = os.environ.get("QUANT_TRADING_SIGNAL_SECRET", "qmt-signal-secret-2026")
 
 
 # ── Per-Stock State ──────────────────────────────────────────────
@@ -167,10 +167,10 @@ def _post_signal_http(signal: dict) -> None:
     import urllib.request
     body = json.dumps(signal, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    if OPENCLAW_WEBHOOK_SECRET:
-        headers["X-Signal-Secret"] = OPENCLAW_WEBHOOK_SECRET
+    if QUANT_TRADING_WEBHOOK_SECRET:
+        headers["X-Signal-Secret"] = QUANT_TRADING_WEBHOOK_SECRET
     req = urllib.request.Request(
-        OPENCLAW_WEBHOOK_URL, data=body, headers=headers, method="POST",
+        QUANT_TRADING_WEBHOOK_URL, data=body, headers=headers, method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
@@ -181,7 +181,7 @@ def _post_signal_http(signal: dict) -> None:
 
 def _write_signal_file(signal: dict) -> None:
     path = os.path.join(
-        os.path.expanduser("~"), ".openclaw", "quant-trading",
+        os.path.expanduser("~"), "data",
         "sector-synergy-signals.json",
     )
     os.makedirs(os.path.dirname(path), exist_ok=True)

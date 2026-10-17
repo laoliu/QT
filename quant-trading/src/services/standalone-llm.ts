@@ -1,7 +1,7 @@
 /**
  * Standalone LLM subagent implementation.
  * Provides OpenAI-compatible chat completions for standalone mode,
- * enabling the strategy lab AI exploration without the full OpenClaw gateway.
+ * enabling the strategy lab AI exploration without an external gateway.
  *
  * Supports: OpenAI, DeepSeek, Moonshot, Qwen, and any OpenAI-compatible API.
  */

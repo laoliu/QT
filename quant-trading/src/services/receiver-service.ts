@@ -2,7 +2,7 @@
  * ReceiverService — manages the RECEIVER.py child process lifecycle.
  *
  * RECEIVER.py is the Mac-side HTTP server that bridges data requests between
- * the Mac (running OpenClaw) and the Windows QMT machine. It listens on a
+ * the Mac (running Quant Trading) and the Windows QMT machine. It listens on a
  * configurable port (default 18889) and provides endpoints for the Windows
  * BRIDGE.py to poll pending requests and push results.
  *

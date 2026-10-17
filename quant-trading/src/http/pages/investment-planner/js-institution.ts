@@ -25,7 +25,7 @@ function usePlanForInstitution(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){toast('⚠️ 当前没有可导入的投资计划');return}
   var codes=currentPlan.portfolio.map(function(p){return p.symbol}).join(',');
   document.getElementById('inst-symbols').value=codes;
-  localStorage.setItem('openclaw-inst-symbols',codes);
+  localStorage.setItem('quant-trading-inst-symbols',codes);
   toast('✅ 已导入 '+currentPlan.portfolio.length+' 只计划股票');
 }
 
@@ -799,7 +799,7 @@ function scanInstitutionActivity(){
   ensureInstitutionDefaults();
   var btn=document.getElementById('btn-inst-scan');
   var symbols=parseSymbolList(document.getElementById('inst-symbols').value);
-  if(symbols.length){localStorage.setItem('openclaw-inst-symbols',symbols.join(','));}
+  if(symbols.length){localStorage.setItem('quant-trading-inst-symbols',symbols.join(','));}
   btn.disabled=true;btn.textContent='⏳ 正在聚合…';
   document.getElementById('inst-results').style.display='none';
   document.getElementById('inst-status').textContent='正在聚合龙虎榜、主力资金、北向资金、大宗交易和价量结构…';

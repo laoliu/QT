@@ -177,7 +177,7 @@ except ImportError:
 
 _BUILTIN_STRATEGY_DIR = os.path.dirname(os.path.abspath(__file__))
 _USER_STRATEGY_DIR = os.path.join(
-    os.path.expanduser("~"), ".openclaw", "quant-trading", "strategies"
+    os.path.expanduser("~"), "data", "strategies"
 )
 
 _registry: dict[str, type] | None = None

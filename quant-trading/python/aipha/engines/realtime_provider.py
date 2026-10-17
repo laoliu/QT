@@ -13,7 +13,7 @@ realtime_provider — 实时行情接口（miniQMT data_bridge）
   - get_bridge_url() → 读取配置的bridge地址
 
 配置来源：
-  ~/.openclaw/openclaw.json → plugins.entries.quant-trading.config
+  ~/.quant-trading/quant-trading.json → plugins.entries.quant-trading.config
       .tradingAccount.qmt.windowsBridgeUrl
     默认: http://192.168.3.30:18888
 """
@@ -28,11 +28,11 @@ from typing import Any, Optional
 
 
 def get_bridge_url() -> str:
-    """Read bridge URL from openclaw config or env.
+    """Read bridge URL from quant-trading config or env.
 
     Priority:
       1. WINDOWS_XTDATA_URL env var
-      2. ~/.openclaw/openclaw.json config
+      2. ~/.quant-trading/quant-trading.json config
       3. Default fallback
     """
     # Env override
@@ -42,7 +42,7 @@ def get_bridge_url() -> str:
 
     # Read from config
     try:
-        config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+        config_path = os.path.expanduser("~/.quant-trading/quant-trading.json")
         with open(config_path) as f:
             cfg = json.load(f)
         url = (

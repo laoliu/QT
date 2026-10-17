@@ -11,13 +11,13 @@ import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.
 import { todayCST } from "../utils/cst-time.js";
 
 function getPortfolioPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "portfolio-paper.json");
 }
 
 /** Legacy path — used only for migration fallback */
 function getLegacyPortfolioPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "portfolio.json");
 }
 
@@ -77,7 +77,7 @@ async function recordPaperTrade(
     price: number;
   },
 ): Promise<void> {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   const histPath = path.join(dir, "trade-history.json");
   let history: Array<Record<string, unknown>> = [];
   try {

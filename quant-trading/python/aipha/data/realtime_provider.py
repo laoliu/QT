@@ -28,7 +28,7 @@ def get_bridge_url() -> str:
     url = os.environ.get("WINDOWS_XTDATA_URL")
     if url:
         return url.rstrip("/")
-    config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+    config_path = os.path.expanduser("~/.quant-trading/quant-trading.json")
     if os.path.isfile(config_path):
         try:
             with open(config_path, "r") as f:

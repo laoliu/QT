@@ -22,7 +22,7 @@ export function getStockOptimizationPageHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenClaw 个股组合优化</title>
+<title>Quant Trading 个股组合优化</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🎯</text></svg>">
 <style>
 ${THEME_CSS_VARS}

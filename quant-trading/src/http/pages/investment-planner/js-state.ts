@@ -17,8 +17,8 @@ var currentInstitutionTop3HistoryId = null;
 var selectedInstitutionTop3Symbol = '';
 var _instTop3Seq = 0;
 var _instPresetInitialized = false;
-var ACC_TOP3_THRESHOLDS_KEY = 'openclaw-acc-top3-thresholds-v1';
-var ACC_TOP3_PRESET_KEY = 'openclaw-acc-top3-preset-v1';
+var ACC_TOP3_THRESHOLDS_KEY = 'quant-trading-acc-top3-thresholds-v1';
+var ACC_TOP3_PRESET_KEY = 'quant-trading-acc-top3-preset-v1';
 var ACC_TOP3_PRESETS = {
   stable:{
     pre_accum_days:12,
@@ -55,9 +55,9 @@ var ACC_TOP3_PRESETS = {
   }
 };
 
-var INSTITUTION_PRESET_KEY = 'openclaw-inst-threshold-preset';
-var INSTITUTION_THRESHOLDS_KEY = 'openclaw-inst-threshold-values';
-var INSTITUTION_CUSTOM_PRESETS_KEY = 'openclaw-inst-custom-presets-v1';
+var INSTITUTION_PRESET_KEY = 'quant-trading-inst-threshold-preset';
+var INSTITUTION_THRESHOLDS_KEY = 'quant-trading-inst-threshold-values';
+var INSTITUTION_CUSTOM_PRESETS_KEY = 'quant-trading-inst-custom-presets-v1';
 var INSTITUTION_THRESHOLD_PRESETS = {
   conservative:{
     pre_accum_days:12,
@@ -87,7 +87,7 @@ var INSTITUTION_THRESHOLD_PRESETS = {
 var institutionCustomThresholdPresets = {};
 var _dailyPickState = null;
 var _dailyPickRunning = false;
-var DAILY_PICK_HISTORY_KEY = 'openclaw-daily-pick-history-v1';
+var DAILY_PICK_HISTORY_KEY = 'quant-trading-daily-pick-history-v1';
 var _dailyPickHistory = [];
 var _lastRecommendData = null;
 var _recSymbolsAtAnalysis = '';

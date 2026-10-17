@@ -200,7 +200,7 @@ function ensureInstitutionDefaults(){
     else if(now.getDay()===0)now.setDate(now.getDate()-2);
     dateEl.value=now.toISOString().slice(0,10);
   }
-  var saved=localStorage.getItem('openclaw-inst-symbols');
+  var saved=localStorage.getItem('quant-trading-inst-symbols');
   if(saved&&!document.getElementById('inst-symbols').value){
     document.getElementById('inst-symbols').value=saved;
   }

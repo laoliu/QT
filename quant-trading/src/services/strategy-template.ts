@@ -207,7 +207,7 @@ export class UserStrategyStore {
   private persistPath: string;
 
   constructor(dataDir?: string) {
-    const dir = dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = dataDir ?? path.join(process.cwd(), "data");
     this.persistPath = path.join(dir, "user-strategies.json");
   }
 

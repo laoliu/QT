@@ -40,13 +40,13 @@ def get_input():
 
 
 def _get_token(cfg: dict) -> str:
-    """Resolve tushare token from config → env → openclaw config."""
+    """Resolve tushare token from config → env → quant-trading config."""
     token = cfg.get("tushare_token", "")
     if not token:
         token = os.environ.get("TUSHARE_TOKEN", "")
     if not token:
-        # Try reading from openclaw plugin config
-        oc_path = Path(__file__).resolve().parent.parent / "openclaw.plugin.json"
+        # Try reading from quant-trading plugin config
+        oc_path = Path(__file__).resolve().parent.parent / "config.json"
         if oc_path.exists():
             try:
                 oc = json.loads(oc_path.read_text(encoding="utf-8"))

@@ -23,7 +23,7 @@ export function getConditionalOrdersPageHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenClaw 条件单监控</title>
+<title>Quant Trading 条件单监控</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📡</text></svg>">
 <style>
 ${THEME_CSS_VARS}

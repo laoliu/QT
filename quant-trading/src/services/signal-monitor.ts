@@ -27,7 +27,7 @@ import type { OrderManager } from "./order-manager.js";
 import { todayCST } from "../utils/cst-time.js";
 
 function getSignalsPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "signals.json");
 }
 

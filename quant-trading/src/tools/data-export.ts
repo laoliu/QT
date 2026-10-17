@@ -55,7 +55,7 @@ function toCsv(headers: string[], rows: Record<string, unknown>[]): string {
 // ── Export directory ────────────────────────────────────────────
 
 function getExportDir(config: QuantTradingConfig): string {
-  const base = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const base = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(base, "exports");
 }
 
@@ -67,7 +67,7 @@ function makeFilename(dataset: string, format: string): string {
 // ── Portfolio loader (mirrors portfolio tool logic) ─────────────
 
 async function loadPaperPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   for (const name of ["portfolio-paper.json", "portfolio.json"]) {
     try {
       const raw = await fs.readFile(path.join(dir, name), "utf-8");

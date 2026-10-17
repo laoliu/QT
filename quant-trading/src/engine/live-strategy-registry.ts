@@ -13,7 +13,7 @@ import type { ActiveLiveStrategy, KlineInterval, QuantTradingConfig } from "../t
 import { nowCSTISO } from "../utils/cst-time.js";
 
 function registryPath(cfg: QuantTradingConfig): string {
-  const dir = cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = cfg.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "live-strategies.json");
 }
 

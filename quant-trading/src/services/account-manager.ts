@@ -54,7 +54,7 @@ export class AccountManager {
       this.activeAccountName = this.accounts[0].name;
     }
 
-    const dataDir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dataDir = config.dataDir ?? path.join(process.cwd(), "data");
     this.statePath = path.join(dataDir, "account-manager-state.json");
   }
 

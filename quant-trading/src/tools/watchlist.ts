@@ -15,7 +15,7 @@ import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-
 import type { QuantTradingConfig } from "../types.js";
 
 export function createWatchlistTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   const watchlistPath = path.join(dir, "watchlist.json");
 
   async function loadWatchlist(): Promise<string[]> {

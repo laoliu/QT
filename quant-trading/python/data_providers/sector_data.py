@@ -41,9 +41,9 @@ from engines.lianban import _safe_float, _safe_int
 
 
 def _read_bridge_url_from_config() -> str:
-    """Read windowsBridgeUrl from ~/.openclaw/openclaw.json config."""
+    """Read windowsBridgeUrl from ~/.quant-trading/quant-trading.json config."""
     try:
-        config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+        config_path = os.path.expanduser("~/.quant-trading/quant-trading.json")
         if os.path.exists(config_path):
             with open(config_path) as f:
                 cfg = json.load(f)

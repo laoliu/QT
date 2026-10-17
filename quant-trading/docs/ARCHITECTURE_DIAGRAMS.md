@@ -1,6 +1,6 @@
 # quant-trading 架构图谱
 
-本文件汇总了 quant-trading 扩展在 OpenClaw 插件体系中的完整架构视图，包含机制、时序、生命周期、排障和运维等多个维度，可配合 [ARCHITECTURE_ANALYSIS.md](./ARCHITECTURE_ANALYSIS.md) 一同阅读。
+本文件汇总了 quant-trading 扩展在 Quant Trading 插件体系中的完整架构视图，包含机制、时序、生命周期、排障和运维等多个维度，可配合 [ARCHITECTURE_ANALYSIS.md](./ARCHITECTURE_ANALYSIS.md) 一同阅读。
 
 ---
 
@@ -16,7 +16,7 @@ flowchart TB
   classDef deploy fill:#f3e8ff,stroke:#9333ea,color:#581c87
 
   subgraph Layer1[机制层 — 插件是怎么工作的]
-    D1([1. OpenClaw 扩展机制全景图\n插件发现→加载→注册→消费]):::mechanism
+    D1([1. Quant Trading 扩展机制全景图\n插件发现→加载→注册→消费]):::mechanism
     D7([7. 插件缓存与热加载关系图\n三层缓存命中与失效规则]):::mechanism
   end
 
@@ -53,7 +53,7 @@ flowchart TB
 
 ## 目录
 
-1. [OpenClaw 扩展机制全景图](#1-openclaw-扩展机制全景图)
+1. [Quant Trading 扩展机制全景图](#1-quant-trading-扩展机制全景图)
 2. [用户请求到工具执行时序图](#2-用户请求到工具执行时序图)
 3. [quant-trading 内部子系统架构图](#3-quant-trading-内部子系统架构图)
 4. [生命周期状态机](#4-生命周期状态机)
@@ -67,7 +67,7 @@ flowchart TB
 
 ---
 
-## 1. OpenClaw 扩展机制全景图
+## 1. Quant Trading 扩展机制全景图
 
 > 描述：插件从发现、加载、注册到运行时消费的完整链路。
 
@@ -75,16 +75,16 @@ flowchart TB
 flowchart TB
   U[用户消息\nDiscord/Telegram/Web/CLI] --> G[Gateway Server]
   G --> GP[loadGatewayPlugins]
-  GP --> L[loadOpenClawPlugins]
+  GP --> L[loadQuant TradingPlugins]
 
   subgraph D[插件发现与解析]
-    R[resolvePluginSourceRoots\nworkspace/global/bundled/config] --> DISC[discoverOpenClawPlugins]
+    R[resolvePluginSourceRoots\nworkspace/global/bundled/config] --> DISC[discoverQuant TradingPlugins]
     DISC --> MR[loadPluginManifestRegistry]
     MR --> CAND[候选插件 + manifest 元数据]
   end
 
   L --> D
-  CAND --> JI[jiti 动态加载插件入口\nalias: openclaw/plugin-sdk]
+  CAND --> JI[jiti 动态加载插件入口\nalias: runtime]
   JI --> REG[createPluginRegistry + createApi]
 
   subgraph EXT[quant-trading 插件 register(api)]
@@ -150,8 +150,8 @@ sequenceDiagram
 
   alt 首次请求或缓存失效
     Gw->>Pl: loadGatewayPlugins()
-    Pl->>Pl: loadOpenClawPlugins()
-    Pl->>Pl: discoverOpenClawPlugins + manifest registry
+    Pl->>Pl: loadQuant TradingPlugins()
+    Pl->>Pl: discoverQuant TradingPlugins + manifest registry
     Pl->>Pl: jiti import quant-trading/index.ts
     Pl->>Pl: 执行 register(api)
     Pl->>Reg: setActivePluginRegistry(registry)
@@ -189,8 +189,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  subgraph Core[OpenClaw 插件容器]
-    API[OpenClawPluginApi]
+  subgraph Core[Quant Trading 插件容器]
+    API[Quant TradingPluginApi]
     REG[Plugin Registry Entries]
   end
 
@@ -400,7 +400,7 @@ flowchart LR
     I3[plugins.allow/deny/entries]
     I4[plugins.installs]
     I5[onlyPluginIds/setup-only mode]
-    I6[env knobs\nOPENCLAW_PLUGIN_*_CACHE_MS]
+    I6[env knobs\nQUANT_TRADING_PLUGIN_*_CACHE_MS]
   end
 
   Inputs --> DK[Discovery Cache Key]
@@ -412,9 +412,9 @@ flowchart LR
   RK --> RC[Plugin Registry Cache\nLRU, max 128]
 
   subgraph LoadFlow[加载流程]
-    L1[discoverOpenClawPlugins]
+    L1[discoverQuant TradingPlugins]
     L2[loadPluginManifestRegistry]
-    L3[loadOpenClawPlugins]
+    L3[loadQuant TradingPlugins]
     L4[createPluginRegistry/createApi]
     L5[jiti import + register(api)]
     L6[setActivePluginRegistry]
@@ -511,7 +511,7 @@ sequenceDiagram
   Boot->>G: initialize gateway server
   G->>PL: loadGatewayPlugins(cfg, workspaceDir)
 
-  PL->>Disc: discoverOpenClawPlugins()
+  PL->>Disc: discoverQuant TradingPlugins()
   Disc-->>PL: plugin candidates
   PL->>Disc: loadPluginManifestRegistry()
   Disc-->>PL: manifest records
@@ -646,4 +646,4 @@ flowchart LR
 ---
 
 **文档版本**: 2026-04-03
-**项目**: OpenClaw Quant-Trading v1.0
+**项目**: Quant Trading Quant-Trading v1.0

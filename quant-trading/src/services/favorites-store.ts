@@ -48,7 +48,7 @@ export class FavoritesStore {
   private readonly writeMutex = new AsyncMutex();
 
   constructor(opts: FavoritesStoreOptions = {}) {
-    this.dataDir = opts.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    this.dataDir = opts.dataDir ?? path.join(process.cwd(), "data");
     this.favoritesPath = path.join(this.dataDir, "favorites.json");
     this.loadFromDisk();
   }

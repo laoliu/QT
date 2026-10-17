@@ -15,7 +15,7 @@ if _this_dir not in sys.path:
     sys.path.insert(0, _this_dir)
 
 # Patch data fetching to use SQLite cache first
-_CACHE_DB = os.path.expanduser("~/.openclaw/extensions/quant-trading/cache/stock_data.db")
+_CACHE_DB = os.path.expanduser("~/data/cache/stock_data.db")
 
 def _fetch_from_cache(symbol, start_date, end_date, market=None):
     """Read kline data from local SQLite cache."""

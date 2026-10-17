@@ -18,7 +18,7 @@ import type { Portfolio, QuantTradingConfig } from "../types.js";
 import type { EventBus } from "./event-bus.js";
 
 function getPortfolioPaths(config: QuantTradingConfig): string[] {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return [
     path.join(dir, "portfolio-paper.json"),
     path.join(dir, "portfolio-live.json"),
@@ -27,7 +27,7 @@ function getPortfolioPaths(config: QuantTradingConfig): string[] {
 }
 
 function getWatchlistPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "watchlist.json");
 }
 

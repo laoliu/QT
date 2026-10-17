@@ -525,7 +525,7 @@ export class QMTBroker implements IBrokerAdapter {
       filepath: result.filepath,
       filename: result.filename,
       orderCount: orders.length,
-      strategyName: strategyName ?? "openclaw_scheduled",
+      strategyName: strategyName ?? "quant-trading_scheduled",
     };
   }
 

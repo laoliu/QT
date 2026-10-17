@@ -17,7 +17,7 @@ export class CustomStrategyStore {
   private filePath: string;
 
   constructor(dataDir?: string) {
-    const base = dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const base = dataDir ?? path.join(process.cwd(), "data");
     this.filePath = path.join(base, "custom-strategies.json");
   }
 

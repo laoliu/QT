@@ -126,7 +126,7 @@ export class DataExportService {
 
   constructor(opts: { dataSource: DataSource; exportDir?: string }) {
     this.dataSource = opts.dataSource;
-    this.exportDir = opts.exportDir ?? path.join(os.homedir(), ".openclaw", "quant-trading", "exports");
+    this.exportDir = opts.exportDir ?? path.join(os.homedir(), "data", "exports");
   }
 
   async export(target: ExportTarget, format: ExportFormat = "csv"): Promise<ExportResult> {

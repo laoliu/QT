@@ -51,7 +51,7 @@ interface InstitutionActivityHistoryEntry {
 type InstitutionScanPayload = Record<string, unknown>;
 
 function getInstitutionHistoryPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "institution-activity-history.json");
 }
 

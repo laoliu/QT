@@ -17,7 +17,7 @@ import type { BacktestResult, Portfolio, PortfolioPosition, QuantTradingConfig }
 import { todayCST } from "../utils/cst-time.js";
 
 async function loadPortfolio(config: QuantTradingConfig): Promise<Portfolio> {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   // Try mode-specific file first, then legacy
   for (const name of ["portfolio-paper.json", "portfolio.json"]) {
     try {

@@ -18,7 +18,7 @@ describe("Dashboard", () => {
     });
 
     it("embeds the page title", () => {
-      expect(html).toContain("<title>OpenClaw 量化交易仪表盘</title>");
+      expect(html).toContain("<title>Quant Trading 量化交易仪表盘</title>");
     });
 
     // ── Layout sections ──────────────────────────────────────

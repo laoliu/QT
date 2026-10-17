@@ -85,7 +85,7 @@ export class AccountStore {
   private loaded = false;
 
   constructor(opts: { dataDir?: string; encryptionSeed?: string } = {}) {
-    const dir = opts.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = opts.dataDir ?? path.join(process.cwd(), "data");
     this.filePath = path.join(dir, "accounts.json");
     this.encryptionSeed = opts.encryptionSeed;
   }

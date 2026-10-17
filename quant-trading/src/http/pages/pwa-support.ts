@@ -9,8 +9,8 @@ export function getManifestJson(baseUrl: string): string {
   const b = baseUrl.replace(/\/$/, "");
   return JSON.stringify(
     {
-      name: "OpenClaw 量化交易",
-      short_name: "OpenClaw",
+      name: "Quant Trading 量化交易",
+      short_name: "Quant Trading",
       description: "A-share quantitative trading platform",
       start_url: `${b}/quant/`,
       display: "standalone",
@@ -45,8 +45,8 @@ export function getPwaIconSvg(): string {
 /** Service Worker script */
 export function getServiceWorkerJs(baseUrl: string): string {
   const b = baseUrl.replace(/\/$/, "");
-  return `// OpenClaw Service Worker — offline caching for PWA
-const CACHE_NAME = 'openclaw-v1';
+  return `// Quant Trading Service Worker — offline caching for PWA
+const CACHE_NAME = 'quant-trading-v1';
 const SHELL_URLS = [
   '${b}/quant/',
   '${b}/quant/dashboard/ui',

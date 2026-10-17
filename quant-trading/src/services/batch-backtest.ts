@@ -191,7 +191,7 @@ export interface BatchBacktestRecord {
 function getBatchHistoryDir(config: QuantTradingConfig): string {
   const dataDir = config.dataDir ?? path.join(
     process.env["HOME"] ?? process.env["USERPROFILE"] ?? ".",
-    ".openclaw",
+    ".quant-trading",
     "quant-data",
   );
   const dir = path.join(dataDir, "batch-backtest-history");

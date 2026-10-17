@@ -39,7 +39,7 @@ const tradesMutex = new AsyncMutex();
 // ── File helpers ─────────────────────────────────────────────────
 
 function dir(cfg: QuantTradingConfig): string {
-  return cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return cfg.dataDir ?? path.join(process.cwd(), "data");
 }
 
 /** Mode suffix based on broker type — keeps paper/live orders in separate files */

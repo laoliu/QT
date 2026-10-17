@@ -1,7 +1,7 @@
 /** Investment Planner — investment plan generation, rendering, and history management */
 export function getPlanJs(): string {
   return `
-function _planCacheKey(){return 'openclaw-plan-cache-'+(window._currentViewMode||'paper')}
+function _planCacheKey(){return 'quant-trading-plan-cache-'+(window._currentViewMode||'paper')}
 
 function restoreCachedPlan(){
   try{
@@ -161,7 +161,7 @@ function planStocksToRecommend(){
   if(!currentPlan||!currentPlan.portfolio||!currentPlan.portfolio.length){toast('⚠️ 请先生成投资计划');_activateTab('plan');history.pushState(null,null,'#plan');return}
   var codes=currentPlan.portfolio.map(function(p){return p.symbol}).join(',');
   document.getElementById('rec-symbols').value=codes;
-  localStorage.setItem('openclaw-rec-symbols',codes);
+  localStorage.setItem('quant-trading-rec-symbols',codes);
   // Switch to recommend tab
   activateTab('recommend');
   history.pushState(null,null,'#recommend');
@@ -175,7 +175,7 @@ function importFromScreener(){
     if(!data||!data.length){toast('⚠️ 暂无选股结果，请先运行 /选股 命令');return}
     var codes=data.map(function(s){return s.replace(/\.[A-Z]{2}$/,'')}).join(',');
     document.getElementById('rec-symbols').value=codes;
-    localStorage.setItem('openclaw-rec-symbols',codes);
+    localStorage.setItem('quant-trading-rec-symbols',codes);
     toast('✅ 已导入 '+data.length+' 只选股结果');
   }).catch(function(){toast('❌ 加载选股结果失败')});
 }
@@ -340,7 +340,7 @@ function importPlanToRecommendById(planId){
     var codes=fp.portfolio.map(function(p){return p.symbol}).join(',');
     var recEl=document.getElementById('rec-symbols');
     if(recEl)recEl.value=codes;
-    localStorage.setItem('openclaw-rec-symbols',codes);
+    localStorage.setItem('quant-trading-rec-symbols',codes);
     closePlanDetail();
     activateTab('recommend');
     history.pushState(null,null,'#recommend');

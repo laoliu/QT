@@ -31,7 +31,7 @@ const confirmsMutex = new AsyncMutex();
 // ── File persistence ─────────────────────────────────────────────
 
 function confirmsPath(cfg: QuantTradingConfig): string {
-  const dir = cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = cfg.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "confirmations.json");
 }
 
@@ -44,7 +44,7 @@ async function loadConfirms(cfg: QuantTradingConfig): Promise<PendingConfirmatio
 }
 
 async function saveConfirms(items: PendingConfirmation[], cfg: QuantTradingConfig): Promise<void> {
-  const dir = cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = cfg.dataDir ?? path.join(process.cwd(), "data");
   await fs.mkdir(dir, { recursive: true });
   // Prune old terminal records (resolved/expired/rejected) to prevent unbounded growth
   const MAX_TERMINAL_CONFIRMS = 500;

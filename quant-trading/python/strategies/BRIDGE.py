@@ -22,7 +22,7 @@ import time
 # ===================== CONFIG =====================
 
 # Mac receiver URL (RECEIVER.py running on Mac)
-_BRIDGE_HOST = os.environ.get("OPENCLAW_HOST", "192.168.3.30")
+_BRIDGE_HOST = os.environ.get("QUANT_TRADING_HOST", "192.168.3.30")
 # 58088 is excluded on the QMT Windows host (WinError 10013); use the
 # dedicated push-receiver port unless an explicit environment override exists.
 _BRIDGE_PORT = os.environ.get("BRIDGE_RECEIVER_PORT", "18889")

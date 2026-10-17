@@ -1,4 +1,4 @@
-# OpenClaw Quant-Trading - 指标应用矩阵
+# Quant Trading Quant-Trading - 指标应用矩阵
 
 ## 指标速查表
 

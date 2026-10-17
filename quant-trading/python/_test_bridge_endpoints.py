@@ -7,8 +7,8 @@ import urllib.error
 import urllib.request
 
 def _read_bridge_url_from_config() -> str:
-    """Read windowsBridgeUrl from openclaw.json config."""
-    config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+    """Read windowsBridgeUrl from quant-trading.json config."""
+    config_path = os.path.expanduser("~/.quant-trading/quant-trading.json")
     try:
         with open(config_path, "r") as f:
             cfg = json.loads(f.read())

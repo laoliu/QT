@@ -18,7 +18,7 @@ export function getDashboardHtml(baseUrl: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenClaw 量化交易仪表盘</title>
+  <title>Quant Trading 量化交易仪表盘</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -226,7 +226,7 @@ export function getDashboardHtml(baseUrl: string): string {
 <body>
   <div class="breadcrumb"><a href="${baseUrl}/quant/">🏠 首页</a><span class="sep">/</span><span class="current">📊 交易仪表盘</span></div>
   <header>
-    <h1><a href="${baseUrl}/quant/" style="color:inherit;text-decoration:none">OpenClaw 量化交易</a></h1>
+    <h1><a href="${baseUrl}/quant/" style="color:inherit;text-decoration:none">Quant Trading 量化交易</a></h1>
     <div class="header-right">
       <select id="modeSwitch" class="mode-banner mode-paper" onchange="switchViewMode(this.value)" style="cursor:pointer;appearance:none;-webkit-appearance:none;padding:4px 28px 4px 14px;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 5l3 3 3-3%22 fill=%22%238b949e%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;">
         <option value="">当前模式</option>

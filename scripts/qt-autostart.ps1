@@ -55,7 +55,7 @@ if ($Status) {
         Write-Host "   自动交易: http://127.0.0.1:${Port}/quant/admin/auto-trade"
         
         # Check auto-trade config
-        $configPath = Join-Path $env:USERPROFILE '.openclaw\quant-data\auto-trade-config.json'
+        $configPath = Join-Path $env:USERPROFILE 'QT\\data\\auto-trade-config.json'
         if (Test-Path $configPath) {
             $cfg = Get-Content $configPath -Raw | ConvertFrom-Json
             $mode = if ($cfg.enabled) { '✅ 已启用' } else { '⏸️ 已停止' }
@@ -89,15 +89,13 @@ if ($listening) {
     exit 0
 }
 
-# 2. 先关闭残留进程
-$downScript = Join-Path $ScriptDir 'gateway-down.ps1'
-if (Test-Path $downScript) {
-    & $downScript 2>$null
+# 2. 启动独立服务
+$standalone = Join-Path $ProjectDir 'quant-trading\standalone.ts'
+$pnpm = Get-Command pnpm.cmd -ErrorAction SilentlyContinue
+if (-not $pnpm) {
+    throw '未找到 pnpm，请先安装 Node.js/pnpm。'
 }
-
-# 3. 启动 gateway
-$upScript = Join-Path $ScriptDir 'gateway-up.ps1'
-& $upScript
+Start-Process -FilePath $pnpm.Source -ArgumentList @('exec', 'tsx', $standalone) -WorkingDirectory $ProjectDir -WindowStyle Hidden
 
 # 4. 等待服务就绪
 $maxWait = 15

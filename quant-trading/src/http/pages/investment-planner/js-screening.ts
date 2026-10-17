@@ -24,7 +24,7 @@ function refreshPortfolio(){
           if(r.status==='ok'&&r.entry&&r.entry.fullPlan){
             currentPlan=r.entry.fullPlan;
             currentPlanVersion=r.entry.version||null;
-            try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+            try{sessionStorage.setItem('quant-trading-plan-cache',JSON.stringify(currentPlan))}catch(e){}
             refreshPortfolio();
           }else{
             document.getElementById('portfolio-kpis').innerHTML='<div style="width:100%;text-align:center;padding:40px 20px"><div style="font-size:48px;margin-bottom:12px">⚠️</div><div style="font-size:16px;margin-bottom:16px;color:var(--text-dim)">请先生成投资计划</div><button class="btn" onclick="_activateTab(\\'plan\\');history.pushState(null,null,\\'#plan\\')">📋 前往制定计划</button></div>';
@@ -338,7 +338,7 @@ function runScreening(){
     el.innerHTML='<span style="color:var(--green)">✅ 筛选完成 ('+esc(d.strategy)+' / '+esc(d.riskProfile)+')</span>';
     renderScreenResults(d);
     // Cache results so browser back restores them
-    try{sessionStorage.setItem('openclaw-screen-results',JSON.stringify(d))}catch(e){}
+    try{sessionStorage.setItem('quant-trading-screen-results',JSON.stringify(d))}catch(e){}
     // Auto-refresh history comparison after screening
     loadScreenerHistory();
   }).catch(function(){el.innerHTML='<span style="color:var(--red)">❌ 筛选失败</span>'});
@@ -423,7 +423,7 @@ function renderScreenResults(d){
 
 function restoreScreenResults(){
   try{
-    var raw=sessionStorage.getItem('openclaw-screen-results');
+    var raw=sessionStorage.getItem('quant-trading-screen-results');
     if(raw){
       var d=JSON.parse(raw);
       var el=document.getElementById('screen-status');
@@ -1449,7 +1449,7 @@ function loadSignals(){
           if(r.status==='ok'&&r.entry&&r.entry.fullPlan){
             currentPlan=r.entry.fullPlan;
             currentPlanVersion=r.entry.version||null;
-            try{sessionStorage.setItem('openclaw-plan-cache',JSON.stringify(currentPlan))}catch(e){}
+            try{sessionStorage.setItem('quant-trading-plan-cache',JSON.stringify(currentPlan))}catch(e){}
             loadSignals();
           }else{
             _showSignalEmpty();

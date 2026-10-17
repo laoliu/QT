@@ -8,7 +8,7 @@ import urllib.request
 
 def _read_bridge_url():
     try:
-        with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
+        with open(os.path.expanduser("~/.quant-trading/quant-trading.json")) as f:
             cfg = json.load(f)
         return (cfg.get("plugins", {}).get("entries", {})
                 .get("quant-trading", {}).get("config", {})

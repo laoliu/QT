@@ -11,7 +11,7 @@
  *   npx tsx quant-trading/standalone.ts [--port 18891]
  *   node --import tsx/esm quant-trading/standalone.ts [--port 18891]
  *
- * The server defaults to the `standalonePort` from plugin config, or 18891.
+ * The server defaults to the `standalonePort` from project config, or 18891.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -35,10 +35,19 @@ function loadProjectConfig(): QuantTradingConfig {
     }
   } catch { /* environment may be provided by the launcher */ }
   const config: Record<string, unknown> = {};
+  const merge = (target: Record<string, unknown>, source: Record<string, unknown>) => {
+    for (const [key, value] of Object.entries(source)) {
+      if (value && typeof value === "object" && !Array.isArray(value) && target[key] && typeof target[key] === "object") {
+        merge(target[key] as Record<string, unknown>, value as Record<string, unknown>);
+      } else {
+        target[key] = value;
+      }
+    }
+  };
   for (const p of [path.join(root, "config.json"), path.join(root, "config.local.json")]) {
     try {
       const raw = fs.readFileSync(p, "utf-8");
-      Object.assign(config, JSON.parse(raw) as Record<string, unknown>);
+      merge(config, JSON.parse(raw) as Record<string, unknown>);
     } catch {
       // Project defaults may be overridden locally.
     }
@@ -48,7 +57,22 @@ function loadProjectConfig(): QuantTradingConfig {
   const llm = (config.llm ?? {}) as Record<string, unknown>;
   llm.apiKey ??= process.env["LLM_API_KEY"] ?? process.env["AI_GATEWAY_API_KEY"];
   config.llm = llm;
-  return config as QuantTradingConfig;
+  const resolve = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      const match = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(value);
+      return match ? (process.env[match[1]] ?? "") : value;
+    }
+    if (Array.isArray(value)) return value.map(resolve);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolve(v)]));
+    }
+    return value;
+  };
+  const resolved = resolve(config) as QuantTradingConfig;
+  if (resolved.dataDir && !path.isAbsolute(resolved.dataDir)) {
+    resolved.dataDir = path.resolve(root, resolved.dataDir);
+  }
+  return resolved;
 }
 
 // ── CLI Args ──────────────────────────────────────────────────────
@@ -79,15 +103,12 @@ function createMockApi(
     debug: (msg: string) => console.debug(`[debug] ${msg}`),
   };
 
-  const noop = () => {};
-
-  // Minimal mock that satisfies the plugin's register() requirements
+  // Small application runtime shared by services and route handlers.
   const api = {
     id: "quant-trading",
     name: "Quant Trading",
     source: "standalone",
-    registrationMode: "eager" as const,
-    config: { gateway: {} } as unknown,
+    config: {},
     pluginConfig,
     runtime: (() => {
       const llmConfig = resolveLlmConfig(pluginConfig);
@@ -108,44 +129,11 @@ function createMockApi(
     registerHttpRoute: (params: { path: string; handler: unknown; match?: "exact" | "prefix" }) => {
       routeCollector.collect(params as Parameters<typeof routeCollector.collect>[0]);
     },
-    registerTool: noop,
-    registerHook: noop,
-    registerChannel: noop,
-    registerGatewayMethod: noop,
-    registerCli: noop,
-    registerReload: noop,
-    registerNodeHostCommand: noop,
-    registerSecurityAuditCollector: noop,
     registerService: (svc: { id: string; start?: () => Promise<void>; stop?: () => Promise<void> }) => {
       services.push(svc);
     },
-    registerCliBackend: noop,
-    registerConfigMigration: noop,
-    registerAutoEnableProbe: noop,
-    registerProvider: noop,
-    registerSpeechProvider: noop,
-    registerRealtimeTranscriptionProvider: noop,
-    registerRealtimeVoiceProvider: noop,
-    registerMediaUnderstandingProvider: noop,
-    registerImageGenerationProvider: noop,
-    registerVideoGenerationProvider: noop,
-    registerMusicGenerationProvider: noop,
-    registerWebFetchProvider: noop,
-    registerWebSearchProvider: noop,
-    registerInteractiveHandler: noop,
-    onConversationBindingResolved: noop,
-    registerCommand: noop,
-    registerContextEngine: noop,
-    registerCompactionProvider: noop,
-    registerMemoryCapability: noop,
-    registerMemoryPromptSection: noop,
-    registerMemoryPromptSupplement: noop,
-    registerMemoryCorpusSupplement: noop,
-    registerMemoryFlushPlan: noop,
-    registerMemoryRuntime: noop,
-    registerMemoryEmbeddingProvider: noop,
+    getPositions: async () => [],
     resolvePath: (input: string) => path.resolve(input),
-    on: noop,
   };
 
   return { api, services };
@@ -180,12 +168,12 @@ async function main() {
   const pluginConfig = loadProjectConfig();
   const port = parsePort(process.argv.slice(2), Number(pluginConfig["standalonePort"]) || 18891);
 
-  console.log(`[standalone] bootstrapping quant-trading plugin (port ${port})...`);
+  console.log(`[standalone] bootstrapping quant-trading application (port ${port})...`);
 
   const routeCollector = createRouteCollector();
   const { api, services } = createMockApi(pluginConfig, routeCollector);
 
-  // Dynamically import the plugin and call register()
+  // Dynamically import the application and start it.
   const { default: app } = await import("./index.js");
   app.start(api);
 

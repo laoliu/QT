@@ -1660,7 +1660,7 @@ const backtraderStrategies: StrategyDefinition[] = [
     name: "QMT 5分钟双均线 (QMT Dual MA 5min)",
     description:
       "QMT平台5分钟双均线策略：基于EMA12/EMA26交叉信号，" +
-      "在QMT环境中实时运行，信号输出到OpenClaw webhook。适合日内短线交易。",
+      "在QMT环境中实时运行，信号输出到Quant Trading webhook。适合日内短线交易。",
     version: "1.0.0",
     engine: "qmt",
     entryFile: "strategies/qmt_dual_ma_5m.py",

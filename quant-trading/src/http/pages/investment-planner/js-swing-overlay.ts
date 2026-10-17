@@ -66,7 +66,7 @@ function _getSwingHoldingsFromPlan() {
     return api('/quant/admin/api/plan-history?id=' + encodeURIComponent(latest.id)).then(function(r) {
       if (r.status === 'ok' && r.entry && r.entry.fullPlan) {
         currentPlan = r.entry.fullPlan;
-        try { sessionStorage.setItem('openclaw-plan-cache', JSON.stringify(currentPlan)); } catch(e) {}
+        try { sessionStorage.setItem('quant-trading-plan-cache', JSON.stringify(currentPlan)); } catch(e) {}
         return (currentPlan.portfolio || []).map(function(p) { return { symbol: p.symbol, name: p.name || p.symbol, market: '' }; }).filter(function(x){ return !!x.symbol; });
       }
       return [];

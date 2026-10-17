@@ -1,0 +1,42 @@
+{
+  "dataDir": "./data",
+  "defaultMarket": "cn_stock",
+  "pythonPath": "${PYTHON_BIN}",
+  "tradingAccount": {
+    "mode": "live",
+    "broker": "remote-qmt",
+    "confirmationRequired": false,
+    "autoStart": true,
+    "qmt": {
+      "windowsBridgeUrl": "http://127.0.0.1:58088",
+      "miniQmtPath": "${MINI_QMT_PATH}",
+      "accountId": "${TRADING_ACCOUNT_ID}"
+    }
+  },
+  "dataProviders": {
+    "yfinance": { "enabled": true },
+    "jqdata": {
+      "enabled": true,
+      "username": "${JQDATA_USERNAME}",
+      "password": "${JQDATA_PASSWORD}"
+    },
+    "tushare": {
+      "enabled": true,
+      "token": "${TUSHARE_TOKEN}"
+    }
+  },
+  "receiver": {
+    "enabled": true,
+    "port": 18889,
+    "host": "0.0.0.0"
+  },
+  "standalonePort": 18891,
+  "llm": {
+    "baseUrl": "https://ai-gateway.aiae.ndhy.com/v1",
+    "model": "gpt-4o-2024-11-20",
+    "maxTokens": 4096,
+    "temperature": 0.7,
+    "timeoutMs": 120000,
+    "apiKey": "${LLM_API_KEY}"
+  }
+}

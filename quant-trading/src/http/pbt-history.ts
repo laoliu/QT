@@ -61,7 +61,7 @@ export interface PbtStrategyFrequency {
 const MAX_ENTRIES = 100;
 
 function getFilePath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "pbt-history.json");
 }
 

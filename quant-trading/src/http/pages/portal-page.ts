@@ -18,7 +18,7 @@ export function getPortalPageHtml(baseUrl: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenClaw 量化交易</title>
+<title>Quant Trading 量化交易</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>📈</text></svg>">
 <style>
 :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#c9d1d9;--text-dim:#8b949e;--accent:#58a6ff;--green:#3fb950;--red:#f85149;--yellow:#d29922;--orange:#db6d28;--purple:#bc8cff;--teal:#39d353}
@@ -123,7 +123,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
 <body>
 <div class="breadcrumb"><span class="current">🏠 首页</span></div>
 <header>
-  <h1>🦞 OpenClaw 量化交易</h1>
+  <h1>🦞 Quant Trading 量化交易</h1>
   <div class="header-right">
     <select id="modeSwitch" onchange="switchViewMode(this.value)" style="cursor:pointer;appearance:none;-webkit-appearance:none;display:inline-block;padding:4px 28px 4px 12px;border-radius:6px;font-size:13px;font-weight:600;background:rgba(210,153,34,0.15);color:#d29922;border:1px solid rgba(210,153,34,0.3);background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M3 5l3 3 3-3%22 fill=%22%238b949e%22/></svg>');background-repeat:no-repeat;background-position:right 8px center;">
       <option value="">当前模式</option>
@@ -633,7 +633,7 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
 </main>
 
 <footer>
-  OpenClaw Quant Trading Extension · <span id="footerVersion">v1</span> · <a href="https://docs.openclaw.ai" target="_blank">文档</a>
+  Quant Trading Quant Trading Extension · <span id="footerVersion">v1</span> · <a href="https://docs.quant-trading.ai" target="_blank">文档</a>
 </footer>
 
 <script>

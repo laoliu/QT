@@ -1,9 +1,9 @@
 /**
- * @openclaw/quant-trading — main plugin entry point
+ * @quant-trading/quant-trading — main application entry point
  *
  * Architecture overview:
  * ┌─────────────────────────────────────────────────────────────────┐
- * │  OpenClaw Gateway (Node.js / TypeScript)                       │
+ * │  Quant Trading Application (Node.js / TypeScript)                   │
  * │                                                                │
  * │  ┌──────────────────────────────────────────────────────────┐  │
  * │  │  quant-trading extension                                 │  │
@@ -185,8 +185,7 @@ import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 async function persistSignal(signal: TradingSignal, config: QuantTradingConfig): Promise<void> {
   const { default: fs } = await import("node:fs/promises");
   const { default: path } = await import("node:path");
-  const { default: os } = await import("node:os");
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   const filePath = path.join(dir, "signals.json");
   let signals: TradingSignal[] = [];
   try {
@@ -215,8 +214,7 @@ interface DecisionLogEntry {
 async function persistDecisionLog(entry: DecisionLogEntry, config: QuantTradingConfig): Promise<void> {
   const { default: fs } = await import("node:fs/promises");
   const { default: path } = await import("node:path");
-  const { default: os } = await import("node:os");
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   const filePath = path.join(dir, "decision-log.json");
   let log: DecisionLogEntry[] = [];
   try {
@@ -1048,7 +1046,7 @@ const quantTradingApp = {
       ),
     );
     // LiveEngine is registered as a service. When tradingAccount.autoStart is
-    // true the engine starts automatically with the gateway; otherwise it waits
+    // true the engine starts automatically with the application; otherwise it waits
     // for an explicit start_engine tool call. Lifecycle hooks handle cleanup.
     api.registerService(liveEngine);
 

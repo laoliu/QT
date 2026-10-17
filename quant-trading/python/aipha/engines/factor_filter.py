@@ -674,8 +674,8 @@ def _fetch_qmt_bridge_stocks() -> tuple[dict[str, dict[str, Any]], list[str]]:
 def _read_qmt_bridge_url() -> str:
     """Read QMT bridge URL from config."""
     try:
-        for state_dir in ["~/.openclaw-dev", "~/.openclaw"]:
-            config_path = os.path.expanduser(f"{state_dir}/openclaw.json")
+        for state_dir in ["~/.quant-trading-dev", "~/.quant-trading"]:
+            config_path = os.path.expanduser(f"{state_dir}/quant-trading.json")
             if os.path.exists(config_path):
                 with open(config_path) as f:
                     cfg = json.load(f)

@@ -69,7 +69,7 @@ export function createPositionSizingTool(
         if (!sizing) {
           return (
             "当前未配置仓位管理，使用默认值: 每笔固定100股。\n\n" +
-            "可在 openclaw.json 中配置 tradingAccount.positionSizing:\n" +
+            "可在 quant-trading.json 中配置 tradingAccount.positionSizing:\n" +
             '```json\n{\n  "tradingAccount": {\n    "positionSizing": {\n' +
             '      "method": "risk_pct",\n' +
             '      "riskPct": 0.02,\n' +

@@ -363,12 +363,12 @@ _QMT_BATCH_WINDOW_S = 0.15  # 150ms window to collect concurrent requests
 
 
 def _read_qmt_bridge_url() -> str:
-    """Read QMT windowsBridgeUrl from openclaw config (cached).
+    """Read QMT windowsBridgeUrl from quant-trading config (cached).
 
     Checks config files in order:
-      1. $OPENCLAW_STATE_DIR/openclaw.json  (explicit state dir)
-      2. ~/.openclaw-dev/openclaw.json      (dev lane)
-      3. ~/.openclaw/openclaw.json          (global lane)
+      1. $QUANT_TRADING_STATE_DIR/quant-trading.json  (explicit state dir)
+      2. ~/.quant-trading-dev/quant-trading.json      (dev lane)
+      3. ~/.quant-trading/quant-trading.json          (global lane)
     Returns the first non-empty windowsBridgeUrl found.
     """
     global _qmt_bridge_url_cache
@@ -377,11 +377,11 @@ def _read_qmt_bridge_url() -> str:
 
     home = os.path.expanduser("~")
     candidates = []
-    state_dir = os.environ.get("OPENCLAW_STATE_DIR", "")
+    state_dir = os.environ.get("QUANT_TRADING_STATE_DIR", "")
     if state_dir:
-        candidates.append(os.path.join(state_dir, "openclaw.json"))
-    candidates.append(os.path.join(home, ".openclaw-dev", "openclaw.json"))
-    candidates.append(os.path.join(home, ".openclaw", "openclaw.json"))
+        candidates.append(os.path.join(state_dir, "quant-trading.json"))
+    candidates.append(os.path.join(home, ".quant-trading-dev", "quant-trading.json"))
+    candidates.append(os.path.join(home, ".quant-trading", "quant-trading.json"))
 
     for config_path in candidates:
         try:
@@ -412,7 +412,7 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
 
     Bridge URL resolution order:
       1. WINDOWS_XTDATA_URL env var (set by TypeScript bridge)
-      2. openclaw config files (~/.openclaw-dev, ~/.openclaw)
+      2. quant-trading config files (~/.quant-trading-dev, ~/.quant-trading)
 
     Returns list of bar dicts, or empty list if bridge unavailable.
     """

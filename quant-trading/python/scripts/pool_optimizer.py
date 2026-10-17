@@ -80,7 +80,7 @@ def _safe_float(v, default=0.0):
 
 def _optimizer_cache_db_path() -> str:
     home = os.path.expanduser("~")
-    cache_dir = os.path.join(home, ".openclaw", "extensions", "quant-trading", "cache")
+    cache_dir = os.path.join(home, ".quant-trading", "extensions", "quant-trading", "cache")
     os.makedirs(cache_dir, exist_ok=True)
     return os.path.join(cache_dir, "stock_data.db")
 

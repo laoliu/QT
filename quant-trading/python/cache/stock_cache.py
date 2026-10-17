@@ -34,7 +34,7 @@ from typing import Any, Optional
 def _default_cache_dir() -> Path:
     """Return default cache directory: ~/data/cache/"""
     home = Path.home()
-    return home / ".openclaw" / "extensions" / "quant-trading" / "cache"
+    return home / ".quant-trading" / "extensions" / "quant-trading" / "cache"
 
 
 # ── Trading hours detection (China A-share) ─────────────────────

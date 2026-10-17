@@ -119,7 +119,7 @@ async function runScreener(
       const results: ScreenerStockResult[] = Array.isArray(parsed) ? [] : (parsed.results ?? []);
 
       // Persist to stock-list.json
-      const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+      const dir = config.dataDir ?? path.join(process.cwd(), "data");
       await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(
         path.join(dir, "stock-list.json"),
@@ -593,7 +593,7 @@ export function createQuantCommands(
         }
         // Fallback to paper portfolio
         try {
-          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const dir = config.dataDir ?? path.join(process.cwd(), "data");
           const pfPath = path.join(dir, "portfolio.json");
           const raw = await fs.readFile(pfPath, "utf-8");
           const pf = JSON.parse(raw) as import("../types.js").Portfolio;
@@ -628,7 +628,7 @@ export function createQuantCommands(
       description: "查看最近交易信号。用法: /signal",
       async execute() {
         try {
-          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const dir = config.dataDir ?? path.join(process.cwd(), "data");
           const signalPath = path.join(dir, "signals.json");
           const raw = await fs.readFile(signalPath, "utf-8");
           const signals = (
@@ -800,7 +800,7 @@ export function createQuantCommands(
         "  /自选 del 600519  — 删除\n" +
         "  /自选 clear       — 清空",
       async execute(args: string) {
-        const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+        const dir = config.dataDir ?? path.join(process.cwd(), "data");
         const watchlistPath = path.join(dir, "watchlist.json");
 
         // Load existing watchlist
@@ -1871,7 +1871,7 @@ export function createQuantCommands(
         } else {
           // Fallback: read paper portfolio
           try {
-            const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+            const dir = config.dataDir ?? path.join(process.cwd(), "data");
             const raw = await fs.readFile(path.join(dir, "portfolio.json"), "utf-8");
             const pf = JSON.parse(raw) as import("../types.js").Portfolio;
             lines.push(
@@ -1884,7 +1884,7 @@ export function createQuantCommands(
 
         // Watchlist count
         try {
-          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const dir = config.dataDir ?? path.join(process.cwd(), "data");
           const wl = JSON.parse(
             await fs.readFile(path.join(dir, "watchlist.json"), "utf-8"),
           ) as string[];
@@ -1897,7 +1897,7 @@ export function createQuantCommands(
 
         // Signals count
         try {
-          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const dir = config.dataDir ?? path.join(process.cwd(), "data");
           const sigs = JSON.parse(
             await fs.readFile(path.join(dir, "signals.json"), "utf-8"),
           ) as unknown[];
@@ -2590,7 +2590,7 @@ export function createQuantCommands(
           }));
         } else {
           try {
-            const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+            const dir = config.dataDir ?? path.join(process.cwd(), "data");
             const pfPath = path.join(dir, "portfolio.json");
             const raw = await fs.readFile(pfPath, "utf-8");
             const pf = JSON.parse(raw) as import("../types.js").Portfolio;
@@ -2744,7 +2744,7 @@ export function createQuantCommands(
 
         // Fallback: read paper trade history
         try {
-          const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+          const dir = config.dataDir ?? path.join(process.cwd(), "data");
           const histPath = path.join(dir, "trade-history.json");
           const raw = await fs.readFile(histPath, "utf-8");
           const history = JSON.parse(raw) as Array<{

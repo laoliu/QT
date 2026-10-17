@@ -31,14 +31,14 @@ from typing import Any
 
 def _get_db_path() -> str:
     data_dir = os.environ.get("QUANT_DATA_DIR") or os.path.join(
-        os.path.expanduser("~"), ".openclaw", "quant-data"
+        os.path.expanduser("~"), "data"
     )
     return os.path.join(data_dir, "quant-trading.db")
 
 
 def _get_trading_dir() -> str:
     return os.environ.get("QUANT_TRADING_DIR") or os.path.join(
-        os.path.expanduser("~"), ".openclaw", "quant-trading"
+        os.path.expanduser("~"), "data"
     )
 
 

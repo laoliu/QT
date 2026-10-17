@@ -24,7 +24,6 @@ allowBuilds:
   m: true
   n: true
   o: true
-  openclaw: false
   p: true
   protobufjs: false
   r: true

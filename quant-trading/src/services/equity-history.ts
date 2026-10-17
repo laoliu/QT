@@ -52,7 +52,7 @@ export class EquityHistory {
   private saveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(opts: EquityHistoryOptions = {}) {
-    const dir = opts.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = opts.dataDir ?? path.join(process.cwd(), "data");
     const suffix = opts.mode ? `-${opts.mode}` : "";
     this.filePath = path.join(dir, `equity-history${suffix}.json`);
     this.maxSnapshots = opts.maxSnapshots ?? 2000;

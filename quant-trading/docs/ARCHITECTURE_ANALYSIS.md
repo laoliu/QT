@@ -1,4 +1,4 @@
-# OpenClaw Quant-Trading 扩展 - 深度架构分析
+# Quant Trading Quant-Trading 扩展 - 深度架构分析
 
 ## 目录
 
@@ -491,7 +491,7 @@ Loop: next() on each bar
 **实时交易引擎** (`live-engine.ts`):
 
 ```typescript
-class LiveEngine implements OpenClawPluginService {
+class LiveEngine implements Quant TradingPluginService {
   // Python 持久进程
   private proc: PersistentPythonProcess | null = null;
 
@@ -928,4 +928,4 @@ test("sma should return NaN for initial period", () => {
 ---
 
 **文档版本**: 2026-04-03
-**项目**: OpenClaw Quant-Trading v1.0
+**项目**: Quant Trading Quant-Trading v1.0

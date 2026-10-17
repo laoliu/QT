@@ -13,7 +13,7 @@ _this_dir = os.path.dirname(os.path.abspath(__file__))
 if _this_dir not in sys.path:
     sys.path.insert(0, _this_dir)
 
-CACHE_DB = os.path.expanduser("~/.openclaw/extensions/quant-trading/cache/stock_data.db")
+CACHE_DB = os.path.expanduser("~/data/cache/stock_data.db")
 
 def _fetch_from_cache(symbol, start_date, end_date, market=None):
     import pandas as pd

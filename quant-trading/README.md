@@ -1,12 +1,12 @@
-# @openclaw/quant-trading
+# @quant-trading/quant-trading
 
-量化交易 OpenClaw 扩展插件 — 股票、期货、基金、期权的推荐、管理、买卖、策略回测。
+量化交易 Quant Trading 扩展插件 — 股票、期货、基金、期权的推荐、管理、买卖、策略回测。
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│  OpenClaw Gateway (Node.js / TypeScript)                                │
+│  Quant Trading Gateway (Node.js / TypeScript)                                │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  quant-trading extension (51 AI Tools · 60+ Services · 52 策略)   │  │
@@ -167,10 +167,10 @@
 ### CLI Commands
 
 ```bash
-openclaw quant backtest dual-ma-crossover -s 2024-01-01 -e 2025-01-01 --symbols 600519
-openclaw quant data fetch --symbol 600519
-openclaw quant portfolio show
-openclaw quant live status
+quant-trading quant backtest dual-ma-crossover -s 2024-01-01 -e 2025-01-01 --symbols 600519
+quant-trading quant data fetch --symbol 600519
+quant-trading quant portfolio show
+quant-trading quant live status
 ```
 
 ### Built-in Strategies (52 个内置策略)
@@ -268,7 +268,7 @@ Composite、Gated、Scored、TrendCombo、EnhancedComposite、RsiMacd、T0Enhanc
 
 ### 1. Enable the plugin
 
-在 `openclaw.json` (或 temp-config.json) 中添加:
+在 `quant-trading.json` (或 temp-config.json) 中添加:
 
 ```json
 {
@@ -360,13 +360,13 @@ AI:   [调用 smart_order tool] 已提交bracket单：入场+止损10+止盈13 .
 
 ```bash
 # Run a backtest
-openclaw quant backtest dual-ma-crossover --symbols 600519 -s 2024-01-01 -e 2025-12-31
+quant-trading quant backtest dual-ma-crossover --symbols 600519 -s 2024-01-01 -e 2025-12-31
 
 # Fetch market data
-openclaw quant data fetch --symbol 000300
+quant-trading quant data fetch --symbol 000300
 
 # View portfolio
-openclaw quant portfolio show
+quant-trading quant portfolio show
 ```
 
 ## 跨机器迁移 (Export / Import)
@@ -377,12 +377,12 @@ openclaw quant portfolio show
 
 | 目录             | 说明                                                                                                |
 | ---------------- | --------------------------------------------------------------------------------------------------- |
-| `config/`        | `openclaw.json` 插件配置（含 quant-trading 段）                                                     |
+| `config/`        | `quant-trading.json` 插件配置（含 quant-trading 段）                                                     |
 | `data/`          | `~/data/` 运行时数据（signals、stock-list、portfolio、orders …）                 |
 | `cache/`         | `~/data/cache/` SQLite 缓存数据库（stock_data.db、financial_data.db） |
-| `openclaw-home/` | `~/.openclaw/` 核心目录：workspace 人设、identity 设备密钥、cron 定时任务、feishu 状态              |
+| `quant-trading-home/` | `~/.quant-trading/` 核心目录：workspace 人设、identity 设备密钥、cron 定时任务、feishu 状态              |
 | `python/`        | Python 策略/选股/引擎/数据源代码                                                                    |
-| `meta/`          | 插件元信息 (`openclaw.plugin.json`, `package.json`) + TypeScript 源码                               |
+| `meta/`          | 插件元信息 (`config.json`, `package.json`) + TypeScript 源码                               |
 
 ### 导出
 
@@ -396,13 +396,13 @@ openclaw quant portfolio show
 
 导出脚本会自动收集以下内容：
 
-1. `config-custom/openclaw.json` 和 `~/.openclaw/openclaw.json` 配置文件
+1. `config-custom/quant-trading.json` 和 `~/.quant-trading/quant-trading.json` 配置文件
 2. `~/data/` 下的所有运行时数据文件
 3. `~/data/cache/` 下的 SQLite 缓存数据库（导出前自动执行 WAL checkpoint 保证数据完整性）
-4. `~/.openclaw/workspace/` AI 人设文件（IDENTITY.md、USER.md、SOUL.md、TOOLS.md 等）
-5. `~/.openclaw/identity/` 设备身份密钥
-6. `~/.openclaw/cron/` 定时任务配置
-7. `~/.openclaw/feishu/` 飞书去重状态
+4. `~/.quant-trading/workspace/` AI 人设文件（IDENTITY.md、USER.md、SOUL.md、TOOLS.md 等）
+5. `~/.quant-trading/identity/` 设备身份密钥
+6. `~/.quant-trading/cron/` 定时任务配置
+7. `~/.quant-trading/feishu/` 飞书去重状态
 8. `extensions/quant-trading/python/` 下全部 Python 源码（排除 `__pycache__`）
 9. 插件元信息和 TypeScript 源码
 
@@ -445,7 +445,7 @@ openclaw quant portfolio show
 
 ```bash
 # 1. 检查配置（API 密钥、Webhook Secret 等可能需要更新）
-cat config-custom/openclaw.json | grep -A5 quant-trading
+cat config-custom/quant-trading.json | grep -A5 quant-trading
 
 # 2. 安装 Python 依赖
 cd extensions/quant-trading/python && pip install -r requirements.txt
@@ -454,7 +454,7 @@ cd extensions/quant-trading/python && pip install -r requirements.txt
 pnpm install && pnpm build
 ```
 
-> **注意**：`qmt_dual_ma_5m.py` 中的 `OPENCLAW_WEBHOOK_URL` 包含源机器 IP，
+> **注意**：`qmt_dual_ma_5m.py` 中的 `QUANT_TRADING_WEBHOOK_URL` 包含源机器 IP，
 > 需要修改为目标机器的地址。
 
 ## File Structure
@@ -463,7 +463,7 @@ pnpm install && pnpm build
 quant-trading/
 ├── index.ts                        # Plugin entry point (51 tools registered)
 ├── package.json
-├── openclaw.plugin.json            # Plugin metadata & config schema
+├── config.json            # Plugin metadata & config schema
 ├── README.md
 ├── docs/
 │   ├── ARCHITECTURE_ANALYSIS.md    # 深度架构分析
@@ -532,10 +532,10 @@ quant-trading/
 │   │   ├── sqlite-storage.ts       # SQLite 持久化
 │   │   └── ... (50+ more services)
 │   ├── cli/
-│   │   ├── backtest-cli.ts         # openclaw quant backtest
-│   │   ├── data-cli.ts             # openclaw quant data
-│   │   ├── portfolio-cli.ts        # openclaw quant portfolio
-│   │   └── live-cli.ts             # openclaw quant live
+│   │   ├── backtest-cli.ts         # quant-trading quant backtest
+│   │   ├── data-cli.ts             # quant-trading quant data
+│   │   ├── portfolio-cli.ts        # quant-trading quant portfolio
+│   │   └── live-cli.ts             # quant-trading quant live
 │   ├── http/
 │   │   ├── routes.ts               # Route registration
 │   │   ├── admin-routes.ts         # Admin API endpoints

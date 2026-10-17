@@ -9,7 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { QuantTradingConfig } from "../types.js";
 
-/** Plugin HTTP route handler signature (mirrors OpenClawPluginHttpRouteHandler). */
+/** Plugin HTTP route handler signature (mirrors Quant TradingPluginHttpRouteHandler). */
 export type HttpHandler = (req: IncomingMessage, res: ServerResponse) => Promise<void> | void;
 
 // ── Bearer Token Auth ─────────────────────────────────────────────

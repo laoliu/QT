@@ -88,7 +88,7 @@ export interface BasketOrder {
 const basketMutex = new AsyncMutex();
 
 function dataDir(cfg: QuantTradingConfig): string {
-  return cfg.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return cfg.dataDir ?? path.join(process.cwd(), "data");
 }
 
 function basketsPath(cfg: QuantTradingConfig): string {

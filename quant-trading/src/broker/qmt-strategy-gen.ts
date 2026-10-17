@@ -29,7 +29,7 @@ export function generateQmtStrategyScript(
   } = {},
 ): { content: string; filename: string } {
   const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 15).replace(/\./g, "_");
-  const name = opts.strategyName ?? "openclaw_scheduled";
+  const name = opts.strategyName ?? "quant-trading_scheduled";
   const filename = `${name}_${ts}.py`;
 
   const orderData = JSON.stringify(
@@ -52,7 +52,7 @@ export function generateQmtStrategyScript(
 
   const content = `# coding: utf-8
 """
-OpenClaw 预埋策略 - 自动生成于 ${ts}
+Quant Trading 预埋策略 - 自动生成于 ${ts}
 策略名称: ${name}
 
 使用方法:
@@ -148,7 +148,7 @@ def run_strategy():
         sys.exit(1)
 
     _log("=" * 50)
-    _log("OpenClaw 预埋策略启动")
+    _log("Quant Trading 预埋策略启动")
     _log("待下单: %d 笔" % len(ORDERS))
     for o in ORDERS:
         _log("  %s %s 数量:%d 限价:%.3f" % (
@@ -218,9 +218,9 @@ def run_strategy():
 
 def init(context):
     """QMT strategy init callback."""
-    _log("OpenClaw 预埋策略 init (QMT内部模式)")
+    _log("Quant Trading 预埋策略 init (QMT内部模式)")
     import threading
-    t = threading.Thread(target=run_strategy, name="openclaw-scheduled", daemon=True)
+    t = threading.Thread(target=run_strategy, name="quant-trading-scheduled", daemon=True)
     t.start()
 
 def handlebar(context):

@@ -600,7 +600,7 @@ function applyDailyPickToRecommend(){
       if(stratSel.options[i].value===best.strategy){stratSel.selectedIndex=i;break;}
     }
   }
-  localStorage.setItem('openclaw-rec-symbols',document.getElementById('rec-symbols').value||'');
+  localStorage.setItem('quant-trading-rec-symbols',document.getElementById('rec-symbols').value||'');
   toast('✅ 已应用每日综合选股结果到建仓推荐');
 }
 
@@ -620,7 +620,7 @@ function runRecommend(){
 
   var endVal=document.getElementById('rec-end').value.trim();
   var symVal=document.getElementById('rec-symbols').value.trim();
-  if(symVal)localStorage.setItem('openclaw-rec-symbols',symVal);
+  if(symVal)localStorage.setItem('quant-trading-rec-symbols',symVal);
   _recSymbolsAtAnalysis=symVal;
   var staleBanner=document.getElementById('rec-pool-stale-banner');
   if(staleBanner)staleBanner.style.display='none';

@@ -45,13 +45,13 @@ export function paginate<T>(items: T[], params: PaginationParams): PaginatedResu
 }
 
 function getPortfolioPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "portfolio-paper.json");
 }
 
 /** Legacy path — used only for migration fallback */
 function getLegacyPortfolioPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "portfolio.json");
 }
 
@@ -317,7 +317,7 @@ export async function handlePortfolioByIdApi(
 // ── Mode-specific file readers (for cross-mode queries) ──────────
 
 function modeDataDir(config: QuantTradingConfig): string {
-  return config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  return config.dataDir ?? path.join(process.cwd(), "data");
 }
 
 /**
@@ -505,7 +505,7 @@ export async function handleSignalsApi(
   pagination?: PaginationParams,
 ): Promise<Record<string, unknown> | PaginatedResult<Record<string, unknown>>> {
   try {
-    const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+    const dir = config.dataDir ?? path.join(process.cwd(), "data");
     const raw = await fs.readFile(path.join(dir, "signals.json"), "utf-8");
     let signals = JSON.parse(raw) as Array<Record<string, unknown>>;
     if (filter.strategyId) signals = signals.filter((s) => s["strategyId"] === filter.strategyId);
@@ -523,7 +523,7 @@ export async function handleSignalsApi(
  * POST /quant/api/stocklist — replace the stock list (called by qmt_screener_mac.py).
  */
 function getStocklistPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "stock-list.json");
 }
 
@@ -569,7 +569,7 @@ interface ScreenerHistoryEntry {
 }
 
 function getScreenerHistoryPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "screener-history.json");
 }
 
@@ -694,7 +694,7 @@ interface PlanHistoryEntry {
 }
 
 function getPlanHistoryPath(config: QuantTradingConfig): string {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   return path.join(dir, "plan-history.json");
 }
 

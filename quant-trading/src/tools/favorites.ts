@@ -23,7 +23,7 @@ import { FavoritesStore } from "../services/favorites-store.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createFavoritesTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
-  const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
+  const dir = config.dataDir ?? path.join(process.cwd(), "data");
   const store = new FavoritesStore({ dataDir: dir });
 
   return {

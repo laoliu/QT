@@ -29,7 +29,11 @@ from aipha.research.contracts import FinancialSnapshot, TargetPosition
 from aipha.research.pipeline import _filter_historical_universe
 from aipha.research.artifacts import load_verified_selector
 from aipha.research.execution_plan import build_execution_plan, execute_target_plan, read_execution_plan
-from aipha.research.snapshots import SNAPSHOT_GENERATOR_VERSION, frame_content_sha256
+from aipha.research.snapshots import (
+    SNAPSHOT_GENERATOR_VERSION,
+    financial_snapshots_from_provider,
+    frame_content_sha256,
+)
 
 
 def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
@@ -165,6 +169,49 @@ def test_financial_facts_are_filtered_by_announcement_date() -> None:
     ]
     visible = visible_financial_snapshots(rows, pd.Timestamp("2024-04-01").date())
     assert [row.value for row in visible] == [0.1]
+
+
+def test_tushare_snapshot_materializes_announced_indicator_and_statement_history() -> None:
+    from datetime import date
+    from types import SimpleNamespace
+
+    class PITFixture:
+        def get_indicator_history(self, symbol: str):
+            return [SimpleNamespace(
+                report_date=SimpleNamespace(to_date=lambda: date(2023, 12, 31)),
+                announce_date=date(2024, 3, 15),
+                indicators={"roe": 0.12},
+            )]
+
+        def get_statement_history(self, symbol, start_date, end_date, statement_type):
+            values = {
+                "income": {"revenue": 1200.0},
+                "balance": {"total_assets": 3500.0},
+                "cashflow": {"cash_from_operations": 450.0},
+            }
+            return [SimpleNamespace(
+                report_date=SimpleNamespace(to_date=lambda: date(2023, 12, 31)),
+                announce_date=date(2024, 3, 20),
+                data=values[statement_type],
+            )]
+
+    facts = financial_snapshots_from_provider(
+        PITFixture(), ["600000.SH"],
+        start_date=date(2024, 1, 1), end_date=date(2024, 3, 31),
+    )
+    assert set(facts["metric_name"]) == {
+        "roe", "revenue", "total_assets", "cash_from_operations",
+    }
+    panel = join_pit_financials(pd.DataFrame({
+        "trade_date": ["2024-03-14", "2024-03-15", "2024-03-19", "2024-03-20"],
+        "symbol": ["600000.SH"] * 4,
+    }), facts)
+    assert pd.isna(panel.loc[0, "roe"])
+    assert panel.loc[1, "roe"] == pytest.approx(0.12)
+    assert pd.isna(panel.loc[2, "revenue"])
+    assert panel.loc[3, "revenue"] == pytest.approx(1200.0)
+    assert panel.loc[3, "total_assets"] == pytest.approx(3500.0)
+    assert panel.loc[3, "cash_from_operations"] == pytest.approx(450.0)
 
 
 def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -> None:

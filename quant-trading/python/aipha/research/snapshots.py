@@ -305,13 +305,16 @@ def join_pit_financials(panel: pd.DataFrame, snapshots: pd.DataFrame) -> pd.Data
     if missing:
         raise ValueError(f"PIT financial snapshot missing columns: {', '.join(sorted(missing))}")
     facts = snapshots.copy()
-    facts["announce_date"] = pd.to_datetime(facts["announce_date"])
-    facts["report_date"] = pd.to_datetime(facts["report_date"])
+    # merge_asof requires identical datetime units.  Pandas 2/3 can infer
+    # different units from Python ``date`` objects versus frame timestamps;
+    # normalize both sides explicitly before the causal join.
+    facts["announce_date"] = pd.to_datetime(facts["announce_date"]).astype("datetime64[ns]")
+    facts["report_date"] = pd.to_datetime(facts["report_date"]).astype("datetime64[ns]")
     if (facts["announce_date"] < facts["report_date"]).any():
         raise ValueError("PIT announce_date cannot precede report_date")
     facts = facts.sort_values(["symbol", "metric_name", "announce_date"])
     result = panel.copy()
-    result["_asof_date"] = pd.to_datetime(result["trade_date"])
+    result["_asof_date"] = pd.to_datetime(result["trade_date"]).astype("datetime64[ns]")
     for metric, metric_rows in facts.groupby("metric_name", sort=True):
         metric_rows = metric_rows.rename(columns={"value": str(metric)})
         metric_rows = metric_rows[["symbol", "announce_date", str(metric)]].drop_duplicates(
@@ -328,13 +331,30 @@ def join_pit_financials(panel: pd.DataFrame, snapshots: pd.DataFrame) -> pd.Data
                     left, right.drop(columns=["symbol"]),
                     left_on="_asof_date", right_on="announce_date", direction="backward",
                 )
+                # The announcement key is only a join aid.  Drop it after
+                # every metric so the next metric cannot create duplicate
+                # announce_date columns in the evolving panel.
+                left = left.drop(columns=["announce_date"], errors="ignore")
             merged_parts.append(left)
         result = pd.concat(merged_parts).sort_index()
     return result.drop(columns=["_asof_date"], errors="ignore")
 
 
-def financial_snapshots_from_provider(pit_provider: Any, symbols: list[str]) -> pd.DataFrame:
-    """Materialize TuSharePITProvider histories into the long-form contract."""
+def financial_snapshots_from_provider(
+    pit_provider: Any,
+    symbols: list[str],
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    statement_types: tuple[str, ...] = ("income", "balance", "cashflow"),
+) -> pd.DataFrame:
+    """Materialize PIT indicators and statement histories into the long form.
+
+    ``get_statement_history`` is optional for lightweight fixture providers,
+    but the production TuShare provider implements it for income, balance and
+    cashflow.  Statement rows retain their ``announce_date`` so the subsequent
+    as-of join can never expose a report before it was published.
+    """
     rows: list[dict[str, Any]] = []
     for symbol in symbols:
         history = pit_provider.get_indicator_history(symbol)
@@ -347,6 +367,23 @@ def financial_snapshots_from_provider(pit_provider: Any, symbols: list[str]) -> 
                     "metric_name": metric,
                     "value": None if value is None else float(value),
                 })
+        statement_loader = getattr(pit_provider, "get_statement_history", None)
+        if callable(statement_loader):
+            history_start = start_date or date.min
+            history_end = end_date or date.max
+            for statement_type in statement_types:
+                statements = statement_loader(
+                    symbol, history_start, history_end, statement_type,
+                )
+                for statement in statements or ():
+                    for metric, value in statement.data.items():
+                        rows.append({
+                            "symbol": symbol,
+                            "report_date": statement.report_date.to_date(),
+                            "announce_date": statement.announce_date,
+                            "metric_name": metric,
+                            "value": None if value is None else float(value),
+                        })
     return pd.DataFrame(rows, columns=["symbol", "report_date", "announce_date", "metric_name", "value"])
 
 
@@ -409,6 +446,8 @@ def build_tushare_snapshot(
     if pit_provider is not None:
         financial_snapshots = financial_snapshots_from_provider(
             pit_provider, sorted(market["ts_code"].dropna().astype(str).unique()),
+            start_date=date.fromisoformat(f"{spec.start_date[:4]}-{spec.start_date[4:6]}-{spec.start_date[6:8]}"),
+            end_date=date.fromisoformat(f"{spec.end_date[:4]}-{spec.end_date[4:6]}-{spec.end_date[6:8]}"),
         )
     start_year = int(spec.start_date[:4])
     end_year = int(spec.end_date[:4])

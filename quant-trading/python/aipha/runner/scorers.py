@@ -774,6 +774,16 @@ def _load_ml_cross_section(comp_cfg: dict, universe: str, trade_date: str) -> An
     """
     import pandas as pd
 
+    # Canonical deployments provide a frozen PIT feature snapshot explicitly.
+    # This branch never imports the legacy training script and therefore keeps
+    # the runtime scorer on the same provenance contract as research runs.
+    snapshot_path = comp_cfg.get("feature_snapshot_path") or comp_cfg.get("research_snapshot_path")
+    if snapshot_path:
+        return _load_canonical_ml_cross_section(
+            str(snapshot_path), universe, trade_date,
+            feature_version=str(comp_cfg.get("feature_version", "cn_equity_v1")),
+        )
+
     train_ml = _import_train_ml_factor()
 
     # Alpha158 最长窗口 60 天，行为/基本面因子还要更长；留 250 个交易日。
@@ -808,6 +818,79 @@ def _load_ml_cross_section(comp_cfg: dict, universe: str, trade_date: str) -> An
         )
 
     cross = _apply_ml_filters(cross, comp_cfg)
+    return cross
+
+
+def _load_canonical_ml_cross_section(
+    snapshot_path: str,
+    universe: str,
+    trade_date: str,
+    *,
+    feature_version: str,
+) -> Any:
+    """Read one date from an attested canonical PIT feature snapshot.
+
+    ``snapshot_path`` may contain ``{trade_date}`` (``YYYYMMDD``) or
+    ``{date}`` (``YYYY-MM-DD``).  A missing/invalid snapshot is fatal: using
+    the old cache as an implicit fallback would defeat the provenance gate.
+    """
+    import pandas as pd
+
+    path_text = str(snapshot_path)
+    path_text = path_text.replace("{trade_date}", str(trade_date).replace("-", ""))
+    path_text = path_text.replace("{date}", str(trade_date)[:10])
+    path = Path(path_text).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(f"canonical feature snapshot not found: {path}")
+    if path.suffix.lower() != ".parquet":
+        raise ValueError("canonical feature_snapshot_path must point to Parquet")
+
+    from aipha.research.snapshots import verify_attested_parquet
+
+    metadata = verify_attested_parquet(path, require_artifact_hash=True, verify_content_hash=True)
+    if metadata.get("provider") != "tushare_pit":
+        raise ValueError("canonical ML scorer requires provider=tushare_pit")
+    if metadata.get("feature_version") != feature_version:
+        raise ValueError(
+            f"feature version mismatch: snapshot={metadata.get('feature_version')!r}, "
+            f"requested={feature_version!r}"
+        )
+    expected_indices = {
+        "csi300": "000300.SH", "csi500": "000905.SH",
+        "csi1000": "000852.SH", "csi2000": "932000.CSI",
+    }
+    expected_index = expected_indices.get(str(universe).lower())
+    if expected_index and str(metadata.get("index_code", "")).upper() != expected_index:
+        raise ValueError(
+            f"universe mismatch: snapshot index={metadata.get('index_code')!r}, "
+            f"requested {universe} ({expected_index})"
+        )
+    panel = pd.read_parquet(path)
+    required = {"trade_date", "symbol", "feature_version", "is_index_member", "is_st", "listing_days"}
+    missing = required - set(panel.columns)
+    if missing:
+        raise ValueError(f"canonical feature snapshot missing columns: {', '.join(sorted(missing))}")
+    versions = panel["feature_version"].dropna().astype(str).unique().tolist()
+    if versions != [feature_version]:
+        raise ValueError(f"row feature_version mismatch: {versions!r}")
+    if "price_adjustment" not in panel or not panel["price_adjustment"].eq("point_in_time_factor").all():
+        raise ValueError("canonical feature snapshot must use point_in_time_factor adjusted prices")
+    panel = panel.copy()
+    panel["datetime"] = pd.to_datetime(panel["trade_date"], errors="raise")
+    target = pd.Timestamp(_to_date(trade_date))
+    cross = panel[panel["datetime"] == target].copy()
+    if cross.empty:
+        raise RuntimeError(f"canonical feature snapshot has no rows for {trade_date}")
+    # The snapshot is normally already scoped to its configured index.  The
+    # row-level check makes this true even when a combined snapshot is used.
+    cross = cross[cross["is_index_member"].astype(bool)]
+    cross = cross[~cross["is_st"].astype(bool)]
+    cross = cross[cross["listing_days"] >= 252]
+    if "is_suspended" in cross:
+        cross = cross[~cross["is_suspended"].astype(bool)]
+    cross.attrs["feature_version"] = feature_version
+    cross.attrs["universe"] = universe
+    cross.attrs["canonical_pit"] = True
     return cross
 
 
@@ -858,10 +941,23 @@ def _predict_ranks(model_dir: Path, cross: Any) -> Any:
     返回排名而非原始分数：多模型集成时 ``rank_average`` 才有意义，
     不同模型的分数量纲不可比。
     """
-    from aipha.models.ml_stock_selector import MLStockSelector
+    manifest = model_dir / "model_manifest.json"
+    if manifest.is_file():
+        from aipha.research import load_verified_selector
 
-    selector = MLStockSelector()
-    selector.load(model_dir)
+        selector = load_verified_selector(
+            model_dir,
+            expected_feature_version=str(cross.attrs.get("feature_version", "cn_equity_v1")),
+        )
+    else:
+        if cross.attrs.get("canonical_pit"):
+            raise ValueError(
+                f"canonical PIT inference rejects legacy model without model_manifest.json: {model_dir}"
+            )
+        from aipha.models.ml_stock_selector import MLStockSelector
+
+        selector = MLStockSelector()
+        selector.load(model_dir)
     _check_feature_coverage(selector, cross, model_dir)
 
     scores = selector.predict(cross)

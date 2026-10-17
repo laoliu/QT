@@ -763,6 +763,40 @@ class TestMLScorer:
 
         assert seen["universe"] == "micro"
 
+    def test_canonical_snapshot_is_pit_verified_and_filtered(self, tmp_path: Path) -> None:
+        from aipha.research.snapshots import write_attested_parquet
+
+        frame = pd.DataFrame({
+            "trade_date": ["2025-01-06"] * 4,
+            "symbol": ["A", "B", "C", "D"],
+            "open": [10.0] * 4, "high": [10.0] * 4,
+            "low": [10.0] * 4, "close": [10.0] * 4,
+            "volume": [1000.0] * 4, "amount": [1000.0] * 4,
+            "adj_factor": [1.0] * 4,
+            "is_suspended": [False, True, False, False],
+            "is_limit_up": [False] * 4, "is_limit_down": [False] * 4,
+            "is_index_member": [True, True, False, True],
+            "is_st": [False, False, True, False],
+            "listing_days": [400, 400, 400, 100],
+            "price_adjustment": ["point_in_time_factor"] * 4,
+            "feature_version": ["cn_equity_v1"] * 4,
+            "f1": [1.0, 2.0, 3.0, 4.0],
+        })
+        path = tmp_path / "snapshot.parquet"
+        write_attested_parquet(
+            frame, path,
+            {
+                "provider": "tushare_pit", "feature_version": "cn_equity_v1",
+                "data_snapshot_id": "fixture", "start_date": "2025-01-06",
+                "end_date": "2025-01-06", "index_code": "000905.SH",
+            },
+        )
+        result = scorers._load_canonical_ml_cross_section(
+            str(path), "csi500", "20250106", feature_version="cn_equity_v1",
+        )
+        assert result["symbol"].tolist() == ["A"]
+        assert result.attrs["canonical_pit"] is True
+
 
 class TestV2Ensemble:
     def test_requires_model_dirs(self) -> None:

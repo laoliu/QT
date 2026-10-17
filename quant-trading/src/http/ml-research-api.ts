@@ -125,6 +125,7 @@ export function createMLResearchHandler(
     const payload = { ...body };
     delete payload.idempotencyKey;
     const digest = digestPayload(payload);
+    if (key) payload.idempotencyKey = key;
     if (key) {
       const existing = idempotency.get(key);
       if (existing) {

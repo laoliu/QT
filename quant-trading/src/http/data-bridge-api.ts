@@ -99,6 +99,11 @@ function _loadDiskCache(period: string, count: number): KlineMap | null {
   }
 }
 
+function _cacheCoversCodes(data: KlineMap, codes: string[]): boolean {
+  const available = new Set(Object.keys(data));
+  return codes.every((code) => available.has(code.replace(/\.(SH|SZ|BJ)$/i, "")));
+}
+
 function _saveDiskCache(data: KlineMap, period: string, count: number): void {
   try {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
@@ -126,7 +131,7 @@ export function handleDataBridgePostRequest(body: unknown): Record<string, unkno
 
   // 检查磁盘缓存：如有当天有效缓存，直接返回（无需等 Windows）
   const cached = _loadDiskCache(period, count);
-  if (cached) {
+  if (cached && _cacheCoversCodes(cached, codes as string[])) {
     const requestId = crypto.randomUUID();
     _pendingResponses.set(requestId, { requestId, data: cached, receivedAt: Date.now() });
     console.log(`[data-bridge] 使用磁盘缓存 (${Object.keys(cached).length} 只)，跳过 Windows 请求`);

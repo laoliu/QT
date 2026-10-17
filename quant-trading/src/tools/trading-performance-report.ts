@@ -88,7 +88,7 @@ export function createTradingPerformanceReportTool(
       const snapshots = equityHistory.getAll();
 
       if (trades.length === 0 && snapshots.length === 0) {
-        return { error: "150604020513081905060700" };
+        return { error: "暂无交易数据，无法生成绩效报告" };
       }
 
       const report = generatePerformanceReport(trades, snapshots, { from, to, topN });

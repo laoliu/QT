@@ -360,6 +360,6 @@ describe("BasketOrderService", () => {
       items: [{ symbol: "600519", side: "buy", orderType: "limit", quantity: 100, price: 1800 }],
     });
 
-    await expect(svc.submit(basket.basketId)).rejects.toThrow("OrderManager ā03");
+    await expect(svc.submit(basket.basketId)).rejects.toThrow("OrderManager 未初始化");
   });
 });

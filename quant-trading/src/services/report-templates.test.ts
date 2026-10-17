@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REPORT_TEMPLATES, findReportTemplate } from "./report-templates.js";
+import { todayCST } from "../utils/cst-time.js";
 
 let tmpDir: string;
 
@@ -90,7 +91,7 @@ describe("report-templates", () => {
   });
 
   it("market_close includes today's trade signals", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     const template = findReportTemplate("market_close")!;
     const executeTool = vi.fn().mockImplementation((name: string) => {
       if (name === "trading_signal") {
@@ -401,7 +402,7 @@ describe("report-templates", () => {
   });
 
   it("daily_journal generates comprehensive journal", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     const template = findReportTemplate("daily_journal")!;
     const executeTool = vi
       .fn()
@@ -482,7 +483,7 @@ describe("report-templates", () => {
   });
 
   it("daily_settlement generates structured settlement report", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayCST();
     const template = findReportTemplate("daily_settlement")!;
     expect(template).toBeDefined();
     expect(template.name).toBe("每日结算");

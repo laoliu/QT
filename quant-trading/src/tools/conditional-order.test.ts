@@ -160,6 +160,6 @@ describe("conditional_order tool", () => {
 
   it("returns error for unknown action", async () => {
     const res = (await tool.execute({ action: "invalid" })) as Record<string, unknown>;
-    expect(res.error).toContain("δ֪");
+    expect(res.error).toContain("未知操作");
   });
 });

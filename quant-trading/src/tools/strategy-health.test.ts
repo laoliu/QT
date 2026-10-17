@@ -99,6 +99,6 @@ describe("strategy_health tool", () => {
   it("returns error for unknown action", async () => {
     const raw = await tool.execute({ action: "invalid" });
     const res = JSON.parse(raw as string);
-    expect(res.error).toContain("δ֪");
+    expect(res.error).toContain("未知操作");
   });
 });

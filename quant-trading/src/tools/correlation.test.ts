@@ -97,6 +97,6 @@ describe("correlation_analysis tool", () => {
   it("returns error for unknown action", async () => {
     const tool = createCorrelationTool(fakeApi, fakeConfig, async () => null);
     const raw = await tool.execute({ action: "nope" });
-    expect(JSON.parse(raw as string).error).toContain("δ֪");
+    expect(JSON.parse(raw as string).error).toContain("未知操作");
   });
 });

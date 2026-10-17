@@ -24,6 +24,7 @@ export type ReportTemplateId =
   | "daily_scan"
   | "institutional_top3"
   | "daily_journal"
+  | "daily_settlement"
   | "monthly_report"
   | "after_market_review";
 
@@ -1028,6 +1029,65 @@ async function generateDailyJournal(
   return sections.join("\n");
 }
 
+/** Build an end-of-day settlement from realized trades and current positions. */
+async function generateDailySettlement(
+  executeTool: (name: string, args: Record<string, unknown>) => Promise<string>,
+  _config: QuantTradingConfig,
+): Promise<string> {
+  const today = todayCST();
+  const sections = ["📊 **每日结算汇总**", ""];
+  let account: Record<string, unknown> = {};
+  let trades: Array<Record<string, unknown>> = [];
+  let positions: Array<Record<string, unknown>> = [];
+
+  try {
+    const data = JSON.parse(await executeTool("live_trading", { action: "status" }));
+    account = data.account ?? {};
+  } catch { /* account data is optional */ }
+  try {
+    const data = JSON.parse(await executeTool("portfolio", { action: "live_trades" }));
+    trades = (data.trades ?? []).filter((trade: Record<string, unknown>) =>
+      String(trade.exitTime ?? "").startsWith(today),
+    );
+  } catch { /* trade data is optional */ }
+  try {
+    const data = JSON.parse(await executeTool("portfolio", { action: "view" }));
+    positions = data.positions ?? [];
+  } catch { /* position data is optional */ }
+
+  if (trades.length === 0) {
+    sections.push("今日无平仓交易");
+  } else {
+    const realized = trades.reduce((sum, trade) => sum + Number(trade.grossPnl ?? 0), 0);
+    const fees = trades.reduce((sum, trade) => sum + Number(trade.commission ?? 0), 0);
+    const net = trades.reduce((sum, trade) => sum + Number(trade.netPnl ?? trade.grossPnl ?? 0), 0);
+    const wins = trades.filter((trade) => Number(trade.grossPnl ?? 0) > 0);
+    const losses = trades.filter((trade) => Number(trade.grossPnl ?? 0) < 0);
+    const winRate = wins.length / trades.length * 100;
+    const averageWin = wins.length ? wins.reduce((sum, trade) => sum + Number(trade.grossPnl), 0) / wins.length : 0;
+    const averageLoss = losses.length ? Math.abs(losses.reduce((sum, trade) => sum + Number(trade.grossPnl), 0) / losses.length) : 0;
+    const profitFactor = averageLoss > 0 ? averageWin / averageLoss : (averageWin > 0 ? Infinity : 0);
+    sections.push(
+      `已实现盈亏: ¥${realized.toFixed(2)}`,
+      `手续费合计: ¥${fees.toFixed(2)}`,
+      `净收益: ¥${net.toFixed(2)}`,
+      `胜率: ${winRate.toFixed(1)}%`,
+      `盈亏比: ${Number.isFinite(profitFactor) ? profitFactor.toFixed(2) : "∞"}`,
+      "",
+      "**平仓明细**",
+      ...trades.map((trade) =>
+        `  ${String(trade.symbol ?? "")} ${Number(trade.quantity ?? 0)}股 ` +
+        `¥${Number(trade.netPnl ?? trade.grossPnl ?? 0).toFixed(2)}`,
+      ),
+    );
+  }
+
+  const unrealized = positions.reduce((sum, position) => sum + Number(position.unrealizedPnl ?? 0), 0);
+  sections.push("", `未实现盈亏变动: ¥${unrealized.toFixed(2)}`);
+  if (account.totalAssets != null) sections.push(`账户总资产: ¥${Number(account.totalAssets).toFixed(2)}`);
+  return sections.join("\n");
+}
+
 /**
  * Build a monthly performance report — comprehensive review of the past month's trading.
  */
@@ -1539,6 +1599,13 @@ export const REPORT_TEMPLATES: ReportTemplate[] = [
     description: "收盘后综合日志：大盘+盈亏+委托+成交+信号统计+风控",
     defaultIntervalMinutes: 0,
     generate: generateDailyJournal,
+  },
+  {
+    id: "daily_settlement",
+    name: "每日结算",
+    description: "收盘结算：已实现盈亏、费用、持仓浮盈及交易统计",
+    defaultIntervalMinutes: 0,
+    generate: generateDailySettlement,
   },
   {
     id: "monthly_report",

@@ -34,7 +34,7 @@ describe("DataQualityValidator", () => {
     skipWeekends: true,
     maxPriceChangeRatio: 0.1,
     maxVolumeSpikeRatio: 5,
-    stalenessThresholdDays: 999, // disable for most tests
+    stalenessThresholdDays: 9999, // disable for fixed historical fixtures
   });
 
   it("returns clean report for valid data", () => {

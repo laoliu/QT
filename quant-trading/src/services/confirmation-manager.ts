@@ -289,8 +289,8 @@ export class ConfirmationManager {
   /** Returns all waiting confirmations (for status queries). */
   async listPending(): Promise<PendingConfirmation[]> {
     const items = await loadConfirms(this.cfg);
-    const now = nowCSTISO();
-    return items.filter((c) => c.status === "waiting" && c.expiresAt > now);
+    const now = Date.now();
+    return items.filter((c) => c.status === "waiting" && Date.parse(c.expiresAt) > now);
   }
 
   // ── Private ──────────────────────────────────────────────────

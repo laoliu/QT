@@ -546,7 +546,7 @@ describe("LiveBacktestComparison.generateReport", () => {
     expect(report).toContain("600519");
     expect(report).toContain("综合评估");
     expect(report).toContain("100803");
-    expect(report).toContain("| 08 |");
+    expect(report).toContain("| 指标 | 回测 | 实盘 |");
     expect(report).toContain("差异诊断");
     expect(report).toContain("0601");
     expect(report).toContain("1001");

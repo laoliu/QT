@@ -131,7 +131,7 @@ describe("chat commands", () => {
       const cmd = findCommand("/screen");
       const out = await cmd!.execute("pe<20 roe>15");
       // Should show results from mock or graceful error
-      expect(out).toContain("ɸѡ");
+      expect(out).toContain("筛选条件");
     });
 
     it("echoes filter args", async () => {

@@ -15,7 +15,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { TradingSignal } from "../types.js";
-import { todayCST } from "../utils/cst-time.js";
+import { formatDateCST, todayCST } from "../utils/cst-time.js";
 
 export type HitCheckResult = "pending" | "hit" | "miss" | "no_data";
 
@@ -103,10 +103,12 @@ export class SignalHitRateTracker {
     const checkpoints: SignalTrackRecord["checkpoints"] = {};
 
     for (const d of this.horizons) {
-      const target = new Date(now);
-      target.setDate(target.getDate() + d);
+      // Keep target dates in the same China Standard Time calendar used by
+      // checkAccuracy(); Date#setDate would use the host timezone and can
+      // make a T+1 checkpoint look due around UTC midnight.
+      const target = new Date(now.getTime() + d * 86_400_000);
       checkpoints[`T+${d}`] = {
-        targetDate: target.toISOString().slice(0, 10),
+        targetDate: formatDateCST(target),
         result: "pending",
       };
     }

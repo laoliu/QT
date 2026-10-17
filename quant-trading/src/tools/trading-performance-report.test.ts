@@ -65,7 +65,7 @@ describe("trading_performance_report tool", () => {
   it("returns error when no data exists", async () => {
     const tool = createTool([], []);
     const res = (await tool.execute({ action: "full_report" })) as Record<string, unknown>;
-    expect(res.error).toContain("暂无");
+    expect(res.error).toContain("暂无交易数据");
   });
 
   // ── full_report ──

@@ -104,6 +104,7 @@ describe("PnlMonitor", () => {
         pollIntervalSecs: 1,
         warningPct: -0.03,
         circuitBreakerPct: -0.05,
+        infoPct: 0,
         enabled: true,
       },
     } as QuantTradingConfig;
@@ -213,6 +214,7 @@ describe("PnlMonitor", () => {
         pollIntervalSecs: 1,
         warningPct: -0.03,
         circuitBreakerPct: -0.2,
+        infoPct: 0,
         enabled: true,
       },
     } as QuantTradingConfig;

@@ -67,6 +67,7 @@ describe("admin-routes chip-accumulation top3", () => {
     registeredRoutes.length = 0;
     mockBuildAccumulationTop3.mockReset();
     mockRunPythonScript.mockReset();
+    mockRunPythonScript.mockResolvedValue({ ok: false, error: "not configured" } as never);
     registerAdminRoutes({
       api: {
         registerHttpRoute(route: RegisteredRoute) {

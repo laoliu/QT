@@ -159,6 +159,21 @@ export function createLiveTradingTool(
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
 
+      // QMT live orders from this legacy convenience tool have no validated
+      // research execution plan to bind their targets and provenance to. Keep
+      // manual order controls available in Paper, while requiring live QMT
+      // orders to enter through the target-plan bridge.
+      if (
+        ["force_order", "batch_order", "close_position"].includes(action)
+        && config.tradingAccount?.mode === "live"
+        && ["qmt", "remote-qmt"].includes(config.tradingAccount.broker ?? "")
+      ) {
+        return {
+          error: "QMT 实盘只接受经过校验的执行计划；请通过研究执行计划入口提交，不能使用手工下单动作。",
+          code: "EXECUTION_PLAN_REQUIRED",
+        };
+      }
+
       switch (action) {
         case "engine_status": {
           const engine = getEngine();
@@ -215,6 +230,32 @@ export function createLiveTradingTool(
           if (!engine) return { error: "引擎未初始化" };
           engine.resume();
           return { message: "引擎已恢复，继续正常运行" };
+        }
+
+        case "execute_rebalance": {
+          // Retain a narrow compatibility shim for callers of the retired
+          // weight-based action. It deliberately does not submit orders: a
+          // rebalance must first be materialized as a validated TargetPosition
+          // execution plan and then consumed by the Paper/QMT plan adapter.
+          const engine = getEngine();
+          if (!engine) return { error: "引擎未初始化" };
+          const rawTargets = args.targets;
+          if (!Array.isArray(rawTargets) || rawTargets.length === 0) {
+            return { error: "请提供 targets 数组" };
+          }
+          const totalWeight = rawTargets.reduce((sum, item) => {
+            const weight = item && typeof item === "object"
+              ? Number((item as Record<string, unknown>).weight)
+              : NaN;
+            return sum + (Number.isFinite(weight) ? weight : 0);
+          }, 0);
+          if (Math.abs(totalWeight - 100) > 0.01) {
+            return { error: "目标权重总和必须约等于 100%，请先生成执行计划" };
+          }
+          return {
+            error: "execute_rebalance 已废弃；请通过 ml_ranking 导出并确认 TargetPosition 执行计划",
+            code: "EXECUTION_PLAN_REQUIRED",
+          };
         }
 
         case "add_strategy": {
@@ -345,26 +386,33 @@ export function createLiveTradingTool(
             success: boolean;
             orderId?: string;
             error?: string;
-          }> = [];
+          } | undefined> = new Array(orderList.length);
 
-          for (const item of orderList) {
+          // Sell first so proceeds and released position capacity are
+          // available before buy orders are submitted. Keep the response in
+          // the caller's original order for stable item-to-result mapping.
+          const executionOrder = orderList
+            .map((item, index) => ({ item, index }))
+            .sort((left, right) => Number(right.item.side === "sell") - Number(left.item.side === "sell"));
+
+          for (const { item, index } of executionOrder) {
             if (!item.symbol || !item.side || !item.quantity) {
-              results.push({
+              results[index] = {
                 symbol: item.symbol ?? "?",
                 side: item.side ?? "?",
                 success: false,
                 error: "缺少 symbol/side/quantity",
-              });
+              };
               continue;
             }
             const orderType = item.order_type ?? "limit";
             if (orderType === "limit" && !item.price) {
-              results.push({
+              results[index] = {
                 symbol: item.symbol,
                 side: item.side,
                 success: false,
                 error: "限价单需提供 price",
-              });
+              };
               continue;
             }
 
@@ -378,19 +426,24 @@ export function createLiveTradingTool(
               strategyId: "batch-manual",
             };
             const r = await mgr.submit(req);
-            results.push({
+            results[index] = {
               symbol: item.symbol,
               side: item.side,
               success: r.ok,
               orderId: r.ok ? r.order.orderId : undefined,
               error: r.ok ? undefined : r.reason,
-            });
+            };
           }
 
-          const succeeded = results.filter((r) => r.success).length;
+          const details = results.filter((result): result is NonNullable<typeof result> => result !== undefined);
+          const succeeded = details.filter((result) => result.success).length;
+          const failed = details.length - succeeded;
           return {
-            message: `批量下单完成: ${succeeded}/${results.length} 笔成功`,
-            results,
+            message: `批量下单完成: ${succeeded}/${details.length} 笔成功`,
+            success: succeeded,
+            failed,
+            details,
+            results: details,
           };
         }
 

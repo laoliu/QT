@@ -56,6 +56,46 @@ def test_attested_tushare_snapshot_rejects_byte_tampering(tmp_path: Path) -> Non
         verify_attested_parquet(path, require_artifact_hash=True)
 
 
+def test_ml_export_writes_one_paper_plan_per_rebalance_date(tmp_path: Path) -> None:
+    """An export with several months remains directly executable and auditable."""
+    from aipha.engines.aipha_ml_engine import run
+
+    predictions = pd.DataFrame([
+        {"trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0},
+        {"trade_date": "2024-02-29", "symbol": "600000.SH", "score": 1.0},
+    ])
+    source = tmp_path / "predictions.parquet"
+    write_attested_parquet(
+        predictions,
+        source,
+        {
+            "provider": "aipha_research",
+            "data_snapshot_id": "fixture-predictions",
+            "feature_version": "cn_equity_v1",
+            "start_date": "2024-01-31",
+            "end_date": "2024-02-29",
+        },
+        artifact_type="oos_predictions",
+    )
+    result = run({
+        "action": "export",
+        "dataPath": str(source),
+        "outputPath": str(tmp_path / "targets.json"),
+        "runId": "run-export",
+        "modelId": "model-export",
+        "topN": 1,
+    })
+
+    assert result["ok"] is True
+    exported = result["data"]
+    paths = exported["executionPlanPaths"]
+    assert len(paths) == 2
+    assert exported["executionPlanPath"] == paths[-1]
+    assert [read_execution_plan(path).rebalance_date.isoformat() for path in paths] == [
+        "2024-01-31", "2024-02-29",
+    ]
+
+
 def test_legacy_ml_config_migration_is_explicitly_pit_safe() -> None:
     # Unsupported legacy ensembles do not silently become a canonical model.
     with pytest.raises(ValueError, match="no canonical migration"):

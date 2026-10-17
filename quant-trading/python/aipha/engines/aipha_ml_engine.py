@@ -213,8 +213,21 @@ def run(config: dict) -> dict:
                 plans.append(build_execution_plan(
                     group, mode="paper", run_id=run_id, model_id=model_id,
                 ).to_dict())
-            plan_path = output.with_name(f"{output.stem}.execution-plan.json")
-            plan_path.write_text(json.dumps(plans, ensure_ascii=False, indent=2), encoding="utf-8")
+            plan_dir = output.with_name(f"{output.stem}.execution-plans")
+            plan_paths: list[str] = []
+            for plan in plans:
+                rebalance_date = str(plan["rebalance_date"])
+                plan_path = plan_dir / f"{rebalance_date}.json"
+                plan_path.parent.mkdir(parents=True, exist_ok=True)
+                plan_path.write_text(
+                    json.dumps(plan, ensure_ascii=False, indent=2, default=str),
+                    encoding="utf-8",
+                )
+                plan_paths.append(str(plan_path))
+            # The singular path is the most recent signal that can reasonably
+            # be reviewed for current Paper execution. Historical rebalance
+            # plans remain available individually for replay and audit.
+            latest_plan_path = plan_paths[-1] if plan_paths else ""
             as_of = max((item["rebalanceDate"] for item in target_positions), default="")
             envelope = {
                 "schemaVersion": "1.0", "runId": run_id or model_id or "research-export",
@@ -223,7 +236,8 @@ def run(config: dict) -> dict:
                 "signals": [], "targetPositions": target_positions,
             }
             return {"ok": True, "data": {
-                "outputPath": str(output), "executionPlanPath": str(plan_path),
+                "outputPath": str(output), "executionPlanPath": latest_plan_path,
+                "executionPlanPaths": plan_paths,
                 "count": len(targets), "runEnvelope": envelope,
             }}
         if action == "execute_paper":

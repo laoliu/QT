@@ -535,6 +535,22 @@ describe("live_trading tool", () => {
       expect(callOrder[1]).toBe("buy_600519");
     });
 
+    it("preserves request order in results while submitting sells first", async () => {
+      const engine = makeMockEngine();
+      const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
+      const result = (await tool.execute({
+        action: "batch_order",
+        orders: [
+          { symbol: "600519", side: "buy", quantity: 100, price: 1850 },
+          { symbol: "000858", side: "sell", quantity: 100, price: 150 },
+        ],
+      })) as any;
+
+      expect(result.success).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(result.details.map((item: any) => item.symbol)).toEqual(["600519", "000858"]);
+    });
+
     it("validates limit orders require price", async () => {
       const engine = makeMockEngine();
       const tool = createLiveTradingTool(fakeApi, makeConfig(), () => engine);
@@ -620,6 +636,27 @@ describe("live_trading tool", () => {
       const result = (await tool.execute({ action: "invalid_action" })) as any;
       expect(result.error).toContain("未知操作");
     });
+  });
+
+  describe("QMT execution-plan boundary", () => {
+    it.each(["force_order", "batch_order", "close_position"])(
+      "rejects %s for live QMT before calling OrderManager",
+      async (action) => {
+        const engine = makeMockEngine();
+        const config = makeConfig();
+        config.tradingAccount = {
+          ...config.tradingAccount!,
+          mode: "live",
+          broker: "qmt",
+          requireExecutionPlan: true,
+        };
+        const tool = createLiveTradingTool(fakeApi, config, () => engine);
+        const result = (await tool.execute({ action })) as any;
+
+        expect(result.code).toBe("EXECUTION_PLAN_REQUIRED");
+        expect(engine.orderManager!.submit).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("tool metadata", () => {

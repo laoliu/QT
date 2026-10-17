@@ -34,6 +34,7 @@ from .execution_plan import (
     execute_paper_target_plan,
     execute_target_plan,
     read_execution_plan,
+    read_execution_plans,
     validate_execution_risk,
 )
 from .migration import migrate_legacy_model
@@ -75,6 +76,7 @@ __all__ = [
     "execute_paper_target_plan",
     "validate_execution_risk",
     "read_execution_plan",
+    "read_execution_plans",
     "migrate_legacy_model",
     "validate_feature_frame",
     "validate_market_frame",

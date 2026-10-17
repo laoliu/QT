@@ -148,6 +148,15 @@ def build_execution_plan(
 
 def read_execution_plan(path: str | Path, *, allow_live: bool = False) -> ExecutionPlan:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(raw, list):
+        raise ValueError("execution plan file contains multiple plans; use read_execution_plans")
+    return _execution_plan_from_dict(raw, allow_live=allow_live)
+
+
+def _execution_plan_from_dict(raw: dict[str, Any], *, allow_live: bool = False) -> ExecutionPlan:
+    """Deserialize and validate one plan object without touching the filesystem."""
+    if not isinstance(raw, dict):
+        raise ValueError("execution plan must be a JSON object")
     targets = tuple(
         TargetPosition(
             rebalance_date=date.fromisoformat(str(item["rebalance_date"])[:10]),
@@ -173,6 +182,24 @@ def read_execution_plan(path: str | Path, *, allow_live: bool = False) -> Execut
     )
     plan.validate(allow_live=allow_live)
     return plan
+
+
+def read_execution_plans(path: str | Path, *, allow_live: bool = False) -> tuple[ExecutionPlan, ...]:
+    """Read one or more plans emitted by the canonical export action.
+
+    A single object remains the stable legacy format.  Multi-rebalance exports
+    use a JSON array, and each plan is validated independently before any
+    caller is allowed to submit it.
+    """
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    entries = raw if isinstance(raw, list) else [raw]
+    if not entries:
+        raise ValueError("execution plan file contains no plans")
+    plans = tuple(_execution_plan_from_dict(entry, allow_live=allow_live) for entry in entries)
+    rebalance_dates = [plan.rebalance_date for plan in plans]
+    if len(set(rebalance_dates)) != len(rebalance_dates):
+        raise ValueError("execution plan file contains duplicate rebalance dates")
+    return plans
 
 
 def execute_target_plan(

@@ -64,6 +64,12 @@ total-weight risk gate, and carries plan/run/model/signal provenance into every
 submitted order. The `execute_paper` bridge action additionally requires
 explicit `confirm=true`; it never selects QMT.
 
+The `export` action writes one execution-plan JSON file per rebalance date in
+`<output stem>.execution-plans/`. Its `executionPlanPath` points to the latest
+rebalance for Paper review and `executionPlanPaths` lists the full history.
+Pass a single dated plan path to `execute_paper`; historical rebalances must
+not be submitted together as if they were current orders.
+
 Legacy model folders without `model_manifest.json` are rejected. Use
 `migrate_legacy_model` only with an explicit feature version, column order,
 snapshot identifier, and operator attestation. QMT consumption is available

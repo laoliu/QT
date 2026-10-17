@@ -1,12 +1,12 @@
 {
-  "git_commit": "d87f4edb9eebf2622c832788eff2e8a022b0bb60",
-  "git_short": "d87f4ed",
+  "git_commit": "95d7c54ffcd6edcea6164f8dc50c493a16e14ed4",
+  "git_short": "95d7c54",
   "git_dirty": true,
   "git_branch": "master",
-  "config_path": "C:\\Users\\Admin\\AppData\\Local\\Temp\\pytest-of-Admin\\pytest-165\\test_explicit_synthetic_source0\\test.yml",
-  "config_hash": "e57a2677dd285a28",
-  "data_fingerprint": "2b45eba20efc5542",
+  "config_path": "E:\\work\\QT\\.qt-test-tmp\\full-isolation-1\\test_run_from_config_uses_fill0\\fill_model_test.yml",
+  "config_hash": "5bae945276930bbf",
+  "data_fingerprint": "bb039101c0b58385",
   "random_seed": 42,
-  "run_time": "2026-09-11T16:13:02.757231",
+  "run_time": "2026-10-17T16:42:22.267659",
   "python_version": "3.13.4"
 }

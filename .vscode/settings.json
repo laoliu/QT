@@ -1,5 +1,6 @@
 {
   "python.terminal.useEnvFile": true,
   "python.envFile": "${workspaceFolder}/.env",
-  "python-envs.defaultEnvManager": "ms-python.python:pyenv"
+  "python-envs.defaultEnvManager": "ms-python.python:pyenv",
+  "git.ignoreLimitWarning": true
 }

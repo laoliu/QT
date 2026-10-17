@@ -1,9 +1,9 @@
-name: explicit_synthetic
+name: fill_model_test
 description: ''
 data:
   source: synthetic
   start_date: '2024-01-01'
-  end_date: '2024-01-31'
+  end_date: '2024-02-28'
   symbols:
   - 600000.SH
   frequency: 1d
@@ -19,7 +19,7 @@ universe:
 strategy:
   name: demo_momentum
   params:
-    lookback_days: 5
+    lookback_days: 10
     top_k: 1
 cost:
   commission_rate: 0.0001
@@ -28,7 +28,7 @@ cost:
   transfer_fee_rate: 1.0e-05
   slippage_bps: 10.0
 fill_model:
-  name: next_bar_open
+  name: next_bar_close
 risk:
   enabled: true
   max_position_weight: 0.1

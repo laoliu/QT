@@ -10,3 +10,9 @@ quant-trading/src/engine/fitness-worker.mjs
 
 .env
 quant-trading/config.local.json
+
+# Local test temp directories
+*temp/
+*tmp/
+*temp[0-9]*/
+*tmp[0-9]*/

@@ -132,7 +132,7 @@ def build_target_positions(
         )
         if ranked.empty:
             continue
-        weight = min(max_position_weight, 1.0 / top_k)
+        weight = min(max_position_weight, 1.0 / min(top_k, len(ranked)))
         cap_enabled = max_industry_weight is not None and industry_column in ranked.columns
         selected: list[Any] = []
         industry_weights: dict[str, float] = {}

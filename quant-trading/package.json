@@ -8,8 +8,7 @@
     "test:safety-boundaries": "vitest run src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts"
   },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
-    "xlsx": "^0.18.5"
+    "better-sqlite3": "^12.9.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

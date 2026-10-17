@@ -701,8 +701,8 @@ def _build_evaluation_diagnostics(
     long_short: list[float] = []
     long_short_net: list[float] = []
     long_short_costs: list[float] = []
-    long_members: set[str] = set()
-    short_members: set[str] = set()
+    long_weights: dict[str, float] = {}
+    short_weights: dict[str, float] = {}
     target_dates = sorted({pd.Timestamp(target.rebalance_date).normalize() for target in targets})
     prediction_dates = pd.to_datetime(predictions["trade_date"], errors="coerce").dt.normalize()
     for signal_date in target_dates:
@@ -717,27 +717,31 @@ def _build_evaluation_diagnostics(
         bottom = bottom_rows["fwd_return"].mean()
         if pd.notna(top) and pd.notna(bottom):
             gross_spread = float(top - bottom)
-            new_long = set(top_rows["symbol"].astype(str))
-            new_short = set(bottom_rows["symbol"].astype(str))
+            long_symbols = top_rows["symbol"].astype(str).tolist()
+            short_symbols = bottom_rows["symbol"].astype(str).tolist()
+            new_long = {symbol: 1.0 / len(long_symbols) for symbol in long_symbols}
+            new_short = {symbol: 1.0 / len(short_symbols) for symbol in short_symbols}
             cost = 0.0
             # Each leg is normalized to 100% notional, so this is a 2x gross
             # long-short diagnostic. Charge entry/exit turnover on both legs;
             # the short leg is a statistical comparator, not an A-share
             # shortability claim.
-            for old, new in ((long_members, new_long), (short_members, new_short)):
-                weight = 1.0 / max(len(new), 1)
-                for symbol in old | new:
-                    delta = (weight if symbol in new else 0.0) - (weight if symbol in old else 0.0)
+            for old, new, short_leg in (
+                (long_weights, new_long, False), (short_weights, new_short, True),
+            ):
+                for symbol in old.keys() | new.keys():
+                    delta = new.get(symbol, 0.0) - old.get(symbol, 0.0)
                     if not delta:
                         continue
                     rate = config.commission_rate + config.transfer_fee_rate + config.slippage_bps / 10_000
-                    if delta < 0:
+                    is_sale = (delta > 0) if short_leg else (delta < 0)
+                    if is_sale:
                         rate += config.stamp_tax_rate
                     cost += abs(delta) * rate
             long_short.append(gross_spread)
             long_short_costs.append(cost)
             long_short_net.append(gross_spread - cost)
-            long_members, short_members = new_long, new_short
+            long_weights, short_weights = new_long, new_short
     if long_short:
         ls = pd.Series(long_short, dtype=float)
         net = pd.Series(long_short_net, dtype=float)

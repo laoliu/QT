@@ -24,7 +24,17 @@ def atomic_json(path: Path, payload: dict) -> None:
             json.dump(payload, stream, ensure_ascii=True)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name, path)
+        # Windows antivirus/indexer readers can briefly deny replacement of
+        # the worker heartbeat file. Retry that transient sharing violation;
+        # retain atomic replacement semantics and surface persistent errors.
+        for attempt in range(5):
+            try:
+                os.replace(name, path)
+                break
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
     finally:
         if os.path.exists(name):
             os.unlink(name)

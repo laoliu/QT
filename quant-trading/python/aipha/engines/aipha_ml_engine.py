@@ -246,6 +246,42 @@ def run(config: dict) -> dict:
                 max_position_weight=float(config.get("maxPositionWeight", cfg.max_position_weight)),
                 max_total_weight=float(config.get("maxTotalWeight", 1.0)),
             )
+            # The bridge process is short-lived, so keep a durable execution
+            # receipt after the in-memory PaperGateway has accepted the plan.
+            # This is intentionally a receipt, not a broker order database;
+            # it lets operators reconcile a retry without routing anything to
+            # QMT.
+            import datetime as _datetime
+            receipt_root = Path(os.environ.get("QUANT_DATA_DIR", "data")).expanduser().resolve()
+            receipt_path = receipt_root / "research" / "paper-executions.jsonl"
+            receipt_path.parent.mkdir(parents=True, exist_ok=True)
+            orders = []
+            for order_id in order_ids:
+                order = gateway.get_order(order_id)
+                if order is None:
+                    continue
+                orders.append({
+                    "order_id": order.order_id,
+                    "symbol": order.symbol,
+                    "side": order.side,
+                    "qty": order.qty,
+                    "order_type": order.order_type,
+                    "status": str(order.status),
+                    "metadata": dict(order.metadata),
+                })
+            receipt = {
+                "timestamp": _datetime.datetime.now(_datetime.timezone.utc).isoformat(),
+                "schema_version": 1,
+                "plan_id": plan.plan_id,
+                "mode": "paper",
+                "run_id": plan.run_id,
+                "model_id": plan.model_id,
+                "signal_id": plan.signal_id,
+                "order_ids": order_ids,
+                "orders": orders,
+            }
+            with receipt_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(receipt, ensure_ascii=False, default=str) + "\n")
             return {"ok": True, "data": {
                 "planId": plan.plan_id,
                 "mode": "paper",
@@ -256,6 +292,7 @@ def run(config: dict) -> dict:
                     "modelId": plan.model_id,
                     "signalId": plan.signal_id,
                 },
+                "receiptPath": str(receipt_path),
             }}
         return {"ok": False, "error": f"未知 action: {action}"}
     except Exception as error:

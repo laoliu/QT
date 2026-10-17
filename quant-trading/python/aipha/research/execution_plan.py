@@ -233,6 +233,15 @@ def execute_target_plan(
                     "model_id": plan.model_id,
                     "signal_id": signal_id,
                     "mode": plan.mode,
+                    # QMT and remote bridges use these broker-neutral fields
+                    # when constructing the broker remark. Keeping the full
+                    # provenance in metadata also makes Paper/QMT receipts
+                    # identical and auditable.
+                    "strategy_name": "aipha-ml-ranking",
+                    "remark": (
+                        f"plan_id={plan.plan_id}|run_id={plan.run_id}|"
+                        f"model_id={plan.model_id}|signal_id={signal_id}"
+                    ),
                 },
             )
             order_ids.append(str(gateway.submit_order(order)))

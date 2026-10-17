@@ -100,6 +100,44 @@ def test_paper_gateway_boundary_applies_plan_risk_gate() -> None:
         )
 
 
+def test_execute_paper_writes_durable_provenance_receipt(tmp_path: Path, monkeypatch) -> None:
+    import json
+    from engines.aipha_ml_engine import run
+
+    plan_path = tmp_path / "paper-plan.json"
+    plan_path.write_text(json.dumps(_plan().to_dict(), default=str), encoding="utf-8")
+    data_dir = tmp_path / "data"
+    monkeypatch.setenv("QUANT_DATA_DIR", str(data_dir))
+
+    result = run({
+        "action": "execute_paper",
+        "confirm": True,
+        "planPath": str(plan_path),
+        "accountValue": 100_000,
+        "maxPositionWeight": 0.5,
+        "prices": {"600000.SH": 10.0},
+    })
+
+    assert result["ok"] is True
+    receipt_path = Path(result["data"]["receiptPath"])
+    assert receipt_path == data_dir / "research" / "paper-executions.jsonl"
+    receipts = [json.loads(line) for line in receipt_path.read_text(encoding="utf-8").splitlines()]
+    assert len(receipts) == 1
+    receipt = receipts[0]
+    assert receipt["mode"] == "paper"
+    assert receipt["plan_id"] == _plan().plan_id
+    assert receipt["run_id"] == "run-completion"
+    assert receipt["model_id"] == "model-completion"
+    assert receipt["signal_id"]
+    assert receipt["orders"]
+    order_metadata = receipt["orders"][0]["metadata"]
+    assert order_metadata["run_id"] == "run-completion"
+    assert order_metadata["model_id"] == "model-completion"
+    assert order_metadata["strategy_name"] == "aipha-ml-ranking"
+    assert f"plan_id={receipt['plan_id']}" in order_metadata["remark"]
+    assert f"model_id={receipt['model_id']}" in order_metadata["remark"]
+
+
 def test_research_config_migration_output_is_loadable(tmp_path: Path) -> None:
     from aipha.research.config import migrate_legacy_ml_config_file
 

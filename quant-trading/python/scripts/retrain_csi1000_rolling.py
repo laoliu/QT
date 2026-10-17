@@ -62,7 +62,7 @@ IC_IMPROVEMENT_MIN = -0.005  # 允许微降 0.5%
 PSI_THRESHOLD = 0.20  # PSI 超此值视为显著漂移
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """CLI 参数解析"""
     p = argparse.ArgumentParser(description="CSI1000 滚动重训")
     p.add_argument(
@@ -79,7 +79,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--skip-archive", action="store_true", help="跳过旧模型归档",
     )
-    return p.parse_args()
+    p.add_argument(
+        "--legacy-compat", action="store_true",
+        help="显式运行旧 train_ml_factor 重训链路；新研究请使用 canonical ml_ranking train_tushare",
+    )
+    return p.parse_args(argv)
+
+
+def validate_retrain_mode(args: argparse.Namespace) -> None:
+    """Keep the historical cache-backed trainer out of the default CLI path."""
+    if not args.check_only and not args.legacy_compat:
+        raise SystemExit(
+            "legacy CSI1000 retraining is disabled by default; use the canonical "
+            "aipha.research train_tushare pipeline, or pass --legacy-compat "
+            "to explicitly retrain a historical model"
+        )
 
 
 def check_data_coverage(end_date: str) -> dict:
@@ -269,6 +283,7 @@ def compare_ic(old_report: dict, new_report: dict) -> dict:
 def main() -> None:
     """主流程：检查→漂移→归档→重训→对比→输出"""
     args = parse_args()
+    validate_retrain_mode(args)
     end_date = args.end_date
     tag = datetime.now().strftime("v%Y%m%d")
 

@@ -857,7 +857,12 @@ def _load_canonical_ml_cross_section(
 
     from aipha.research.snapshots import verify_attested_parquet
 
-    metadata = verify_attested_parquet(path, require_artifact_hash=True, verify_content_hash=True)
+    metadata = verify_attested_parquet(
+        path,
+        require_artifact_hash=True,
+        verify_content_hash=True,
+        require_source_signature=True,
+    )
     if metadata.get("provider") != "tushare_pit":
         raise ValueError("canonical ML scorer requires provider=tushare_pit")
     if metadata.get("feature_version") != feature_version:

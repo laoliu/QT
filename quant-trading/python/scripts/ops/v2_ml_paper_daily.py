@@ -558,6 +558,7 @@ def _load_feature_panel(
             panel_path,
             require_artifact_hash=True,
             verify_content_hash=True,
+            require_source_signature=True,
         )
         if metadata.get("provider") != "tushare_pit":
             raise ValueError("规范 Paper 面板必须来自 tushare_pit snapshot builder")

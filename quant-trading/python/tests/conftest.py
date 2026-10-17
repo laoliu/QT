@@ -12,6 +12,10 @@ import pytest
 # Persist for the whole pytest process and inherit into subprocesses/background
 # workers; PYTEST_CURRENT_TEST is intentionally only set around one test call.
 os.environ["AIPHA_TEST_RUNTIME"] = "1"
+# Canonical PIT fixtures are source-authenticated just like production
+# snapshots. This deterministic key is test-only; deployments must provide
+# their own secret through AIPHA_PIT_SNAPSHOT_KEY.
+os.environ["AIPHA_PIT_SNAPSHOT_KEY"] = "test-only-pit-snapshot-key-0123456789abcdef"
 
 # 下面三个文件不是 pytest 测试，而是手工联调脚本：它们在模块顶层直接
 # 对 QMT bridge（硬编码的局域网地址）发 HTTP 请求，并在 import 期调用

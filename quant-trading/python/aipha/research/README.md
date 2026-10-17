@@ -33,6 +33,10 @@ Financial features must already have been joined by announcement date. The
 long-form financial snapshots. A sidecar with another provider, mismatched
 feature version, or mismatched date range is rejected.
 
+TuShare PIT sidecars are HMAC authenticated with the deployment-held
+`AIPHA_PIT_SNAPSHOT_KEY`; canonical ML and Paper readers fail closed when the
+signature is missing or invalid. The key is never stored in the repository.
+
 TuShare sidecars written by the canonical snapshot builder also include the
 generator version, logical content SHA-256 and Parquet artifact SHA-256. A
 TuShare input with a missing or mismatched artifact hash is rejected by the

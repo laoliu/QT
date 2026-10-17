@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +55,27 @@ def test_attested_tushare_snapshot_rejects_byte_tampering(tmp_path: Path) -> Non
     path.write_bytes(path.read_bytes() + b"tampered")
     with pytest.raises(ValueError, match="artifact_sha256"):
         verify_attested_parquet(path, require_artifact_hash=True)
+
+
+def test_tushare_sidecar_requires_valid_source_signature(tmp_path: Path) -> None:
+    path = tmp_path / "signed.parquet"
+    frame = pd.DataFrame({
+        "trade_date": ["2025-01-06"], "symbol": ["600000.SH"], "close": [10.0],
+    })
+    write_attested_parquet(frame, path, {
+        "provider": "tushare_pit", "feature_version": "cn_equity_v1",
+        "data_snapshot_id": "signed", "start_date": "2025-01-06",
+        "end_date": "2025-01-06",
+    })
+    metadata = verify_attested_parquet(
+        path, require_artifact_hash=True, require_source_signature=True,
+    )
+    assert metadata["source_signature_algorithm"] == "hmac-sha256"
+    raw = json.loads(path.with_suffix(".metadata.json").read_text(encoding="utf-8"))
+    raw["source_signature"] = "0" * 64
+    path.with_suffix(".metadata.json").write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="signature"):
+        verify_attested_parquet(path, require_artifact_hash=True, require_source_signature=True)
 
 
 def test_ml_export_writes_one_paper_plan_per_rebalance_date(tmp_path: Path) -> None:

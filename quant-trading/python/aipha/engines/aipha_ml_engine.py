@@ -60,6 +60,7 @@ def _read_parquet(path: str | None):
         target,
         require_artifact_hash=str(raw_metadata.get("provider", "")) == "tushare_pit",
         verify_content_hash=bool(raw_metadata.get("snapshot_content_sha256")),
+        require_source_signature=str(raw_metadata.get("provider", "")) == "tushare_pit",
     )
     frame = pd.read_parquet(target)
     frame.attrs["snapshot_metadata"] = metadata

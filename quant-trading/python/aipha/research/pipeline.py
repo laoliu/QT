@@ -893,6 +893,9 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
     if any(not normalized[key] for key in required):
         raise ValueError("snapshot metadata values must be non-empty")
     if normalized["provider"] == "tushare_pit":
+        from .snapshots import verify_snapshot_signature
+
+        verify_snapshot_signature(metadata, required=True)
         # A provider label is not provenance. Direct callers of ResearchPipeline
         # must carry the same logical-content attestation that Parquet callers
         # receive from verify_attested_parquet(). This catches a changed frame

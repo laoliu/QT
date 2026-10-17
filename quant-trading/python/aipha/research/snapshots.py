@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 import hashlib
+import hmac
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,79 @@ import numpy as np
 # same attestation format.
 SNAPSHOT_SCHEMA_VERSION = 1
 SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/1"
+SNAPSHOT_SIGNING_KEY_ENV = "AIPHA_PIT_SNAPSHOT_KEY"
+_SIGNED_SOURCE_FIELDS = (
+    "provider", "data_snapshot_id", "feature_version", "start_date", "end_date",
+    "index_code", "benchmark_code", "adjust", "snapshot_schema_version",
+    "generator_version", "snapshot_content_sha256", "row_count", "column_count",
+)
+
+
+def _snapshot_signing_key(key: str | bytes | None = None) -> bytes | None:
+    raw = key if key is not None else os.environ.get(SNAPSHOT_SIGNING_KEY_ENV)
+    if raw is None:
+        return None
+    value = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
+    if len(value) < 32:
+        raise ValueError(f"{SNAPSHOT_SIGNING_KEY_ENV} must contain at least 32 bytes")
+    return value
+
+
+def _signature_payload(metadata: dict[str, Any]) -> bytes:
+    payload = {key: metadata.get(key) for key in _SIGNED_SOURCE_FIELDS}
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def sign_snapshot_metadata(
+    metadata: dict[str, Any], *, key: str | bytes | None = None,
+) -> dict[str, Any]:
+    """Authenticate PIT provenance with a deployment-held HMAC key.
+
+    File/content hashes detect accidental or post-write changes. This
+    signature adds a separate trust anchor so a caller cannot create a new
+    sidecar that simply claims ``provider=tushare_pit``.
+    """
+    if metadata.get("provider") != "tushare_pit":
+        return dict(metadata)
+    secret = _snapshot_signing_key(key)
+    if secret is None:
+        raise ValueError(f"{SNAPSHOT_SIGNING_KEY_ENV} is required to sign a TuShare PIT snapshot")
+    missing = [
+        field for field in (
+            "provider", "data_snapshot_id", "feature_version", "start_date",
+            "end_date", "snapshot_schema_version", "generator_version",
+            "snapshot_content_sha256", "row_count", "column_count",
+        ) if metadata.get(field) is None
+    ]
+    if missing:
+        raise ValueError(f"cannot sign PIT snapshot; metadata missing: {', '.join(missing)}")
+    result = dict(metadata)
+    result["source_signature_algorithm"] = "hmac-sha256"
+    result["source_signature"] = hmac.new(secret, _signature_payload(result), hashlib.sha256).hexdigest()
+    return result
+
+
+def verify_snapshot_signature(
+    metadata: dict[str, Any], *, key: str | bytes | None = None, required: bool = True,
+) -> None:
+    """Verify the source HMAC; required mode fails closed on missing key/signature."""
+    if metadata.get("provider") != "tushare_pit":
+        return
+    signature = str(metadata.get("source_signature", "")).strip()
+    if not signature:
+        if required:
+            raise ValueError("TuShare PIT snapshot is missing its source_signature")
+        return
+    if metadata.get("source_signature_algorithm") != "hmac-sha256":
+        raise ValueError("unsupported TuShare PIT source signature algorithm")
+    secret = _snapshot_signing_key(key)
+    if secret is None:
+        if required:
+            raise ValueError(f"{SNAPSHOT_SIGNING_KEY_ENV} is required to verify a TuShare PIT snapshot")
+        return
+    expected = hmac.new(secret, _signature_payload(metadata), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise ValueError("TuShare PIT source signature verification failed")
 
 
 def frame_content_sha256(frame: pd.DataFrame) -> str:
@@ -50,7 +125,12 @@ def frame_content_sha256(frame: pd.DataFrame) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def attest_snapshot_metadata(frame: pd.DataFrame, metadata: dict[str, Any]) -> dict[str, Any]:
+def attest_snapshot_metadata(
+    frame: pd.DataFrame,
+    metadata: dict[str, Any],
+    *,
+    signing_key: str | bytes | None = None,
+) -> dict[str, Any]:
     """Add generator/schema/content provenance to snapshot metadata."""
     result = dict(metadata)
     result.update({
@@ -60,6 +140,8 @@ def attest_snapshot_metadata(frame: pd.DataFrame, metadata: dict[str, Any]) -> d
         "row_count": int(len(frame)),
         "column_count": int(len(frame.columns)),
     })
+    if result.get("provider") == "tushare_pit" and _snapshot_signing_key(signing_key) is not None:
+        result = sign_snapshot_metadata(result, key=signing_key)
     return result
 
 
@@ -69,17 +151,20 @@ def write_attested_parquet(
     metadata: dict[str, Any],
     *,
     artifact_type: str = "snapshot",
+    signing_key: str | bytes | None = None,
 ) -> tuple[Path, Path, dict[str, Any]]:
     """Write a Parquet artifact and a sidecar containing verifiable hashes."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(target, index=False)
     sidecar = target.with_suffix(".metadata.json")
-    sidecar_metadata = attest_snapshot_metadata(frame, metadata)
+    sidecar_metadata = attest_snapshot_metadata(frame, metadata, signing_key=signing_key)
     sidecar_metadata.update({
         "artifact_type": artifact_type,
         "artifact_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
     })
+    if sidecar_metadata.get("provider") == "tushare_pit":
+        sidecar_metadata = sign_snapshot_metadata(sidecar_metadata, key=signing_key)
     sidecar.write_text(
         json.dumps(sidecar_metadata, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
@@ -92,6 +177,8 @@ def verify_attested_parquet(
     *,
     require_artifact_hash: bool = False,
     verify_content_hash: bool = True,
+    require_source_signature: bool = False,
+    signing_key: str | bytes | None = None,
 ) -> dict[str, Any]:
     """Verify a Parquet sidecar and return its metadata.
 
@@ -117,6 +204,9 @@ def verify_attested_parquet(
         actual_content = frame_content_sha256(frame)
         if actual_content != str(metadata["snapshot_content_sha256"]):
             raise ValueError("snapshot_content_sha256 does not match Parquet rows")
+    verify_snapshot_signature(
+        metadata, key=signing_key, required=require_source_signature,
+    )
     return metadata
 
 

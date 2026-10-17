@@ -21,6 +21,7 @@ export function getAdminBodyHtml(b: string): string {
   <div class="tab" data-tab="sectors">🏷️ 板块</div>
   <div class="tab" data-tab="tasks">⏰ 任务</div>
   <div class="tab" data-tab="logs">📋 日志</div>
+  <div class="tab" data-tab="ai-chat">🤖 AI 聊天</div>
   <div class="tab" data-tab="config">🔑 配置</div>
 </div>
 
@@ -264,9 +265,25 @@ export function getAdminBodyHtml(b: string): string {
   </div>
 </div>
 
-    <div id="ai-chat-frame-container" style="flex:1;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg2)">
-      <div id="ai-chat-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:14px">点击加载 AI 助手…</div>
-    </div>
+<div class="tab-content" id="tab-ai-chat">
+  <div style="display:flex;gap:10px;height:calc(100vh - 150px);min-height:420px">
+    <aside class="card" style="width:240px;min-width:190px;display:flex;flex-direction:column;overflow:auto">
+      <button class="btn btn-primary" onclick="chatNewConversation()">＋ 新建对话</button>
+      <div id="chat-conversations" style="margin-top:10px"></div>
+    </aside>
+    <section class="card" style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:8px">
+        <b id="chat-title">选择或新建对话</b><span style="flex:1"></span><span id="chat-status" style="font-size:11px;color:var(--text-dim)">就绪</span>
+      </div>
+      <div id="chat-messages" style="flex:1;overflow:auto;padding:12px;line-height:1.65"></div>
+      <div id="chat-tool-status" style="font-size:11px;color:var(--text-dim);min-height:18px"></div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <select id="chat-skill" title="Skill 选择" style="max-width:200px;padding:8px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:6px"><option value="">自动选择 Skill</option></select>
+        <textarea id="chat-input" placeholder="输入问题，或以 @skill-name 指定 Skill（Enter 发送，Shift+Enter 换行）" rows="2" style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font:inherit;resize:vertical"></textarea>
+        <button class="btn btn-primary" id="chat-send" onclick="chatSend()">发送</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">项目 Skill 为分析指引；可调用只读行情与分析工具，不执行交易或配置写操作。</div>
+    </section>
   </div>
 </div>
 

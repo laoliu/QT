@@ -66,12 +66,15 @@
 import type {
   QuantTradingRuntime,
 } from "./src/runtime.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runPythonScript, setPythonBridgeLogger } from "./src/bridge/python-bridge.js";
 import { validateConfig } from "./src/config-validator.js";
 import { createDataProvider } from "./src/data/market-data-provider.js";
 import { LiveEngine } from "./src/engine/live-engine.js";
 import { TickFeatureStore } from "./src/engine/tick-feature-store.js";
 import { registerAdminRoutes } from "./src/http/admin-routes.js";
+import { registerAiChatRoutes } from "./src/http/ai-chat-routes.js";
 import { registerRiskOverlayRoutes } from "./src/http/routes/risk-overlay.js";
 import {
   withSecurity,
@@ -109,6 +112,9 @@ import { findReportTemplate } from "./src/services/report-templates.js";
 import { ScanHistoryStore } from "./src/services/scan-history-store.js";
 import { RecommendationTracker } from "./src/services/recommendation-tracker.js";
 import { SignalHitRateTracker } from "./src/services/signal-hitrate.js";
+import { AiChatService, defaultChatDbPath, type ChatTool } from "./src/services/ai-chat.js";
+import { ChatStore } from "./src/services/chat-store.js";
+import { resolveLlmConfig } from "./src/services/standalone-llm.js";
 import { createSignalMonitorService } from "./src/services/signal-monitor.js";
 import { InMemoryStorage } from "./src/services/sqlite-storage.js";
 import { StrategyHealthMonitor } from "./src/services/strategy-health.js";
@@ -1323,6 +1329,20 @@ const quantTradingApp = {
       autoTradeScheduler,
       secure,
       securePublic,
+    });
+
+    const chatStore = new ChatStore(defaultChatDbPath(config.dataDir));
+    const chatService = new AiChatService(
+      chatStore,
+      resolveLlmConfig(api.pluginConfig),
+      path.join(path.dirname(fileURLToPath(import.meta.url)), "skills"),
+      Object.values(getToolMap()) as ChatTool[],
+    );
+    registerAiChatRoutes({ api, chat: chatService, store: chatStore, secure });
+    api.registerService({
+      id: "ai-chat-store",
+      async start() { await chatService.initialize(); },
+      async stop() { chatStore.close(); },
     });
 
     // ── Risk Overlay API Routes ──────────────────────────────

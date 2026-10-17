@@ -53,7 +53,7 @@ setInterval(function(){document.getElementById('clock').textContent=new Date().t
 // Set default end date for kline query to today
 (function(){var el=document.getElementById('kline-end');if(el)el.value=_localDate()})();
 function loadTab(name){
-  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,config:loadConfig};
+  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,'ai-chat':chatLoad,config:loadConfig};
   if(m[name])m[name]();
 }
 
@@ -723,6 +723,99 @@ function uploadSectorCSV(){
   };
   reader.readAsText(file);
 }
+
+/* ══════ UNIFIED AI CHAT ══════ */
+var _chatConversationId=null;
+var _chatBusy=false;
+function chatRenderConversations(rows){
+  var box=document.getElementById('chat-conversations');if(!box)return;
+  window._chatRows=rows||[];
+  box.innerHTML=(rows||[]).map(function(c){
+    return '<div style="display:flex;gap:3px;align-items:center;padding:5px;border-radius:5px;background:'+(_chatConversationId===c.id?'var(--bg2)':'transparent')+';margin-top:4px">'+
+      '<button class="btn btn-sm chat-select" data-id="'+esc(c.id)+'" style="flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis">'+esc(c.title)+'</button>'+
+      '<button class="btn btn-sm chat-rename" data-id="'+esc(c.id)+'" title="重命名">✎</button>'+
+      '<button class="btn btn-sm btn-danger chat-delete" data-id="'+esc(c.id)+'" title="删除">×</button></div>';
+  }).join('')||'<div style="padding:10px;color:var(--text-dim);font-size:12px">暂无会话</div>';
+  box.querySelectorAll('.chat-select').forEach(function(b){b.addEventListener('click',function(){chatSelectConversation(b.dataset.id)})});
+  box.querySelectorAll('.chat-rename').forEach(function(b){b.addEventListener('click',function(){var c=window._chatRows.find(function(x){return x.id===b.dataset.id});chatRenameConversation(b.dataset.id,c?c.title:'')})});
+  box.querySelectorAll('.chat-delete').forEach(function(b){b.addEventListener('click',function(){chatDeleteConversation(b.dataset.id)})});
+}
+function chatLoadConversations(){
+  return api('/quant/admin/api/chat/conversations').then(function(d){chatRenderConversations(d.conversations);return d.conversations||[]});
+}
+function chatLoadSkills(){
+  api('/quant/admin/api/chat/skills').then(function(d){
+    var sel=document.getElementById('chat-skill');if(!sel)return;
+    sel.innerHTML='<option value="">自动选择 Skill</option>'+(d.skills||[]).map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.name)+' · @'+esc(s.id)+'</option>'}).join('');
+    if(!d.configured){document.getElementById('chat-status').textContent='未配置大模型：请在 llm 配置中设置 API Key';document.getElementById('chat-status').style.color='var(--yellow)'}
+  }).catch(function(){});
+}
+function chatNewConversation(){
+  api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){return chatLoadConversations().then(function(){chatShowConversation(d.conversation,[])})});
+}
+function chatShowConversation(c,messages){
+  _chatConversationId=c.id;document.getElementById('chat-title').textContent=c.title;
+  var box=document.getElementById('chat-messages');box.innerHTML='';
+  (messages||[]).forEach(function(m){
+    var row=document.createElement('div');row.style.marginBottom='14px';
+    var role=document.createElement('div');role.style.cssText='font-size:11px;color:'+(m.role==='user'?'var(--accent)':'var(--green)')+';font-weight:600';role.textContent=m.role==='user'?'你':'AI 助手'+((m.skills||[]).length?' · Skill: '+m.skills.join(', '):'');
+    var body=document.createElement('div');body.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';body.textContent=m.content+(m.status==='error'?'（本次回答失败）':'');
+    row.appendChild(role);row.appendChild(body);box.appendChild(row);
+  });
+  if(!messages||!messages.length)box.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:35px">发送问题开始对话。可选自动 Skill，或使用 @skill-name 指定。</div>';
+  box.scrollTop=box.scrollHeight;chatRenderConversations(window._chatRows||[]);
+}
+function chatSelectConversation(id){
+  api('/quant/admin/api/chat/conversation?id='+encodeURIComponent(id)).then(function(d){chatShowConversation(d.conversation,d.messages)});
+}
+function chatRenameConversation(id,title){
+  var next=prompt('输入新的会话名称',title);if(!next||!next.trim())return;
+  api('/quant/admin/api/chat/conversation',{method:'PATCH',body:JSON.stringify({id:id,title:next.trim()})}).then(function(){return chatLoadConversations()}).then(function(rows){window._chatRows=rows;if(_chatConversationId===id)document.getElementById('chat-title').textContent=next.trim()});
+}
+function chatDeleteConversation(id){
+  if(!confirm('删除此会话及其消息？'))return;
+  api('/quant/admin/api/chat/conversation',{method:'DELETE',body:JSON.stringify({id:id})}).then(function(){
+    if(_chatConversationId===id){_chatConversationId=null;document.getElementById('chat-title').textContent='选择或新建对话';document.getElementById('chat-messages').innerHTML=''}
+    return chatLoadConversations();
+  }).then(function(rows){window._chatRows=rows});
+}
+function chatLoad(){
+  chatLoadSkills();
+  chatLoadConversations().then(function(rows){
+    window._chatRows=rows;
+    var id=location.hash==='#ai-chat'&&sessionStorage.getItem('qt-chat-id');
+    var chosen=rows.find(function(c){return c.id===id})||rows[0];
+    if(chosen)chatSelectConversation(chosen.id);
+  }).catch(function(err){document.getElementById('chat-status').textContent='聊天服务不可用: '+err.message});
+}
+function chatSend(){
+  if(_chatBusy)return;
+  var input=document.getElementById('chat-input'),question=input.value.trim();if(!question)return;
+  var selected=document.getElementById('chat-skill').value,mention=/^@([a-z0-9-]+)\s*/i.exec(question),skill=selected||(mention&&mention[1])||null;
+  if(mention&&!selected)question=question.slice(mention[0].length).trim();
+  if(!question){toast('请输入问题');return}
+  var ensure=_chatConversationId?Promise.resolve():api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){_chatConversationId=d.conversation.id;document.getElementById('chat-title').textContent=d.conversation.title;return chatLoadConversations()});
+  _chatBusy=true;document.getElementById('chat-send').disabled=true;document.getElementById('chat-status').textContent='思考中…';input.value='';
+  var box=document.getElementById('chat-messages');if(box.querySelector('div[style*="text-align:center"]'))box.innerHTML='';
+  var user=document.createElement('div');user.style.cssText='white-space:pre-wrap;margin:8px 0 14px;color:var(--accent)';user.textContent='你\n'+question;box.appendChild(user);
+  var answer=document.createElement('div');answer.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:14px';answer.textContent='AI 助手\n';box.appendChild(answer);box.scrollTop=box.scrollHeight;
+  var headers={'Content-Type':'application/json'};if(_T)headers.Authorization='Bearer '+_T;
+  ensure.then(function(){sessionStorage.setItem('qt-chat-id',_chatConversationId);return fetch(B+'/quant/admin/api/chat/send',{method:'POST',headers:headers,body:JSON.stringify({conversationId:_chatConversationId,message:question,skill:skill})})})
+  .then(function(response){if(!response.ok)throw new Error('HTTP '+response.status);var reader=response.body.getReader(),decoder=new TextDecoder(),buffer='';
+    function read(){return reader.read().then(function(r){if(r.done)return;buffer+=decoder.decode(r.value,{stream:true});var chunks=buffer.split('\n\n');buffer=chunks.pop();chunks.forEach(function(frame){var line=frame.split('\n').find(function(x){return x.indexOf('data: ')===0});if(!line)return;var ev;try{ev=JSON.parse(line.slice(6))}catch(e){return}
+      if(ev.type==='skill'){var names=(ev.skills||[]);answer.firstChild.textContent='AI 助手'+(names.length?' · Skill: '+names.join(', '):' · 通用模式')+'\n'}
+      else if(ev.type==='tool_start')document.getElementById('chat-tool-status').textContent='正在查询：'+ev.name;
+      else if(ev.type==='tool_result')document.getElementById('chat-tool-status').textContent='已完成：'+ev.name;
+      else if(ev.type==='delta'){answer.textContent+=ev.text;box.scrollTop=box.scrollHeight}
+      else if(ev.type==='error'){answer.textContent+='\n❌ '+ev.message;document.getElementById('chat-status').textContent='回答失败'}
+      else if(ev.type==='done'){document.getElementById('chat-status').textContent='完成';document.getElementById('chat-tool-status').textContent=''}
+    });return read()})}return read();
+  }).catch(function(err){answer.textContent+='\n❌ '+err.message;document.getElementById('chat-status').textContent='连接失败'}).finally(function(){
+    _chatBusy=false;document.getElementById('chat-send').disabled=false;box.scrollTop=box.scrollHeight;
+    chatLoadConversations().then(function(rows){window._chatRows=rows});
+  });
+}
+var _chatInputEl=document.getElementById('chat-input');if(_chatInputEl)_chatInputEl.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatSend()}});
 
 /* ── Auto-refresh overview every 15s ── */
 setInterval(function(){

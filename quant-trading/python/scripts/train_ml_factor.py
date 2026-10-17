@@ -8,8 +8,8 @@
 
 用法:
     python scripts/train_ml_factor.py --universe csi500
-    python scripts/train_ml_factor.py --universe csi500 --model double_ensemble
-    python scripts/train_ml_factor.py --universe csi500 --model lightgbm --output models/ml_csi500
+    python scripts/train_ml_factor.py --universe csi500 --model lightgbm
+    python scripts/train_ml_factor.py --universe csi500 --legacy-model double_ensemble
 
 功能:
 1. 加载 A 股日线 OHLCV 数据 (从缓存)
@@ -54,15 +54,24 @@ if __name__ != "__main__":
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """解析命令行参数。"""
-    p = argparse.ArgumentParser(description="ML 选股模型训练")
+    p = argparse.ArgumentParser(
+        description="Legacy ML 训练脚本；新研究请使用 ml_ranking 入口",
+    )
     p.add_argument("--universe", default="csi500",
                     choices=["csi300", "csi500", "csi800", "csi1000",
                              "csi2000", "micro", "all"])
-    p.add_argument("--model", default="double_ensemble",
-                    choices=["lightgbm", "double_ensemble",
-                             "xgboost", "elasticnet", "gru"])
+    model_group = p.add_mutually_exclusive_group()
+    model_group.add_argument(
+        "--model", default="lightgbm", choices=["lightgbm", "elasticnet"],
+        help="规范模型选择（默认 lightgbm；elasticnet 为线性基线）",
+    )
+    model_group.add_argument(
+        "--legacy-model", dest="legacy_model",
+        choices=["double_ensemble", "xgboost", "gru", "tra", "master", "gat", "hist"],
+        help="显式启用历史实验模型；不属于规范研究 API",
+    )
     p.add_argument("--start", default="2015-01-05")
     p.add_argument("--end", default="2026-02-28")
     p.add_argument("--train-years", type=int, default=3)
@@ -173,7 +182,15 @@ def parse_args() -> argparse.Namespace:
                     help="Additional boosting rounds for incremental folds (default: 100)")
     p.add_argument("--incremental-psi-threshold", type=float, default=0.20,
                     help="PSI threshold to abort incremental and train fresh (default: 0.20)")
-    return p.parse_args()
+    args = p.parse_args(argv)
+    if args.legacy_model:
+        args.model = args.legacy_model
+        logger.warning(
+            "Using legacy experimental model %s; canonical research supports "
+            "LightGBM and ElasticNet only. Use ml_ranking for new runs.",
+            args.legacy_model,
+        )
+    return args
 
 
 def _apply_adj_factor(

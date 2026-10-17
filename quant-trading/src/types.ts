@@ -200,6 +200,7 @@ export type TradingSignal = {
   reason?: string;
   confidence?: number; // 0-1
   strategyId: string;
+  signalId?: string;
   runId?: string;
   strategyVersion?: string;
   dataTimestamp?: number;
@@ -224,6 +225,10 @@ export type OptionStrategyLeg = {
 
 export type BacktestRequest = {
   strategyId: string;
+  /** Optional caller supplied correlation ID; generated at the registry boundary when omitted. */
+  runId?: string;
+  dataSnapshotId?: string;
+  featureVersion?: string;
   symbols: string[];
   startDate: string; // YYYY-MM-DD
   endDate: string;
@@ -261,6 +266,7 @@ export type BacktestResult = {
   engine?: BacktestEngine;
   dataAsOf?: string;
   signalFormatVersion?: "1.0";
+  runEnvelope?: StrategyRunEnvelope;
   symbols: string[];
   startDate: string;
   endDate: string;
@@ -411,6 +417,9 @@ export type Order = {
   status: OrderStatus;
   strategyId?: string; // which strategy generated this order
   signalId?: string; // link back to the TradingSignal
+  runId?: string;
+  strategyVersion?: string;
+  dataTimestamp?: number;
   confirmationId?: string; // if human confirmation was required
   brokerType: BrokerType;
   errorMsg?: string; // rejection/error reason

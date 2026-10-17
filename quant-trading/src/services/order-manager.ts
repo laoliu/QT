@@ -420,7 +420,10 @@ export class OrderManager {
       quantity,
       price: signal.price,
       strategyId: signal.strategyId,
-      signalId: `${signal.timestamp}_${signal.symbol}`,
+      signalId: signal.signalId ?? `${signal.timestamp}_${signal.symbol}`,
+      runId: signal.runId,
+      strategyVersion: signal.strategyVersion,
+      dataTimestamp: signal.dataTimestamp ?? signal.timestamp,
     };
     return this.submit(req, riskOverrides, marketContext);
   }

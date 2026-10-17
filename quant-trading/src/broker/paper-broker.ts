@@ -289,6 +289,9 @@ export class PaperBroker implements IBrokerAdapter {
       status: "submitted",
       strategyId: req.strategyId,
       signalId: req.signalId,
+      runId: req.runId,
+      strategyVersion: req.strategyVersion,
+      dataTimestamp: req.dataTimestamp,
       brokerType: "paper",
       createdAt: now,
       updatedAt: now,
@@ -350,6 +353,9 @@ export class PaperBroker implements IBrokerAdapter {
       stopPrice: update.stopPrice ?? original.stopPrice,
       strategyId: original.strategyId,
       signalId: original.signalId,
+      runId: original.runId,
+      strategyVersion: original.strategyVersion,
+      dataTimestamp: original.dataTimestamp,
     });
   }
 

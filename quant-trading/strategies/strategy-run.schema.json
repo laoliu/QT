@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qt.local/contracts/strategy-run-1.0.schema.json",
+  "title": "QT strategy run envelope",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "strategyId", "strategyVersion", "engine", "dataAsOf", "signalFormat", "signals"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "runId": { "type": "string", "minLength": 1 },
+    "strategyId": { "type": "string", "minLength": 1 },
+    "strategyVersion": { "type": "string", "minLength": 1 },
+    "engine": { "enum": ["builtin", "backtrader", "vnpy", "qmt", "aipha"] },
+    "dataAsOf": { "type": "string", "format": "date" },
+    "signalFormat": { "enum": ["trading_signal", "target_position", "order_intent"] },
+    "signals": { "type": "array", "items": { "type": "object" } },
+    "targetPositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["symbol", "rebalanceDate", "targetWeight", "reason", "riskFlags", "runId", "signalId"],
+        "properties": {
+          "symbol": { "type": "string" },
+          "rebalanceDate": { "type": "string", "format": "date" },
+          "targetWeight": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string" },
+          "riskFlags": { "type": "array", "items": { "type": "string" } },
+          "runId": { "type": "string", "minLength": 1 },
+          "modelId": { "type": "string" },
+          "signalId": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -82,6 +82,19 @@ class TargetPosition:
     model_id: str = ""
     signal_id: str = ""
 
+    def to_wire(self) -> dict[str, Any]:
+        """Serialize using the cross-language camelCase contract."""
+        return {
+            "symbol": self.symbol,
+            "rebalanceDate": self.rebalance_date.isoformat(),
+            "targetWeight": self.target_weight,
+            "reason": self.reason,
+            "riskFlags": list(self.risk_flags),
+            "runId": self.run_id,
+            "modelId": self.model_id,
+            "signalId": self.signal_id,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class ResearchRun:

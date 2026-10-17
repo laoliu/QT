@@ -2,10 +2,17 @@
  * Tests for strategy registry.
  */
 import { describe, expect, it } from "vitest";
+import catalog from "../../strategies/catalog.json" with { type: "json" };
 import { getStrategy, listStrategies, runBacktest } from "./strategy-registry.js";
 
 describe("strategy-registry", () => {
   describe("listStrategies", () => {
+    it("should use a unique cross-language catalog with AIPHA as default research", () => {
+      const ids = catalog.entries.map((entry) => entry.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect(catalog.entries.find((entry) => entry.id === catalog.defaultResearchStrategy)?.engine).toBe("aipha");
+      expect(catalog.defaultResearchStrategy).toBe("aipha-ml-ranking");
+    });
     it("should return built-in strategies", () => {
       const strategies = listStrategies();
       expect(strategies.length).toBeGreaterThanOrEqual(3);
@@ -15,7 +22,7 @@ describe("strategy-registry", () => {
     });
 
     it("each strategy should have required fields", () => {
-      const validEngines = ["builtin", "backtrader", "python", "vnpy"];
+      const validEngines = ["builtin", "backtrader", "python", "vnpy", "aipha"];
       for (const s of listStrategies()) {
         expect(s.id).toBeTruthy();
         expect(s.name).toBeTruthy();
@@ -35,6 +42,22 @@ describe("strategy-registry", () => {
 
     it("should return undefined for unknown strategy", () => {
       expect(getStrategy("nonexistent")).toBeUndefined();
+    });
+
+    it("should expose canonical catalog metadata for TypeScript strategies", () => {
+      const strategy = getStrategy("dual-ma-crossover");
+      expect(strategy?.timeframes).toContain("1d");
+      expect(strategy?.dataRequirements).toContain("ohlcv");
+      expect(strategy?.signalFormat).toBe("trading_signal");
+      expect(strategy?.lifecycle).toBe("primary");
+      expect(strategy?.availableEngines).toContain("builtin");
+    });
+
+    it("should identify the AIPHA low-frequency research route", () => {
+      const strategy = getStrategy("aipha-ml-ranking");
+      expect(strategy?.engine).toBe("aipha");
+      expect(strategy?.signalFormat).toBe("target_position");
+      expect(strategy?.dataRequirements).toContain("fundamentals_pit");
     });
   });
 
@@ -56,6 +79,11 @@ describe("strategy-registry", () => {
       expect(result.strategyId).toBe("dual-ma-crossover");
       expect(result.finalValue).toBeGreaterThan(0);
       expect(result.equityCurve.length).toBeGreaterThan(0);
+      expect(result.runId).toBeTruthy();
+      expect(result.strategyVersion).toBe("1.0.0");
+      expect(result.dataAsOf).toBe(result.equityCurve.at(-1)?.date);
+      expect(result.runEnvelope?.schemaVersion).toBe("1.0");
+      expect(result.runEnvelope?.runId).toBe(result.runId);
     });
 
     it("should throw for unknown builtin strategy", async () => {

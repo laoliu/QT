@@ -313,6 +313,9 @@ export class QMTBroker implements IBrokerAdapter {
       status: "submitted",
       strategyId: req.strategyId,
       signalId: req.signalId,
+      runId: req.runId,
+      strategyVersion: req.strategyVersion,
+      dataTimestamp: req.dataTimestamp,
       brokerType: "qmt",
       createdAt: now,
       updatedAt: now,
@@ -378,6 +381,9 @@ export class QMTBroker implements IBrokerAdapter {
       price: update.price ?? original.price,
       strategyId: original.strategyId,
       signalId: original.signalId,
+      runId: original.runId,
+      strategyVersion: original.strategyVersion,
+      dataTimestamp: original.dataTimestamp,
     });
   }
 
@@ -579,6 +585,7 @@ export class QMTBroker implements IBrokerAdapter {
 
   private mapRawOrder(r: RawOrder, localId?: string): Order {
     const now = nowCSTISO();
+    const cached = localId ? this.orderCache.get(localId) : undefined;
     const sym = fromQmtSymbol(r.stock_code);
     const side = mapQmtSide(r.order_type);
     // Detect option market from order side — option sides (48-51) indicate option orders
@@ -598,6 +605,9 @@ export class QMTBroker implements IBrokerAdapter {
       avgFillPrice: r.traded_price || undefined,
       status: mapQmtStatus(r.order_status),
       strategyId: r.strategy_name || undefined,
+      runId: cached?.runId,
+      strategyVersion: cached?.strategyVersion,
+      dataTimestamp: cached?.dataTimestamp,
       errorMsg: r.strategy_error_msg,
       brokerType: "qmt",
       createdAt: r.order_time ?? now,

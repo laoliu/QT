@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .contracts import TargetPosition, validate_market_frame
+from .execution_plan import build_execution_plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +156,55 @@ class ResearchPipeline:
             skip_days=self.config.label_skip_days,
         )
 
+    def run_tushare(
+        self,
+        equity_provider: Any,
+        output_root: str | Path,
+        *,
+        start_date: str,
+        end_date: str,
+        index_code: str = "000905.SH",
+        pit_provider: Any | None = None,
+        st_status: pd.DataFrame | None = None,
+        limit_prices: pd.DataFrame | None = None,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """Build a frozen TuShare PIT snapshot and execute the canonical run.
+
+        This is the production entry point for historical research.  Provider
+        objects are injected so tests can use deterministic adapters; no
+        AKShare fallback or broker connection is possible from this method.
+        Financial histories are joined by announcement date when a
+        ``TuSharePITProvider`` is supplied, while historical ST status is
+        materialized from name-change intervals when omitted.
+        """
+        from .snapshots import SnapshotSpec, build_tushare_snapshot
+
+        if pit_provider is None:
+            from aipha.data.tushare_pit_provider import TuSharePITProvider
+
+            pit_provider = TuSharePITProvider(equity_provider)
+
+        spec = SnapshotSpec(
+            start_date=start_date,
+            end_date=end_date,
+            index_code=index_code,
+            feature_version=self.config.feature_version,
+        )
+        snapshot = build_tushare_snapshot(
+            equity_provider,
+            spec,
+            st_status=st_status,
+            limit_prices=limit_prices,
+            pit_provider=pit_provider,
+            use_cache=use_cache,
+        )
+        return self.run(
+            snapshot.panel,
+            output_root,
+            data_snapshot_id=snapshot.metadata["data_snapshot_id"],
+        )
+
     def train_oos(self, features: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any], Any]:
         """Train the canonical LightGBM selector and return OOS predictions."""
         from aipha.models.ml_stock_selector import MLSelectorConfig, MLStockSelector
@@ -272,8 +322,13 @@ class ResearchPipeline:
         metrics = _evaluate_predictions(oos, targets, self.config)
         metrics.update(backtest["metrics"])
         metrics["pbo_proxy"] = _pbo_proxy(wf_summary)
+        evaluation_diagnostics = _build_evaluation_diagnostics(source, oos, targets, self.config)
         run_root = Path(output_root) / self.run_id
         run_root.mkdir(parents=True, exist_ok=False)
+        source.to_parquet(run_root / "input_snapshot.parquet", index=False)
+        (run_root / "input_snapshot.metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
         selector.save(run_root / "model")
         _write_model_manifest(
             run_root / "model",
@@ -292,11 +347,24 @@ class ResearchPipeline:
         pd.DataFrame(backtest["trades"]).to_json(
             run_root / "trades.json", orient="records", date_format="iso", force_ascii=False, indent=2,
         )
-        pd.DataFrame([asdict(position) for position in targets]).to_json(
-            run_root / "target_positions.json", orient="records", date_format="iso", force_ascii=False, indent=2,
+        (run_root / "target_positions.json").write_text(
+            json.dumps([position.to_wire() for position in targets], ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
+        execution_plans = []
+        rebalance_dates = sorted({position.rebalance_date for position in targets})
+        for rebalance_date in rebalance_dates:
+            group = [position for position in targets if position.rebalance_date == rebalance_date]
+            plan = build_execution_plan(group, mode="paper", run_id=self.run_id, model_id=self.run_id)
+            plan_path = run_root / "execution_plans" / f"{rebalance_date.isoformat()}.json"
+            plan.write(plan_path)
+            execution_plans.append(str(plan_path.relative_to(run_root)))
         report = {
             "run_id": self.run_id,
+            "strategy_id": "aipha-ml-ranking",
+            "strategy_version": "1.0.0",
+            "engine": "aipha",
+            "data_as_of": max(oos["trade_date"]).isoformat(),
             "model_type": self.config.model_type,
             "feature_version": self.config.feature_version,
             "data_snapshot_id": data_snapshot_id,
@@ -305,17 +373,32 @@ class ResearchPipeline:
             "metrics": metrics,
             "n_oos_predictions": int(len(oos)),
             "n_target_positions": len(targets),
+            "execution_plans": execution_plans,
             "feature_missing_rate": _feature_missing_rate(source),
             "snapshot_metadata": metadata,
             "diagnostics": {
                 "pbo_proxy": metrics["pbo_proxy"],
-                "pbo_method": "fraction_of_folds_with_positive_IS_IC_and_nonpositive_OOS_IC",
+                "pbo": metrics.get("pbo"),
+                "pbo_method": metrics.get("pbo_method", "unavailable"),
                 "is_oos_decay": wf_summary.get("is_oos_decay_per_fold", []),
+                **evaluation_diagnostics,
             },
             "n_trades": len(backtest["trades"]),
             "n_unexecutable": backtest["n_unexecutable"],
+            "input_snapshot_path": "input_snapshot.parquet",
             "portfolio_returns_path": "portfolio_returns.parquet",
             "trades_path": "trades.json",
+            "run_envelope": {
+                "schemaVersion": "1.0",
+                "runId": self.run_id,
+                "strategyId": "aipha-ml-ranking",
+                "strategyVersion": "1.0.0",
+                "engine": "aipha",
+                "dataAsOf": max(oos["trade_date"]).isoformat(),
+                "signalFormat": "target_position",
+                "signals": [],
+                "targetPositions": [position.to_wire() for position in targets],
+            },
         }
         (run_root / "report.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
@@ -362,6 +445,7 @@ class ResearchPipeline:
             "predictions": "oos_predictions.parquet",
             "portfolio_returns": "portfolio_returns.parquet",
             "targets": "target_positions.json",
+            "execution_plans": "execution_plans/",
         }
         path = root / "run_manifest.json"
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -372,7 +456,7 @@ def _evaluate_predictions(
     predictions: pd.DataFrame,
     targets: list[TargetPosition],
     config: ResearchConfig,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Compute OOS cross-sectional metrics and an explicit turnover-cost estimate."""
     from scipy.stats import spearmanr
 
@@ -428,6 +512,7 @@ def _evaluate_predictions(
     bottom_mean = float(np.mean(bottom_returns)) if bottom_returns else 0.0
     ic_mean = float(np.mean(daily_ic)) if daily_ic else 0.0
     ic_std = float(np.std(daily_ic, ddof=1)) if len(daily_ic) > 1 else 0.0
+    formal_pbo, pbo_method = _compute_quintile_cscv(quintile_returns)
     return {
         "rank_ic": ic_mean,
         "icir": ic_mean / ic_std if ic_std > 0 else 0.0,
@@ -438,7 +523,123 @@ def _evaluate_predictions(
         "quintile_5_mean_forward_return": float(np.mean(quintile_returns[5])) if quintile_returns[5] else 0.0,
         "estimated_turnover_cost": turnover_cost,
         "top_k_mean_forward_return_net_estimated_cost": top_mean - turnover_cost,
+        "pbo": formal_pbo,
+        "pbo_method": pbo_method,
     }
+
+
+def _compute_quintile_cscv(
+    quintile_returns: dict[int, list[float]],
+) -> tuple[float | None, str]:
+    """Run formal CSCV PBO over the OOS quintile portfolios.
+
+    The five cross-sectional buckets are the candidate portfolios available
+    from one ranking model.  This is a conservative, reproducible PBO
+    diagnostic; it is deliberately reported separately from the fold-level
+    ``pbo_proxy`` used for walk-forward degradation.
+    """
+    if not quintile_returns:
+        return None, "unavailable"
+    frame = pd.DataFrame(quintile_returns).sort_index(axis=1).dropna(how="any")
+    if len(frame) < 8 or frame.shape[1] < 2:
+        return None, "unavailable_insufficient_oos"
+    # Use the largest even number of temporal partitions supported by the
+    # sample.  Four is the minimum valid CSCV split.
+    partitions = min(16, len(frame))
+    if partitions % 2:
+        partitions -= 1
+    if partitions < 4:
+        return None, "unavailable_insufficient_oos"
+    try:
+        from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
+
+        result = PBOAnalyzer(PBOConfig(num_subsamples=partitions)).compute(
+            frame.to_numpy(dtype=float),
+        )
+        return float(result.pbo), "cscv_quintile_portfolios"
+    except (ValueError, ImportError):
+        return None, "unavailable"
+
+
+def _build_evaluation_diagnostics(
+    source: pd.DataFrame,
+    predictions: pd.DataFrame,
+    targets: list[TargetPosition],
+    config: ResearchConfig,
+) -> dict[str, Any]:
+    """Build benchmark, long-short, and point-in-time exposure diagnostics."""
+    diagnostics: dict[str, Any] = {
+        "benchmark": {"available": False},
+        "long_short": {"available": False},
+        "exposures": {"available": False},
+    }
+    # A provider may add a benchmark close/return to the frozen snapshot.  We
+    # never fetch it here, which keeps the run reproducible and offline.
+    benchmark_returns: pd.Series | None = None
+    if "benchmark_return" in source.columns:
+        values = pd.to_numeric(source["benchmark_return"], errors="coerce")
+        benchmark_returns = values.groupby(pd.to_datetime(source["trade_date"])).first().dropna()
+    elif "benchmark_close" in source.columns:
+        closes = pd.to_numeric(source["benchmark_close"], errors="coerce")
+        series = closes.groupby(pd.to_datetime(source["trade_date"])).first().dropna()
+        benchmark_returns = series.pct_change().dropna()
+    if benchmark_returns is not None and not benchmark_returns.empty:
+        nav = (1.0 + benchmark_returns).cumprod()
+        diagnostics["benchmark"] = {
+            "available": True,
+            "total_return": float(nav.iloc[-1] - 1.0),
+            "annualized_return": float(nav.iloc[-1] ** (252 / max(1, len(nav))) - 1.0),
+            "annualized_volatility": float(benchmark_returns.std(ddof=1) * np.sqrt(252))
+            if len(benchmark_returns) > 1 else 0.0,
+            "max_drawdown": float((nav / nav.cummax() - 1.0).min()),
+        }
+
+    long_short: list[float] = []
+    for _, group in predictions.groupby("trade_date", sort=True):
+        valid = group.dropna(subset=["score", "fwd_return"])
+        if len(valid) < 2:
+            continue
+        ranked = valid.sort_values("score", ascending=False)
+        top = ranked.head(config.top_k)["fwd_return"].mean()
+        bottom = ranked.tail(config.top_k)["fwd_return"].mean()
+        if pd.notna(top) and pd.notna(bottom):
+            long_short.append(float(top - bottom))
+    if long_short:
+        ls = pd.Series(long_short, dtype=float)
+        diagnostics["long_short"] = {
+            "available": True,
+            "periods": int(len(ls)),
+            "mean_return": float(ls.mean()),
+            "annualized_return": float((1.0 + ls.mean()) ** 12 - 1.0),
+            "volatility": float(ls.std(ddof=1) * np.sqrt(12)) if len(ls) > 1 else 0.0,
+            "positive_period_rate": float((ls > 0).mean()),
+        }
+
+    target_frame = pd.DataFrame([asdict(item) for item in targets])
+    industry_col = next((c for c in ("industry", "sector", "sw_industry") if c in source.columns), None)
+    if not target_frame.empty and industry_col:
+        source_dates = pd.to_datetime(source["trade_date"])
+        rows: list[dict[str, Any]] = []
+        for _, group in target_frame.groupby("rebalance_date", sort=True):
+            signal_date = pd.Timestamp(group["rebalance_date"].iloc[0])
+            visible = source.loc[(source_dates <= signal_date) & source["symbol"].isin(group["symbol"])]
+            latest = visible.sort_values("trade_date").drop_duplicates("symbol", keep="last")
+            weights = group.set_index("symbol")["target_weight"]
+            exposure: dict[str, float] = {}
+            for row in latest.itertuples(index=False):
+                industry = str(getattr(row, industry_col, ""))
+                if not industry:
+                    continue
+                exposure[industry] = exposure.get(industry, 0.0) + float(weights.get(row.symbol, 0.0))
+            if exposure:
+                rows.append({"rebalance_date": signal_date.date().isoformat(), "weights": exposure})
+        if rows:
+            diagnostics["exposures"] = {
+                "available": True,
+                "industry_column": industry_col,
+                "by_rebalance": rows,
+            }
+    return diagnostics
 
 
 def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, str]:

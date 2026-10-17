@@ -18,6 +18,8 @@ interface RebalanceTarget {
   symbol: string;
   /** Target weight (0-1, e.g. 0.3 = 30%). */
   weight: number;
+  signalId?: string;
+  riskFlags?: string[];
 }
 
 interface RebalanceTrade {
@@ -59,27 +61,48 @@ export function createPortfolioRebalanceTool(
           },
           description: "目标配置: [{symbol, weight}, ...]",
         },
+        runEnvelope: {
+          type: "object",
+          description: "可直接传入统一策略结果 runEnvelope；targetPositions 会经过现有订单风控后转换为 Paper/QMT 订单。",
+        },
         cash_reserve_pct: {
           type: "number",
           description: "保留现金比例(0-100, 默认5 = 5%)",
         },
       },
-      required: ["action", "targets"],
+      required: ["action"],
     },
     async execute(args: Record<string, unknown>): Promise<string> {
       const action = args.action as string;
       const rawTargets = args.targets as { symbol: string; weight: number }[] | undefined;
+      const runEnvelope = args.runEnvelope as {
+        runId?: string;
+        strategyId?: string;
+        strategyVersion?: string;
+        dataAsOf?: string;
+        targetPositions?: Array<{ symbol: string; targetWeight: number; signalId?: string; riskFlags?: string[] }>;
+      } | undefined;
       const cashReservePctRaw = (args.cash_reserve_pct as number) ?? 5;
       const cashReservePct = cashReservePctRaw > 1 ? cashReservePctRaw / 100 : cashReservePctRaw;
 
-      if (!rawTargets || rawTargets.length === 0) {
+      const inputs = rawTargets?.length
+        ? rawTargets
+        : runEnvelope?.targetPositions?.map((item) => ({
+            symbol: item.symbol,
+            weight: item.targetWeight,
+            signalId: item.signalId,
+            riskFlags: item.riskFlags,
+          }));
+      if (!inputs || inputs.length === 0) {
         return "请提供 targets (目标配置)";
       }
 
       // Normalize weights (handle both % and decimal)
-      const targets: RebalanceTarget[] = rawTargets.map((t) => ({
+      const targets: RebalanceTarget[] = inputs.map((t) => ({
         symbol: t.symbol,
         weight: t.weight > 1 ? t.weight / 100 : t.weight,
+        signalId: "signalId" in t && typeof t.signalId === "string" ? t.signalId : undefined,
+        riskFlags: "riskFlags" in t && Array.isArray(t.riskFlags) ? t.riskFlags.filter((flag): flag is string => typeof flag === "string") : undefined,
       }));
 
       // Validate total weight
@@ -219,8 +242,11 @@ export function createPortfolioRebalanceTool(
           side: "sell",
           orderType: "market",
           quantity: t.quantity,
-          strategyId: "rebalance",
-          signalId: `rebal_${Date.now()}_${t.symbol}`,
+          strategyId: runEnvelope?.strategyId ?? "rebalance",
+          signalId: targets.find((target) => target.symbol === t.symbol)?.signalId ?? `${runEnvelope?.runId ?? "rebalance"}:${t.symbol}:exit`,
+          runId: runEnvelope?.runId,
+          strategyVersion: runEnvelope?.strategyVersion,
+          dataTimestamp: runEnvelope?.dataAsOf ? Date.parse(runEnvelope.dataAsOf) : undefined,
         });
         results.push(
           res.ok
@@ -239,8 +265,11 @@ export function createPortfolioRebalanceTool(
           side: "buy",
           orderType: "market",
           quantity: t.quantity,
-          strategyId: "rebalance",
-          signalId: `rebal_${Date.now()}_${t.symbol}`,
+          strategyId: runEnvelope?.strategyId ?? "rebalance",
+          signalId: targets.find((target) => target.symbol === t.symbol)?.signalId ?? `${runEnvelope?.runId ?? "rebalance"}:${t.symbol}`,
+          runId: runEnvelope?.runId,
+          strategyVersion: runEnvelope?.strategyVersion,
+          dataTimestamp: runEnvelope?.dataAsOf ? Date.parse(runEnvelope.dataAsOf) : undefined,
         });
         results.push(
           res.ok

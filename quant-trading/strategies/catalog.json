@@ -1,0 +1,2562 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Cross-language strategy catalog. Metadata changes belong here first; runtime adapters may add implementation details.",
+  "defaultResearchStrategy": "aipha-ml-ranking",
+  "entries": [
+    {
+      "id": "dual-ma-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "momentum-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "mean-reversion",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "composite",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "trend-combo",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "gated",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "scored",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "rsi-filter",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "rsi-enhanced",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd-confirmation",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd-divergence",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "rsi-macd-combined",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "volume-confirmation",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "enhanced-composite",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "t0-day-trading",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "experimental"
+    },
+    {
+      "id": "t0-enhanced",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "experimental"
+    },
+    {
+      "id": "trix-momentum",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "mfi-oscillator",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "aroon-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cmf-divergence",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "elder-ray",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "supertrend",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "hull-ma-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "dema-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "triple-ma-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ma-envelope",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "connors-rsi",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "kama-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "demarker",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "futures",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "rsi",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "futures",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "kdj",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "turtle",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "futures",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "pair-trading",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "grid",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "auction",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "dragon-return",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "mean-reversion-cn",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "multi-factor",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "bollinger",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "dragon_master",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "lianban_relay",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "qmt-lianban-relay",
+      "engine": "qmt",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "qmt-dual-ma-5m",
+      "engine": "qmt",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "sector-synergy-chase",
+      "engine": "qmt",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ema-cross",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "adx-trend",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "parabolic-sar",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ichimoku",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "dema-cross",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "tema-cross",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "aroon",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vortex",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "cci",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "trix",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "momentum",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "dmi",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "keltner-channel",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "donchian-breakout",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "atr-channel",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "envelope",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "price-channel-breakout",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "stochastic",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "williams-r",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "obv",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "mfi",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "cmf",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "adl",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "roc",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vwap",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "adaptive-ma",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "engulfing",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "hammer",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "doji",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "morning-star",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "three-soldiers",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "harami",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "macd-rsi-combo",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "bollinger-rsi-combo",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "ma-volume-combo",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "kdj-macd-combo",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "ichimoku-adx-combo",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "multi-tf-ma",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "volatility-breakout",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "regime-switch",
+      "engine": "backtrader",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "dual-thrust",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "r-breaker",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "pivot-point",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "covered-call",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "protective-put",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "bull-call-spread",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "bear-put-spread",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "long-straddle",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "iron-condor",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "iron-butterfly",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "calendar-spread",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ratio-call-spread",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option",
+        "index_option",
+        "commodity_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "collar",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "etf_option"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "spread-arbitrage",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "turtle-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "rsi-reversal",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "bollinger-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "aberration",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ttm-squeeze",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "dmi-adx",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "volatility-target",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "momentum-rotation",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "obv-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-kdj",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "mean-reversion-zscore",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "grid-trading",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "multi-ma-convergence",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "donchian-mid-reversion",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "chandelier-exit",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "range-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "vwap-reversion",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "double-bottom",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "roc-momentum",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cci-divergence",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ema-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "atr-trailing",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "stochastic-rsi",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd-histogram-reversal",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "bollinger-bandwidth",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-awesome-oscillator",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-elder-force",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-demarker",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-ultimate-oscillator",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-adx-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-trix-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-hull-ma-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-mass-index",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-chaikin-oscillator",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-coppock",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-rsi-divergence",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-volume-breakout",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-adaptive-ma",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-ma-envelope",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-connors-rsi",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-aroon-oscillator",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-mfi-trend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-dema-crossover",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-triple-ma",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "cta-supertrend",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "swing-overlay",
+      "engine": "builtin",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "vnpy-double-ma",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vnpy-atr-rsi",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vnpy-boll-channel",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vnpy-turtle",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vnpy-king-keltner",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "vnpy-multi-timeframe",
+      "engine": "vnpy",
+      "source": "src/engine/strategy-definitions.ts",
+      "markets": [
+        "cn_stock",
+        "futures"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "sector-synergy",
+      "engine": "backtrader",
+      "source": "python/strategies/sector_synergy_strategy.py",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "lianban-relay",
+      "engine": "backtrader",
+      "source": "python/strategies/lianban_relay_strategy.py",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "dragon-master",
+      "engine": "backtrader",
+      "source": "python/strategies/dragon_master_strategy.py",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "compatibility"
+    },
+    {
+      "id": "aipha-ml-ranking",
+      "engine": "aipha",
+      "source": "python/aipha/research",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv",
+        "fundamentals_pit",
+        "features",
+        "index_membership_pit"
+      ],
+      "signalFormat": "target_position",
+      "lifecycle": "primary"
+    }
+  ]
+}

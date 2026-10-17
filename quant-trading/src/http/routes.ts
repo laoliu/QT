@@ -27,6 +27,7 @@ import { timingSafeCompareStr } from "./auth-middleware.js";
 import { parseJsonBody } from "./parse-body.js";
 import { todayCST } from "../utils/cst-time.js";
 import { fetchStockNames } from "./routes/daily-pick.js";
+import { listUnifiedStrategies } from "../engine/strategy-registry.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -1011,7 +1012,20 @@ function registerEngineRoutes({ api, getEngine, secure }: RouteDeps): void {
 
 // ── Strategy CRUD ────────────────────────────────────────────────
 
-function registerStrategyRoutes({ api, getEngine, secure }: RouteDeps): void {
+function registerStrategyRoutes({ api, config, getEngine, secure }: RouteDeps): void {
+  api.registerHttpRoute({
+    auth: "plugin",
+    path: "/quant/api/strategy-catalog",
+    handler: secure(async (_req, res) => {
+      try {
+        const strategies = await listUnifiedStrategies(config);
+        json(res, { status: "ok", schemaVersion: "1.0", data: strategies });
+      } catch (error) {
+        json(res, { status: "error", message: (error as Error).message }, 502);
+      }
+    }),
+  });
+
   api.registerHttpRoute({
     auth: "plugin",
     path: "/quant/api/strategies",

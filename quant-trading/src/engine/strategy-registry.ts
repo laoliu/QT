@@ -8,6 +8,9 @@ import type {
   QuantTradingConfig,
   StrategyDefinition,
 } from "../types.js";
+import { randomUUID } from "node:crypto";
+import catalog from "../../strategies/catalog.json" with { type: "json" };
+import { runPythonScript } from "../bridge/python-bridge.js";
 import { runBacktraderBacktest } from "./backtrader-engine.js";
 import { runAiphaBacktest } from "./aipha-engine.js";
 import { runVnpyBacktest } from "./vnpy-engine.js";
@@ -1036,7 +1039,30 @@ import {
   type SubStrategyConfig,
 } from "./dynamic-composer.js";
 import { buildRuleStrategy, type RuleStrategyConfig } from "./rule-strategy.js";
-import { builtinStrategies } from "./strategy-definitions.js";
+import { builtinStrategies, optionStrategies } from "./strategy-definitions.js";
+
+type CatalogEntry = {
+  id: string;
+  engine: StrategyDefinition["engine"];
+  source: string;
+  markets: StrategyDefinition["markets"];
+  timeframes: StrategyDefinition["timeframes"];
+  dataRequirements: StrategyDefinition["dataRequirements"];
+  signalFormat: StrategyDefinition["signalFormat"];
+  lifecycle: StrategyDefinition["lifecycle"];
+};
+const canonicalCatalog = catalog as { schemaVersion: "1.0"; defaultResearchStrategy: string; entries: CatalogEntry[] };
+const catalogById = new Map(canonicalCatalog.entries.map((entry) => [entry.id, entry]));
+
+const aiphaResearchDefinition: StrategyDefinition = {
+  id: canonicalCatalog.defaultResearchStrategy,
+  name: "AIPHA A股低频多因子排序",
+  description: "统一的 A 股 PIT 特征、Walk-Forward、组合回测和目标持仓研究路径。",
+  version: "1.0.0",
+  engine: "aipha",
+  entryFile: "python/aipha/research",
+  parameters: [],
+};
 
 // ── Composed strategy runtime registry ───────────────────────────
 
@@ -1145,17 +1171,73 @@ export function listStrategies(): StrategyDefinition[] {
   const available = builtinStrategies.filter(
     (s) =>
       !s.disabled &&
-      (s.engine === "backtrader" || s.engine === "vnpy" || strategyMap.has(s.id)),
+      (s.engine === "backtrader" || s.engine === "vnpy" || s.engine === "aipha" || strategyMap.has(s.id)),
+  ).map(normalizeStrategyDefinition);
+  return [...available, ...composedDefinitions.values(), ...ruleDefinitions.values()].map(normalizeStrategyDefinition);
+}
+
+/** Load the cross-runtime catalog, including Python-only implementations. */
+export async function listUnifiedStrategies(config: QuantTradingConfig): Promise<StrategyDefinition[]> {
+  const local = [
+    ...builtinStrategies.map(normalizeStrategyDefinition),
+    ...optionStrategies.map(normalizeStrategyDefinition),
+    ...composedDefinitions.values(),
+    ...ruleDefinitions.values(),
+  ];
+  const python = await runPythonScript<StrategyDefinition[]>(
+    "engines/backtrader_engine.py",
+    { action: "list_strategies" },
+    config,
   );
-  return [...available, ...composedDefinitions.values(), ...ruleDefinitions.values()];
+  if (!python.ok || !Array.isArray(python.data)) {
+    throw new Error(python.error ?? "无法读取 Python 策略目录");
+  }
+  const byId = new Map(local.map((entry) => [entry.id, entry]));
+  byId.set(aiphaResearchDefinition.id, normalizeStrategyDefinition(aiphaResearchDefinition));
+  for (const entry of python.data) {
+    if (!entry?.id || byId.has(entry.id)) continue;
+    byId.set(entry.id, normalizeStrategyDefinition({
+      ...entry,
+      engine: entry.engine ?? "backtrader",
+      entryFile: entry.entryFile ?? "",
+      parameters: entry.parameters ?? [],
+      markets: entry.markets?.length ? entry.markets : ["cn_stock"],
+      version: entry.version ?? "1.0.0",
+    }));
+  }
+  return [...byId.values()];
 }
 
 export function getStrategy(id: string): StrategyDefinition | undefined {
-  return (
+  const definition = (
     builtinStrategies.find((s) => s.id === id) ??
+    (id === aiphaResearchDefinition.id ? aiphaResearchDefinition : undefined) ??
     composedDefinitions.get(id) ??
     ruleDefinitions.get(id)
   );
+  return definition ? normalizeStrategyDefinition(definition) : undefined;
+}
+
+/** Fill engine-neutral catalog fields for legacy definitions without changing their IDs or parameters. */
+export function normalizeStrategyDefinition(strategy: StrategyDefinition): StrategyDefinition {
+  const catalogEntry = catalogById.get(strategy.id);
+  const lifecycle = strategy.lifecycle ?? (strategy.engine === "builtin" ? "primary" : "compatibility");
+  const requirements = strategy.dataRequirements ?? (strategy.engine === "aipha"
+    ? ["features", "ohlcv", "fundamentals_pit", "index_membership_pit"] as const
+    : ["ohlcv"] as const);
+  const format = strategy.signalFormat ?? (strategy.engine === "aipha" ? "target_position" : "trading_signal");
+  return {
+    ...strategy,
+    engine: strategy.engine,
+    entryFile: catalogEntry?.source ?? strategy.entryFile,
+    category: strategy.category ?? "technical",
+    markets: strategy.markets?.length ? [...strategy.markets] : (catalogEntry?.markets?.length ? [...catalogEntry.markets] : ["cn_stock"]),
+    timeframes: catalogEntry?.timeframes?.length ? [...catalogEntry.timeframes] : (strategy.timeframes?.length ? [...strategy.timeframes] : ["1d"]),
+    dataRequirements: catalogEntry?.dataRequirements?.length ? [...catalogEntry.dataRequirements] : [...requirements],
+    signalFormat: catalogEntry?.signalFormat ?? format,
+    lifecycle: catalogEntry?.lifecycle ?? lifecycle,
+    availableEngines: strategy.availableEngines?.length ? [...strategy.availableEngines] : [strategy.engine],
+  };
 }
 
 /** Check whether a strategy ID has a registered builtin factory (composable). */
@@ -1166,6 +1248,50 @@ export function hasStrategyFactory(id: string): boolean {
 // ── Runner ───────────────────────────────────────────────────────
 
 export async function runBacktest(
+  request: BacktestRequest,
+  config: QuantTradingConfig,
+  sharedProvider?: MarketDataProvider,
+): Promise<BacktestResult> {
+  if (request.strategyId === aiphaResearchDefinition.id) {
+    throw new Error("AIPHA ML 排序是研究工作流，不是单策略回测。请使用 ml_ranking 提供冻结数据快照并执行 train/evaluate/export。");
+  }
+  const runId = request.runId ?? randomUUID();
+  const result = await runBacktestInner({ ...request, runId }, config, sharedProvider);
+  const definition = getStrategy(request.strategyId);
+  const engine = request.engine ?? definition?.engine ?? config.backtestEngine ?? "aipha";
+  const effectiveRunId = request.runId ?? result.runId ?? runId;
+  const strategyVersion = result.strategyVersion ?? definition?.version ?? "1.0.0";
+  const dataAsOf = result.dataAsOf ?? result.equityCurve.at(-1)?.date ?? request.endDate;
+  const signalFormat = definition?.signalFormat ?? "trading_signal";
+  const signals = (result.signals ?? []).map((signal) => ({
+    ...signal,
+    runId: effectiveRunId,
+    strategyVersion,
+    signalId: signal.signalId ?? `${effectiveRunId}:${request.strategyId}:${signal.symbol}:${signal.timestamp}`,
+    dataTimestamp: signal.dataTimestamp ?? signal.timestamp,
+  }));
+  return {
+    ...result,
+    runId: effectiveRunId,
+    strategyVersion,
+    engine,
+    dataAsOf,
+    signalFormatVersion: "1.0",
+    signals,
+    runEnvelope: {
+      schemaVersion: "1.0",
+      runId: effectiveRunId,
+      strategyId: request.strategyId,
+      strategyVersion,
+      engine,
+      dataAsOf,
+      signalFormat,
+      signals,
+    },
+  };
+}
+
+async function runBacktestInner(
   request: BacktestRequest,
   config: QuantTradingConfig,
   sharedProvider?: MarketDataProvider,

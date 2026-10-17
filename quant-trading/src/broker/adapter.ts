@@ -30,6 +30,9 @@ export type OrderRequest = {
   stopPrice?: number; // required for stop / stop_limit
   strategyId?: string;
   signalId?: string;
+  runId?: string;
+  strategyVersion?: string;
+  dataTimestamp?: number;
   clientOrderId?: string; // caller-supplied idempotency key
   // ── Option-specific fields ──
   strike?: number;

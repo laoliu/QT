@@ -36,6 +36,9 @@ export async function runBacktraderBacktest(
       commission: request.commission ?? 0.0003,
       slippage: request.slippage ?? 0.001, // 0.1% default — consistent with builtin engine
       parameters: request.parameters ?? {},
+      runId: request.runId,
+      dataSnapshotId: request.dataSnapshotId,
+      featureVersion: request.featureVersion,
       benchmark: request.benchmark,
       market: detectMarketHint(request.symbols),
     },

@@ -152,6 +152,17 @@ class TuSharePITProvider(PITFinancialProvider):
             indicators=filtered,
         )
 
+    def get_indicator_history(self, symbol: str) -> list[FinancialIndicator]:
+        """Return the symbol's immutable announcement-dated indicator history.
+
+        Consumers must still join by ``announce_date <= trade_date``. This
+        method exposes source rows for snapshot materialization without
+        bypassing the provider's cache and TuShare normalization.
+        """
+        if symbol not in self._indicator_cache:
+            self._load_indicators(symbol)
+        return list(self._indicator_cache.get(symbol, []))
+
     def get_statement_history(
         self,
         symbol: str,

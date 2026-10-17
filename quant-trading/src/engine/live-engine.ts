@@ -17,6 +17,7 @@
  * Registered as an AppService via api.registerService().
  */
 import type { QuantTradingRuntime } from "../runtime.js";
+import { randomUUID } from "node:crypto";
 import type { AppService } from "../runtime.js";
 import { PersistentPythonProcess } from "../bridge/persistent-python.js";
 import type { IBrokerAdapter } from "../broker/adapter.js";
@@ -55,6 +56,10 @@ type RawSignal = {
   confidence?: number;
   strategy_id: string;
   live_strategy_id: string;
+  run_id?: string;
+  strategy_version?: string;
+  signal_id?: string;
+  data_timestamp?: number;
 };
 
 export class LiveEngine implements AppService {
@@ -498,6 +503,10 @@ export class LiveEngine implements AppService {
         reason: raw.reason,
         confidence: raw.confidence,
         strategyId: raw.strategy_id,
+        runId: raw.run_id ?? randomUUID(),
+        strategyVersion: raw.strategy_version ?? "1.0.0",
+        signalId: raw.signal_id ?? `${raw.strategy_id}:${raw.symbol}:${raw.timestamp}`,
+        dataTimestamp: raw.data_timestamp ?? raw.timestamp,
       };
 
       this.log(`信号: ${raw.direction} ${raw.symbol} @ ¥${raw.price} | ${raw.reason ?? ""}`);

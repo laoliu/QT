@@ -44,10 +44,23 @@ function loadProjectConfig(): QuantTradingConfig {
       }
     }
   };
+  const allowLiveOverride = /^(1|true|yes)$/i.test(process.env["QUANT_TRADING_ALLOW_LIVE"] ?? "");
   for (const p of [path.join(root, "config.json"), path.join(root, "config.local.json")]) {
     try {
       const raw = fs.readFileSync(p, "utf-8");
-      merge(config, JSON.parse(raw) as Record<string, unknown>);
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const account = parsed.tradingAccount as Record<string, unknown> | undefined;
+      const localLiveProfile = path.basename(p) === "config.local.json" && account && (
+        account.mode === "live" || account.broker === "qmt" || account.broker === "remote-qmt" || account.autoStart === true
+      );
+      if (localLiveProfile && !allowLiveOverride) {
+        // A developer-local live/QMT file must never silently turn a default
+        // paper startup into real trading. Use an explicit environment gate
+        // for live, while retaining safe non-trading local settings.
+        delete parsed.tradingAccount;
+        console.warn("[config] ignored live/QMT config.local.json override; set QUANT_TRADING_ALLOW_LIVE=true explicitly");
+      }
+      merge(config, parsed);
     } catch {
       // Project defaults may be overridden locally.
     }

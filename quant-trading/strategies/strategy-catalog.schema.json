@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qt.local/contracts/strategy-catalog-1.0.schema.json",
+  "title": "QT cross-language strategy catalog",
+  "type": "object",
+  "required": ["schemaVersion", "defaultResearchStrategy", "entries"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "defaultResearchStrategy": { "type": "string", "minLength": 1 },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "engine", "source", "markets", "timeframes", "dataRequirements", "signalFormat", "lifecycle"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "engine": { "enum": ["builtin", "backtrader", "vnpy", "qmt", "aipha"] },
+          "source": { "type": "string", "minLength": 1 },
+          "markets": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "timeframes": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "dataRequirements": { "type": "array", "items": { "enum": ["ohlcv", "fundamentals_pit", "features", "index_membership_pit", "ticks", "order_book"] } },
+          "signalFormat": { "enum": ["trading_signal", "target_position", "order_intent"] },
+          "lifecycle": { "enum": ["primary", "compatibility", "experimental", "live_only"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

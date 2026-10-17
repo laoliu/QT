@@ -677,6 +677,41 @@ class TuShareEquityProvider:
 
         return pd.concat(dfs, ignore_index=True)
 
+    def load_limit_prices_range(
+        self,
+        start_date: str,
+        end_date: str,
+        use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """Load historical A-share limit prices from TuShare stk_limit.
+
+        Limit prices are kept as a separate snapshot because execution
+        eligibility must be evaluated at the signal/execution date, never
+        inferred from a current price limit.
+        """
+        from aipha.data.calendar import CNStockCalendar
+
+        cal = CNStockCalendar()
+        dates = cal.get_trading_days(self._to_date(start_date), self._to_date(end_date))
+        parts: list[pd.DataFrame] = []
+        for raw_date in dates:
+            trade_date = raw_date.strftime("%Y%m%d")
+            cache_path = self.cache_dir / f"stk_limit_{trade_date}.parquet"
+            cached = self._safe_read_parquet(cache_path) if use_cache and cache_path.exists() else None
+            if cached is None or cached.empty:
+                cached = self._retry_call(
+                    self.api.stk_limit,
+                    trade_date=trade_date,
+                    fields="ts_code,trade_date,up_limit,down_limit",
+                )
+                if cached is not None and not cached.empty:
+                    self._atomic_write_parquet(cached, cache_path)
+            if cached is not None and not cached.empty:
+                parts.append(cached)
+        if not parts:
+            return pd.DataFrame(columns=["ts_code", "trade_date", "up_limit", "down_limit"])
+        return pd.concat(parts, ignore_index=True).drop_duplicates(["ts_code", "trade_date"])
+
     # ------------------------------------------------------------------
     # 复权因子
     # ------------------------------------------------------------------

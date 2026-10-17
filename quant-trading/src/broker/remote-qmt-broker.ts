@@ -273,6 +273,9 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       status: "submitted",
       strategyId: req.strategyId,
       signalId: req.signalId,
+      runId: req.runId,
+      strategyVersion: req.strategyVersion,
+      dataTimestamp: req.dataTimestamp,
       brokerType: "qmt",
       createdAt: now,
       updatedAt: now,
@@ -320,6 +323,9 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       price: update.price ?? original.price,
       strategyId: original.strategyId,
       signalId: original.signalId,
+      runId: original.runId,
+      strategyVersion: original.strategyVersion,
+      dataTimestamp: original.dataTimestamp,
     });
   }
 

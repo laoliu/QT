@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from datetime import datetime
 
 # Ensure the python/ directory is on sys.path for strategy imports
@@ -47,6 +48,7 @@ def run_backtest(config):
         return {"ok": False, "error": f"Missing dependency: {e}. Run: pip install backtrader pandas"}
 
     strategy_id = config.get("strategyId", "dual-ma-crossover")
+    run_id = str(config.get("runId") or uuid.uuid4().hex)
     symbols = config.get("symbols", ["000300"])
     start_date = config.get("startDate", "2024-01-01")
     end_date = config.get("endDate", datetime.now().strftime("%Y-%m-%d"))
@@ -71,9 +73,14 @@ def run_backtest(config):
 
     # Add data — use provider_factory for market-aware routing
     data_count = 0
+    data_as_of = ""
     for symbol in symbols:
         data = _fetch_data(symbol, start_date, end_date, market)
         if data is not None and not data.empty:
+            observed = data.index.max()
+            if hasattr(observed, "strftime"):
+                observed = observed.strftime("%Y-%m-%d")
+            data_as_of = max(data_as_of, str(observed)[:10])
             bt_data = bt.feeds.PandasData(dataname=data)
             cerebro.adddata(bt_data, name=symbol)
             data_count += 1
@@ -108,8 +115,30 @@ def run_backtest(config):
     signals = []
     if hasattr(strat, "get_signals"):
         signals = strat.get_signals()
+    strategy_version = "1.0.0"
+    if getattr(strat, "STRATEGY_META", None) is not None:
+        strategy_version = getattr(strat.STRATEGY_META, "version", "1.0.0")
+    for index, signal in enumerate(signals):
+        signal.setdefault("runId", run_id)
+        signal.setdefault("strategyVersion", strategy_version)
+        signal.setdefault("dataTimestamp", signal.get("timestamp"))
+        signal.setdefault("signalId", f"{run_id}:{strategy_id}:{signal.get('symbol', '')}:{signal.get('timestamp', '')}:{index}")
 
     return {
+        "runId": run_id,
+        "strategyVersion": strategy_version,
+        "dataAsOf": data_as_of or end_date,
+        "signalFormatVersion": "1.0",
+        "runEnvelope": {
+            "schemaVersion": "1.0",
+            "runId": run_id,
+            "strategyId": strategy_id,
+            "strategyVersion": strategy_version,
+            "engine": "backtrader",
+            "dataAsOf": data_as_of or end_date,
+            "signalFormat": "trading_signal",
+            "signals": signals,
+        },
         "strategyId": strategy_id,
         "symbols": symbols,
         "startDate": start_date,

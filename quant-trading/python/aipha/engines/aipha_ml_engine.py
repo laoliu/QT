@@ -80,6 +80,11 @@ def run(config: dict) -> dict:
                 config.get("outputDir", "output/research/runs"),
                 data_snapshot_id=config.get("dataSnapshotId"),
             )
+            result["runEnvelope"] = result.pop("run_envelope")
+            result["runId"] = result["run_id"]
+            result["strategyId"] = result["strategy_id"]
+            result["strategyVersion"] = result["strategy_version"]
+            result["dataAsOf"] = result["data_as_of"]
             return {"ok": True, "data": result}
         if action == "predict":
             from aipha.research import load_verified_selector
@@ -129,29 +134,54 @@ def run(config: dict) -> dict:
             return {"ok": True, "data": {"metrics": metrics, "rows": int(len(normalized))}}
         if action == "export":
             from aipha.research import build_target_positions
-            from dataclasses import asdict
+            from aipha.research.execution_plan import build_execution_plan
 
             cfg = _load_config(config.get("configPath"))
             source = _read_parquet(config.get("predictionsPath") or config.get("dataPath"))
+            run_id = str(config.get("runId", "")).strip()
+            model_id = str(config.get("modelId", "")).strip()
+            if not run_id or not model_id:
+                raise ValueError("runId and modelId are required when exporting an execution plan")
             source = source.rename(columns={"datetime": "trade_date", "pred_score": "score"})
             targets = build_target_positions(
                 source,
                 top_k=int(config.get("topN", cfg.top_k)),
                 max_position_weight=cfg.max_position_weight,
-                run_id=str(config.get("runId", "")),
-                model_id=str(config.get("modelId", "")),
+                run_id=run_id,
+                model_id=model_id,
             )
             output = Path(config.get("outputPath", "output/research/target_positions.json"))
             output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(
-                json.dumps([
-                    {**asdict(item), "rebalance_date": item.rebalance_date.isoformat(),
-                     "risk_flags": list(item.risk_flags)}
-                    for item in targets
-                ], ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            return {"ok": True, "data": {"outputPath": str(output), "count": len(targets)}}
+            target_positions = [{
+                "symbol": item.symbol,
+                "rebalanceDate": item.rebalance_date.isoformat(),
+                "targetWeight": item.target_weight,
+                "reason": item.reason,
+                "riskFlags": list(item.risk_flags),
+                "runId": item.run_id,
+                "modelId": item.model_id,
+                "signalId": item.signal_id,
+            } for item in targets]
+            output.write_text(json.dumps(target_positions, ensure_ascii=False, indent=2), encoding="utf-8")
+            plans = []
+            for rebalance_date in sorted({item.rebalance_date for item in targets}):
+                group = [item for item in targets if item.rebalance_date == rebalance_date]
+                plans.append(build_execution_plan(
+                    group, mode="paper", run_id=run_id, model_id=model_id,
+                ).to_dict())
+            plan_path = output.with_name(f"{output.stem}.execution-plan.json")
+            plan_path.write_text(json.dumps(plans, ensure_ascii=False, indent=2), encoding="utf-8")
+            as_of = max((item["rebalanceDate"] for item in target_positions), default="")
+            envelope = {
+                "schemaVersion": "1.0", "runId": run_id or model_id or "research-export",
+                "strategyId": "aipha-ml-ranking", "strategyVersion": "1.0.0",
+                "engine": "aipha", "dataAsOf": as_of, "signalFormat": "target_position",
+                "signals": [], "targetPositions": target_positions,
+            }
+            return {"ok": True, "data": {
+                "outputPath": str(output), "executionPlanPath": str(plan_path),
+                "count": len(targets), "runEnvelope": envelope,
+            }}
         return {"ok": False, "error": f"未知 action: {action}"}
     except Exception as error:
         return {"ok": False, "error": str(error)}

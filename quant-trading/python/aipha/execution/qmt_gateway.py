@@ -282,6 +282,29 @@ class QMTGateway(BrokerGateway):
                 raise GatewayError("Persistent kill switch is active", code="KILL_SWITCH")
             return self._submit_order_impl(order)
 
+    def submit_target_plan(
+        self,
+        plan: Any,
+        *,
+        prices: dict[str, float],
+        account_value: float,
+        current_positions: dict[str, int] | None = None,
+        allow_live: bool = False,
+    ) -> list[str]:
+        """Consume a versioned live execution plan with explicit provenance."""
+        from aipha.research.execution_plan import execute_target_plan
+
+        if getattr(plan, "mode", None) != "live":
+            raise GatewayError("QMT requires an execution plan with mode=live", code="PLAN_MODE")
+        return execute_target_plan(
+            self,
+            plan,
+            prices=prices,
+            account_value=account_value,
+            current_positions=current_positions,
+            allow_live=allow_live,
+        )
+
     def _submit_order_impl(self, order: GatewayOrder) -> str:
         self._ensure_connected()
 

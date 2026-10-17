@@ -791,26 +791,26 @@ function chatLoad(){
 function chatSend(){
   if(_chatBusy)return;
   var input=document.getElementById('chat-input'),question=input.value.trim();if(!question)return;
-  var selected=document.getElementById('chat-skill').value,mention=/^@([a-z0-9-]+)\s*/i.exec(question),skill=selected||(mention&&mention[1])||null;
+  var selected=document.getElementById('chat-skill').value,mention=/^@([a-z0-9-]+)\\s*/i.exec(question),skill=selected||(mention&&mention[1])||null;
   if(mention&&!selected)question=question.slice(mention[0].length).trim();
   if(!question){toast('请输入问题');return}
   var ensure=_chatConversationId?Promise.resolve():api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){_chatConversationId=d.conversation.id;document.getElementById('chat-title').textContent=d.conversation.title;return chatLoadConversations()});
   _chatBusy=true;document.getElementById('chat-send').disabled=true;document.getElementById('chat-status').textContent='思考中…';input.value='';
   var box=document.getElementById('chat-messages');if(box.querySelector('div[style*="text-align:center"]'))box.innerHTML='';
-  var user=document.createElement('div');user.style.cssText='white-space:pre-wrap;margin:8px 0 14px;color:var(--accent)';user.textContent='你\n'+question;box.appendChild(user);
-  var answer=document.createElement('div');answer.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:14px';answer.textContent='AI 助手\n';box.appendChild(answer);box.scrollTop=box.scrollHeight;
+  var user=document.createElement('div');user.style.cssText='white-space:pre-wrap;margin:8px 0 14px;color:var(--accent)';user.textContent='你'+String.fromCharCode(10)+question;box.appendChild(user);
+  var answer=document.createElement('div');answer.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:14px';answer.textContent='AI 助手'+String.fromCharCode(10);box.appendChild(answer);box.scrollTop=box.scrollHeight;
   var headers={'Content-Type':'application/json'};if(_T)headers.Authorization='Bearer '+_T;
   ensure.then(function(){sessionStorage.setItem('qt-chat-id',_chatConversationId);return fetch(B+'/quant/admin/api/chat/send',{method:'POST',headers:headers,body:JSON.stringify({conversationId:_chatConversationId,message:question,skill:skill})})})
   .then(function(response){if(!response.ok)throw new Error('HTTP '+response.status);var reader=response.body.getReader(),decoder=new TextDecoder(),buffer='';
-    function read(){return reader.read().then(function(r){if(r.done)return;buffer+=decoder.decode(r.value,{stream:true});var chunks=buffer.split('\n\n');buffer=chunks.pop();chunks.forEach(function(frame){var line=frame.split('\n').find(function(x){return x.indexOf('data: ')===0});if(!line)return;var ev;try{ev=JSON.parse(line.slice(6))}catch(e){return}
-      if(ev.type==='skill'){var names=(ev.skills||[]);answer.firstChild.textContent='AI 助手'+(names.length?' · Skill: '+names.join(', '):' · 通用模式')+'\n'}
+    function read(){return reader.read().then(function(r){if(r.done)return;buffer+=decoder.decode(r.value,{stream:true});var nl=String.fromCharCode(10),chunks=buffer.split(nl+nl);buffer=chunks.pop();chunks.forEach(function(frame){var line=frame.split(nl).find(function(x){return x.indexOf('data: ')===0});if(!line)return;var ev;try{ev=JSON.parse(line.slice(6))}catch(e){return}
+      if(ev.type==='skill'){var names=(ev.skills||[]);answer.firstChild.textContent='AI 助手'+(names.length?' · Skill: '+names.join(', '):' · 通用模式')+String.fromCharCode(10)}
       else if(ev.type==='tool_start')document.getElementById('chat-tool-status').textContent='正在查询：'+ev.name;
       else if(ev.type==='tool_result')document.getElementById('chat-tool-status').textContent='已完成：'+ev.name;
       else if(ev.type==='delta'){answer.textContent+=ev.text;box.scrollTop=box.scrollHeight}
-      else if(ev.type==='error'){answer.textContent+='\n❌ '+ev.message;document.getElementById('chat-status').textContent='回答失败'}
+      else if(ev.type==='error'){answer.textContent+=String.fromCharCode(10)+'❌ '+ev.message;document.getElementById('chat-status').textContent='回答失败'}
       else if(ev.type==='done'){document.getElementById('chat-status').textContent='完成';document.getElementById('chat-tool-status').textContent=''}
     });return read()})}return read();
-  }).catch(function(err){answer.textContent+='\n❌ '+err.message;document.getElementById('chat-status').textContent='连接失败'}).finally(function(){
+  }).catch(function(err){answer.textContent+=String.fromCharCode(10)+'❌ '+err.message;document.getElementById('chat-status').textContent='连接失败'}).finally(function(){
     _chatBusy=false;document.getElementById('chat-send').disabled=false;box.scrollTop=box.scrollHeight;
     chatLoadConversations().then(function(rows){window._chatRows=rows});
   });

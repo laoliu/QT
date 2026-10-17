@@ -16,11 +16,18 @@ from aipha.research import (
     validate_feature_frame,
     validate_market_frame,
     visible_financial_snapshots,
+    SnapshotSpec,
+    assemble_tushare_snapshot,
+    join_pit_financials,
+    point_in_time_adjust_prices,
+    build_cn_equity_features,
+    historical_st_status_from_provider,
 )
 from aipha.research.backtest import run_portfolio_backtest
 from aipha.research.contracts import FinancialSnapshot, TargetPosition
 from aipha.research.pipeline import _filter_historical_universe
 from aipha.research.artifacts import load_verified_selector
+from aipha.research.execution_plan import build_execution_plan, execute_target_plan, read_execution_plan
 
 
 def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
@@ -144,6 +151,132 @@ def test_financial_facts_are_filtered_by_announcement_date() -> None:
     assert [row.value for row in visible] == [0.1]
 
 
+def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -> None:
+    market = pd.DataFrame({
+        "ts_code": ["600000.SH", "600000.SH", "600001.SH", "600001.SH"],
+        "trade_date": ["20240102", "20240103", "20240102", "20240103"],
+        "open": [10, 11, 20, 21], "high": [10, 11, 20, 21],
+        "low": [10, 11, 20, 21], "close": [10, 11, 20, 21],
+        "vol": [100, 100, 100, 100], "amount": [1000, 1100, 2000, 2100],
+        "adj_factor": [1.0, 2.0, 1.0, 1.0],
+    })
+    stock = pd.DataFrame({"ts_code": ["600000.SH", "600001.SH"], "list_date": ["20200101", "20200101"]})
+    status = pd.DataFrame({
+        "ts_code": ["600000.SH"] * 2 + ["600001.SH"] * 2,
+        "trade_date": ["20240102", "20240103", "20240102", "20240103"],
+        "is_st": [False] * 4,
+    })
+    limits = pd.DataFrame({
+        "ts_code": ["600000.SH"] * 2 + ["600001.SH"] * 2,
+        "trade_date": ["20240102", "20240103", "20240102", "20240103"],
+        "up_limit": [10, 11, 22, 22], "down_limit": [8, 9, 18, 19],
+    })
+    facts = pd.DataFrame({
+        "symbol": ["600000.SH", "600000.SH"],
+        "report_date": ["2023-12-31", "2023-12-31"],
+        "announce_date": ["2024-01-02", "2024-01-04"],
+        "metric_name": ["roe", "roe"], "value": [0.1, 0.2],
+    })
+    snapshot = assemble_tushare_snapshot(
+        market, daily_basic=None, stock_basic=stock,
+        index_snapshots={"20240101": ["600000.SH"], "20240103": ["600001.SH"]},
+        st_status=status, limit_prices=limits, financial_snapshots=facts,
+        spec=SnapshotSpec("20240102", "20240103"),
+    )
+    panel = snapshot.panel.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
+    assert panel.loc[0, "close"] == pytest.approx(10.0)
+    assert panel.loc[1, "close"] == pytest.approx(20.0)
+    assert bool(panel.loc[0, "is_index_member"]) is True
+    assert bool(panel.loc[2, "is_index_member"]) is False
+    assert panel.loc[0, "roe"] == pytest.approx(0.1)
+    assert pd.isna(panel.loc[1, "roe"])
+    assert bool(panel.loc[2, "is_limit_up"]) is True
+    assert snapshot.metadata["provider"] == "tushare_pit"
+
+
+def test_point_in_time_adjustment_rejects_missing_future_factor() -> None:
+    frame = pd.DataFrame({"open": [10], "high": [10], "low": [10], "close": [10], "adj_factor": [None]})
+    with pytest.raises(ValueError, match="adj_factor"):
+        point_in_time_adjust_prices(frame)
+
+
+def test_causal_features_do_not_change_when_future_prices_change() -> None:
+    panel = pd.DataFrame({
+        "trade_date": pd.date_range("2023-01-01", periods=30),
+        "symbol": ["600000.SH"] * 30,
+        "close": np.arange(10.0, 40.0),
+        "volume": [100.0] * 30, "amount": [1000.0] * 30,
+    })
+    base = build_cn_equity_features(panel)
+    changed = panel.copy()
+    changed.loc[changed.index >= 25, "close"] *= 5
+    revised = build_cn_equity_features(changed)
+    pd.testing.assert_series_equal(base.loc[:24, "momentum_5"], revised.loc[:24, "momentum_5"])
+    pd.testing.assert_series_equal(base.loc[:24, "volatility_20"], revised.loc[:24, "volatility_20"])
+
+
+def test_historical_st_status_uses_namechange_intervals() -> None:
+    class Provider:
+        def load_namechange(self, ts_code: str, use_cache: bool = True) -> pd.DataFrame:
+            assert ts_code == "600000.SH"
+            return pd.DataFrame({
+                "ts_code": [ts_code], "name": ["ST示例"],
+                "start_date": [pd.Timestamp("2024-01-03")],
+                "end_date": [pd.Timestamp("2024-01-04")],
+            })
+
+    market = pd.DataFrame({
+        "ts_code": ["600000.SH"] * 3,
+        "trade_date": ["20240102", "20240103", "20240105"],
+    })
+    result = historical_st_status_from_provider(Provider(), market)
+    assert result["is_st"].tolist() == [False, True, False]
+
+
+def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, monkeypatch) -> None:
+    dates = ["20240102", "20240103"]
+    symbols = ["600000.SH", "600001.SH"]
+    market = pd.DataFrame([
+        {
+            "ts_code": symbol, "trade_date": day,
+            "open": 10.0, "high": 10.0, "low": 10.0, "close": 10.0,
+            "vol": 1000.0, "amount": 10000.0,
+        }
+        for day in dates for symbol in symbols
+    ])
+
+    class EquityProvider:
+        def load_daily_bars_range(self, *args, **kwargs): return market.copy()
+        def load_daily_basic_range(self, *args, **kwargs): return pd.DataFrame()
+        def load_stock_basic(self, **kwargs):
+            return pd.DataFrame({"ts_code": symbols, "list_date": ["20200101"] * 2})
+        def load_adj_factor_bulk(self, *args, **kwargs):
+            return pd.DataFrame([{"ts_code": s, "trade_date": d, "adj_factor": 1.0} for d in dates for s in symbols])
+        def load_index_members_snapshots(self, *args, **kwargs): return {"20240101": symbols}
+        def load_limit_prices_range(self, *args, **kwargs):
+            return pd.DataFrame([{"ts_code": s, "trade_date": d, "up_limit": 11.0, "down_limit": 9.0} for d in dates for s in symbols])
+        def load_namechange(self, ts_code: str, **kwargs): return pd.DataFrame()
+
+    class PitProvider:
+        def get_indicator_history(self, symbol: str): return []
+
+    pipeline = ResearchPipeline()
+    observed = {}
+    def capture(frame, output_root, *, data_snapshot_id=None):
+        observed["frame"] = frame
+        observed["data_snapshot_id"] = data_snapshot_id
+        return {"run_id": "captured"}
+    monkeypatch.setattr(pipeline, "run", capture)
+    result = pipeline.run_tushare(
+        EquityProvider(), tmp_path / "runs", start_date="20240102", end_date="20240103",
+        pit_provider=PitProvider(), use_cache=False,
+    )
+    assert result["run_id"] == "captured"
+    assert observed["data_snapshot_id"].startswith("tushare_pit:")
+    assert {"momentum_5", "volatility_20", "feature_version"} <= set(observed["frame"].columns)
+    assert observed["frame"]["is_index_member"].all()
+
+
 def test_portfolio_replay_executes_next_open_and_obeys_limit_up() -> None:
     market = pd.DataFrame({
         "trade_date": pd.date_range("2024-01-30", periods=4),
@@ -173,6 +306,41 @@ def test_targets_are_monthly_top_k_and_weight_capped() -> None:
     assert sorted({t.rebalance_date.isoformat() for t in targets}) == ["2024-01-31", "2024-02-29"]
     assert len(targets) == 8
     assert all(t.target_weight <= 0.05 for t in targets)
+    assert sum(t.target_weight for t in targets[:4]) == pytest.approx(0.2)
+
+
+def test_execution_plan_is_paper_only_and_provenance_checked(tmp_path: Path) -> None:
+    targets = build_target_positions(pd.DataFrame([
+        {"trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0},
+        {"trade_date": "2024-01-31", "symbol": "600001.SH", "score": 0.5},
+    ]), top_k=2, max_position_weight=0.5, run_id="run-1", model_id="model-1")
+    plan = build_execution_plan(targets, run_id="run-1", model_id="model-1")
+    path = plan.write(tmp_path / "plan.json")
+    restored = read_execution_plan(path)
+    assert restored.mode == "paper"
+    assert all(item.run_id == "run-1" and item.model_id == "model-1" and item.signal_id for item in restored.targets)
+    with pytest.raises(ValueError, match="explicit allow_live"):
+        build_execution_plan(targets, mode="live")
+
+
+def test_live_plan_executor_attaches_provenance_to_every_order() -> None:
+    targets = build_target_positions(pd.DataFrame([
+        {"trade_date": "2024-01-31", "symbol": "600000.SH", "score": 1.0},
+    ]), top_k=1, max_position_weight=0.5, run_id="run-1", model_id="model-1")
+    plan = build_execution_plan(targets, mode="live", allow_live=True)
+    class Gateway:
+        def __init__(self): self.orders = []
+        def submit_order(self, order):
+            self.orders.append(order)
+            return order.order_id
+    gateway = Gateway()
+    ids = execute_target_plan(
+        gateway, plan, prices={"600000.SH": 10.0}, account_value=100_000,
+        allow_live=True,
+    )
+    assert ids and gateway.orders[0].metadata["run_id"] == "run-1"
+    assert gateway.orders[0].metadata["model_id"] == "model-1"
+    assert gateway.orders[0].metadata["signal_id"]
 
 
 def test_legacy_model_without_manifest_is_rejected(tmp_path: Path) -> None:
@@ -205,8 +373,15 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     with pytest.raises(ValueError, match="metadata"):
         pipeline.run(_panel(n_symbols=20), tmp_path / "missing-metadata", data_snapshot_id="fixture-v1")
     assert (artifact_dir / "model" / "model_manifest.json").is_file()
+    assert (artifact_dir / "input_snapshot.parquet").is_file()
+    assert (artifact_dir / "input_snapshot.metadata.json").is_file()
     assert (artifact_dir / "oos_predictions.parquet").is_file()
     assert (artifact_dir / "target_positions.json").is_file()
+    plan_paths = result["execution_plans"]
+    assert plan_paths
+    plan = read_execution_plan(artifact_dir / plan_paths[0])
+    assert plan.mode == "paper"
+    assert plan.run_id == result["run_id"]
     manifest = json.loads((artifact_dir / "run_manifest.json").read_text(encoding="utf-8"))
     report = json.loads((artifact_dir / "report.json").read_text(encoding="utf-8"))
     assert manifest["data_snapshot_id"] == "fixture-v1"
@@ -217,6 +392,9 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert (artifact_dir / "portfolio_returns.parquet").is_file()
     assert (artifact_dir / "trades.json").is_file()
     assert report["walk_forward"]["n_folds"] >= 1
+    assert report["diagnostics"]["pbo_method"] in {
+        "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
+    }
     model_manifest = json.loads((artifact_dir / "model" / "model_manifest.json").read_text(encoding="utf-8"))
     assert "momentum_signal" in model_manifest["feature_columns"]
     assert "is_limit_up" not in model_manifest["feature_columns"]

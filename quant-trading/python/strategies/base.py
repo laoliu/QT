@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -37,6 +38,12 @@ class StrategyMeta:
     category: str  # "trend", "oscillator", "arbitrage", "range", "composite"
     parameters: list[StrategyParameter] = field(default_factory=list)
     markets: list[str] = field(default_factory=list)  # empty = all markets
+    version: str = "1.0.0"
+    timeframes: list[str] = field(default_factory=lambda: ["1d"])
+    data_requirements: list[str] = field(default_factory=lambda: ["ohlcv"])
+    signal_format: str = "trading_signal"
+    lifecycle: str = "compatibility"
+    available_engines: list[str] = field(default_factory=lambda: ["backtrader"])
 
 
 # ── Base Strategy ─────────────────────────────────────────────────
@@ -251,9 +258,16 @@ def _load_registry() -> dict[str, type]:
 def get_all_strategies() -> list[dict[str, Any]]:
     """Return metadata for all registered strategies."""
     registry = _load_registry()
+    catalog_path = os.path.join(os.path.dirname(os.path.dirname(_BUILTIN_STRATEGY_DIR)), "strategies", "catalog.json")
+    try:
+        with open(catalog_path, encoding="utf-8") as stream:
+            catalog = {item["id"]: item for item in json.load(stream).get("entries", [])}
+    except (OSError, ValueError, TypeError):
+        catalog = {}
     result = []
     for strategy_id, cls in registry.items():
         meta: StrategyMeta = cls.STRATEGY_META
+        canonical = catalog.get(strategy_id, {})
         result.append({
             "id": meta.id,
             "name": meta.name,
@@ -271,7 +285,15 @@ def get_all_strategies() -> list[dict[str, Any]]:
                 }
                 for p in meta.parameters
             ],
-            "markets": meta.markets,
+            "markets": canonical.get("markets") or meta.markets or ["cn_stock"],
+            "version": getattr(meta, "version", "1.0.0"),
+            "engine": canonical.get("engine", "backtrader"),
+            "entryFile": canonical.get("source", getattr(cls, "__module__", "")),
+            "timeframes": canonical.get("timeframes", getattr(meta, "timeframes", ["1d"])),
+            "dataRequirements": canonical.get("dataRequirements", getattr(meta, "data_requirements", ["ohlcv"])),
+            "signalFormat": canonical.get("signalFormat", getattr(meta, "signal_format", "trading_signal")),
+            "lifecycle": canonical.get("lifecycle", getattr(meta, "lifecycle", "compatibility")),
+            "availableEngines": [canonical.get("engine", "backtrader")],
         })
     return result
 

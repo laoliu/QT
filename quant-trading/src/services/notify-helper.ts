@@ -5,7 +5,7 @@
  * Works around SDK versions that may not have `notify` on the API interface.
  * All callers should use `tryNotify(api, msg)` instead of raw `api.notify`.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { NotificationChannel } from "../types.js";
 
 // ── Channel registry (set once at startup) ───────────────────────
@@ -27,7 +27,7 @@ export function registerNotificationChannels(channels: NotificationChannel[] | u
  * Swallows errors silently — notification should never break business logic.
  */
 export async function tryNotifyWithPush(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   message: string,
   level: "info" | "warning" | "critical" = "info",
   title?: string,
@@ -42,7 +42,7 @@ export async function tryNotifyWithPush(
  * Sends via `api.notify` (if available) AND all registered webhook channels.
  * Swallows errors silently — notification should never break business logic.
  */
-export async function tryNotify(api: OpenClawPluginApi, message: string): Promise<void> {
+export async function tryNotify(api: QuantTradingRuntime, message: string): Promise<void> {
   // 1. SDK notify (in-app)
   try {
     const notifyFn = (api as Record<string, unknown>).notify;

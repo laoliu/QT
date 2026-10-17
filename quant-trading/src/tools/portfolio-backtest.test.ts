@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 /**
  * Tests for the portfolio_backtest AI tool.
  */
@@ -7,7 +7,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createPortfolioBacktestTool } from "./portfolio-backtest.js";
 
-function fakeApi(): OpenClawPluginApi {
+function fakeApi(): QuantTradingRuntime {
   return {
     id: "quant-trading",
     name: "quant-trading",
@@ -27,7 +27,7 @@ function fakeApi(): OpenClawPluginApi {
     registerCommand() {},
     on() {},
     resolvePath: (p: string) => p,
-  } as unknown as OpenClawPluginApi;
+  } as unknown as QuantTradingRuntime;
 }
 
 describe("portfolio_backtest tool", () => {

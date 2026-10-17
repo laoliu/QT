@@ -33,7 +33,7 @@ export interface EquitySnapshot {
 }
 
 export interface EquityHistoryOptions {
-  /** Base data directory; defaults to ~/.openclaw/quant-trading */
+  /** Base data directory; defaults to ~/data */
   dataDir?: string;
   /** Maximum number of snapshots to retain (default: 2000 ≈ 4 years daily) */
   maxSnapshots?: number;

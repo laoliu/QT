@@ -7,12 +7,12 @@
  *   detail — Detailed analysis with chart-ready time series
  *   ambush_scan — Scan pre-surge ambush-style accumulation candidates
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 import { toNumberOrDefault, toOptionalNumber } from "../utils/number-utils.js";
 
-export function createChipAccumulationTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createChipAccumulationTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "chip_accumulation",
     description:

@@ -15,8 +15,8 @@
 #
 # 恢复内容:
 #   1. config/openclaw.json → config-custom/openclaw.json (合并 quant-trading 配置)
-#   2. data/*              → ~/.openclaw/quant-trading/
-#   3. cache/*             → ~/.openclaw/extensions/quant-trading/cache/
+#   2. data/*              → ~/data/
+#   3. cache/*             → ~/data/cache/
 #   4. python/*            → extensions/quant-trading/python/
 #   5. meta/*              → extensions/quant-trading/ (元信息 + src)
 # ────────────────────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ for k, v in m.get('contents', {}).items():
 fi
 
 DATE_TAG=$(date +%Y%m%d-%H%M%S)
-DATA_DIR="${QUANT_DATA_DIR:-$HOME/.openclaw/quant-trading}"
+DATA_DIR="${QUANT_DATA_DIR:-$HOME/data}"
 
 # 确定要恢复哪些部分
 RESTORE_CONFIG=true
@@ -118,7 +118,7 @@ if ! $FORCE && ! $DRY_RUN; then
   echo "将要恢复:"
   $RESTORE_CONFIG && echo "  • 配置文件 → config-custom/openclaw.json"
   $RESTORE_DATA   && echo "  • 运行时数据 → $DATA_DIR"
-  $RESTORE_DATA   && echo "  • 缓存数据库 → ~/.openclaw/extensions/quant-trading/cache/"
+  $RESTORE_DATA   && echo "  • 缓存数据库 → ~/data/cache/"
   $RESTORE_DATA   && echo "  • ~/.openclaw 目录 (workspace, identity, cron, feishu)"
   $RESTORE_PYTHON && echo "  • Python 策略 → extensions/quant-trading/python/"
   $RESTORE_META   && echo "  • 插件元信息 → extensions/quant-trading/"
@@ -245,7 +245,7 @@ if $RESTORE_DATA && [[ -d "$BUNDLE/data" ]] && [[ "$(ls -A "$BUNDLE/data" 2>/dev
 fi
 
 # ── 3. 恢复缓存数据库 ─────────────────────────────────────────────────────────
-CACHE_TARGET="$HOME/.openclaw/extensions/quant-trading/cache"
+CACHE_TARGET="$HOME/data/cache"
 if $RESTORE_DATA && [[ -d "$BUNDLE/cache" ]] && [[ "$(ls -A "$BUNDLE/cache" 2>/dev/null)" ]]; then
   echo ""
   echo "💾 恢复缓存数据库..."

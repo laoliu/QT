@@ -10,8 +10,8 @@
  *
  * Designed to run alongside the existing PnL monitor and signal monitor.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { GreeksSnapshot, LivePosition, QuantTradingConfig } from "../types.js";
@@ -79,10 +79,10 @@ const DEFAULTS = {
 // ── Service ──────────────────────────────────────────────────
 
 export function createOptionsMonitorService(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getPositions: () => LivePosition[],
-): OpenClawPluginService {
+): AppService {
   const merged = {
     ...DEFAULTS,
     ...config.optionsConfig?.monitor,

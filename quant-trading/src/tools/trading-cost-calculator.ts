@@ -7,11 +7,11 @@
  *  - batch: 批量计算多笔交易费用
  *  - compare: 080004040809
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { TradeFeeCalculator, type FeeCalculationInput, type FeeConfig } from "../services/trade-fee.js";
 import type { MarketType, QuantTradingConfig } from "../types.js";
 
-export function createTradingCostCalculatorTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createTradingCostCalculatorTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "交易成本计算器 — 020403000009",
     parameters: {

@@ -7,7 +7,7 @@
  *  - 0403/撤单检测
  *  - 070500
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
@@ -57,7 +57,7 @@ export class AuctionMonitorService {
   private sessionDate: string | null = null;
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private tradingConfig: QuantTradingConfig,
     private alertStore: AlertStore | null,
     private notificationService: NotificationService | null,

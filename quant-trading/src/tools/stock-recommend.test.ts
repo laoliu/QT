@@ -11,8 +11,6 @@ vi.mock("../bridge/python-bridge.js", () => ({
   runPythonScript: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk", () => ({}));
-
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createStockRecommendTool } from "./stock-recommend.js";
 

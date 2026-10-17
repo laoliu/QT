@@ -17,7 +17,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { ConditionalOrderService } from "../services/conditional-order.js";
 import type { DcaScheduleService } from "../services/dca-schedule.js";
@@ -96,7 +96,7 @@ export interface DataExportDeps {
   dcaScheduleService?: DcaScheduleService;
 }
 
-export function createDataExportTool(api: OpenClawPluginApi, deps: DataExportDeps) {
+export function createDataExportTool(api: QuantTradingRuntime, deps: DataExportDeps) {
   const { config, quantStorage, equityHistory, journal, backtestStore, scanHistoryStore, favoritesStore, alertStore, signalHitRateTracker, getEngine, conditionalOrderService, dcaScheduleService } = deps;
 
   return {

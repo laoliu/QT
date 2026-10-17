@@ -5,8 +5,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { RecommendationTracker } from "../services/recommendation-tracker.js";
 import { createRecommendTrackerTool } from "./recommend-tracker.js";
 
-vi.mock("openclaw/plugin-sdk", () => ({}));
-
 const fakeApi = { logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as never;
 
 function makeTracker() {

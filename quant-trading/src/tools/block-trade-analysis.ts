@@ -7,11 +7,11 @@
  *  - 趋势分析 (成交额走势)
  *  - 0119080004
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createBlockTradeAnalysisTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createBlockTradeAnalysisTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "block_trade_analysis",
     description: "大宗交易深度分析 — 12080209010100010108",

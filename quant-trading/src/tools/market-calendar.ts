@@ -8,11 +8,11 @@
  *   ex_dividend      66upcoming ex-dividend dates for a symbol or market-wide
  *   index_rebalance  66upcoming index rebalancing dates (e.g. CSI 300)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createMarketCalendarTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createMarketCalendarTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "market_calendar",
     description:

@@ -3,11 +3,11 @@
  *
  * 00 Python AKShare 090903520700
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createShareholderDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createShareholderDataTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "031009 — 0903/0003520700",
     parameters: {

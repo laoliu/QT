@@ -1,7 +1,7 @@
 /**
  * Composed Strategy Store — persist dynamically composed strategies to disk.
  *
- * Saves to `~/.openclaw/quant-trading/composed-strategies.json`.
+ * Saves to `~/data/composed-strategies.json`.
  * On load, re-registers all saved compositions into the strategy registry.
  */
 import fs from "node:fs/promises";

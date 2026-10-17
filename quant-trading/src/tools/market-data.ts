@@ -1,7 +1,7 @@
 /**
  * market_data tool — AI-callable tool for fetching market quotes and klines.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { QuantTradingConfig, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
@@ -45,7 +45,7 @@ export type TickHistoryAccessor = {
 };
 
 export function createMarketDataTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   tickServices?: {
     getTickService: () => TickServiceAccessor | null;

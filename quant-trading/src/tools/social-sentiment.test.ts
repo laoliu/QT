@@ -4,8 +4,6 @@ vi.mock("../bridge/python-bridge.js", () => ({
   runPythonScript: vi.fn().mockResolvedValue({ ok: false, error: "python not available" }),
 }));
 
-vi.mock("openclaw/plugin-sdk", () => ({}));
-
 import { createSocialSentimentTool } from "./social-sentiment.js";
 
 function makeTool() {

@@ -3,11 +3,11 @@
  *
  * 00 Python AKShare 0919001100
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createLockupCalendarTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createLockupCalendarTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "限售解禁日历 — 091900110005",
     parameters: {

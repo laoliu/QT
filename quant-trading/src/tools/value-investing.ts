@@ -8,11 +8,11 @@
  *   - Quality scoring (Piotroski F-Score, Altman Z-Score)
  *   - Comprehensive value report combining all metrics
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createValueInvestingTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createValueInvestingTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "value_investing",
     description:

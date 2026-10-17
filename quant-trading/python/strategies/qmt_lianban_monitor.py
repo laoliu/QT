@@ -73,8 +73,8 @@ EMERGENCY_SELL_AT_LIMIT_DOWN = True  # 跌停紧急卖出
 
 # Mac OpenClaw 连接
 _OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_OPENCLAW_PORT = os.environ.get("OPENCLAW_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_OPENCLAW_PORT}"
+_APP_PORT = os.environ.get("APP_PORT", "18789")
+_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
 OPENCLAW_WEBHOOK_URL = f"{_OPENCLAW_BASE}/quant/api/signal"
 OPENCLAW_WEBHOOK_SECRET = os.environ.get("OPENCLAW_SIGNAL_SECRET", "qmt-signal-secret-2026")
 OPENCLAW_TIMEOUT_SECS = 5

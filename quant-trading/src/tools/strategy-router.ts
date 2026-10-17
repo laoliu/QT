@@ -13,7 +13,7 @@
  *   - enrich_with_routing:   Add routing info to stock candidates
  *   - get_regime:            Get current macro economic regime
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { StockProfile, StrategyRecommendation } from "../engine/dynamic-composer.js";
 import type { QuantTradingConfig } from "../types.js";
@@ -102,7 +102,7 @@ interface RegimeResult {
 
 // ── Tool Factory ─────────────────────────────────────────────────
 
-export function createStrategyRouterTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createStrategyRouterTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "strategy_router",
     description:

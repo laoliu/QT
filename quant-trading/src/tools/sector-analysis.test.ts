@@ -6,7 +6,6 @@ vi.mock("../bridge/python-bridge.js", () => ({
 }));
 
 // Mock plugin API
-vi.mock("openclaw/plugin-sdk", () => ({}));
 
 import { createSectorAnalysisTool } from "./sector-analysis.js";
 

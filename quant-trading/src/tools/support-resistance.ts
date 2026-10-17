@@ -3,11 +3,11 @@
  *
  * 080710 (14110306160013)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createSupportResistanceTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createSupportResistanceTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "支撑阻力位检测 — 08071008160013",
     parameters: {

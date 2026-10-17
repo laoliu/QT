@@ -7,11 +7,11 @@
  *   - sentiment: Analyze market sentiment from recent news
  *   - events: Upcoming economic calendar events
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createNewsSummaryTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createNewsSummaryTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "news_summary",
     description:

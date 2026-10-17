@@ -5,7 +5,7 @@
  * comparison, optimal strike finding, and Greeks aggregation.
  * Engine delegates to option_strategy_engine.py + greeks_engine.py.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
@@ -75,7 +75,7 @@ interface CompareResult {
   }>;
 }
 
-export function createOptionsStrategyTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createOptionsStrategyTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "options_strategy",
     description:

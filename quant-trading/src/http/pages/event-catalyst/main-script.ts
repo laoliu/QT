@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Browser-side JavaScript for the Event Catalyst page.
  */
 export function getEventCatalystMainScript(): string {

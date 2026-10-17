@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-setlocal
+setlocal EnableExtensions
 
 cd /d "%~dp0\.."
 
@@ -11,7 +11,7 @@ cd /d "%~dp0\.."
 ::   1. Start XtMiniQmt.exe (if not running)
 ::   2. Wait for user to enter verification code and login
 ::   3. Verify miniQMT connection is ready (tradeable state)
-::   4. Start QMT Data Bridge HTTP service (port 58088)
+::   4. Start QMT Data Bridge HTTP service (port 18888)
 :: =========================================================================
 
 :: --- Load config from .env ---
@@ -23,18 +23,19 @@ if exist "%ENV_FILE%" (
         if "%%A"=="SERVE_PORT" set "BRIDGE_PORT=%%B"
         if "%%A"=="SERVE_HOST" set "BRIDGE_HOST=%%B"
         if "%%A"=="TRADING_ACCOUNT_ID" set "TRADING_ACCOUNT_ID=%%B"
+        if "%%A"=="PYTHON_BIN" set "BRIDGE_PYTHON=%%B"
     )
 )
 
 :: --- Defaults (used when .env is not set) ---
 if not defined MINI_QMT_PATH set "MINI_QMT_PATH=D:\st_lc\userdata_mini"
 if not defined QMT_INSTALL_DIR set "QMT_INSTALL_DIR=D:\st_lc"
-if not defined BRIDGE_PORT set "BRIDGE_PORT=58088"
+if not defined BRIDGE_PORT set "BRIDGE_PORT=18888"
 if not defined BRIDGE_HOST set "BRIDGE_HOST=0.0.0.0"
+if not defined BRIDGE_PYTHON set "BRIDGE_PYTHON=python"
 
 :: --- Derived paths ---
 set "QMT_EXE=%QMT_INSTALL_DIR%\bin.x64\XtMiniQmt.exe"
-set "QMT_PY=%QMT_INSTALL_DIR%\bin.x64\python.exe"
 set "BRIDGE_SCRIPT=%~dp0..\quant-trading\python\strategies\qmt_data_bridge.py"
 
 echo ===================================================
@@ -43,6 +44,7 @@ echo ===================================================
 echo   QMT_INSTALL_DIR = %QMT_INSTALL_DIR%
 echo   MINI_QMT_PATH   = %MINI_QMT_PATH%
 echo   QMT_EXE         = %QMT_EXE%
+echo   Python          = %BRIDGE_PYTHON%
 echo   Bridge          = %BRIDGE_HOST%:%BRIDGE_PORT%
 echo   Script          = %BRIDGE_SCRIPT%
 echo ===================================================
@@ -52,6 +54,19 @@ echo.
 if not exist "%QMT_EXE%" (
     echo [ERROR] XtMiniQmt.exe not found: %QMT_EXE%
     echo Please edit this script and update QMT_INSTALL_DIR, or set it in .env
+    pause
+    exit /b 1
+)
+if /I "%BRIDGE_PYTHON%"=="python" (
+    where python >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Python was not found on PATH. Set PYTHON_BIN in .env.
+        pause
+        exit /b 1
+    )
+) else if not exist "%BRIDGE_PYTHON%" (
+    echo [ERROR] Python interpreter not found: %BRIDGE_PYTHON%
+    echo Please correct PYTHON_BIN in .env.
     pause
     exit /b 1
 )
@@ -90,11 +105,26 @@ echo [OK] XtMiniQmt.exe is running.
 
 :: --- Step 5: Quick xtdata connectivity check ---
 echo [INFO] Verifying xtdata connectivity...
-"%QMT_PY%" -c "from xtquant import xtdata; codes=xtdata.get_stock_list_in_sector('沪深A股'); print(f'[OK] xtdata connected, {len(codes)} stocks available'); assert len(codes)>0" 2>nul
-if errorlevel 1 (
-    echo [WARN] xtdata connectivity check failed.
-    echo        miniQMT may still be initializing. Continuing anyway...
-    echo        If bridge fails, restart miniQMT and re-run this script.
+set "XTDATA_OK=0"
+call :check_xtdata 1
+if not errorlevel 1 goto xtdata_check_done
+timeout /t 3 /nobreak >nul
+call :check_xtdata 2
+if not errorlevel 1 goto xtdata_check_done
+timeout /t 3 /nobreak >nul
+call :check_xtdata 3
+if not errorlevel 1 goto xtdata_check_done
+timeout /t 3 /nobreak >nul
+call :check_xtdata 4
+if not errorlevel 1 goto xtdata_check_done
+timeout /t 3 /nobreak >nul
+call :check_xtdata 5
+
+:xtdata_check_done
+if "%XTDATA_OK%"=="0" (
+    echo [WARN] xtdata could not connect using the configured Python interpreter.
+    echo        The HTTP bridge will still start, but market-data endpoints may be unavailable.
+    echo        Check that the QMT market-data service is running, not only the trading service.
     echo.
 ) else (
     echo [OK] xtdata connectivity verified.
@@ -107,6 +137,14 @@ if defined TRADING_ACCOUNT_ID (
 )
 
 :: --- Step 7: Start Data Bridge ---
+echo [INFO] Checking TCP listener on port %BRIDGE_PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0clear_qmt_bridge_port.ps1" -Port %BRIDGE_PORT%
+if errorlevel 1 (
+    echo [ERROR] Could not clear the QMT bridge port. See the message above.
+    pause
+    exit /b 1
+)
+
 echo.
 echo ===================================================
 echo   Starting QMT Data Bridge on %BRIDGE_HOST%:%BRIDGE_PORT%
@@ -119,8 +157,16 @@ echo   Trading:       POST http://localhost:%BRIDGE_PORT%/trading
 echo   Press Ctrl+C to stop.
 echo.
 
-python "%BRIDGE_SCRIPT%" %BRIDGE_ARGS%
+"%BRIDGE_PYTHON%" "%BRIDGE_SCRIPT%" %BRIDGE_ARGS%
 
 echo.
 echo Bridge stopped.
 pause
+goto :eof
+
+:check_xtdata
+echo [INFO] xtdata attempt %1/5...
+"%BRIDGE_PYTHON%" -c "from xtquant import xtdata; xtdata.connect(); codes=xtdata.get_stock_list_in_sector('沪深A股'); print(f'[OK] xtdata connected, {len(codes)} stocks available'); assert len(codes)>0"
+if errorlevel 1 exit /b 1
+set "XTDATA_OK=1"
+exit /b 0

@@ -10,7 +10,7 @@
  *
  * Example: "帮我把组合调整为 600519:30%, 000001:20%, 510300:50%"
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { QuantTradingConfig } from "../types.js";
 
@@ -28,7 +28,7 @@ interface RebalanceTrade {
 }
 
 export function createPortfolioRebalanceTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   _config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
 ) {

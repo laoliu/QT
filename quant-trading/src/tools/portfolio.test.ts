@@ -4,12 +4,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { QuantTradingConfig } from "../types.js";
 import { createPortfolioTool } from "./portfolio.js";
 
-function fakeApi(): OpenClawPluginApi {
+function fakeApi(): QuantTradingRuntime {
   return {
     id: "quant-trading",
     name: "quant-trading",
@@ -29,7 +29,7 @@ function fakeApi(): OpenClawPluginApi {
     registerCommand() {},
     on() {},
     resolvePath: (p: string) => p,
-  } as unknown as OpenClawPluginApi;
+  } as unknown as QuantTradingRuntime;
 }
 
 describe("portfolio tool", () => {

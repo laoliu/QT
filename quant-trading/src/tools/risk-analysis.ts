@@ -6,12 +6,12 @@
  *
  * Supports cross-portfolio aggregated risk assessment via action=cross_portfolio_risk.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { Portfolio, QuantTradingConfig } from "../types.js";
 import { loadAllPortfolios } from "./portfolio.js";
 
-export function createRiskAnalysisTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createRiskAnalysisTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "risk_analysis",
     description:

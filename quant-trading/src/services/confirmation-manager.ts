@@ -20,7 +20,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { OrderRequest } from "../broker/adapter.js";
 import type { ConfirmationStatus, PendingConfirmation, QuantTradingConfig } from "../types.js";
 import { AsyncMutex } from "../utils/async-mutex.js";
@@ -115,9 +115,9 @@ export class ConfirmationManager {
   private pending: Map<string, PendingEntry> = new Map();
   private cfg: QuantTradingConfig;
   // api may be undefined in unit tests
-  private api: OpenClawPluginApi | null;
+  private api: QuantTradingRuntime | null;
 
-  constructor(cfg: QuantTradingConfig, api: OpenClawPluginApi | null = null) {
+  constructor(cfg: QuantTradingConfig, api: QuantTradingRuntime | null = null) {
     this.cfg = cfg;
     this.api = api;
   }

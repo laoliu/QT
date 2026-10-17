@@ -15,7 +15,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import {
   computeAttribution,
   computeRiskMetrics,
@@ -57,7 +57,7 @@ async function loadEquityCurve(
 }
 
 export function createPerformanceAttributionTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
 ) {
   return {

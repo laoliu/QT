@@ -7,7 +7,7 @@
  *  - 094148
  *  - 07080509150407
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore } from "./alert-store.js";
@@ -48,7 +48,7 @@ export class EarningsAlertService {
   private alertedKeys = new Set<string>();
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private tradingConfig: QuantTradingConfig,
     private alertStore: AlertStore | null,
     private notificationService: NotificationService | null,

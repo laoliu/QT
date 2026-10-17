@@ -1,7 +1,7 @@
 /**
  * backtest tool — AI-callable tool for running strategy backtests.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import type { BacktestStore } from "../services/backtest-store.js";
 import type { QuantTradingConfig } from "../types.js";
@@ -14,7 +14,7 @@ function fmt(v: unknown, digits: number): string {
 }
 
 export function createBacktestTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   backtestStore?: BacktestStore,
 ) {

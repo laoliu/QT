@@ -19,7 +19,7 @@
  *   get_risk_snapshot    — risk metrics on current live portfolio
  *   list_confirmations   — list pending human confirmation requests
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { OrderRequest } from "../broker/adapter.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
@@ -27,7 +27,7 @@ import type { EquityHistory } from "../services/equity-history.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createLiveTradingTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
   equityHistory?: EquityHistory,

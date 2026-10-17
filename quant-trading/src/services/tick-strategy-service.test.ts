@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { describe, expect, it } from "vitest";
 import type { KlineBar, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
 import type { EventBus, EventCategory, QuantEvent } from "./event-bus.js";
@@ -52,7 +52,7 @@ class FakeEventBus implements Pick<EventBus, "emit"> {
   }
 }
 
-function createApiStub(): OpenClawPluginApi {
+function createApiStub(): QuantTradingRuntime {
   return {
     logger: {
       info: () => {},
@@ -60,7 +60,7 @@ function createApiStub(): OpenClawPluginApi {
       error: () => {},
       debug: () => {},
     },
-  } as unknown as OpenClawPluginApi;
+  } as unknown as QuantTradingRuntime;
 }
 
 function makeTick(symbol = "600519", price = 100, timestamp = 1_000): TickData {

@@ -12,11 +12,11 @@
  *   remove             — remove a conditional order by ID
  *   check_now          — manually trigger a price check cycle
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { ConditionalOrderService } from "../services/conditional-order.js";
 
 export function createConditionalOrderTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   condOrderService: ConditionalOrderService,
 ) {
   return {

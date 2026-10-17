@@ -8,13 +8,13 @@
  *   - refresh    — batch-refresh current prices & resolve expired ones
  *   - review     — review a specific batch of recommendations
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { MarketDataProvider } from "../data/market-data-provider.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { RecommendationTracker, TrackerQuery } from "../services/recommendation-tracker.js";
 
 export function createRecommendTrackerTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   tracker: RecommendationTracker,
   getDataProvider?: () => MarketDataProvider,
 ) {

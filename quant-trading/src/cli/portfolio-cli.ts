@@ -3,12 +3,12 @@
  *
  * Shows current portfolio and can place simple buy/sell orders
  * by calling the running gateway's HTTP API.
- * Port: --port option → OPENCLAW_PORT env → default 18789.
+ * Port: --port option → APP_PORT env → default 18789.
  */
 import type { QuantTradingConfig } from "../types.js";
 
 function gatewayBase(port?: number): string {
-  const p = port ?? Number(process.env["OPENCLAW_PORT"] ?? "18789");
+  const p = port ?? Number(process.env["APP_PORT"] ?? "18789");
   return `http://127.0.0.1:${p}`;
 }
 

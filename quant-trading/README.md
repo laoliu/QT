@@ -378,8 +378,8 @@ openclaw quant portfolio show
 | 目录             | 说明                                                                                                |
 | ---------------- | --------------------------------------------------------------------------------------------------- |
 | `config/`        | `openclaw.json` 插件配置（含 quant-trading 段）                                                     |
-| `data/`          | `~/.openclaw/quant-trading/` 运行时数据（signals、stock-list、portfolio、orders …）                 |
-| `cache/`         | `~/.openclaw/extensions/quant-trading/cache/` SQLite 缓存数据库（stock_data.db、financial_data.db） |
+| `data/`          | `~/data/` 运行时数据（signals、stock-list、portfolio、orders …）                 |
+| `cache/`         | `~/data/cache/` SQLite 缓存数据库（stock_data.db、financial_data.db） |
 | `openclaw-home/` | `~/.openclaw/` 核心目录：workspace 人设、identity 设备密钥、cron 定时任务、feishu 状态              |
 | `python/`        | Python 策略/选股/引擎/数据源代码                                                                    |
 | `meta/`          | 插件元信息 (`openclaw.plugin.json`, `package.json`) + TypeScript 源码                               |
@@ -397,8 +397,8 @@ openclaw quant portfolio show
 导出脚本会自动收集以下内容：
 
 1. `config-custom/openclaw.json` 和 `~/.openclaw/openclaw.json` 配置文件
-2. `~/.openclaw/quant-trading/` 下的所有运行时数据文件
-3. `~/.openclaw/extensions/quant-trading/cache/` 下的 SQLite 缓存数据库（导出前自动执行 WAL checkpoint 保证数据完整性）
+2. `~/data/` 下的所有运行时数据文件
+3. `~/data/cache/` 下的 SQLite 缓存数据库（导出前自动执行 WAL checkpoint 保证数据完整性）
 4. `~/.openclaw/workspace/` AI 人设文件（IDENTITY.md、USER.md、SOUL.md、TOOLS.md 等）
 5. `~/.openclaw/identity/` 设备身份密钥
 6. `~/.openclaw/cron/` 定时任务配置

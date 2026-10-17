@@ -6,7 +6,7 @@
  *   - Template catalog with common strategy patterns (trend, mean-rev, breakout …)
  *   - User strategy configs: save/load/list/delete named strategy presets
  *   - Parameter validation against strategy definition schema
- *   - Persist to `~/.openclaw/quant-trading/user-strategies.json`
+ *   - Persist to `~/data/user-strategies.json`
  */
 import fs from "node:fs/promises";
 import os from "node:os";

@@ -6,12 +6,12 @@
  *   list   — List active alerts
  *   remove — Remove an alert by ID
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { PriceAlertService, AlertConditionType } from "../services/price-alert.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createPriceAlertTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   _config: QuantTradingConfig,
   alertService: PriceAlertService,
 ) {

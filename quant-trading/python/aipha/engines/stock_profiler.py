@@ -33,7 +33,7 @@ if _python_root not in sys.path:
 from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 
 CACHE_DB = os.path.expanduser(
-    "~/.openclaw/extensions/quant-trading/cache/stock_data.db"
+    "~/data/cache/stock_data.db"
 )
 
 # ── Feature Classification Thresholds ─────────────────────────────

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
  *
  * Each entry specifies which strategy (by ID), which symbols, and what
  * parameters to use for the live run. The registry is written to
- * ~/.openclaw/quant-trading/live-strategies.json so it survives restarts.
+ * ~/data/live-strategies.json so it survives restarts.
  */
 import fs from "node:fs/promises";
 import os from "node:os";

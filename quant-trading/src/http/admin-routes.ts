@@ -5,10 +5,9 @@
  * The admin panel also calls existing `/quant/api/*` routes directly from
  * the frontend — those routes are NOT duplicated here.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { OrderRequest } from "../broker/adapter.js";
-import { startOpenClawProxy } from "./openclaw-proxy.js";
 import {
   createDataProvider,
   detectMarketFromSymbol,
@@ -67,7 +66,7 @@ import { todayCST, formatDateCST, nowCSTISO } from "../utils/cst-time.js";
 // ── Types ────────────────────────────────────────────────────────
 
 export interface AdminRouteDeps {
-  api: OpenClawPluginApi;
+  api: QuantTradingRuntime;
   config: QuantTradingConfig;
   dataWarehouse: HistoricalDataWarehouse;
   receiverService: ReceiverService | null;
@@ -131,23 +130,6 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   const { signalHitRateTracker, autoTradeScheduler } = deps;
   const marketDataProvider = createDataProvider(config);
 
-  // ── OpenClaw iframe proxy ──────────────────────────────────────
-  const proxyPort = config.openclawProxyPort
-    ? Number(config.openclawProxyPort)
-    : 0;
-  if (proxyPort) {
-    const gwPort = Number(process.env["OPENCLAW_GATEWAY_PORT"] || 18789);
-    const gwTarget = `http://localhost:${gwPort}`;
-    // Resolve gateway token for auto-login injection
-    const rawGwToken = api.config.gateway?.auth?.token;
-    let gwToken: string | undefined;
-    if (typeof rawGwToken === "string") {
-      const envMatch = /^\$\{(\w+)\}$/.exec(rawGwToken);
-      gwToken = envMatch ? process.env[envMatch[1]] : rawGwToken;
-    }
-    startOpenClawProxy({ target: gwTarget, port: proxyPort, gatewayToken: gwToken });
-  }
-
   // ── Portal (Home) Page ─────────────────────────────────────────
   api.registerHttpRoute({
     auth: "plugin",
@@ -178,15 +160,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
     path: "/quant/admin/ui",
     handler: securePublic(async (_req, res) => {
       const { getAdminPageHtml } = await import("./pages/admin/index.js");
-      // Try to resolve gateway auth token so the chat tab can connect via WebSocket
-      const rawGwToken = api.config.gateway?.auth?.token;
-      let gatewayToken: string | undefined;
-      if (typeof rawGwToken === "string") {
-        // Resolve ${ENV_VAR} patterns
-        const envMatch = /^\$\{(\w+)\}$/.exec(rawGwToken);
-        gatewayToken = envMatch ? process.env[envMatch[1]] : rawGwToken;
-      }
-      const html = getAdminPageHtml("", config.apiToken, gatewayToken, proxyPort || undefined);
+      const html = getAdminPageHtml("", config.apiToken);
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
@@ -3115,8 +3089,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const gateway = {
         running: true,
         pid: process.pid,
-        port: Number(process.env["OPENCLAW_GATEWAY_PORT"] || 18789),
-        version: process.env["OPENCLAW_SERVICE_VERSION"] || "unknown",
+        port: Number(process.env["APP_PORT"] || 18789),
+        version: process.env["APP_VERSION"] || "unknown",
         uptime: formatUptime(process.uptime()),
       };
 
@@ -4098,8 +4072,8 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       json(res, {
         gateway: {
           pid: process.pid,
-          port: Number(process.env["OPENCLAW_GATEWAY_PORT"] || 18789),
-          version: process.env["OPENCLAW_SERVICE_VERSION"] || "unknown",
+          port: Number(process.env["APP_PORT"] || 18789),
+          version: process.env["APP_VERSION"] || "unknown",
           uptime: formatUptime(process.uptime()),
           memoryMB: Math.round(process.memoryUsage().heapUsed / 1048576),
         },

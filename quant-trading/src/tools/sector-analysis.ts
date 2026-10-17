@@ -6,11 +6,11 @@
  *   detail  — Constituent stocks of a specific sector
  *   history — Historical K-line of a sector index
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createSectorAnalysisTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createSectorAnalysisTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "sector_analysis",
     description:

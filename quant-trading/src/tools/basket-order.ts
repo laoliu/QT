@@ -12,12 +12,12 @@
  *   refresh_basket    66refresh order statuses from broker
  *   delete_basket     66delete a draft/completed/cancelled basket
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { BasketOrderService } from "../services/basket-order.js";
 import type { OrderSide, OrderType, QuantTradingConfig } from "../types.js";
 
 export function createBasketOrderTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   basketService: BasketOrderService,
 ) {

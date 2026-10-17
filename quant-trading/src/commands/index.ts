@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Chat commands for the quant-trading extension.
  * These bypass the LLM and respond directly.
  */
@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { getStrategiesDir } from "../bridge/python-dir.js";
 import { createDataProvider } from "../data/market-data-provider.js";
@@ -148,7 +148,7 @@ type CommandDefinition = {
 };
 
 export function createQuantCommands(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine?: () => LiveEngine | null,
   priceAlertService?: PriceAlertService,

@@ -6,11 +6,11 @@
  *   walk_forward   — Walk-Forward 时间序列交叉验证
  *   pbo            — Probability of Backtest Overfitting 检验
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createStrategyValidationTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createStrategyValidationTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "strategy_validation",
     description:

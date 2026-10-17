@@ -10,11 +10,11 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createWatchlistTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createWatchlistTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
   const watchlistPath = path.join(dir, "watchlist.json");
 

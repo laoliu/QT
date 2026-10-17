@@ -3,11 +3,11 @@
  *
  * 计算 VWAP 0615TWAP 061701025921
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createVwapTwapTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createVwapTwapTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "VWAP/TWAP 1102 — 061206010221",
     parameters: {
@@ -50,7 +50,7 @@ export function createVwapTwapTool(api: OpenClawPluginApi, config: QuantTradingC
 }
 
 async function analyzeVwapTwap(
-  api: OpenClawPluginApi, config: QuantTradingConfig,
+  api: QuantTradingRuntime, config: QuantTradingConfig,
   symbol: string, days: number,
 ) {
   const script = `
@@ -139,7 +139,7 @@ except Exception as e:
 }
 
 async function splitPlan(
-  api: OpenClawPluginApi, config: QuantTradingConfig,
+  api: QuantTradingRuntime, config: QuantTradingConfig,
   symbol: string, totalQty: number, algo: string, slices: number,
 ) {
   const script = `

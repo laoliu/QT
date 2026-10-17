@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 波段交易策略回测
  * Usage:
  *   npx tsx quant-trading/src/engine/_run-swing-backtest.ts           # 全部20只代表股

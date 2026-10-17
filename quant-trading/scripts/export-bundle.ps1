@@ -8,8 +8,8 @@
 #
 # 打包内容:
 #   1. openclaw.json 中的 quant-trading 插件配置
-#   2. ~/.openclaw/quant-trading/ 运行时数据 (signals, stock-list, portfolio, orders …)
-#   3. ~/.openclaw/extensions/quant-trading/cache/ 缓存数据库 (stock_data.db, financial_data.db)
+#   2. ~/data/ 运行时数据 (signals, stock-list, portfolio, orders …)
+#   3. ~/data/cache/ 缓存数据库 (stock_data.db, financial_data.db)
 #   4. ~/.openclaw/workspace/ 人设文件 (IDENTITY, USER, SOUL, TOOLS …)
 #   5. ~/.openclaw/identity/ 设备密钥
 #   6. ~/.openclaw/cron/ 定时任务

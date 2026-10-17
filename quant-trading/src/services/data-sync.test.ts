@@ -6,7 +6,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginServiceContext } from "openclaw/plugin-sdk/core";
+import type { AppServiceContext } from "../runtime.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Portfolio, QuantTradingConfig } from "../types.js";
 import { createDataSyncService } from "./data-sync.js";
@@ -45,7 +45,7 @@ function makeApi() {
 /** Flush pending microtasks so fire-and-forget async ticks settle. */
 const flush = () => new Promise((r) => setTimeout(r, 50));
 
-const dummyCtx = {} as OpenClawPluginServiceContext;
+const dummyCtx = {} as AppServiceContext;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "oc-datasync-test-"));

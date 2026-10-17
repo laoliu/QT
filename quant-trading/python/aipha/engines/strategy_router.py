@@ -27,7 +27,7 @@ if _python_root not in sys.path:
 from aipha.engines.stock_profiler import profile_stock
 
 ROUTING_TABLE_PATH = os.path.expanduser(
-    "~/.openclaw/quant-trading/strategy_routing_table.json"
+    "~/data/strategy_routing_table.json"
 )
 
 # ── Rule-Based Routing Defaults ──────────────────────────────────
@@ -328,7 +328,7 @@ def _ensure_cache_fetch():
 
         _original_fetch = bt_eng._fetch_data
         _db_path = os.path.expanduser(
-            "~/.openclaw/extensions/quant-trading/cache/stock_data.db"
+            "~/data/cache/stock_data.db"
         )
 
         def _cache_fetch(symbol, start_date, end_date, market=None):

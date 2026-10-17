@@ -7,7 +7,7 @@ Mac (stock_detail.py 等)  → pull →  Windows (qmt_data_bridge.py :18888)
          ↓                                    ↓
    refresh_klines.py                   xtquant (QMT内置)
          ↓
-  ~/.openclaw/extensions/quant-trading/cache/stock_data.db
+  ~/data/cache/stock_data.db
 ```
 
 Mac 直接向 Windows HTTP 服务拉取数据，无需 Windows 知道 Mac 地址。
@@ -77,11 +77,11 @@ PYTHONUNBUFFERED=1 python3 scripts/refresh_klines.py 2>&1 | tee /tmp/refresh_kli
 
 ```bash
 # 总股票数 / 最新日期 / 最早日期
-sqlite3 ~/.openclaw/extensions/quant-trading/cache/stock_data.db \
+sqlite3 ~/data/cache/stock_data.db \
   "SELECT COUNT(DISTINCT symbol), MAX(trade_date), MIN(trade_date) FROM kline_data WHERE market='cn_stock';"
 
 # 最近2天内有数据的股票数
-sqlite3 ~/.openclaw/extensions/quant-trading/cache/stock_data.db \
+sqlite3 ~/data/cache/stock_data.db \
   "SELECT COUNT(DISTINCT symbol) FROM kline_data WHERE market='cn_stock' AND trade_date >= date('now', '-2 days');"
 ```
 
@@ -111,5 +111,5 @@ ps aux | grep RECEIVER | grep -v grep
 curl -s --connect-timeout 3 http://127.0.0.1:18888/health
 
 # 查看 K 线缓存 DB 大小
-du -h ~/.openclaw/extensions/quant-trading/cache/stock_data.db
+du -h ~/data/cache/stock_data.db
 ```

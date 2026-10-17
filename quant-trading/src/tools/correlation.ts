@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import {
   computeCorrelation,
   computeCorrelationMatrix,
@@ -13,7 +13,7 @@ import type { QuantTradingConfig } from "../types.js";
 type QuoteFn = (symbol: string) => Promise<{ klines: Array<{ close: number }> } | null>;
 
 export function createCorrelationTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   _config: QuantTradingConfig,
   getKlinesFn: QuoteFn,
 ) {

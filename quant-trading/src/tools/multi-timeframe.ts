@@ -3,11 +3,11 @@
  *
  * 日/周/月多周期趋势一致性判断
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createMultiTimeframeTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createMultiTimeframeTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "多时间框架分析 — 日/周/月多周期趋势一致性判断",
     parameters: {

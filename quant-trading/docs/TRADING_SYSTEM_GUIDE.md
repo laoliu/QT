@@ -470,11 +470,11 @@ score = 总收益 × 1.0
 
 | 数据 | 路径 |
 |------|------|
-| 条件单 | `~/.openclaw/quant-data/conditional-orders.json` |
-| 条件单历史 | `~/.openclaw/quant-data/conditional-orders-history.json` |
-| 自动交易配置 | `~/.openclaw/quant-trading/auto-trade-config.json` |
-| 股票收藏 | `~/.openclaw/quant-trading/favorites.json` |
-| 策略适配度DB | `~/.openclaw/quant-data/strategy_fitness.db` |
-| 组合优化DB | `~/.openclaw/quant-data/stock_combo_optimization.db` |
-| 日报 | `~/.openclaw/quant-data/reports/daily-review-{date}.md` |
+| 条件单 | `~/data/conditional-orders.json` |
+| 条件单历史 | `~/data/conditional-orders-history.json` |
+| 自动交易配置 | `~/data/auto-trade-config.json` |
+| 股票收藏 | `~/data/favorites.json` |
+| 策略适配度DB | `~/data/strategy_fitness.db` |
+| 组合优化DB | `~/data/stock_combo_optimization.db` |
+| 日报 | `~/data/reports/daily-review-{date}.md` |
 | 网关日志 | `logs/standalone-18891.log` |

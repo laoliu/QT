@@ -166,8 +166,8 @@ GET 返回示例：
 
 ## 数据持久化
 
-**收藏数据**保存至：`~/.openclaw/quant-trading/favorites.json`
-**自选股数据**保存至：`~/.openclaw/quant-trading/watchlist.json`
+**收藏数据**保存至：`~/data/favorites.json`
+**自选股数据**保存至：`~/data/watchlist.json`
 
 - 使用 `AsyncMutex` 保证并发写入安全
 - 每次增删改操作后自动持久化

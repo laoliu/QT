@@ -2,7 +2,7 @@
  * Custom (Rule-based) Strategy Store — persist user-defined rule strategies to disk.
  *
  * Follows the same pattern as ComposedStrategyStore / LiveStrategyRegistry.
- * Saves to `~/.openclaw/quant-trading/custom-strategies.json`.
+ * Saves to `~/data/custom-strategies.json`.
  * On load, registers each saved rule strategy into the strategy registry.
  */
 import fs from "node:fs/promises";

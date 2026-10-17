@@ -5,8 +5,6 @@ vi.mock("../bridge/python-bridge.js", () => ({
   runPythonScript: vi.fn().mockResolvedValue({ ok: false, error: "python not available" }),
 }));
 
-vi.mock("openclaw/plugin-sdk", () => ({}));
-
 import { createDragonTigerTool } from "./dragon-tiger.js";
 
 function makeTool() {

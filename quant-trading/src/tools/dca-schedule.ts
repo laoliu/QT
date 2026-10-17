@@ -9,7 +9,7 @@
  *   resume  — Resume a paused plan
  *   cancel  — Cancel a plan permanently
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { DcaScheduleService, DcaFrequency } from "../services/dca-schedule.js";
 
 const FREQ_LABEL: Record<DcaFrequency, string> = {
@@ -19,7 +19,7 @@ const FREQ_LABEL: Record<DcaFrequency, string> = {
   monthly: "每月",
 };
 
-export function createDcaScheduleTool(_api: OpenClawPluginApi, dcaService: DcaScheduleService) {
+export function createDcaScheduleTool(_api: QuantTradingRuntime, dcaService: DcaScheduleService) {
   return {
     name: "dca_schedule",
     description:

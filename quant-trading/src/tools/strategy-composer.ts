@@ -8,14 +8,14 @@
  *   - delete:    Remove a composition
  *   - detail:    Get details of a composition
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { CompositionConfig, CompositionMethod } from "../engine/dynamic-composer.js";
 import { listStrategies } from "../engine/strategy-registry.js";
 import type { ComposedStrategyStore } from "../services/composed-strategy-store.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createStrategyComposerTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   _config: QuantTradingConfig,
   store: ComposedStrategyStore,
 ) {

@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { listStrategies, runBacktest } from "../engine/strategy-registry.js";
 import { runBatchBacktest } from "../services/batch-backtest.js";
 import type { BacktestResult, Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
@@ -79,7 +79,7 @@ interface PortfolioBacktestSummary {
   perPosition: PerPositionResult[];
 }
 
-export function createPortfolioBacktestTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createPortfolioBacktestTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "portfolio_backtest",
     description:

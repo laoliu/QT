@@ -6,7 +6,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginServiceContext } from "openclaw/plugin-sdk/core";
+import type { AppServiceContext } from "../runtime.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import { createSignalMonitorService } from "./signal-monitor.js";
@@ -66,7 +66,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
 });
 
-const dummyCtx = {} as OpenClawPluginServiceContext;
+const dummyCtx = {} as AppServiceContext;
 
 afterEach(async () => {
   vi.useRealTimers();

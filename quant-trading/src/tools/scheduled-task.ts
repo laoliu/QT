@@ -6,13 +6,13 @@
  * - Set up periodic reports (e.g., "ÿ30分钟推送一次行情")
  * - List/cancel pending tasks
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { REPORT_TEMPLATES, findReportTemplate } from "../services/report-templates.js";
 import type { TaskScheduler } from "../services/task-scheduler.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createScheduledTaskTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   scheduler: TaskScheduler,
   executeToolFn: (toolName: string, args: Record<string, unknown>) => Promise<string>,

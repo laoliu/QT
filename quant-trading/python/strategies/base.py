@@ -198,7 +198,7 @@ def _discover_strategy_modules() -> list[tuple[str, str]]:
         basename = os.path.splitext(os.path.basename(fpath))[0]
         results.append((basename, fpath))
 
-    # 2. User-defined strategies: ~/.openclaw/quant-trading/strategies/*_strategy.py
+    # 2. User-defined strategies: ~/data/strategies/*_strategy.py
     if os.path.isdir(_USER_STRATEGY_DIR):
         user_pattern = os.path.join(_USER_STRATEGY_DIR, "*_strategy.py")
         for fpath in sorted(glob.glob(user_pattern)):

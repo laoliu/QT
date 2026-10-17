@@ -6,7 +6,7 @@
  *   - optimize: Grid/random search over strategy parameters to find best config
  *   - validate_signals: Validate historical signals against subsequent price movements
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { runBatchBacktest, type BatchBacktestItem } from "../services/batch-backtest.js";
 import type { ComposedStrategyStore } from "../services/composed-strategy-store.js";
@@ -58,7 +58,7 @@ interface ValidateSignalsResult {
 // ── Tool Factory ─────────────────────────────────────────────────
 
 export function createStrategyOptimizerTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   composedStore?: ComposedStrategyStore,
 ) {

@@ -5,7 +5,7 @@
  * option position management, exercise, and option-specific risk views.
  * Delegates to the LiveEngine's broker adapter.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { OrderRequest } from "../broker/adapter.js";
 import { createOptionsDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
@@ -19,7 +19,7 @@ import type {
 } from "../types.js";
 
 export function createOptionsTradingTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
 ) {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Investment Planner — HTML body template.
  * Contains the page skeleton: header, tabs, tab content panels, forms, etc.
  * Uses \`\${b}\` for base URL interpolation (3 occurrences).

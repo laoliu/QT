@@ -3,11 +3,11 @@
  *
  * 2-10 01070418/07/PE/PB/ROE/主力资金/0803
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createStockCompareTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createStockCompareTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "0703 — 2-1001070418/07/PE/PB/ROE/040302",
     parameters: {

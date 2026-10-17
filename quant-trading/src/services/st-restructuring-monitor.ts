@@ -13,7 +13,7 @@
  *  MAIN-1 ~ MAIN-7 04040718060405
  *  REMOVED        0009/0005
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
@@ -76,7 +76,7 @@ export class STRestructuringMonitor {
   private previousRecords: Record<string, STRestructuringStock> = {};
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private tradingConfig: QuantTradingConfig,
     private notificationService: NotificationService | null,
     config?: Partial<STMonitorConfig>,

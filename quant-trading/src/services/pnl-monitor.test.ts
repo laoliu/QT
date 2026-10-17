@@ -1,5 +1,5 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginServiceContext } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppServiceContext } from "../runtime.js";
 /**
  * Unit tests for PnlMonitor — background PnL monitoring + alert severity.
  */
@@ -49,7 +49,7 @@ function makePosition(symbol: string, overrides?: Partial<LivePosition>): LivePo
   };
 }
 
-type MockPluginApi = OpenClawPluginApi & { notify: ReturnType<typeof vi.fn> };
+type MockPluginApi = QuantTradingRuntime & { notify: ReturnType<typeof vi.fn> };
 
 function makeMockApi(): MockPluginApi {
   return {
@@ -78,7 +78,7 @@ function makeMockOrderManager(
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe("PnlMonitor", () => {
-  const dummyCtx = {} as OpenClawPluginServiceContext;
+  const dummyCtx = {} as AppServiceContext;
 
   beforeEach(() => {
     vi.useFakeTimers();

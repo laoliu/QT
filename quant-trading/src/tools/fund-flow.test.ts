@@ -5,8 +5,6 @@ vi.mock("../bridge/python-bridge.js", () => ({
   runPythonScript: vi.fn().mockResolvedValue({ ok: false, error: "python not available" }),
 }));
 
-vi.mock("openclaw/plugin-sdk", () => ({}));
-
 import { createFundFlowTool } from "./fund-flow.js";
 
 function makeTool() {

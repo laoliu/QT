@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dragon Master Page — self-contained SPA for 真龙战法 (True Dragon Strategy) analysis.
  *
  * Tabs: 主线总览 (theme overview), 龙头排名 (dragon ranking), 打板信号 (board signals)

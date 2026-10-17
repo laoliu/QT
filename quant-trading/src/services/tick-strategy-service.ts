@@ -1,5 +1,5 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { createTickDrivenStrategy, type TickDrivenStrategy } from "../engine/tick-strategies.js";
 import type { TickFeatures, TickStrategyId, TradingSignal, QuantTradingConfig } from "../types.js";
 import type { EventBus } from "./event-bus.js";
@@ -18,7 +18,7 @@ type StrategyRuntime = {
   strategy: TickDrivenStrategy;
 };
 
-export class TickStrategyService implements OpenClawPluginService {
+export class TickStrategyService implements AppService {
   readonly id = "qmt-tick-strategies";
 
   private readonly runtimes = new Map<string, StrategyRuntime>();
@@ -30,7 +30,7 @@ export class TickStrategyService implements OpenClawPluginService {
 
   constructor(
     private readonly config: QuantTradingConfig,
-    private readonly api: OpenClawPluginApi,
+    private readonly api: QuantTradingRuntime,
     private readonly tickIngress: TickIngressService,
     private readonly eventBus: EventBus,
     private readonly getOrderManager: () => OrderManager | null,

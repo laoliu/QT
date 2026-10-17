@@ -8,11 +8,11 @@
  *   insider_trades    — Executive/management buy/sell transactions
  *   smart_money_signal — Composite institutional conviction score
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createInstitutionalFlowTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createInstitutionalFlowTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "institutional_flow",
     description:

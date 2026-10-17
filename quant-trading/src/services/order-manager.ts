@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { IBrokerAdapter, OrderRequest } from "../broker/adapter.js";
 import type {
   BrokerAccount,
@@ -194,7 +194,7 @@ export class OrderManager {
   readonly broker: IBrokerAdapter;
   private riskGate: RiskGate;
   private confirmMgr: ConfirmationManager;
-  private api: OpenClawPluginApi | null;
+  private api: QuantTradingRuntime | null;
   private tradeCb?: (trade: TradeRecord) => void;
   private riskOverlayFn?: () => number;
 
@@ -230,7 +230,7 @@ export class OrderManager {
   constructor(
     cfg: QuantTradingConfig,
     broker: IBrokerAdapter,
-    api: OpenClawPluginApi | null = null,
+    api: QuantTradingRuntime | null = null,
   ) {
     this.cfg = cfg;
     this.broker = broker;

@@ -5,11 +5,11 @@
  *   list    — List all registered factors and categories
  *   compute — Compute factor values for given symbols
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createFactorAnalysisTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createFactorAnalysisTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "factor_analysis",
     description:

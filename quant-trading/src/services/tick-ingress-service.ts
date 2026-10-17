@@ -1,7 +1,7 @@
 import { writeFile, readFile } from "fs";
 import { join } from "path";
 import { promisify } from "util";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { AppService } from "../runtime.js";
 import { TickAggregator } from "../engine/tick-aggregator.js";
 import { TickFeatureStore } from "../engine/tick-feature-store.js";
 import type {
@@ -119,7 +119,7 @@ function normalizeTick(raw: Record<string, unknown>, quote: QuoteSnapshot): Tick
   };
 }
 
-export class TickIngressService implements OpenClawPluginService {
+export class TickIngressService implements AppService {
   readonly id = "qmt-tick-ingress";
 
   private readonly pollIntervalMs: number;

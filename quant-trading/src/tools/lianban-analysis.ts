@@ -6,11 +6,11 @@
  *   candidates  — 二进三候选列表 (多因子评分排序)
  *   detail      — 单只股票连板轨迹分析
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createLianbanAnalysisTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createLianbanAnalysisTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "lianban_analysis",
     description:

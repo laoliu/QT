@@ -7,13 +7,13 @@
  * Also supports advanced screener strategies via screener_engine:
  *   canslim, fscore, magic_formula, technical, volume_price, peg
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { ScanHistoryStore, ScanStockEntry } from "../services/scan-history-store.js";
 import type { QuantTradingConfig, ScreenResult } from "../types.js";
 
 export function createStockScreenTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
 ) {

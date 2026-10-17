@@ -7,11 +7,11 @@
  *   surprise_history — Historical beat/miss track record
  *   analyst_ratings  — Analyst ratings & price targets
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createEarningsCalendarTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createEarningsCalendarTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "earnings_calendar",
     description:

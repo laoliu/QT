@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Data Bridge API — Mac gateway side of Mac↔Windows QMT K-line bridge.
  *
  * Protocol (轮询模式，无需 Windows 开放端口):

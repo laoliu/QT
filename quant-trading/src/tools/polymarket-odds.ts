@@ -7,11 +7,11 @@
  *   - Market predictions (S&P500 targets, crypto milestones)
  *   - General prediction market trending topics
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createPolymarketOddsTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createPolymarketOddsTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "polymarket_odds",
     description:

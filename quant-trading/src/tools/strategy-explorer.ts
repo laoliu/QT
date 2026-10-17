@@ -6,7 +6,7 @@
  *   - explore:   Generate N candidate combinations → batch backtest → rank
  *   - recommend:  Given a symbol, recommend best compositions from exploration history
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { CompositionConfig, CompositionMethod } from "../engine/dynamic-composer.js";
 import { listStrategies, listComposedStrategies } from "../engine/strategy-registry.js";
 import type { BacktestStore } from "../services/backtest-store.js";
@@ -100,7 +100,7 @@ function generateCandidateCombinations(
 }
 
 export function createStrategyExplorerTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   composedStore: ComposedStrategyStore,
   backtestStore?: BacktestStore,

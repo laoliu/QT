@@ -9,12 +9,12 @@
  *   list_eod_rules — List EOD exit rules
  *   remove_eod_rule— Remove an EOD exit rule
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { BreakoutMonitor, VolumeCondition } from "../services/breakout-monitor.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createBreakoutMonitorTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   _config: QuantTradingConfig,
   monitor: BreakoutMonitor,
 ) {

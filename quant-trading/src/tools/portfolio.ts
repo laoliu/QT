@@ -5,7 +5,7 @@ import path from "node:path";
  * portfolio tool — AI-callable for portfolio management.
  * Supports both paper portfolio (local JSON) and live broker positions.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { Portfolio, PortfolioPosition, QuantTradingConfig } from "../types.js";
 import { todayCST } from "../utils/cst-time.js";
@@ -102,7 +102,7 @@ async function recordPaperTrade(
 }
 
 export function createPortfolioTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine?: () => LiveEngine | null,
 ) {

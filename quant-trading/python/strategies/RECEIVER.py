@@ -66,7 +66,7 @@ REQUEST_TIMEOUT = 60  # seconds to wait for result before timing out
 REQUEST_EXPIRY = 300  # seconds before a request is cleaned up
 
 # Gateway proxy — forward /quant/api/trading-* to the local OpenClaw gateway
-GATEWAY_URL = "http://127.0.0.1:" + os.environ.get("OPENCLAW_GATEWAY_PORT", "18789")
+GATEWAY_URL = "http://127.0.0.1:" + os.environ.get("APP_PORT", "18789")
 
 # ===================== REQUEST STORE =====================
 

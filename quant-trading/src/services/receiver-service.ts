@@ -14,7 +14,7 @@
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 import path from "node:path";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { AppService } from "../runtime.js";
 import { getStrategiesDir } from "../bridge/python-dir.js";
 import type { QuantTradingConfig } from "../types.js";
 
@@ -32,7 +32,7 @@ export interface ReceiverStatus {
   startedAt: string | null;
 }
 
-export class ReceiverService implements OpenClawPluginService {
+export class ReceiverService implements AppService {
   readonly id = "qmt-receiver";
 
   private child: ChildProcess | null = null;

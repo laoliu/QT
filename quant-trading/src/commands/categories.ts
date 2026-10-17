@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Stock screening categories and formatting helpers.
  *
  * Each category re-weights the 4 investment dimensions (valuation, growth,

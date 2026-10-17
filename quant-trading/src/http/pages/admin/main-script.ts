@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin Management Page — main browser-side JavaScript.
  *
  * Returns the full <script> body as a string. The caller injects the three
@@ -53,7 +53,7 @@ setInterval(function(){document.getElementById('clock').textContent=new Date().t
 // Set default end date for kline query to today
 (function(){var el=document.getElementById('kline-end');if(el)el.value=_localDate()})();
 function loadTab(name){
-  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,chat:loadChat,'ai-chat':loadAiChat,config:loadConfig};
+  var m={overview:loadOverview,services:loadServices,data:loadData,alerts:loadAlerts,trading:loadTrading,strategies:loadStrategies,sectors:loadSectors,tasks:loadTasks,logs:loadLogs,config:loadConfig};
   if(m[name])m[name]();
 }
 

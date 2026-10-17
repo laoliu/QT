@@ -12,8 +12,8 @@ import path from "node:path";
  * Supports breakout confirmation: when a strategy sets confirmationBars > 0,
  * signals must appear in that many consecutive check cycles before being emitted.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import { createDataProvider } from "../data/market-data-provider.js";
 import { LiveStrategyRegistry } from "../engine/live-strategy-registry.js";
@@ -145,7 +145,7 @@ export async function appendSignals(
 async function generateActiveSignals(
   config: QuantTradingConfig,
   lastSeenTs: number,
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
 ): Promise<TradingSignal[]> {
   const registry = new LiveStrategyRegistry(config);
   await registry.load();
@@ -261,12 +261,12 @@ function isWithinTimeWindows(windows: string[]): boolean {
 }
 
 export function createSignalMonitorService(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getOrderManager?: () => OrderManager | null,
   eventBus?: EventBus,
   alertStore?: AlertStore,
-): OpenClawPluginService {
+): AppService {
   let interval: ReturnType<typeof setInterval> | null = null;
   /** Epoch ms of the most recently processed signal. */
   let lastSeenTs = 0;

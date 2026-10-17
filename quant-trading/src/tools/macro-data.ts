@@ -7,11 +7,11 @@
  *   calendar   — Upcoming economic event releases
  *   regime     — Current macro regime classification (Merrill clock)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createMacroDataTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createMacroDataTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "macro_data",
     description:

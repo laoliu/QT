@@ -1,7 +1,7 @@
 /**
  * Exploration History Store — persist AI strategy exploration results to disk.
  *
- * Saves to `<dataDir>/exploration-history.json` (default `~/.openclaw/quant-trading/`).
+ * Saves to `<dataDir>/exploration-history.json` (default `~/data/`).
  * Keeps the most recent N explorations (default 50) and auto-prunes older ones.
  */
 import fs from "node:fs/promises";

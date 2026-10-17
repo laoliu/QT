@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Standalone HTTP server for quant-trading — runs WITHOUT the OpenClaw gateway.
+ * Standalone HTTP server for quant-trading.
  *
- * Reads the plugin config from ~/.openclaw/openclaw.json (or $OPENCLAW_STATE_DIR),
+ * Reads project configuration from quant-trading/config.json, with optional
+ * local overrides from quant-trading/config.local.json and environment variables.
  * bootstraps core services, registers all HTTP routes into a standalone Node.js
  * HTTP server, and starts listening.
  *
@@ -14,40 +15,40 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { fileURLToPath } from "node:url";
+import type { QuantTradingConfig } from "./src/types.js";
 import { createRouteCollector, startStandaloneServer } from "./src/http/standalone-server.js";
 import { resolveLlmConfig, createStandaloneSubagent } from "./src/services/standalone-llm.js";
 
 // ── Config Loading ────────────────────────────────────────────────
 
-function loadOpenClawConfig(): Record<string, unknown> {
-  const candidates = [
-    process.env["OPENCLAW_STATE_DIR"]
-      ? path.join(process.env["OPENCLAW_STATE_DIR"], "openclaw.json")
-      : null,
-    path.join(os.homedir(), ".openclaw-dev", "openclaw.json"),
-    path.join(os.homedir(), ".openclaw", "openclaw.json"),
-  ].filter(Boolean) as string[];
-
-  for (const p of candidates) {
+function loadProjectConfig(): QuantTradingConfig {
+  const root = path.dirname(fileURLToPath(import.meta.url));
+  const workspaceRoot = path.dirname(root);
+  try {
+    const envText = fs.readFileSync(path.join(workspaceRoot, ".env"), "utf8");
+    for (const line of envText.split(/\r?\n/)) {
+      const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/.exec(line);
+      if (match && process.env[match[1]] === undefined) {
+        process.env[match[1]] = match[2].replace(/^(["'])(.*)\1$/, "$2");
+      }
+    }
+  } catch { /* environment may be provided by the launcher */ }
+  const config: Record<string, unknown> = {};
+  for (const p of [path.join(root, "config.json"), path.join(root, "config.local.json")]) {
     try {
       const raw = fs.readFileSync(p, "utf-8");
-      console.log(`[standalone] loaded config from ${p}`);
-      return JSON.parse(raw) as Record<string, unknown>;
+      Object.assign(config, JSON.parse(raw) as Record<string, unknown>);
     } catch {
-      // try next
+      // Project defaults may be overridden locally.
     }
   }
-  console.warn("[standalone] no openclaw.json found, using defaults");
-  return {};
-}
-
-function extractPluginConfig(root: Record<string, unknown>): Record<string, unknown> {
-  const plugins = root["plugins"] as Record<string, unknown> | undefined;
-  const entries = plugins?.["entries"] as Record<string, unknown> | undefined;
-  const qt = entries?.["quant-trading"] as Record<string, unknown> | undefined;
-  return (qt?.["config"] as Record<string, unknown>) ?? {};
+  config.dataDir ??= process.env["QUANT_DATA_DIR"] ?? path.join(root, "data");
+  config.pythonPath ??= process.env["PYTHON_BIN"];
+  const llm = (config.llm ?? {}) as Record<string, unknown>;
+  llm.apiKey ??= process.env["LLM_API_KEY"] ?? process.env["AI_GATEWAY_API_KEY"];
+  config.llm = llm;
+  return config as QuantTradingConfig;
 }
 
 // ── CLI Args ──────────────────────────────────────────────────────
@@ -61,14 +62,14 @@ function parsePort(args: string[], fallback: number): number {
   return fallback;
 }
 
-// ── Mock OpenClaw Plugin API ─────────────────────────────────────
+// ── Application runtime ──────────────────────────────────────────
 
 type ServiceEntry = { id: string; start?: () => Promise<void>; stop?: () => Promise<void> };
 
 function createMockApi(
   pluginConfig: Record<string, unknown>,
   routeCollector: ReturnType<typeof createRouteCollector>,
-): { api: OpenClawPluginApi; services: ServiceEntry[] } {
+): { api: any; services: ServiceEntry[] } {
   const services: ServiceEntry[] = [];
 
   const logger = {
@@ -100,7 +101,7 @@ function createMockApi(
           },
         });
       }
-      console.warn("[standalone] LLM not configured — set llm.apiKey in config or OPENCLAW_LLM_API_KEY env");
+      console.warn("[standalone] LLM not configured — set LLM_API_KEY in the environment");
       return new Proxy({} as object, { get: () => () => Promise.reject(new Error("not available in standalone mode")) });
     })(),
     logger,
@@ -145,7 +146,7 @@ function createMockApi(
     registerMemoryEmbeddingProvider: noop,
     resolvePath: (input: string) => path.resolve(input),
     on: noop,
-  } as unknown as OpenClawPluginApi;
+  };
 
   return { api, services };
 }
@@ -176,8 +177,7 @@ process.on("unhandledRejection", (reason) => {
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {
-  const rootConfig = loadOpenClawConfig();
-  const pluginConfig = extractPluginConfig(rootConfig);
+  const pluginConfig = loadProjectConfig();
   const port = parsePort(process.argv.slice(2), Number(pluginConfig["standalonePort"]) || 18891);
 
   console.log(`[standalone] bootstrapping quant-trading plugin (port ${port})...`);
@@ -186,8 +186,8 @@ async function main() {
   const { api, services } = createMockApi(pluginConfig, routeCollector);
 
   // Dynamically import the plugin and call register()
-  const { default: plugin } = await import("./index.js");
-  plugin.register(api);
+  const { default: app } = await import("./index.js");
+  app.start(api);
 
   console.log(`[standalone] ${routeCollector.routes.length} routes collected`);
 

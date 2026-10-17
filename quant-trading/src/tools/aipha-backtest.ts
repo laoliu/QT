@@ -5,11 +5,11 @@
  *   run           — Run backtest with inline params
  *   run_from_yaml — Run from YAML config file
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createAiphaBacktestTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createAiphaBacktestTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "aipha_backtest",
     description:

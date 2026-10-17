@@ -18,11 +18,11 @@
  */
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { FavoritesStore } from "../services/favorites-store.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createFavoritesTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createFavoritesTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   const dir = config.dataDir ?? path.join(os.homedir(), ".openclaw", "quant-trading");
   const store = new FavoritesStore({ dataDir: dir });
 

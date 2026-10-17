@@ -7,7 +7,7 @@ Provides transparent caching for all data fetched from remote APIs:
   - K-line history
   - Code-name mapping
 
-Cache is stored at ~/.openclaw/extensions/quant-trading/cache/stock_data.db
+Cache is stored at ~/data/cache/stock_data.db
 
 Usage:
     from cache.stock_cache import StockCache
@@ -32,7 +32,7 @@ from typing import Any, Optional
 # ── Cache location ──────────────────────────────────────────────
 
 def _default_cache_dir() -> Path:
-    """Return default cache directory: ~/.openclaw/extensions/quant-trading/cache/"""
+    """Return default cache directory: ~/data/cache/"""
     home = Path.home()
     return home / ".openclaw" / "extensions" / "quant-trading" / "cache"
 

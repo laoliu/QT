@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 import { createTradingSignalTool } from "./trading-signal.js";
 
-// Minimal mock for OpenClawPluginApi — tool doesn't use it
+// Minimal mock for QuantTradingRuntime — tool doesn't use it
 const fakeApi = {} as never;
 
 function makeConfig(dataDir: string): QuantTradingConfig {

@@ -9,11 +9,11 @@
  *   name_changes     66stock name change history
  *   summary          66all recent corporate actions for a symbol
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createCorporateActionsTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createCorporateActionsTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "corporate_actions",
     description:

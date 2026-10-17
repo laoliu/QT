@@ -16,7 +16,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { EquityHistory } from "../services/equity-history.js";
 import { generatePerformanceReport } from "../services/trading-performance-report.js";
 import type { QuantTradingConfig, TradeRecord } from "../types.js";
@@ -35,7 +35,7 @@ async function loadTrades(config: QuantTradingConfig): Promise<TradeRecord[]> {
 }
 
 export function createTradingPerformanceReportTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
 ) {
   return {

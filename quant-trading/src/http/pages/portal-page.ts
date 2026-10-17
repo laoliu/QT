@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Portal Page — unified entry point / home page for all quant-trading web features.
  *
  * Served at `/quant/` — provides a card-based navigation hub linking to:

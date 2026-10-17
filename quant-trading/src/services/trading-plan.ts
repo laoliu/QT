@@ -65,7 +65,7 @@ export class TradingPlanService {
   private dataDir: string;
 
   constructor(config: QuantTradingConfig) {
-    this.dataDir = config.dataDir ?? ".openclaw/quant-trading";
+    this.dataDir = config.dataDir ?? "data";
   }
 
   private filePath(): string {

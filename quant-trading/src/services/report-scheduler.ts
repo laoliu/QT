@@ -6,7 +6,7 @@
  *  - MorningBriefService (RE-3 盘前简报)
  *  - 08G02
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import type { NotificationService } from "./notification-service.js";
 import { DailyReviewService } from "./daily-review.js";
@@ -51,7 +51,7 @@ export class ReportScheduler {
   private executeTool: ((name: string, args: Record<string, unknown>) => Promise<string>) | null;
 
   constructor(
-    api: OpenClawPluginApi,
+    api: QuantTradingRuntime,
     tradingConfig: QuantTradingConfig,
     notificationService: NotificationService | null,
     config?: Partial<ReportSchedulerConfig>,

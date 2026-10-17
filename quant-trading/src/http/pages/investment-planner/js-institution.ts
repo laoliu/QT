@@ -1,4 +1,4 @@
-﻿/** Investment Planner — institution activity scanning, Top3, manual confirmation, and history */
+/** Investment Planner — institution activity scanning, Top3, manual confirmation, and history */
 export function getInstitutionJs(): string {
   return `
 function parseSymbolList(raw){

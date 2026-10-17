@@ -24,12 +24,12 @@
  *       {"left":{"indicator":"rsi","period":14},"op":"above","value":70}
  *     ]}
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { RuleStrategyConfig, RuleGroup } from "../engine/rule-strategy.js";
 import { validateRuleConfig } from "../engine/rule-strategy.js";
 import type { CustomStrategyStore } from "../services/custom-strategy-store.js";
 
-export function createCustomStrategyTool(_api: OpenClawPluginApi, store: CustomStrategyStore) {
+export function createCustomStrategyTool(_api: QuantTradingRuntime, store: CustomStrategyStore) {
   return {
     name: "custom_strategy",
     description:

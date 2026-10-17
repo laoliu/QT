@@ -11,12 +11,12 @@
  *   summary      — overall journal statistics
  *   tags         — list all unique tags
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { TradeJournal } from "../services/trade-journal.js";
 import { toCSV, type CsvColumn } from "../utils/csv-export.js";
 import { todayCST } from "../utils/cst-time.js";
 
-export function createTradeJournalTool(_api: OpenClawPluginApi, journal: TradeJournal) {
+export function createTradeJournalTool(_api: QuantTradingRuntime, journal: TradeJournal) {
   return {
     name: "trade_journal",
     description:

@@ -7,7 +7,7 @@
  *  - 板块涨停/0544
  *  - 与 Python AKShare 050900
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
@@ -54,7 +54,7 @@ export class SectorAlertService {
   private readonly cooldownMs = 600_000; // 10 min
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private tradingConfig: QuantTradingConfig,
     private alertStore: AlertStore | null,
     private notificationService: NotificationService | null,

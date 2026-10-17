@@ -8,11 +8,11 @@
  *
  * Delegates to the Python futures_straddle engine (migrated from jtstock).
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createFuturesStraddleTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createFuturesStraddleTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "futures_straddle",
     description:

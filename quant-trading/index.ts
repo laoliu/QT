@@ -64,12 +64,9 @@
  */
 
 import type {
-  AnyAgentTool,
-  OpenClawPluginApi,
-  OpenClawPluginConfigSchema,
-} from "openclaw/plugin-sdk";
+  QuantTradingRuntime,
+} from "./src/runtime.js";
 import { runPythonScript, setPythonBridgeLogger } from "./src/bridge/python-bridge.js";
-import { createQuantCommands } from "./src/commands/index.js";
 import { validateConfig } from "./src/config-validator.js";
 import { createDataProvider } from "./src/data/market-data-provider.js";
 import { LiveEngine } from "./src/engine/live-engine.js";
@@ -184,40 +181,6 @@ import { createValueInvestingTool } from "./src/tools/value-investing.js";
 import { createWatchlistTool } from "./src/tools/watchlist.js";
 import type { QuantTradingConfig, TradingSignal } from "./src/types.js";
 
-/** Adapt a simple tool object into the AgentTool interface expected by the plugin SDK. */
-function wrapTool(
-  tool: {
-    name: string;
-    description: string;
-    parameters: unknown;
-    execute: (args: Record<string, unknown>) => Promise<unknown>;
-  },
-  label: string,
-): AnyAgentTool {
-  return {
-    name: tool.name,
-    label,
-    description: tool.description,
-    parameters: tool.parameters,
-    async execute(_toolCallId: string, params: unknown) {
-      const result = await tool.execute(params as Record<string, unknown>);
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-        details: result,
-      };
-    },
-  } as AnyAgentTool;
-}
-
-/** Collect all valid command names (primary + aliases) that pass SDK validation.
- *  SDK validates with /^[a-z][a-z0-9_-]*$/ — only ASCII letters, digits, hyphens, underscores. */
-function resolveAllValidCommandNames(cmd: { name: string; aliases?: string[] }): string[] {
-  return [cmd.name, ...(cmd.aliases ?? [])]
-    .map((s) => s.replace(/^\//, "").trim().toLowerCase())
-    .filter(Boolean)
-    .filter((s) => /^[a-z][a-z0-9_-]*$/.test(s));
-}
-
 /** Append a signal to signals.json for the trading_signal tool. */
 async function persistSignal(signal: TradingSignal, config: QuantTradingConfig): Promise<void> {
   const { default: fs } = await import("node:fs/promises");
@@ -267,32 +230,13 @@ async function persistDecisionLog(entry: DecisionLogEntry, config: QuantTradingC
   await fs.writeFile(filePath, JSON.stringify(log, null, 2));
 }
 
-/** Permissive config schema — accepts any object so all QuantTradingConfig fields are allowed. */
-function quantTradingConfigSchema(): OpenClawPluginConfigSchema {
-  return {
-    safeParse(value: unknown) {
-      if (value === undefined) return { success: true as const, data: undefined };
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return {
-          success: false as const,
-          error: { issues: [{ path: [], message: "expected config object" }] },
-        };
-      }
-      return { success: true as const, data: value };
-    },
-    jsonSchema: { type: "object", additionalProperties: true },
-  };
-}
-
-const quantTradingPlugin = {
+const quantTradingApp = {
   id: "quant-trading",
   name: "Quant Trading",
   description:
     "Quantitative trading toolkit: market data, strategy backtesting, portfolio management, trading signals, and live broker trading for stocks, futures, and funds.",
-  configSchema: quantTradingConfigSchema(),
-
-  register(api: OpenClawPluginApi) {
-    const config = (api.pluginConfig ?? {}) as QuantTradingConfig;
+  start(api: QuantTradingRuntime) {
+    const config = api.pluginConfig as QuantTradingConfig;
 
     // ── Config validation — surface misconfigurations early ──────
     const issues = validateConfig(config);
@@ -899,10 +843,6 @@ const quantTradingPlugin = {
       equity_screening: "AI选股筛选",
       aipha_monitor: "因子策略监控",
     };
-    for (const [name, tool] of Object.entries(toolInstances)) {
-      api.registerTool(wrapTool(tool, toolLabels[name] ?? name), { names: [name] });
-    }
-
     // ── Task Scheduler (delayed retry / periodic push) ────────────
     const taskScheduler = new TaskScheduler({
       maxConcurrent: 3,
@@ -938,10 +878,6 @@ const quantTradingPlugin = {
       return JSON.stringify(result, null, 2);
     };
 
-    api.registerTool(
-      wrapTool(createScheduledTaskTool(api, config, taskScheduler, executeToolByName), "定时任务"),
-      { names: ["scheduled_task"] },
-    );
 
     // Wire TaskScheduler run factory for persistence: rebuild `run` closures from serialized meta
     taskScheduler.setRunFactory((meta) => {
@@ -1079,175 +1015,6 @@ const quantTradingPlugin = {
       return result.ok ? { ok: true } : { ok: false, reason: result.reason };
     });
 
-    api.registerTool(wrapTool(createPriceAlertTool(api, config, priceAlertService), "条件预警"), {
-      names: ["price_alert"],
-    });
-
-    // ── Chat Commands ────────────────────────────────────────
-    const commands = createQuantCommands(api, config, getEngine, priceAlertService, taskScheduler);
-
-    // Report template shortcut commands — generate and return report immediately
-    const reportShortcuts: Array<{
-      name: string;
-      aliases: string[];
-      reportId: string;
-      description: string;
-    }> = [
-      {
-        name: "/简报",
-        aliases: ["/morning", "/morning_brief"],
-        reportId: "morning_brief",
-        description: "立即生成早盘简报",
-      },
-      {
-        name: "/收盘",
-        aliases: ["/close", "/market_close"],
-        reportId: "market_close",
-        description: "立即生成收盘总结",
-      },
-      {
-        name: "/日志",
-        aliases: ["/journal", "/daily_journal"],
-        reportId: "daily_journal",
-        description: "立即生成交易日志",
-      },
-      {
-        name: "/周报",
-        aliases: ["/weekly", "/weekly_review"],
-        reportId: "weekly_review",
-        description: "立即生成周度回顾",
-      },
-      {
-        name: "/选股报告",
-        aliases: ["/daily_scan"],
-        reportId: "daily_scan",
-        description: "立即生成每日选股报告",
-      },
-      {
-        name: "/机构前三",
-        aliases: ["/institutional_top3"],
-        reportId: "institutional_top3",
-        description: "立即生成每日机构行为Top3",
-      },
-      {
-        name: "/月报",
-        aliases: ["/monthly", "/monthly_report"],
-        reportId: "monthly_report",
-        description: "立即生成月度绩效报告",
-      },
-    ];
-    for (const sc of reportShortcuts) {
-      const template = findReportTemplate(sc.reportId);
-      if (!template) continue;
-      const cmd = {
-        name: sc.name,
-        aliases: sc.aliases,
-        description: sc.description,
-        async execute(_args: string) {
-          const content = await template.generate(executeToolByName, config);
-          return content || "⚠️ 报告生成无数据";
-        },
-      };
-      commands.push(cmd);
-    }
-
-    for (const cmd of commands) {
-      const validNames = resolveAllValidCommandNames(cmd);
-      if (validNames.length === 0) {
-        api.logger.warn(
-          `[quant-trading] skip command registration: no valid command name in ${cmd.name}`,
-        );
-        continue;
-      }
-      // Register under all valid names (primary + aliases) so both
-      // /选股 and /screen-qmt trigger the same handler.
-      for (const commandName of validNames) {
-        api.registerCommand({
-          name: commandName,
-          description: cmd.description,
-          acceptsArgs: true,
-          async handler(ctx) {
-            try {
-              const text = await cmd.execute(ctx.args ?? "");
-              api.logger.info(`[cmd:${cmd.name}] 完成: ${text.slice(0, 200)}`);
-              return { text };
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              api.logger.info(`[cmd:${cmd.name}] 失败: ${msg}`);
-              return { text: `❌ ${msg.slice(0, 300)}` };
-            }
-          },
-        });
-      }
-    }
-
-    // ── CLI sub-commands ─────────────────────────────────────
-    api.registerCli(
-      ({ program }) => {
-        const quant = program.command("quant").description("Quantitative trading utilities");
-
-        quant
-          .command("backtest")
-          .description("Run a strategy backtest from the command line")
-          .argument("<strategy>", "Strategy file or built-in name")
-          .option("-s, --start <date>", "Start date (YYYY-MM-DD)")
-          .option("-e, --end <date>", "End date (YYYY-MM-DD)")
-          .option("-c, --cash <amount>", "Initial cash", "100000")
-          .option("--engine <engine>", "Backtest engine (builtin|backtrader)", "builtin")
-          .option("--symbols <symbols>", "Comma-separated symbol list")
-          .action(async (strategy, opts) => {
-            const { runCliBacktest } = await import("./src/cli/backtest-cli.js");
-            await runCliBacktest(strategy, opts, config);
-          });
-
-        quant
-          .command("data")
-          .description("Market data utilities")
-          .argument("<action>", "fetch | list | clean")
-          .option("--symbol <symbol>", "Symbol code")
-          .option("--market <market>", "Market (cn_stock|us_stock|futures|fund)")
-          .option(
-            "--table <table>",
-            "Cache table to clear: stock_list | stock_fundamentals | kline_data | stock_code_name (for clean)",
-          )
-          .action(async (action, opts) => {
-            const { runCliData } = await import("./src/cli/data-cli.js");
-            await runCliData(action, opts, config);
-          });
-
-        quant
-          .command("portfolio")
-          .description("Portfolio management")
-          .argument("[action]", "show | add | remove | rebalance", "show")
-          .option("--symbol <code>", "Symbol code (for add/remove)")
-          .option("--quantity <n>", "Number of shares (for add/remove)", parseInt)
-          .option("--price <p>", "Limit price (for add/remove)", parseFloat)
-          .option("--port <port>", "Gateway HTTP port (default: $OPENCLAW_PORT or 18789)", parseInt)
-          .action(async (action, opts) => {
-            const { runCliPortfolio } = await import("./src/cli/portfolio-cli.js");
-            await runCliPortfolio(action, opts, config);
-          });
-
-        quant
-          .command("live")
-          .description("Live trading engine control")
-          .argument(
-            "[action]",
-            "start | stop | status | orders | pnl | pause | resume | strategies",
-            "status",
-          )
-          .option("--strategy <id>", "Strategy ID (for start)")
-          .option("--symbols <codes>", "Comma-separated symbol codes (for start)")
-          .option("--broker <type>", "Broker type: paper | qmt (for start)")
-          .option("--status <filter>", "Order status filter (for orders)")
-          .option("--port <port>", "Gateway HTTP port (default: $OPENCLAW_PORT or 18789)", parseInt)
-          .action(async (action, opts) => {
-            const { runCliLive } = await import("./src/cli/live-cli.js");
-            await runCliLive(action, opts, config);
-          });
-      },
-      { commands: ["quant"] },
-    );
 
     // ── Background Services ──────────────────────────────────
     api.registerService(createDataSyncService(api, config, eventBus));
@@ -1585,98 +1352,10 @@ const quantTradingPlugin = {
     }
 
     // ── AI Workflow Instructions (injected into system prompt) ──
-    api.on("before_prompt_build", async () => ({
-      appendSystemContext: QUANT_WORKFLOW_INSTRUCTIONS,
-    }));
 
-    api.logger.info("quant-trading plugin registered (live trading enabled)");
+    api.logger.info("quant-trading application started");
   },
 };
 
-// ── Static AI workflow guidance ──────────────────────────────────
-// Appended to the system prompt so the AI follows deterministic multi-step
-// workflows instead of guessing tool sequences.
-const QUANT_WORKFLOW_INSTRUCTIONS = `
-## Quant Trading — 工具调用工作流指南
-
-### 🚫 绝对禁止
-- **禁止自己编造或默认使用股票代码**（如600519、000858、300750等蓝筹股）。
-- 所有股票代码必须来自工具的实际返回结果。
-- 如果工具失败且重试后仍然失败，必须如实告知用户，不要编造结果。
-
-### 推荐选股：stock_recommend 工具
-stock_recommend 是一个便捷的一键工具，自动完成 全市场选股→策略路由→回测验证→排名推荐 全流程。
-也可以分步调用 stock_screen + strategy_router + backtest 手动组合，根据需要灵活选择。
-**universe 参数：用户没有明确指定股票范围时，推荐使用 universe="all"（全市场扫描约5000只）。超时会自动降级到较小范围，无需担心性能。**
-例: stock_recommend(count=3, universe="all") 即可全市场筛选并推荐3只经过回测的股票。
-
-### screenerId 选择指南（classic模式下非常重要）
-系统共有12种选股器，不同选股器产生完全不同的候选股。**同一选股器在同一天会返回相同结果**，所以：
-- **用户说"再推荐/换一批/还有吗"** → 必须换一个不同的 screenerId 调用
-- **用户没指定 screenerId** → 不传 screenerId 参数，系统会自动轮换选股器
-- **用户有明确偏好** → 根据意图选择对应选股器：
-
-| 用户意图 | 推荐 screenerId | 说明 |
-|---------|----------------|------|
-| 价值股/低估值/基本面好 | fscore, magic_formula | 财报驱动，适合中长线 |
-| 成长股/高增长 | canslim, peg | 盈利+营收增速，适合中线 |
-| 短线突破/技术买点 | technical | 均线/MACD/RSI金叉 |
-| 量价异动/主力建仓 | volume_price | Wyckoff方法，适合波段 |
-| 隔夜短线/尾盘买入 | overnight, eod_catalyst | 尾盘介入次日卖出 |
-| 热点题材/龙头股 | sector_hotspot, dragon_master | 板块轮动+涨停池筛选 |
-| 连板接力/打板 | lianban_relay | N进N+1候选 |
-| 事件驱动/催化剂 | event_catalyst | 美股映射A股 |
-
-提示：如果多次推荐结果相同，说明用的是同一个选股器。请换用不同的 screenerId 获取不同视角的推荐。
-
-### ⚠️ strategy_router 调用规则（必须遵守）
-- **strategy_router 的 symbols 参数是必填的**（除 routing_table/build_table/get_regime 三个 action 外）。
-- **禁止不传 symbols 调用** strategy_router 的 profile/recommend/recommend_with_regime/route_portfolio/profile_route_backtest action。
-- **禁止与 stock_screen 并行调用**——strategy_router 依赖 stock_screen 的返回结果，必须串行执行：先调用 stock_screen，等待其返回后，提取股票代码列表，再传入 strategy_router 的 symbols 参数。
-- 正确示例：先调用 stock_screen → 等待返回 codes=[600519,000858] → 再调用 strategy_router(action=recommend, symbols="600519,000858")
-- 错误示例1：stock_screen 和 strategy_router 同时并行调用 ← **strategy_router 拿不到 symbols，会报错**
-- 错误示例2：stock_screen 返回结果后调用 strategy_router(action=recommend) 而不传 symbols ← **会报错**
-- 也可以使用 stock_recommend 工具，它内部自动完成 选股→路由→回测 全流程，无需手动拼接。
-
-### 单只股票回测分析（用户指定了具体股票时）
-1. 调用 strategy_router(action=recommend, symbols=目标股票) 获取推荐策略。
-2. 使用推荐策略ID调用 backtest(action=run, strategyId=推荐策略, symbols=目标股票, endDate=今天)。
-3. 检查 warnings 和 forwardSignals，给出结论。
-
-### 个股深度分析流程（用户问"帮我分析XX股票"时）
-按以下顺序调用工具，构建完整的研报级分析：
-1. **行情概览**: market_data(action=quote) — 当前价格、涨跌幅、成交量
-2. **技术形态**: market_data(action=indicators) — MA/MACD/RSI/布林带，判断趋势方向和支撑压力位
-3. **基本面**: market_data(action=fundamentals) + value_investing — PE/PB/ROE/毛利率，DCF估值
-4. **资金面**: fund_flow(action=stock) + institutional_flow(action=fund_holdings) — 主力资金流向、机构持仓变化
-5. **筹码分布**: chip_accumulation — 主力吸筹/出货信号
-6. **事件催化**: earnings_calendar(action=upcoming) + news_summary(action=stock_news) — 近期财报和新闻
-7. **策略验证**: strategy_router(action=recommend) → backtest — 量化策略回测验证
-8. **风险评估**: risk_analysis — VaR、最大回撤、波动率
-最后综合给出：趋势判断 + 估值水平 + 资金动向 + 操作建议 + **风险提示**
-
-### 板块分析流程（用户问"哪个板块好/热点板块"时）
-1. sector_analysis — 板块排名、涨跌幅排行
-2. fund_flow(action=rank) — 板块级资金净流入排名
-3. sector_synergy — 板块协同效应、联动分析
-4. lianban_analysis — 连板梯队，辨识市场主线
-5. dragon_tiger — 龙虎榜异动，游资动向
-
-### 每日简报模板（用户说"简报/早报/收盘"时）
-用以下结构组织回答：
-1. 📊 **大盘概况** — 上证/深证/创业板涨跌 + 成交量对比
-2. 🔥 **板块热点** — TOP5 板块 + 连板龙头
-3. 💰 **资金动向** — 北向资金 + 主力净流入板块
-4. ⚡ **个股异动** — 龙虎榜 + 涨停分析
-5. 📋 **操作建议** — 基于数据的短线/中线观点 + 风险提示
-
-### 重要规则
-- backtest action=list 可查看所有可用策略（50+内置 + 用户组合策略）。
-- 回测结果有 warnings 字段时必须向用户展示。
-- 如果回测夏普比率>3但回撤>30%，或交易次数<5，说明统计不可靠。
-- 所有投资建议必须附带风险提示，明确说明"以上分析仅供参考，不构成投资建议"。
-- 回答中尽量使用表格呈现关键数据，便于对比。
-- 区分短线（1-5日）、中线（1-3月）、长线（半年以上）不同维度给出建议。
-`.trim();
-
-export default quantTradingPlugin;
+export default quantTradingApp;
+

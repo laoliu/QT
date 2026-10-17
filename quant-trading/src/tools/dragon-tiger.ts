@@ -6,11 +6,11 @@
  *   stock       — Dragon tiger history for a specific stock
  *   institution — Institutional activity summary
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createDragonTigerTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createDragonTigerTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "dragon_tiger",
     description:

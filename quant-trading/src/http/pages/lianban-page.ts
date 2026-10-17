@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lianban Page — self-contained SPA for consecutive limit-up board analysis.
  *
  * Tabs: 梯队总览 (ladder scan), 二进三候选 (relay candidates), 个股轨迹 (stock detail)

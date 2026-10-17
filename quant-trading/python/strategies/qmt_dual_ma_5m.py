@@ -6,7 +6,7 @@ qmt_dual_ma_5m.py   QMT 5
 
   - 5 K (EMA12)(EMA26)
   -     
-  -  ~/.openclaw/quant-trading/signals.json
+  -  ~/data/signals.json
   - OpenClaw  +  + 
 
 
@@ -28,8 +28,8 @@ qmt_dual_ma_5m.py   QMT 5
   }
 
 OpenClaw signals.json 
-  Windows: C:\\Users\\<>\\.openclaw\\quant-trading\\signals.json
-  macOS:   ~/.openclaw/quant-trading/signals.json
+  Windows: C:\\Users\\<>\\data\\signals.json
+  macOS:   ~/data/signals.json
 """
 
 import json
@@ -77,11 +77,11 @@ SCREEN_MA_PERIOD  = 20          # N  MA
 SIGNAL_MODE = "http"   #  "file" 
 
 #  HTTP SIGNAL_MODE="http" 
-# Mac  IP + 端口，通过环境变量 OPENCLAW_HOST / OPENCLAW_PORT 配置
+# Mac  IP + 端口，通过环境变量 OPENCLAW_HOST / APP_PORT 配置
 # 支持 Tailscale / 局域网 / VPN 等多种网络拓扑
 _OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_OPENCLAW_PORT = os.environ.get("OPENCLAW_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_OPENCLAW_PORT}"
+_APP_PORT = os.environ.get("APP_PORT", "18789")
+_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
 
 OPENCLAW_WEBHOOK_URL    = f"{_OPENCLAW_BASE}/quant/api/signal"
 OPENCLAW_WEBHOOK_SECRET = "qmt-signal-secret-2026"  #  openclaw.json signalWebhook.secret 

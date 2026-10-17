@@ -28,7 +28,7 @@ if _python_root not in sys.path:
 
 # Cache-based data fetching (same as _run_ai_exploration.py)
 CACHE_DB = os.path.expanduser(
-    "~/.openclaw/extensions/quant-trading/cache/stock_data.db"
+    "~/data/cache/stock_data.db"
 )
 
 
@@ -380,7 +380,7 @@ def build_routing_table(
 
 
 ROUTING_TABLE_PATH = os.path.expanduser(
-    "~/.openclaw/quant-trading/strategy_routing_table.json"
+    "~/data/strategy_routing_table.json"
 )
 
 if __name__ == "__main__":

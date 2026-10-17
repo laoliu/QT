@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { StrategyHealthMonitor } from "../services/strategy-health.js";
 /**
  * AI-callable tool for strategy health monitoring (策略健康度).
@@ -6,7 +6,7 @@ import { StrategyHealthMonitor } from "../services/strategy-health.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createStrategyHealthTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   monitor: StrategyHealthMonitor,
 ) {

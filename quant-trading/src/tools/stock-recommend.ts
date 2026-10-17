@@ -1,10 +1,10 @@
-﻿/**
+/**
  * stock_recommend tool — compound "screen → route → backtest → recommend" pipeline.
  *
  * This tool forces the full workflow in a single call so the AI cannot
  * skip the screening step or substitute hardcoded stock codes.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { MarketDataProvider } from "../data/market-data-provider.js";
 import { detectMarketFromSymbol } from "../data/market-data-provider.js";
@@ -63,7 +63,7 @@ interface RouteBacktestItem {
 }
 
 export function createStockRecommendTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   scanHistoryStore?: ScanHistoryStore,
   getDataProvider?: () => MarketDataProvider,

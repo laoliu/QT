@@ -1,4 +1,4 @@
-﻿import {
+import {
   getLatestInstitutionTopLeaders,
   handleGetInstitutionActivityHistoryApi,
 } from "../http/institution-history.js";

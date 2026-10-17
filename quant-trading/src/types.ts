@@ -967,7 +967,7 @@ export type QuantTradingConfig = {
   llm?: {
     /** API base URL (e.g. "https://api.deepseek.com/v1", "https://api.openai.com/v1") */
     baseUrl?: string;
-    /** API key (or set env OPENCLAW_LLM_API_KEY) */
+    /** API key (or set env LLM_API_KEY) */
     apiKey?: string;
     /** Model name (default: "deepseek-chat") */
     model?: string;

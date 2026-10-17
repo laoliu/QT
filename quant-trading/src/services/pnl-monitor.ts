@@ -10,8 +10,8 @@
  *
  * Runs every `pollIntervalSecs` (default 30s) while the market is open.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import type { BrokerAccount, LivePosition, QuantTradingConfig } from "../types.js";
 import { tryNotify } from "./notify-helper.js";
@@ -75,13 +75,13 @@ const SEVERITY_EMOJI: Record<AlertSeverity, string> = {
 // ── Service factory ──────────────────────────────────────────────
 
 export function createPnlMonitorService(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getOrderManager: () => OrderManager | null,
   pauseEngine?: () => Promise<void>,
   /** Optional callback invoked on every alert (e.g. for persisting to AlertStore). */
   onAlert?: (alert: PnlAlert) => void,
-): OpenClawPluginService {
+): AppService {
   const monitorCfg: Required<PnlMonitorConfig> = {
     ...DEFAULTS,
     ...(config.pnlMonitor ?? {}),

@@ -9,11 +9,11 @@
  *  - 1406
  *  - VIX / 波动率代理
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createMarketSentimentIndexTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createMarketSentimentIndexTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "market_sentiment_index",
     description: "050907 — 1007/换手率/融资余额/连板等构建0-100情绪指数",
@@ -44,7 +44,7 @@ export function createMarketSentimentIndexTool(api: OpenClawPluginApi, config: Q
   };
 }
 
-async function getCurrentSentiment(api: OpenClawPluginApi, config: QuantTradingConfig, detailed: boolean) {
+async function getCurrentSentiment(api: QuantTradingRuntime, config: QuantTradingConfig, detailed: boolean) {
   const script = `
 import akshare as ak
 import json, sys
@@ -213,7 +213,7 @@ except Exception as e:
   }
 }
 
-async function getSentimentHistory(api: OpenClawPluginApi, config: QuantTradingConfig, days: number) {
+async function getSentimentHistory(api: QuantTradingRuntime, config: QuantTradingConfig, days: number) {
   const script = `
 import akshare as ak
 import json, sys

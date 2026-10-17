@@ -4,7 +4,7 @@ import path from "node:path";
 /**
  * trading_signal tool — query and manage strategy-generated signals.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { SignalHitRateTracker } from "../services/signal-hitrate.js";
 import type { QuantTradingConfig, TradingSignal } from "../types.js";
 
@@ -23,7 +23,7 @@ async function loadSignals(config: QuantTradingConfig): Promise<TradingSignal[]>
 }
 
 export function createTradingSignalTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   hitRateTracker?: SignalHitRateTracker,
 ) {

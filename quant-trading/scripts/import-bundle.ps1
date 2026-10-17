@@ -90,7 +90,7 @@ if (-not $Force -and -not $DryRun) {
     Write-Host "将要恢复:"
     if ($RestoreConfig) { Write-Host "  • 配置文件 → config-custom\openclaw.json" }
     if ($RestoreData)   { Write-Host "  • 运行时数据 → $DataDir" }
-    if ($RestoreData)   { Write-Host "  • 缓存数据库 → ~/.openclaw/extensions/quant-trading/cache/" }
+    if ($RestoreData)   { Write-Host "  • 缓存数据库 → ~/data/cache/" }
     if ($RestoreData)   { Write-Host "  • ~/.openclaw 目录 (workspace, identity, cron, feishu)" }
     if ($RestorePython) { Write-Host "  • Python 策略 → quant-trading\python\" }
     if ($RestoreMeta)   { Write-Host "  • 插件元信息 → quant-trading\" }

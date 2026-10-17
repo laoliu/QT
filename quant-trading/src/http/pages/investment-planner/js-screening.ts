@@ -1,4 +1,4 @@
-﻿/** Investment Planner — stock screening, rebalancing, signals, milestones, and monitoring */
+/** Investment Planner — stock screening, rebalancing, signals, milestones, and monitoring */
 export function getScreeningJs(): string {
   return `
 /* Sync plan portfolio with actual broker positions in live mode */

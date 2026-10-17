@@ -6,11 +6,11 @@
  *  - 市场两融排行
  *  - 两融异常检测
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createMarginDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createMarginDataTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "融资融券数据 — 个股两融余额、趋势、排行榜、异常检测",
     parameters: {

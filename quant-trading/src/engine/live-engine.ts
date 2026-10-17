@@ -14,10 +14,10 @@
  *  - Polls live positions & account every minute
  *  - Emits a daily P&L summary on market close
  *
- * Registered as an OpenClawPluginService via api.registerService().
+ * Registered as an AppService via api.registerService().
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { PersistentPythonProcess } from "../bridge/persistent-python.js";
 import type { IBrokerAdapter } from "../broker/adapter.js";
 import { createBrokerAdapter } from "../broker/index.js";
@@ -57,11 +57,11 @@ type RawSignal = {
   live_strategy_id: string;
 };
 
-export class LiveEngine implements OpenClawPluginService {
+export class LiveEngine implements AppService {
   readonly id = "quant-live-engine";
 
   private cfg: QuantTradingConfig;
-  private api: OpenClawPluginApi;
+  private api: QuantTradingRuntime;
   private status: LiveEngineStatus = "stopped";
   private proc: PersistentPythonProcess | null = null;
   private orderMgr: OrderManager | null = null;
@@ -125,7 +125,7 @@ export class LiveEngine implements OpenClawPluginService {
   /** Portfolio-level risk overlay scale function (MDD gradient + vol scaling). */
   private riskOverlayFn?: () => number;
 
-  constructor(cfg: QuantTradingConfig, api: OpenClawPluginApi) {
+  constructor(cfg: QuantTradingConfig, api: QuantTradingRuntime) {
     this.cfg = cfg;
     this.api = api;
     this.registry = new LiveStrategyRegistry(cfg);
@@ -192,7 +192,7 @@ export class LiveEngine implements OpenClawPluginService {
     }
   }
 
-  // ── OpenClawPluginService interface ───────────────────────────
+  // ── AppService interface ───────────────────────────
 
   async start(): Promise<void> {
     if (this.status === "running" || this.status === "starting") return;

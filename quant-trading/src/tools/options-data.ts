@@ -4,7 +4,7 @@
  * Supports ETF options, index options, and commodity options on the Chinese market.
  * Data sourced via AKShare Python bridge (options_provider.py).
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createOptionsDataProvider } from "../data/market-data-provider.js";
 import type {
@@ -18,7 +18,7 @@ import type {
 } from "../types.js";
 import { todayCST } from "../utils/cst-time.js";
 
-export function createOptionsDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createOptionsDataTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   const provider = createOptionsDataProvider(config);
 
   return {

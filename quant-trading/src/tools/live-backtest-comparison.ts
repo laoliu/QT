@@ -12,7 +12,7 @@
  *   symbol_breakdown 66per-symbol breakdown of live vs backtest differences
  *   execution_quality 66execution quality analysis (slippage, timing, holding, profit factor)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { BacktestResult, QuantTradingConfig, TradeRecord } from "../types.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { EquityHistory } from "../services/equity-history.js";
@@ -29,7 +29,7 @@ function fmt(v: unknown, digits: number): string {
 }
 
 export function createLiveBacktestComparisonTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
   equityHistory: EquityHistory,
@@ -754,7 +754,7 @@ async function getBacktestResult(
   endDate: string,
   rerunBacktest: boolean | undefined,
   config: QuantTradingConfig,
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
 ): Promise<BacktestResult | null> {
   if (rerunBacktest) {
     try {
@@ -775,7 +775,7 @@ async function getBacktestResult(
 
 async function runCompare(
   comparison: LiveBacktestComparison,
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEngine: () => LiveEngine | null,
   strategyId: string,

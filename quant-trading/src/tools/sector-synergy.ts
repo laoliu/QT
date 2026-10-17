@@ -7,11 +7,11 @@
  *   analyze  — 个股板块协同分析（检查是否满足板块协同条件）
  *   config   — 策略参数说明（6个买入条件 + 3个卖出规则）
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createSectorSynergyTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createSectorSynergyTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "sector_synergy",
     description:

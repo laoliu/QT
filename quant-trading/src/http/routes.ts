@@ -5,7 +5,7 @@
  * All routes are prefixed with `/quant/`.
  */
 import type { ServerResponse } from "node:http";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
 import type { LiveEngine } from "../engine/live-engine.js";
@@ -50,7 +50,7 @@ function urlParams(req: { url?: string }): URLSearchParams {
 // ── Dependencies ─────────────────────────────────────────────────
 
 export interface RouteDeps {
-  api: OpenClawPluginApi;
+  api: QuantTradingRuntime;
   config: QuantTradingConfig;
   alertStore: AlertStore;
   backtestStore: BacktestStore;

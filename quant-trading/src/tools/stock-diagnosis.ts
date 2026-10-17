@@ -3,11 +3,11 @@
  *
  * 技术面 + 基本面 + 04050700
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createStockDiagnosisTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createStockDiagnosisTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "个股综合诊断 — 技术面+基本面+0405071005, 输出健康评分",
     parameters: {

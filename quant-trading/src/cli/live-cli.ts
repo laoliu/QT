@@ -3,12 +3,12 @@
  *
  * Controls the live trading engine by calling the running gateway's HTTP API.
  * The gateway must be running (`openclaw gateway run`) for most operations.
- * Port is resolved from: --port option → OPENCLAW_PORT env → default 18789.
+ * Port is resolved from: --port option → APP_PORT env → default 18789.
  */
 import type { QuantTradingConfig } from "../types.js";
 
 function gatewayBase(portOption?: number): string {
-  const port = portOption ?? Number(process.env["OPENCLAW_PORT"] ?? "18789");
+  const port = portOption ?? Number(process.env["APP_PORT"] ?? "18789");
   return `http://127.0.0.1:${port}`;
 }
 
@@ -227,7 +227,7 @@ export async function runCliLive(
       console.log("  strategies List active live strategies");
       console.log("");
       console.log("Options:");
-      console.log("  --port <n>      Gateway HTTP port (default: $OPENCLAW_PORT or 18789)");
+      console.log("  --port <n>      Gateway HTTP port (default: $APP_PORT or 18789)");
       console.log("");
       console.log("Available built-in strategies:");
       console.log("  dual-ma-crossover  — 双均线交叉");

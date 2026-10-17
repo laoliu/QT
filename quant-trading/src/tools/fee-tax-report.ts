@@ -7,12 +7,12 @@
  *   tax_report       66tax-relevant trade summary for annual filing
  *   export_trades    66export trades as CSV-formatted text for external tools
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { LiveEngine } from "../engine/live-engine.js";
 import type { TradeRecord } from "../types.js";
 
 export function createFeeTaxReportTool(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   getEngine: () => LiveEngine | null,
 ) {
   return {

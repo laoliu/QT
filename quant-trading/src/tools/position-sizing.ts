@@ -13,12 +13,12 @@
  *   kelly        — Kelly criterion (fraction of bankroll based on win rate)
  *   atr_vol      — Volatility-adjusted (qty = riskAmt / ATR×multiplier)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { computePositionSize, type SizingParams } from "../services/position-sizer.js";
 import type { QuantTradingConfig, PositionSizingConfig } from "../types.js";
 
 export function createPositionSizingTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   getEquity: () => Promise<number>,
 ) {

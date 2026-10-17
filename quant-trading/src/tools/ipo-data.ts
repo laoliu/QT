@@ -1,11 +1,11 @@
 /**
  * ipo_data — IPO/018909
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createIpoDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createIpoDataTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "IPO/0189 — 0189050901",
     parameters: {

@@ -7,7 +7,7 @@
  *  - Markdown 格式输出
  *  - 可推送至通知渠道
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { QuantTradingConfig } from "../types.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
@@ -76,7 +76,7 @@ export class DailyReviewService {
   private lastGenDate: string | null = null;
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private tradingConfig: QuantTradingConfig,
     private notificationService: NotificationService | null,
     config?: Partial<DailyReviewConfig>,

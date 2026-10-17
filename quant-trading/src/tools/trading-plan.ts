@@ -3,10 +3,10 @@
  *
  * Actions: create, list, update, activate, complete, cancel, review, discipline
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { TradingPlanService, PlanStatus } from "../services/trading-plan.js";
 
-export function createTradingPlanTool(api: OpenClawPluginApi, planService: TradingPlanService) {
+export function createTradingPlanTool(api: QuantTradingRuntime, planService: TradingPlanService) {
   return {
     description: "0607 — 创建/51/04/070607010209",
     parameters: {

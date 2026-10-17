@@ -13,13 +13,13 @@
  *   - compare: Multi-model comparison for a single stock
  *   - tax_calculation: Capital gains & dividend tax calculation
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { TradeJournal } from "../services/trade-journal.js";
 import type { QuantTradingConfig } from "../types.js";
 
 export function createFinancialCalculatorTool(
-  _api: OpenClawPluginApi,
+  _api: QuantTradingRuntime,
   config: QuantTradingConfig,
   journal?: TradeJournal,
 ) {

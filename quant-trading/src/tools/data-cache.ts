@@ -2,13 +2,13 @@
  * data_cache tool — AI-callable tool for managing the local stock data cache.
  *
  * Provides cache statistics, clearing, and cleanup operations.
- * Cache is stored in SQLite at ~/.openclaw/extensions/quant-trading/cache/stock_data.db
+ * Cache is stored in SQLite at ~/data/cache/stock_data.db
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createDataCacheTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createDataCacheTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "data_cache",
     description:

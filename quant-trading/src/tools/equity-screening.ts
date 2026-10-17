@@ -1,12 +1,12 @@
 import type { QuantTradingConfig } from "../types.js";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { spawn } from "child_process";
 import * as path from "path";
 
 /**
  * A股多因子选股工具 — 调用 aipha 策略引擎选股
  */
-export function createEquityScreeningTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createEquityScreeningTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "equity_screening",
     description:

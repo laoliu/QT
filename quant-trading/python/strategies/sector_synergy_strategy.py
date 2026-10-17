@@ -98,8 +98,8 @@ ORDER_ACCOUNT_ID = ""
 # 信号输出 (复用 qmt_lianban_monitor 的 webhook)
 SIGNAL_MODE = "http"         # "http" | "file"
 _OPENCLAW_HOST = os.environ.get("OPENCLAW_HOST", "127.0.0.1")
-_OPENCLAW_PORT = os.environ.get("OPENCLAW_PORT", "18789")
-_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_OPENCLAW_PORT}"
+_APP_PORT = os.environ.get("APP_PORT", "18789")
+_OPENCLAW_BASE = f"http://{_OPENCLAW_HOST}:{_APP_PORT}"
 OPENCLAW_WEBHOOK_URL = f"{_OPENCLAW_BASE}/quant/api/signal"
 OPENCLAW_WEBHOOK_SECRET = os.environ.get("OPENCLAW_SIGNAL_SECRET", "qmt-signal-secret-2026")
 

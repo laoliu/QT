@@ -7,7 +7,7 @@
  *  - 020802
  *  - 与 NotificationService + AlertStore 联动
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import type { AlertStore, AlertSeverity } from "./alert-store.js";
 import type { NotificationService, NotificationMessage } from "./notification-service.js";
 
@@ -52,7 +52,7 @@ export class PositionAlertService {
   private readonly cooldownMs = 300_000; // 5 min cooldown per symbol
 
   constructor(
-    private api: OpenClawPluginApi,
+    private api: QuantTradingRuntime,
     private alertStore: AlertStore | null,
     private notificationService: NotificationService | null,
     config?: Partial<PositionAlertConfig>,

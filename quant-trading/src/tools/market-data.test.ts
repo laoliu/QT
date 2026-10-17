@@ -1,11 +1,11 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 /**
  * Tests for the market_data AI tool.
  */
 import { describe, expect, it } from "vitest";
 import { createMarketDataTool } from "./market-data.js";
 
-function fakeApi(): OpenClawPluginApi {
+function fakeApi(): QuantTradingRuntime {
   return {
     id: "quant-trading",
     name: "quant-trading",
@@ -25,7 +25,7 @@ function fakeApi(): OpenClawPluginApi {
     registerCommand() {},
     on() {},
     resolvePath: (p: string) => p,
-  } as unknown as OpenClawPluginApi;
+  } as unknown as QuantTradingRuntime;
 }
 
 describe("market_data tool", () => {

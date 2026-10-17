@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { AppService } from "../runtime.js";
 import type { KlineBar, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
 
 type TickHistoryStoreConfig = {
@@ -40,7 +40,7 @@ function filterByTime<T>(rows: T[], getTs: (row: T) => number, range?: TimeRange
   });
 }
 
-export class TickHistoryStore implements OpenClawPluginService {
+export class TickHistoryStore implements AppService {
   readonly id = "tick-history-store";
 
   private readonly config: Required<TickHistoryStoreConfig>;

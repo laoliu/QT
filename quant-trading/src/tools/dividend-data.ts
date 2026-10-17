@@ -6,11 +6,11 @@
  *  - 080004
  *  - 分红日历 (190704)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { runInlinePython } from "../bridge/python-bridge.js";
 import type { QuantTradingConfig } from "../types.js";
 
-export function createDividendDataTool(api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createDividendDataTool(api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     description: "000709 — 090700000704080004",
     parameters: {

@@ -31,7 +31,7 @@ if _python_root not in sys.path:
     sys.path.insert(0, _python_root)
 
 CACHE_DB = os.path.expanduser(
-    "~/.openclaw/extensions/quant-trading/cache/stock_data.db"
+    "~/data/cache/stock_data.db"
 )
 
 # ── Feature Classification Thresholds ─────────────────────────────

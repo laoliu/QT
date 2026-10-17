@@ -9,8 +9,8 @@
 #
 # 打包内容:
 #   1. openclaw.json 中的 quant-trading 插件配置
-#   2. ~/.openclaw/quant-trading/ 运行时数据 (signals, stock-list, portfolio, orders …)
-#   3. ~/.openclaw/extensions/quant-trading/cache/ 缓存数据库 (stock_data.db, financial_data.db)
+#   2. ~/data/ 运行时数据 (signals, stock-list, portfolio, orders …)
+#   3. ~/data/cache/ 缓存数据库 (stock_data.db, financial_data.db)
 #   4. ~/.openclaw/workspace/ 人设文件 (IDENTITY, USER, SOUL, TOOLS …)
 #   5. ~/.openclaw/identity/ 设备密钥
 #   6. ~/.openclaw/cron/ 定时任务
@@ -53,7 +53,7 @@ if [[ -f "$HOME_CONFIG" ]]; then
 fi
 
 # ── 2. 运行时数据 ────────────────────────────────────────────────────────────
-DATA_DIR="${QUANT_DATA_DIR:-$HOME/.openclaw/quant-trading}"
+DATA_DIR="${QUANT_DATA_DIR:-$HOME/data}"
 if [[ -d "$DATA_DIR" ]]; then
   cp -R "$DATA_DIR"/. "$BUNDLE/data/"
   FILE_COUNT=$(find "$BUNDLE/data" -type f | wc -l | tr -d ' ')
@@ -63,7 +63,7 @@ else
 fi
 
 # ── 3. 缓存数据库 (SQLite) ───────────────────────────────────────────────────
-CACHE_DIR="$HOME/.openclaw/extensions/quant-trading/cache"
+CACHE_DIR="$HOME/data/cache"
 if [[ -d "$CACHE_DIR" ]]; then
   # 先做 WAL checkpoint 以确保数据完整性
   for db in "$CACHE_DIR"/*.db; do

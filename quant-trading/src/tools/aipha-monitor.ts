@@ -1,12 +1,12 @@
 import type { QuantTradingConfig } from "../types.js";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { spawn } from "child_process";
 import * as path from "path";
 
 /**
  * 因子/策略健康监控工具 — 调用 monitoring 子系统
  */
-export function createAiphaMonitorTool(_api: OpenClawPluginApi, config: QuantTradingConfig) {
+export function createAiphaMonitorTool(_api: QuantTradingRuntime, config: QuantTradingConfig) {
   return {
     name: "aipha_monitor",
     description:

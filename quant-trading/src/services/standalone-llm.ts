@@ -47,7 +47,7 @@ export function resolveLlmConfig(pluginConfig: Record<string, unknown>): LlmConf
   const llm = pluginConfig["llm"] as Record<string, unknown> | undefined;
   const apiKey =
     (llm?.["apiKey"] as string) ||
-    process.env["OPENCLAW_LLM_API_KEY"] ||
+    process.env["LLM_API_KEY"] ||
     process.env["DEEPSEEK_API_KEY"] ||
     process.env["OPENAI_API_KEY"] ||
     "";

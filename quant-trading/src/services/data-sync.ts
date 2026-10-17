@@ -9,8 +9,8 @@ import path from "node:path";
  *  - `data_sync` on each sync cycle (refreshed/failed/total counts)
  *  - `alert` on per-symbol failures (severity: warning)
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import type { OpenClawPluginService } from "openclaw/plugin-sdk/core";
+import type { QuantTradingRuntime } from "../runtime.js";
+import type { AppService } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { isMarketOpen } from "../broker/paper-broker.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
@@ -55,10 +55,10 @@ async function loadWatchedSymbols(config: QuantTradingConfig): Promise<string[]>
 }
 
 export function createDataSyncService(
-  api: OpenClawPluginApi,
+  api: QuantTradingRuntime,
   config: QuantTradingConfig,
   eventBus?: EventBus,
-): OpenClawPluginService {
+): AppService {
   let interval: ReturnType<typeof setInterval> | null = null;
   let extendedInterval: ReturnType<typeof setInterval> | null = null;
   // Reuse the same provider across ticks to preserve caches/connections

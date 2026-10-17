@@ -1,12 +1,12 @@
 /**
  * Tests for the scheduled_task AI tool.
  */
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { QuantTradingRuntime } from "../runtime.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskScheduler } from "../services/task-scheduler.js";
 import { createScheduledTaskTool } from "./scheduled-task.js";
 
-function fakeApi(): OpenClawPluginApi {
+function fakeApi(): QuantTradingRuntime {
   return {
     id: "quant-trading",
     name: "quant-trading",
@@ -26,7 +26,7 @@ function fakeApi(): OpenClawPluginApi {
     registerCommand() {},
     on() {},
     resolvePath: (p: string) => p,
-  } as unknown as OpenClawPluginApi;
+  } as unknown as QuantTradingRuntime;
 }
 
 describe("scheduled_task tool", () => {

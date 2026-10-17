@@ -16,11 +16,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2023",
-    "useDefineForClassFields": false,
-    "paths": {
-      "openclaw/plugin-sdk": ["./node_modules/openclaw/dist/plugin-sdk/index.d.ts"],
-      "openclaw/plugin-sdk/*": ["./node_modules/openclaw/dist/plugin-sdk/*.d.ts"]
-    }
+    "useDefineForClassFields": false
   },
   "include": ["quant-trading/**/*"],
   "exclude": ["node_modules", "dist"]

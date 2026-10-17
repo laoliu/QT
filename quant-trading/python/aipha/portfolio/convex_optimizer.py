@@ -21,7 +21,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -39,15 +41,30 @@ from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 logger = logging.getLogger(__name__)
 
 
-# 检查 cvxpy 是否可用
-try:
-    import cvxpy as cp
+# Do not import cvxpy during module collection. On Windows, cvxpy probes all
+# installed native solvers (including highspy) at import time; that probe can
+# crash the interpreter when the whole test suite imports many extensions.
+# Keep the public availability flag cheap and load the solver only on demand.
+CVXPY_AVAILABLE = importlib.util.find_spec("cvxpy") is not None
+cp = None
+_cvxpy_module: Any | None = None
 
-    CVXPY_AVAILABLE = True
-except ImportError:
-    CVXPY_AVAILABLE = False
-    cp = None
-    logger.warning("cvxpy 未安装，凸优化器将回退到简化实现")
+
+def _get_cvxpy():
+    global _cvxpy_module
+    if _cvxpy_module is None:
+        if not CVXPY_AVAILABLE:
+            raise ImportError("cvxpy 未安装，凸优化器不可用")
+        # cvxpy eagerly probes every installed conic solver.  The bundled
+        # highspy wheel is unstable when imported after several other native
+        # extensions on Windows/Python 3.13; hide only that optional solver so
+        # cvxpy can safely use its other solvers and its own fallback path.
+        if sys.platform == "win32" and sys.version_info >= (3, 13):
+            sys.modules.setdefault("highspy", None)
+        import cvxpy as module
+
+        _cvxpy_module = module
+    return _cvxpy_module
 
 
 @dataclass
@@ -162,14 +179,14 @@ class ConvexMinVarianceOptimizer(WeightOptimizer):
         sector_map: dict[str, str] | None = None,
     ) -> np.ndarray:
         """使用 cvxpy 求解最小方差"""
-        w = cp.Variable(n)
+        w = _get_cvxpy().Variable(n)
 
         # 目标：最小化组合方差
-        portfolio_variance = cp.quad_form(w, cov_matrix)
-        objective = cp.Minimize(portfolio_variance)
+        portfolio_variance = _get_cvxpy().quad_form(w, cov_matrix)
+        objective = _get_cvxpy().Minimize(portfolio_variance)
 
         # 约束
-        constraint_list = [cp.sum(w) == 1]
+        constraint_list = [_get_cvxpy().sum(w) == 1]
 
         if self.constraints.long_only:
             constraint_list.append(w >= self.constraints.min_weight)
@@ -186,7 +203,7 @@ class ConvexMinVarianceOptimizer(WeightOptimizer):
         ):
             w_prev = np.array([prev_weights.get(s, 0.0) for s in symbols])
             constraint_list.append(
-                cp.norm(w - w_prev, 1) <= self.constraints.max_turnover * 2
+                _get_cvxpy().norm(w - w_prev, 1) <= self.constraints.max_turnover * 2
             )
 
         # 行业约束
@@ -202,10 +219,10 @@ class ConvexMinVarianceOptimizer(WeightOptimizer):
             for sector, max_wt in self.constraints.sector_limits.items():
                 indices = sectors_to_indices.get(sector, [])
                 if indices:
-                    constraint_list.append(cp.sum(w[indices]) <= max_wt)
+                    constraint_list.append(_get_cvxpy().sum(w[indices]) <= max_wt)
 
         # 求解
-        problem = cp.Problem(objective, constraint_list)
+        problem = _get_cvxpy().Problem(objective, constraint_list)
         problem.solve(solver=self.solver)
 
         if problem.status not in ["optimal", "optimal_inaccurate"]:
@@ -478,10 +495,10 @@ class ConvexMaxSharpeOptimizer(WeightOptimizer):
         """
         # 使用变换：y = w / (μ^T w), κ = 1 / (μ^T w)
         # 问题变为: min y^T Σ y, s.t. μ^T y = 1, y >= 0
-        y = cp.Variable(n)
+        y = _get_cvxpy().Variable(n)
 
-        portfolio_variance = cp.quad_form(y, cov_matrix)
-        objective = cp.Minimize(portfolio_variance)
+        portfolio_variance = _get_cvxpy().quad_form(y, cov_matrix)
+        objective = _get_cvxpy().Minimize(portfolio_variance)
 
         # 约束
         constraint_list = [excess_returns @ y == 1]
@@ -489,7 +506,7 @@ class ConvexMaxSharpeOptimizer(WeightOptimizer):
         if self.constraints.long_only:
             constraint_list.append(y >= 0)
 
-        problem = cp.Problem(objective, constraint_list)
+        problem = _get_cvxpy().Problem(objective, constraint_list)
         problem.solve(solver=self.solver)
 
         if problem.status not in ["optimal", "optimal_inaccurate"]:
@@ -606,30 +623,30 @@ class MeanVarianceOptimizer(WeightOptimizer):
         self, n: int, expected_returns: np.ndarray, cov_matrix: np.ndarray
     ) -> np.ndarray:
         """使用 cvxpy 求解均值-方差优化"""
-        w = cp.Variable(n)
+        w = _get_cvxpy().Variable(n)
 
         # 效用: U = μ^T w - γ/2 * w^T Σ w
         portfolio_return = expected_returns @ w
-        portfolio_variance = cp.quad_form(w, cov_matrix)
+        portfolio_variance = _get_cvxpy().quad_form(w, cov_matrix)
 
         if self.target_return is not None:
             # 给定目标收益，最小化方差
-            objective = cp.Minimize(portfolio_variance)
+            objective = _get_cvxpy().Minimize(portfolio_variance)
             constraint_list = [
-                cp.sum(w) == 1,
+                _get_cvxpy().sum(w) == 1,
                 portfolio_return >= self.target_return,
             ]
         else:
             # 最大化效用
             utility = portfolio_return - (self.risk_aversion / 2) * portfolio_variance
-            objective = cp.Maximize(utility)
-            constraint_list = [cp.sum(w) == 1]
+            objective = _get_cvxpy().Maximize(utility)
+            constraint_list = [_get_cvxpy().sum(w) == 1]
 
         if self.constraints.long_only:
             constraint_list.append(w >= self.constraints.min_weight)
         constraint_list.append(w <= self.constraints.max_weight)
 
-        problem = cp.Problem(objective, constraint_list)
+        problem = _get_cvxpy().Problem(objective, constraint_list)
         problem.solve(solver=self.solver)
 
         if problem.status not in ["optimal", "optimal_inaccurate"]:

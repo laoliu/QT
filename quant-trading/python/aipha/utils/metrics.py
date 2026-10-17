@@ -55,6 +55,17 @@ def compute_sharpe_ratio(
     return mean_excess * math.sqrt(trading_days) / std_r
 
 
+def compute_annualized_volatility(
+    returns: NDArray[np.float64] | Sequence[float],
+    trading_days: int = DEFAULT_TRADING_DAYS,
+) -> float:
+    """Annualize sample volatility for a return series."""
+    arr = np.asarray(returns, dtype=np.float64)
+    if len(arr) < 2 or not np.all(np.isfinite(arr)):
+        return 0.0
+    return float(np.std(arr, ddof=1) * math.sqrt(trading_days))
+
+
 def compute_sharpe_ratio_log(
     returns: NDArray[np.float64] | Sequence[float],
     trading_days: int = DEFAULT_TRADING_DAYS,

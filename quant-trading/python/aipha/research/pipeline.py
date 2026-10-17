@@ -19,6 +19,7 @@ import pandas as pd
 
 from .contracts import TargetPosition, validate_market_frame
 from .execution_plan import build_execution_plan
+from aipha.utils.metrics import compute_annualized_volatility
 
 
 @dataclass(frozen=True, slots=True)
@@ -648,8 +649,9 @@ def _build_evaluation_diagnostics(
             "available": True,
             "total_return": float(nav.iloc[-1] - 1.0),
             "annualized_return": float(nav.iloc[-1] ** (252 / max(1, len(nav))) - 1.0),
-            "annualized_volatility": float(benchmark_returns.std(ddof=1) * np.sqrt(252))
-            if len(benchmark_returns) > 1 else 0.0,
+            "annualized_volatility": compute_annualized_volatility(
+                benchmark_returns.to_numpy(), trading_days=252,
+            ),
             "max_drawdown": float((nav / nav.cummax() - 1.0).min()),
         }
 
@@ -670,7 +672,9 @@ def _build_evaluation_diagnostics(
             "periods": int(len(ls)),
             "mean_return": float(ls.mean()),
             "annualized_return": float((1.0 + ls.mean()) ** 12 - 1.0),
-            "volatility": float(ls.std(ddof=1) * np.sqrt(12)) if len(ls) > 1 else 0.0,
+            "volatility": compute_annualized_volatility(
+                ls.to_numpy(), trading_days=12,
+            ),
             "positive_period_rate": float((ls > 0).mean()),
         }
 

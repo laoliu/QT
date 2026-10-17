@@ -22,6 +22,12 @@ if str(_PYTHON_ROOT) not in sys.path:
 DEFAULT_CONFIG = _PYTHON_ROOT / "aipha" / "configs" / "research" / "a_stock_ml.yaml"
 
 
+def _resolve_runtime_path(value: str | os.PathLike[str] | None, *default: str) -> Path:
+    from aipha.utils.paths import resolve_path
+
+    return resolve_path(value, *default)
+
+
 def _load_config(path: str | None) -> Any:
     from aipha.research.config import load_research_config
 
@@ -186,7 +192,9 @@ def run(config: dict) -> dict:
                 run_id=run_id,
                 model_id=model_id,
             )
-            output = Path(config.get("outputPath", "output/research/target_positions.json"))
+            output = _resolve_runtime_path(
+                config.get("outputPath"), "output", "research", "target_positions.json",
+            )
             output.parent.mkdir(parents=True, exist_ok=True)
             target_positions = [{
                 "symbol": item.symbol,
@@ -238,7 +246,9 @@ def run(config: dict) -> dict:
                 raise ValueError("accountValue must be positive")
             cfg = _load_config(config.get("configPath"))
             idempotency_key = str(config.get("idempotencyKey", "")).strip()
-            receipt_root = Path(os.environ.get("QUANT_DATA_DIR", "data")).expanduser().resolve()
+            receipt_root = _resolve_runtime_path(
+                os.environ.get("QUANT_DATA_DIR"), "data",
+            ).expanduser().resolve()
             receipt_path = receipt_root / "research" / "paper-executions.jsonl"
             if idempotency_key and receipt_path.is_file():
                 for line in receipt_path.read_text(encoding="utf-8").splitlines():

@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .contracts import TargetPosition, validate_market_frame
+from aipha.utils.metrics import compute_annualized_volatility, compute_sharpe_ratio
 
 
 def run_portfolio_backtest(
@@ -159,8 +160,10 @@ def run_portfolio_backtest(
     returns = pd.Series([x["daily_return"] for x in daily], dtype=float)
     navs = pd.Series([x["nav"] for x in daily], dtype=float)
     annual_return = float((navs.iloc[-1] / config.initial_capital) ** (252 / max(1, len(navs))) - 1) if len(navs) else 0.0
-    volatility = float(returns.std(ddof=1) * np.sqrt(252)) if len(returns) > 1 else 0.0
-    sharpe = float(returns.mean() / returns.std(ddof=1) * np.sqrt(252)) if len(returns) > 1 and returns.std(ddof=1) > 0 else 0.0
+    volatility = compute_annualized_volatility(returns.to_numpy(), trading_days=252)
+    sharpe = compute_sharpe_ratio(
+        returns.to_numpy(), risk_free_rate=0.0, trading_days=252,
+    )
     drawdown = navs / navs.cummax() - 1 if len(navs) else pd.Series(dtype=float)
     traded = sum(float(t["notional"]) for t in trades)
     return {

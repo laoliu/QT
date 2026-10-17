@@ -1,51 +1,46 @@
-# ML 排序选股回测配置 — LightGBM Walk-Forward
-
-name: ml_ranking_backtest
-
+# Compatibility alias for the canonical A-share research pipeline.
+# New runs should use configs/research/a_stock_ml.yaml; this file remains
+# readable so existing scripts do not silently select an AKShare backtest.
 data:
-  source: akshare
-  start_date: "2018-01-01"
-  end_date: "2024-12-31"
-  frequency: "1d"
+  provider: tushare_pit
+  snapshot_dir: data/snapshots
+  frequency: 1d
   adjust: qfq
 
 universe:
-  policy: default
+  base_index: CSI500
   exclude_st: true
   exclude_suspended: true
   min_listing_days: 252
-  base_index: CSI500
 
-strategy:
-  name: ml_stock_selector       # 需要预训练模型
-  params:
-    model_type: lgbm_ranker
-    top_k: 30
-    retrain_interval: 63        # 每季度重训练
-    train_window: 504           # 2年训练窗口
-    feature_groups:
-      - momentum
-      - value
-      - quality
-      - volatility
-      - liquidity
-      - technical
+features:
+  version: cn_equity_v1
+  groups: [value, quality, momentum, volatility, liquidity, technical]
+
+label:
+  type: forward_return_rank
+  horizon_days: 20
+  skip_days: 1
+
+model:
+  type: lightgbm_ranker
+  objective: lambdarank
+  train_years: 3
+  test_months: 1
+  purge_days: 20
+
+portfolio:
+  rebalance: monthly
+  top_k: 30
+  max_position_weight: 0.05
+  max_daily_turnover: 0.30
 
 cost:
   commission_rate: 0.0000854
   commission_min: 5.0
   stamp_tax_rate: 0.0005
-  slippage_bps: 15.0            # ML策略换手率高，滑点加大
-  slippage_model: linear_impact
-  slippage_params:
-    base_bps: 5.0
-    impact_coeff: 30.0
+  transfer_fee_rate: 0.00001
+  slippage_bps: 15.0
 
-risk:
-  enabled: true
-  max_position_weight: 0.05
-  max_drawdown: 0.20
-  max_daily_turnover: 0.30
-
-initial_capital: 2000000
-output_dir: output/ml_ranking
+execution:
+  mode: paper

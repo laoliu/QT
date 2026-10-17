@@ -3,15 +3,21 @@
   "defaultMarket": "cn_stock",
   "pythonPath": "${PYTHON_BIN}",
   "tradingAccount": {
-    "mode": "live",
-    "broker": "remote-qmt",
-    "confirmationRequired": false,
-    "autoStart": true,
+    "mode": "paper",
+    "broker": "paper",
+    "confirmationRequired": true,
+    "autoStart": false,
     "qmt": {
       "windowsBridgeUrl": "http://127.0.0.1:18888",
       "miniQmtPath": "${MINI_QMT_PATH}",
       "accountId": "${TRADING_ACCOUNT_ID}"
     }
+  },
+  "research": {
+    "configPath": "python/aipha/configs/research/a_stock_ml.yaml",
+    "defaultMode": "paper",
+    "historicalProvider": "tushare_pit",
+    "featureVersion": "cn_equity_v1"
   },
   "dataProviders": {
     "yfinance": { "enabled": true },

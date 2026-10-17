@@ -1,11 +1,8 @@
-"""Aipha ML 排序引擎 — QT Python Bridge 入口。
+"""Canonical A-share research bridge.
 
-调用方式: QUANT_CONFIG='{...}' python -m engines.aipha_ml_engine
-
-支持三种模式:
-- train: Walk-Forward 训练
-- predict: 加载模型 → 排序 → 返回 top-k
-- evaluate: IC/IR 评估
+Actions: ``train`` (offline Parquet panel), ``predict``, ``evaluate``,
+``export`` (target positions), and ``list_models``. Historical training never
+falls back to a network provider: it consumes a frozen local feature panel.
 """
 from __future__ import annotations
 
@@ -13,137 +10,156 @@ import json
 import os
 import sys
 import traceback
+from pathlib import Path
+from typing import Any
 
-_dir = os.path.dirname(os.path.abspath(__file__))
-_parent = os.path.dirname(_dir)
-if _parent not in sys.path:
-    sys.path.insert(0, _parent)
+_DIR = Path(__file__).resolve().parent
+_PYTHON_ROOT = _DIR.parent.parent
+if str(_PYTHON_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PYTHON_ROOT))
+
+DEFAULT_CONFIG = _PYTHON_ROOT / "aipha" / "configs" / "research" / "a_stock_ml.yaml"
+
+
+def _load_config(path: str | None) -> Any:
+    from aipha.research.config import load_research_config
+
+    return load_research_config(path or DEFAULT_CONFIG)
+
+
+def _read_parquet(path: str | None):
+    if not path:
+        raise ValueError("dataPath is required")
+    target = Path(path).expanduser().resolve()
+    if not target.is_file() or target.suffix.lower() not in {".parquet", ".pq"}:
+        raise ValueError(f"dataPath must point to an existing Parquet file: {target}")
+    import pandas as pd
+
+    frame = pd.read_parquet(target)
+    sidecar = target.with_suffix(".metadata.json")
+    if not sidecar.is_file():
+        raise ValueError(
+            f"snapshot metadata sidecar required: {sidecar} "
+            "(provider, data_snapshot_id, feature_version)"
+        )
+    metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+    if not isinstance(metadata, dict):
+        raise ValueError("snapshot metadata sidecar must contain a JSON object")
+    frame.attrs["snapshot_metadata"] = metadata
+    return frame
 
 
 def run(config: dict) -> dict:
-    action = config.get("action", "predict")
+    action = config.get("action", "list_models")
+    try:
+        if action == "list_models":
+            return {"ok": True, "data": {"models": ["lgbm", "linear"], "default": "lgbm",
+                                           "linear_implementation": "elasticnet"}}
+        if action == "train":
+            from aipha.research import ResearchPipeline
 
-    if action == "predict":
-        return _predict(config)
-    elif action == "train":
-        return _train(config)
-    elif action == "evaluate":
-        return _evaluate(config)
-    elif action == "list_models":
-        return {
-            "ok": True,
-            "data": {
-                "models": ["lgbm_ranker", "gru_ranker", "ensemble"],
-                "ensemble_methods": ["rank_average", "weighted_average", "stacking"],
-            },
-        }
-    else:
+            cfg = _load_config(config.get("configPath"))
+            model_type = str(config.get("modelType", "lgbm")).lower()
+            if model_type not in {"lgbm", "linear"}:
+                raise ValueError("modelType must be lgbm or linear")
+            from dataclasses import replace
+            cfg = replace(cfg, model_type="elasticnet" if model_type == "linear" else "lightgbm",
+                          objective="regression" if model_type == "linear" else cfg.objective)
+            overrides = config.get("modelParams") or {}
+            if not isinstance(overrides, dict):
+                raise ValueError("modelParams must be an object")
+            allowed = {"n_estimators", "train_years", "test_months", "purge_days", "top_k"}
+            unknown = set(overrides) - allowed
+            if unknown:
+                raise ValueError(f"unsupported modelParams: {', '.join(sorted(unknown))}")
+            if overrides:
+                cfg = replace(cfg, **{key: int(value) for key, value in overrides.items()})
+            pipeline = ResearchPipeline(cfg)
+            result = pipeline.run(
+                _read_parquet(config.get("dataPath")),
+                config.get("outputDir", "output/research/runs"),
+                data_snapshot_id=config.get("dataSnapshotId"),
+            )
+            return {"ok": True, "data": result}
+        if action == "predict":
+            from aipha.research import load_verified_selector
+
+            cfg = _load_config(config.get("configPath"))
+            feature_path = config.get("featurePath") or config.get("dataPath")
+            frame = _read_parquet(feature_path)
+            if "datetime" not in frame and "trade_date" in frame:
+                frame["datetime"] = frame["trade_date"]
+            model_path = config.get("modelPath")
+            if not model_path:
+                raise ValueError("modelPath is required")
+            selector = load_verified_selector(
+                model_path,
+                expected_feature_version=cfg.feature_version,
+                expected_feature_columns=config.get("featureColumns"),
+                expected_model_type="elasticnet" if str(config.get("modelType", "lgbm")).lower() == "linear" else "lightgbm",
+            )
+            frame = frame.copy()
+            frame["score"] = selector.predict(frame).to_numpy()
+            frame["trade_date"] = frame["datetime"]
+            frame["rank"] = frame.groupby("trade_date")["score"].rank(
+                ascending=False, method="first",
+            ).astype(int)
+            top_n = int(config.get("topN", cfg.top_k))
+            result = frame.sort_values(["trade_date", "rank"]).groupby(
+                "trade_date", sort=True,
+            ).head(top_n)
+            columns = ["trade_date", "symbol", "score", "rank"]
+            result = result[columns]
+            return {"ok": True, "data": {"rankings": result.to_dict("records"), "totalSymbols": int(len(frame)), "topN": top_n}}
+        if action == "evaluate":
+            from aipha.research.pipeline import _evaluate_predictions
+
+            path = config.get("predictionsPath") or config.get("dataPath")
+            frame = _read_parquet(path)
+            from aipha.research import build_target_positions
+            cfg = _load_config(config.get("configPath"))
+            normalized = frame.rename(columns={"datetime": "trade_date", "pred_score": "score"})
+            normalized["trade_date"] = __import__("pandas").to_datetime(normalized["trade_date"]).dt.date
+            targets = build_target_positions(
+                normalized,
+                top_k=cfg.top_k,
+                max_position_weight=cfg.max_position_weight,
+            )
+            metrics = _evaluate_predictions(normalized, targets, cfg)
+            return {"ok": True, "data": {"metrics": metrics, "rows": int(len(normalized))}}
+        if action == "export":
+            from aipha.research import build_target_positions
+            from dataclasses import asdict
+
+            cfg = _load_config(config.get("configPath"))
+            source = _read_parquet(config.get("predictionsPath") or config.get("dataPath"))
+            source = source.rename(columns={"datetime": "trade_date", "pred_score": "score"})
+            targets = build_target_positions(
+                source,
+                top_k=int(config.get("topN", cfg.top_k)),
+                max_position_weight=cfg.max_position_weight,
+                run_id=str(config.get("runId", "")),
+                model_id=str(config.get("modelId", "")),
+            )
+            output = Path(config.get("outputPath", "output/research/target_positions.json"))
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                json.dumps([
+                    {**asdict(item), "rebalance_date": item.rebalance_date.isoformat(),
+                     "risk_flags": list(item.risk_flags)}
+                    for item in targets
+                ], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return {"ok": True, "data": {"outputPath": str(output), "count": len(targets)}}
         return {"ok": False, "error": f"未知 action: {action}"}
-
-
-def _predict(config: dict) -> dict:
-    model_path = config.get("modelPath")
-    if not model_path:
-        return {"ok": False, "error": "需要 modelPath"}
-
-    from aipha.models.predictor import Predictor, PredictorConfig
-
-    predictor = Predictor(PredictorConfig(
-        model_path=model_path,
-        output_type=config.get("outputType", "rank"),
-    ))
-    predictor.load(model_path, verify_hash=config.get("verifyHash", False))
-
-    import numpy as np
-    import pandas as pd
-
-    features = config.get("features")
-    symbols = config.get("symbols", [])
-
-    if features is None:
-        return {"ok": False, "error": "需要 features 数据"}
-
-    X = pd.DataFrame(features)
-    result = predictor.predict(X, symbols)
-    top_n = config.get("topN", 30)
-    top_df = result.get_top_n(top_n)
-
-    return {
-        "ok": True,
-        "data": {
-            "rankings": top_df.to_dict("records"),
-            "totalSymbols": len(symbols),
-            "topN": top_n,
-        },
-    }
-
-
-def _train(config: dict) -> dict:
-    model_type = config.get("modelType", "lgbm")
-
-    if model_type == "lgbm":
-        from aipha.models.lgbm_ranker import LGBMRanker, LGBMRankerConfig
-        import numpy as np
-        import pandas as pd
-
-        X_train = pd.DataFrame(config["trainFeatures"])
-        y_train = np.array(config["trainLabels"])
-        group_train = np.array(config["trainGroup"])
-
-        lgbm_config = LGBMRankerConfig(**config.get("modelParams", {}))
-        model = LGBMRanker(lgbm_config)
-
-        X_valid = pd.DataFrame(config["validFeatures"]) if "validFeatures" in config else None
-        y_valid = np.array(config["validLabels"]) if "validLabels" in config else None
-        group_valid = np.array(config["validGroup"]) if "validGroup" in config else None
-
-        train_result = model.fit(X_train, y_train, group_train, X_valid, y_valid, group_valid)
-
-        save_path = config.get("savePath", "models/lgbm_ranker.joblib")
-        model.save(save_path)
-
-        return {
-            "ok": True,
-            "data": {
-                "modelType": "lgbm",
-                "trainResult": train_result,
-                "savePath": save_path,
-                "featureImportance": dict(list(model.feature_importance().items())[:20]),
-            },
-        }
-
-    return {"ok": False, "error": f"不支持的模型类型: {model_type}"}
-
-
-def _evaluate(config: dict) -> dict:
-    """评估 IC/IR"""
-    import numpy as np
-
-    predictions = np.array(config.get("predictions", []))
-    actuals = np.array(config.get("actuals", []))
-
-    if len(predictions) != len(actuals) or len(predictions) == 0:
-        return {"ok": False, "error": "predictions 和 actuals 长度不匹配或为空"}
-
-    # IC (Information Coefficient) = Spearman rank correlation
-    from scipy.stats import spearmanr
-    ic, p_value = spearmanr(predictions, actuals)
-
-    return {
-        "ok": True,
-        "data": {
-            "ic": round(float(ic), 6),
-            "p_value": round(float(p_value), 6),
-            "n_samples": len(predictions),
-        },
-    }
+    except Exception as error:
+        return {"ok": False, "error": str(error)}
 
 
 if __name__ == "__main__":
     try:
-        raw = os.environ.get("QUANT_CONFIG", "{}")
-        config = json.loads(raw)
-        result = run(config)
-        print(json.dumps(result, ensure_ascii=False, default=str))
-    except Exception as e:
-        print(json.dumps({"ok": False, "error": str(e), "trace": traceback.format_exc()}, ensure_ascii=False))
+        request = json.loads(os.environ.get("QUANT_CONFIG", "{}"))
+        print(json.dumps(run(request), ensure_ascii=False, default=str))
+    except Exception as error:
+        print(json.dumps({"ok": False, "error": str(error), "trace": traceback.format_exc()}, ensure_ascii=False))

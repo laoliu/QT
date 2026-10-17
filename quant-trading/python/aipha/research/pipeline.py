@@ -1,0 +1,524 @@
+"""Canonical A-share low-frequency research pipeline.
+
+The pipeline is intentionally a thin orchestration layer around the existing
+PIT providers, Alpha/feature implementations and LightGBM selector.  It gives
+those components one stable contract while leaving legacy strategies usable.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import date
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from .contracts import TargetPosition, validate_market_frame
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchConfig:
+    """Default research policy for A-share low-frequency strategies."""
+
+    data_provider: str = "tushare_pit"
+    feature_version: str = "cn_equity_v1"
+    universe: str = "csi500"
+    rebalance: str = "monthly"
+    train_years: int = 3
+    test_months: int = 1
+    forward_days: int = 20
+    label_skip_days: int = 1
+    purge_days: int = 20
+    top_k: int = 30
+    max_position_weight: float = 0.05
+    max_daily_turnover: float = 0.30
+    model_type: str = "lightgbm"
+    objective: str = "lambdarank"
+    initial_capital: float = 1_000_000.0
+    n_estimators: int = 300
+    commission_rate: float = 8.54e-05
+    commission_min: float = 5.0
+    stamp_tax_rate: float = 0.0005
+    transfer_fee_rate: float = 0.00001
+    slippage_bps: float = 15.0
+    feature_groups: tuple[str, ...] = (
+        "value", "quality", "momentum", "volatility", "liquidity", "technical",
+    )
+
+    def __post_init__(self) -> None:
+        if self.model_type not in {"lightgbm", "elasticnet"}:
+            raise ValueError("canonical research pipeline supports model_type=lightgbm or elasticnet")
+        if self.rebalance != "monthly":
+            raise ValueError("canonical research pipeline currently uses monthly rebalance")
+        if self.train_years < 1 or self.test_months < 1 or self.n_estimators < 1:
+            raise ValueError("train_years and test_months must be positive")
+        if self.forward_days < 1 or self.purge_days < self.forward_days:
+            raise ValueError("purge_days must be >= forward_days")
+        if not 0 < self.max_position_weight <= 1:
+            raise ValueError("max_position_weight must be in (0, 1]")
+        if not 0 < self.max_daily_turnover <= 2:
+            raise ValueError("max_daily_turnover must be in (0, 2]")
+
+    def model_config_hash(self) -> str:
+        payload = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False, default=list)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def build_forward_labels(
+    frame: pd.DataFrame,
+    *,
+    horizon_days: int = 20,
+    skip_days: int = 1,
+    price_column: str = "close",
+) -> pd.DataFrame:
+    """Create T+1-aligned forward-return and cross-sectional rank labels.
+
+    The input is never mutated.  The last ``skip_days + horizon_days`` rows of
+    each symbol are dropped because their labels are not observable yet.
+    """
+    if horizon_days < 1 or skip_days < 0:
+        raise ValueError("horizon_days must be positive and skip_days non-negative")
+    if price_column not in frame.columns:
+        raise ValueError(f"missing label price column: {price_column}")
+    out = frame.copy()
+    out["trade_date"] = pd.to_datetime(out["trade_date"], errors="raise")
+    out = out.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
+    grouped = out.groupby("symbol", sort=False)[price_column]
+    base = grouped.shift(-skip_days)
+    future = grouped.shift(-(skip_days + horizon_days))
+    out["fwd_return"] = future / base - 1.0
+    out = out.dropna(subset=["fwd_return"]).copy()
+    out["fwd_return_rank"] = out.groupby("trade_date")["fwd_return"].rank(
+        method="average", pct=True,
+    )
+    out["trade_date"] = out["trade_date"].dt.date
+    return out
+
+
+def build_target_positions(
+    predictions: pd.DataFrame,
+    *,
+    top_k: int = 30,
+    max_position_weight: float = 0.05,
+    run_id: str = "",
+    model_id: str = "",
+) -> list[TargetPosition]:
+    """Turn one or more prediction dates into capped equal-weight targets."""
+    required = {"trade_date", "symbol", "score"}
+    missing = required - set(predictions.columns)
+    if missing:
+        raise ValueError(f"predictions missing columns: {', '.join(sorted(missing))}")
+    if top_k < 1 or max_position_weight <= 0:
+        raise ValueError("top_k and max_position_weight must be positive")
+    normalized = predictions.copy()
+    normalized["trade_date"] = pd.to_datetime(normalized["trade_date"]).dt.date
+    period = pd.to_datetime(normalized["trade_date"].astype(str)).dt.to_period("M")
+    last_dates = normalized.assign(_period=period).groupby("_period")["trade_date"].max()
+    normalized = normalized[normalized["trade_date"].isin(set(last_dates))]
+    rows: list[TargetPosition] = []
+    for raw_date, group in normalized.groupby("trade_date", sort=True):
+        ranked = group.dropna(subset=["score"]).sort_values(
+            ["score", "symbol"], ascending=[False, True],
+        ).head(top_k)
+        if ranked.empty:
+            continue
+        weight = min(max_position_weight, 1.0 / len(ranked))
+        for rank, row in enumerate(ranked.itertuples(index=False), start=1):
+            rows.append(TargetPosition(
+                rebalance_date=pd.Timestamp(raw_date).date(),
+                symbol=str(row.symbol),
+                target_weight=float(weight),
+                reason=f"ml_rank_{rank}",
+                run_id=run_id,
+                model_id=model_id,
+                signal_id=f"{run_id or model_id or 'research'}:{pd.Timestamp(raw_date).date().isoformat()}:{row.symbol}",
+            ))
+    return rows
+
+
+class ResearchPipeline:
+    """One canonical train/evaluate/export entry point."""
+
+    def __init__(self, config: ResearchConfig | None = None) -> None:
+        self.config = config or ResearchConfig()
+        self.run_id = uuid.uuid4().hex
+
+    def prepare_labels(self, market: pd.DataFrame) -> pd.DataFrame:
+        checked = validate_market_frame(market)
+        return build_forward_labels(
+            checked,
+            horizon_days=self.config.forward_days,
+            skip_days=self.config.label_skip_days,
+        )
+
+    def train_oos(self, features: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any], Any]:
+        """Train the canonical LightGBM selector and return OOS predictions."""
+        from aipha.models.ml_stock_selector import MLSelectorConfig, MLStockSelector
+
+        required = {"symbol"}
+        if not required.issubset(features.columns) or not ({"datetime", "trade_date"} & set(features.columns)):
+            raise ValueError("features must contain a date column (datetime or trade_date) and symbol")
+        labelled = features.copy()
+        if "datetime" not in labelled.columns:
+            labelled["datetime"] = pd.to_datetime(labelled["trade_date"])
+        if "fwd_return_rank" not in labelled.columns:
+            market = labelled.drop(columns=["datetime"], errors="ignore")
+            labelled = self.prepare_labels(market)
+            labelled["datetime"] = pd.to_datetime(labelled["trade_date"])
+        excluded = {
+            "datetime", "trade_date", "symbol", "open", "high", "low", "close",
+            "volume", "amount", "vol", "pre_close", "change", "pct_chg",
+            "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
+            "is_index_member", "is_st", "listing_days",
+            "fwd_return", "fwd_return_rank", "fwd_return_raw", "label",
+            "feature_version", "feature_set", "industry", "sector", "sw_industry",
+        }
+        feature_cols = [
+            column for column in labelled.columns
+            if column not in excluded and labelled[column].dtype.kind in ("f", "i", "u")
+        ]
+        if not feature_cols:
+            raise ValueError("no numeric feature columns found after excluding labels and market metadata")
+        selector_config = MLSelectorConfig(
+            model_type=self.config.model_type,
+            objective=self.config.objective,
+            train_years=self.config.train_years,
+            predict_months=self.config.test_months,
+            forward_days=self.config.forward_days,
+            label_skip_days=self.config.label_skip_days,
+            purge_days=self.config.purge_days,
+            top_k=self.config.top_k,
+            feature_cols=feature_cols,
+            n_estimators=self.config.n_estimators,
+        )
+        selector = MLStockSelector(selector_config)
+        oos = selector.walk_forward_train(labelled)
+        summary = selector.get_wf_summary()
+        summary.update({
+            "run_id": self.run_id,
+            "feature_version": self.config.feature_version,
+            "model_config_hash": self.config.model_config_hash(),
+            "model_type": self.config.model_type,
+        })
+        return oos, summary, selector
+
+    def run(
+        self,
+        features: pd.DataFrame,
+        output_root: str | Path,
+        *,
+        data_snapshot_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Run OOS training/evaluation and persist an immutable run directory.
+
+        ``features`` must contain a point-in-time feature panel plus daily OHLCV.
+        It can be read from Parquet, so tests and offline research never need a
+        network connection or broker account.
+        """
+        source = features.copy()
+        if "trade_date" not in source and "datetime" in source:
+            source = source.rename(columns={"datetime": "trade_date"})
+        source = validate_market_frame(source)
+        input_start = pd.Timestamp(source["trade_date"].min()).date().isoformat()
+        input_end = pd.Timestamp(source["trade_date"].max()).date().isoformat()
+        source["datetime"] = pd.to_datetime(source["trade_date"])
+        source = _filter_historical_universe(source)
+        if source.empty:
+            raise ValueError("historical universe filter removed all rows")
+        # Preserve only explicitly versioned inputs when the caller supplies it.
+        if "feature_version" in source:
+            versions = source["feature_version"].dropna().astype(str).unique()
+            if len(versions) != 1 or versions[0] != self.config.feature_version:
+                raise ValueError(
+                    f"expected feature_version={self.config.feature_version!r}; got {versions.tolist()}"
+                )
+        else:
+            source["feature_version"] = self.config.feature_version
+
+        metadata = _load_snapshot_metadata(features)
+        if metadata["provider"] != self.config.data_provider:
+            raise ValueError(
+                f"snapshot provider must be {self.config.data_provider!r}; got {metadata['provider']!r}"
+            )
+        if metadata["feature_version"] != self.config.feature_version:
+            raise ValueError("snapshot metadata feature_version does not match research config")
+        if pd.Timestamp(metadata["start_date"]).date().isoformat() != input_start or pd.Timestamp(metadata["end_date"]).date().isoformat() != input_end:
+            raise ValueError("snapshot metadata date range does not match the input panel")
+        if data_snapshot_id is not None and data_snapshot_id != metadata["data_snapshot_id"]:
+            raise ValueError("data_snapshot_id does not match frozen snapshot metadata")
+        data_snapshot_id = metadata["data_snapshot_id"]
+
+        oos, wf_summary, selector = self.train_oos(source)
+        if oos.empty:
+            raise ValueError("walk-forward training produced no out-of-sample predictions")
+        oos = oos.rename(columns={"datetime": "trade_date", "pred_score": "score"})
+        oos["trade_date"] = pd.to_datetime(oos["trade_date"]).dt.date
+        oos["model_id"] = self.run_id
+        oos["feature_version"] = self.config.feature_version
+        targets = build_target_positions(
+            oos,
+            top_k=self.config.top_k,
+            max_position_weight=self.config.max_position_weight,
+            run_id=self.run_id,
+            model_id=self.run_id,
+        )
+        from .backtest import run_portfolio_backtest
+
+        backtest = run_portfolio_backtest(source, oos, targets, self.config)
+        metrics = _evaluate_predictions(oos, targets, self.config)
+        metrics.update(backtest["metrics"])
+        metrics["pbo_proxy"] = _pbo_proxy(wf_summary)
+        run_root = Path(output_root) / self.run_id
+        run_root.mkdir(parents=True, exist_ok=False)
+        selector.save(run_root / "model")
+        _write_model_manifest(
+            run_root / "model",
+            model_type=self.config.model_type,
+            feature_version=self.config.feature_version,
+            feature_cols=selector.config.feature_cols,
+            model_config_hash=self.config.model_config_hash(),
+        )
+        oos.to_parquet(run_root / "oos_predictions.parquet", index=False)
+        (run_root / "oos_predictions.metadata.json").write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        pd.DataFrame(backtest["daily_returns"]).to_parquet(
+            run_root / "portfolio_returns.parquet", index=False,
+        )
+        pd.DataFrame(backtest["trades"]).to_json(
+            run_root / "trades.json", orient="records", date_format="iso", force_ascii=False, indent=2,
+        )
+        pd.DataFrame([asdict(position) for position in targets]).to_json(
+            run_root / "target_positions.json", orient="records", date_format="iso", force_ascii=False, indent=2,
+        )
+        report = {
+            "run_id": self.run_id,
+            "model_type": self.config.model_type,
+            "feature_version": self.config.feature_version,
+            "data_snapshot_id": data_snapshot_id,
+            "config": asdict(self.config),
+            "walk_forward": wf_summary,
+            "metrics": metrics,
+            "n_oos_predictions": int(len(oos)),
+            "n_target_positions": len(targets),
+            "feature_missing_rate": _feature_missing_rate(source),
+            "snapshot_metadata": metadata,
+            "diagnostics": {
+                "pbo_proxy": metrics["pbo_proxy"],
+                "pbo_method": "fraction_of_folds_with_positive_IS_IC_and_nonpositive_OOS_IC",
+                "is_oos_decay": wf_summary.get("is_oos_decay_per_fold", []),
+            },
+            "n_trades": len(backtest["trades"]),
+            "n_unexecutable": backtest["n_unexecutable"],
+            "portfolio_returns_path": "portfolio_returns.parquet",
+            "trades_path": "trades.json",
+        }
+        (run_root / "report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
+        )
+        self.export_manifest(
+            run_root,
+            train_start=pd.Timestamp(source["trade_date"].min()).date(),
+            train_end=pd.Timestamp(source["trade_date"].max()).date(),
+            oos_start=min(oos["trade_date"]),
+            oos_end=max(oos["trade_date"]),
+            data_snapshot_id=data_snapshot_id,
+            metrics=metrics,
+        )
+        return {"run_id": self.run_id, "artifact_dir": str(run_root), **report}
+
+    def export_manifest(
+        self,
+        output_dir: str | Path,
+        *,
+        train_start: date,
+        train_end: date,
+        oos_start: date,
+        oos_end: date,
+        data_snapshot_id: str | None = None,
+        metrics: dict[str, float] | None = None,
+    ) -> Path:
+        """Write an immutable run manifest next to model/report artifacts."""
+        root = Path(output_dir)
+        root.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "run_id": self.run_id,
+            "data_provider": self.config.data_provider,
+            "model_type": self.config.model_type,
+            "data_snapshot_id": data_snapshot_id or f"{self.config.data_provider}:{train_start}:{oos_end}",
+            "feature_version": self.config.feature_version,
+            "model_config_hash": self.config.model_config_hash(),
+            "train_start": train_start.isoformat(),
+            "train_end": train_end.isoformat(),
+            "oos_start": oos_start.isoformat(),
+            "oos_end": oos_end.isoformat(),
+            "metrics": metrics or {},
+            "config": asdict(self.config),
+            "model_artifact": "model/",
+            "predictions": "oos_predictions.parquet",
+            "portfolio_returns": "portfolio_returns.parquet",
+            "targets": "target_positions.json",
+        }
+        path = root / "run_manifest.json"
+        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return path
+
+
+def _evaluate_predictions(
+    predictions: pd.DataFrame,
+    targets: list[TargetPosition],
+    config: ResearchConfig,
+) -> dict[str, float]:
+    """Compute OOS cross-sectional metrics and an explicit turnover-cost estimate."""
+    from scipy.stats import spearmanr
+
+    daily_ic: list[float] = []
+    top_returns: list[float] = []
+    bottom_returns: list[float] = []
+    quintile_returns: dict[int, list[float]] = {index: [] for index in range(1, 6)}
+    for _, group in predictions.groupby("trade_date", sort=True):
+        valid = group.dropna(subset=["score", "fwd_return"])
+        if len(valid) < 3:
+            continue
+        rho = spearmanr(valid["score"], valid["fwd_return"]).statistic
+        if np.isfinite(rho):
+            daily_ic.append(float(rho))
+        ranked = valid.sort_values("score", ascending=False)
+        top_returns.append(float(ranked.head(config.top_k)["fwd_return"].mean()))
+        bottom_returns.append(float(ranked.tail(config.top_k)["fwd_return"].mean()))
+        ranked = ranked.copy()
+        ranked["quintile"] = pd.qcut(
+            ranked["score"].rank(method="first", ascending=False),
+            q=5, labels=False, duplicates="drop",
+        )
+        for bucket in range(5):
+            values = ranked.loc[ranked["quintile"] == bucket, "fwd_return"]
+            if not values.empty:
+                quintile_returns[5 - bucket].append(float(values.mean()))
+    target_frame = pd.DataFrame([asdict(p) for p in targets])
+    turnover_cost = 0.0
+    if not target_frame.empty:
+        # Estimate portfolio turnover between monthly target snapshots. The
+        # cost model applies commission, transfer fee and slippage to both
+        # sides, with stamp tax on sells; final exchange behavior remains in
+        # the event-driven backtest/execution layer.
+        weight_maps = [
+            dict(zip(g["symbol"], g["target_weight"]))
+            for _, g in target_frame.groupby("rebalance_date", sort=True)
+        ]
+        previous: dict[str, float] = {}
+        turnover_costs: list[float] = []
+        for current in weight_maps:
+            symbols = set(previous) | set(current)
+            gross = 0.0
+            for symbol in symbols:
+                delta = current.get(symbol, 0.0) - previous.get(symbol, 0.0)
+                rate = config.commission_rate + config.transfer_fee_rate + config.slippage_bps / 10_000
+                if delta < 0:
+                    rate += config.stamp_tax_rate
+                gross += abs(delta) * rate
+            turnover_costs.append(gross)
+            previous = current
+        turnover_cost = float(np.mean(turnover_costs)) if turnover_costs else 0.0
+    top_mean = float(np.mean(top_returns)) if top_returns else 0.0
+    bottom_mean = float(np.mean(bottom_returns)) if bottom_returns else 0.0
+    ic_mean = float(np.mean(daily_ic)) if daily_ic else 0.0
+    ic_std = float(np.std(daily_ic, ddof=1)) if len(daily_ic) > 1 else 0.0
+    return {
+        "rank_ic": ic_mean,
+        "icir": ic_mean / ic_std if ic_std > 0 else 0.0,
+        "top_k_mean_forward_return": top_mean,
+        "bottom_k_mean_forward_return": bottom_mean,
+        "top_bottom_spread": top_mean - bottom_mean,
+        "quintile_1_mean_forward_return": float(np.mean(quintile_returns[1])) if quintile_returns[1] else 0.0,
+        "quintile_5_mean_forward_return": float(np.mean(quintile_returns[5])) if quintile_returns[5] else 0.0,
+        "estimated_turnover_cost": turnover_cost,
+        "top_k_mean_forward_return_net_estimated_cost": top_mean - turnover_cost,
+    }
+
+
+def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, str]:
+    metadata = frame.attrs.get("snapshot_metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("frozen snapshot metadata is required (Parquet sidecar <file>.metadata.json)")
+    required = {"provider", "data_snapshot_id", "feature_version", "start_date", "end_date"}
+    missing = required - set(metadata)
+    if missing:
+        raise ValueError(f"snapshot metadata missing fields: {', '.join(sorted(missing))}")
+    normalized = {key: str(metadata[key]).strip() for key in required}
+    if any(not value for value in normalized.values()):
+        raise ValueError("snapshot metadata values must be non-empty")
+    return normalized
+
+
+def _feature_missing_rate(frame: pd.DataFrame) -> float:
+    excluded = {
+        "trade_date", "datetime", "symbol", "open", "high", "low", "close",
+        "volume", "amount", "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
+        "is_index_member", "is_st", "listing_days",
+        "feature_version", "feature_set", "industry", "sector", "sw_industry",
+    }
+    cols = [c for c in frame.columns if c not in excluded and pd.api.types.is_numeric_dtype(frame[c])]
+    return float(frame[cols].isna().mean().mean()) if cols else 0.0
+
+
+def _pbo_proxy(wf_summary: dict[str, Any]) -> float:
+    """Conservative fold-level overfit proxy; not a CSCV PBO estimate."""
+    folds = wf_summary.get("folds", []) if isinstance(wf_summary, dict) else []
+    comparable = [
+        row for row in folds
+        if row.get("is_mean_ic") is not None and row.get("mean_ic") is not None
+    ]
+    if not comparable:
+        return 0.0
+    failures = sum(float(row["is_mean_ic"]) > 0 and float(row["mean_ic"]) <= 0 for row in comparable)
+    return float(failures / len(comparable))
+
+
+def _filter_historical_universe(frame: pd.DataFrame) -> pd.DataFrame:
+    required = {"is_index_member", "is_st", "listing_days", "is_suspended"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(
+            "historical point-in-time universe fields required: " + ", ".join(sorted(missing))
+        )
+    out = frame.copy()
+    if out[list(required)].isna().any().any():
+        raise ValueError("historical universe fields cannot be missing")
+    def as_bool(series: pd.Series) -> pd.Series:
+        if pd.api.types.is_bool_dtype(series):
+            return series
+        return series.astype(str).str.strip().str.lower().isin({"1", "true", "yes", "y"})
+
+    eligible = (
+        as_bool(out["is_index_member"])
+        & ~as_bool(out["is_st"])
+        & (pd.to_numeric(out["listing_days"], errors="coerce") >= 252)
+        & ~out["is_suspended"].astype(bool)
+    )
+    return out.loc[eligible].reset_index(drop=True)
+
+
+def _write_model_manifest(
+    model_dir: Path,
+    *,
+    model_type: str,
+    feature_version: str,
+    feature_cols: list[str],
+    model_config_hash: str,
+) -> Path:
+    """Write the schema guard consumed before a saved model is loaded."""
+    manifest = {
+        "schema_version": 1,
+        "model_type": model_type,
+        "feature_version": feature_version,
+        "feature_columns": list(feature_cols),
+        "model_config_hash": model_config_hash,
+    }
+    path = model_dir / "model_manifest.json"
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path

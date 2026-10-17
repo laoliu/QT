@@ -1,0 +1,50 @@
+# Canonical low-frequency A-share research defaults.
+# Input market/feature panels are frozen local Parquet snapshots. Historical
+# provider adapters may only populate these snapshots; they do not silently
+# fall back during backtests.
+data:
+  provider: tushare_pit
+  snapshot_dir: data/snapshots
+  frequency: 1d
+  adjust: qfq
+
+universe:
+  base_index: CSI500
+  exclude_st: true
+  exclude_suspended: true
+  min_listing_days: 252
+
+features:
+  version: cn_equity_v1
+  groups: [value, quality, momentum, volatility, liquidity, technical]
+
+label:
+  type: forward_return_rank
+  horizon_days: 20
+  skip_days: 1
+  price_field: close
+
+model:
+  type: lightgbm_ranker
+  objective: lambdarank
+  train_years: 3
+  test_months: 1
+  purge_days: 20
+  n_estimators: 300
+
+portfolio:
+  rebalance: monthly
+  top_k: 30
+  max_position_weight: 0.05
+  max_daily_turnover: 0.30
+  initial_capital: 1000000
+
+cost:
+  commission_rate: 0.0000854
+  commission_min: 5.0
+  stamp_tax_rate: 0.0005
+  transfer_fee_rate: 0.00001
+  slippage_bps: 15.0
+
+execution:
+  mode: paper

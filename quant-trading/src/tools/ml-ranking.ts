@@ -2,9 +2,10 @@
  * ml_ranking tool — AI-callable for Aipha ML stock ranking.
  *
  * Actions:
- *   predict     — Load model → predict → return top-N
- *   train       — Walk-forward training
- *   evaluate    — IC/IR evaluation
+ *   predict     — Load a version-checked model and rank a Parquet feature panel
+ *   train       — Walk-forward training from a frozen local Parquet panel
+ *   evaluate    — IC/ICIR and cost-estimated evaluation
+ *   export      — Export ranked target positions for paper review
  *   list_models — Available model types
  */
 import type { QuantTradingRuntime } from "../runtime.js";
@@ -15,23 +16,25 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
   return {
     name: "ml_ranking",
     description:
-      "ML 选股排序工具（Aipha 机器学习框架）。支持 LightGBM/GRU/Ensemble 多模型打分选股。\n" +
+      "A 股低频 ML 选股排序工具（统一研究入口）。当前只支持可审计的 LightGBM 排序模型和线性基线。\n" +
       "• action=predict — 使用已训练模型预测股票排名（返回 top-N）\n" +
-      "• action=train — Walk-Forward 训练 LightGBM 排序模型\n" +
-      "• action=evaluate — 评估预测质量（IC/IR）\n" +
-      "• action=list_models — 列出可用模型类型和集成方法",
+      "• action=train — 从本地冻结 Parquet 特征快照执行 Walk-Forward\n" +
+      "• action=predict — 校验特征版本后加载模型并排序\n" +
+      "• action=evaluate — 评估 OOS RankIC/ICIR 与成本估计\n" +
+      "• action=export — 导出目标持仓 JSON（仅供 Paper 审阅）\n" +
+      "• action=list_models — 列出规范模型类型",
     parameters: {
       type: "object" as const,
       properties: {
         action: {
           type: "string",
-          enum: ["predict", "train", "evaluate", "list_models"],
+          enum: ["predict", "train", "evaluate", "export", "list_models"],
           description: "操作类型",
         },
         modelType: {
           type: "string",
-          enum: ["lgbm", "gru", "ensemble"],
-          description: "模型类型（action=train 时使用）",
+          enum: ["lgbm", "linear"],
+          description: "模型类型；默认 lgbm，linear 仅作基线",
         },
         modelPath: {
           type: "string",
@@ -45,6 +48,41 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           type: "object",
           description: "模型超参数（action=train 时使用）",
         },
+        dataPath: {
+          type: "string",
+          description: "本地 Parquet 特征/行情快照路径（train/evaluate/export）",
+        },
+        featurePath: {
+          type: "string",
+          description: "本地 Parquet 特征快照路径（predict）",
+        },
+        predictionsPath: {
+          type: "string",
+          description: "本地 OOS 预测 Parquet 路径（evaluate/export）",
+        },
+        configPath: {
+          type: "string",
+          description: "A 股研究 YAML 配置路径；默认 aipha/configs/research/a_stock_ml.yaml",
+        },
+        outputDir: {
+          type: "string",
+          description: "不可变研究 run 产物根目录（train）",
+        },
+        outputPath: {
+          type: "string",
+          description: "目标持仓 JSON 输出路径（export）",
+        },
+        dataSnapshotId: {
+          type: "string",
+          description: "外部数据快照标识，用于复现实验",
+        },
+        featureColumns: {
+          type: "array",
+          items: { type: "string" },
+          description: "期望的模型特征列顺序；不匹配时拒绝预测",
+        },
+        runId: { type: "string", description: "来源研究 run ID（export）" },
+        modelId: { type: "string", description: "来源模型 ID（export）" },
       },
       required: ["action"],
     },
@@ -52,8 +90,8 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
       const action = (args.action as string) ?? "list_models";
 
       const pyResult = await runPythonScript<{
-        ok: boolean;
-        data?: Record<string, unknown>;
+          ok: boolean;
+          data?: Record<string, unknown>;
         error?: string;
       }>(
         "engines/aipha_ml_engine.py",
@@ -61,6 +99,16 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           action,
           modelType: args.modelType,
           modelPath: args.modelPath,
+          dataPath: args.dataPath,
+          featurePath: args.featurePath,
+          predictionsPath: args.predictionsPath,
+          configPath: args.configPath,
+          outputDir: args.outputDir,
+          outputPath: args.outputPath,
+          dataSnapshotId: args.dataSnapshotId,
+          featureColumns: args.featureColumns,
+          runId: args.runId,
+          modelId: args.modelId,
           topN: (args.topN as number) ?? 30,
           modelParams: args.modelParams,
         },

@@ -155,6 +155,37 @@ export type StrategyDefinition = {
    * (e.g. A-share market does not support T+0 intraday trading)
    */
   disabled?: boolean;
+  /** Canonical catalog metadata shared by TypeScript and Python adapters. */
+  category?: string;
+  timeframes?: KlineInterval[];
+  dataRequirements?: StrategyDataRequirement[];
+  signalFormat?: "trading_signal" | "target_position" | "order_intent";
+  lifecycle?: "primary" | "compatibility" | "experimental" | "live_only";
+  availableEngines?: BacktestEngine[];
+};
+
+export type StrategyDataRequirement = "ohlcv" | "fundamentals_pit" | "features" | "index_membership_pit" | "ticks" | "order_book";
+
+/** Versioned, engine-neutral output envelope used at research/backtest boundaries. */
+export type StrategyRunEnvelope = {
+  schemaVersion: "1.0";
+  runId: string;
+  strategyId: string;
+  strategyVersion: string;
+  engine: BacktestEngine;
+  dataAsOf: string;
+  signalFormat: "trading_signal" | "target_position" | "order_intent";
+  signals: TradingSignal[];
+  targetPositions?: Array<{
+    symbol: string;
+    rebalanceDate: string;
+    targetWeight: number;
+    reason: string;
+    riskFlags: string[];
+    runId: string;
+    modelId?: string;
+    signalId: string;
+  }>;
 };
 
 /**
@@ -169,6 +200,9 @@ export type TradingSignal = {
   reason?: string;
   confidence?: number; // 0-1
   strategyId: string;
+  runId?: string;
+  strategyVersion?: string;
+  dataTimestamp?: number;
 
   // ── Option-specific fields ──
   /** Multi-leg option strategy legs (populated for option signals) */
@@ -222,6 +256,11 @@ export type BacktestRequest = {
 
 export type BacktestResult = {
   strategyId: string;
+  runId?: string;
+  strategyVersion?: string;
+  engine?: BacktestEngine;
+  dataAsOf?: string;
+  signalFormatVersion?: "1.0";
   symbols: string[];
   startDate: string;
   endDate: string;
@@ -886,6 +925,12 @@ export type QuantTradingConfig = {
   /** Shorthand provider selector: "demo" for offline/test, "local" for disk-only parquet, otherwise use `dataProviders`. */
   dataProvider?: "demo" | "akshare" | "tushare" | "yfinance" | "smart" | "jqdata" | "local";
   dataProviders?: DataProviderConfig;
+  research?: {
+    configPath?: string;
+    defaultMode?: "paper" | "live";
+    historicalProvider?: "tushare_pit";
+    featureVersion?: string;
+  };
   backtestEngine?: BacktestEngine;
   pythonPath?: string;
   tradingAccount?: TradingAccountConfig;

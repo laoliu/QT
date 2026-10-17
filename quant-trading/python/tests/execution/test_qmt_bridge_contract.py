@@ -60,6 +60,17 @@ def test_qmt_bridge_rejects_forged_provenance_even_when_complete() -> None:
     assert trader.args is None
 
 
+def test_qmt_bridge_never_places_raw_orders_even_without_profile_flag() -> None:
+    bridge = QMTBrokerBridge({"require_execution_plan": False})
+    bridge.trader = object()
+    bridge.account = object()
+    with pytest.raises(RuntimeError, match="direct order bridge is disabled"):
+        bridge.place_order({
+            "stock_code": "600000.SH", "order_type": 23, "volume": 100,
+            "run_id": "forged", "model_id": "forged", "signal_id": "forged",
+        })
+
+
 @pytest.mark.parametrize("bridge_module", [data_bridge, strategy_data_bridge], ids=["aipha", "qmt-strategy"])
 def test_http_data_bridge_rejects_raw_orders_even_with_forged_provenance(bridge_module) -> None:
     class FakeTrader:

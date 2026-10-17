@@ -186,12 +186,11 @@ class QMTBrokerBridge:
             raise RuntimeError("Not connected")
         # This NDJSON bridge accepts only a single raw order and cannot prove
         # that it belongs to a validated target plan. Provenance strings are
-        # caller-controlled, so gated/live profiles must use
-        # QMTGateway.submit_target_plan instead.
-        if self.require_execution_plan:
-            raise RuntimeError(
-                "QMT direct order bridge is disabled; submit a validated execution plan"
-            )
+        # caller-controlled, so this adapter never places orders directly;
+        # QMTGateway.submit_target_plan is the only order path.
+        raise RuntimeError(
+            "QMT direct order bridge is disabled; submit a validated execution plan"
+        )
         stock_code = params["stock_code"]
         order_type = int(params["order_type"])    # 23=buy, 24=sell
         price_type = int(params.get("price_type", 11))  # 11=限价, 5=市价

@@ -1,5 +1,9 @@
 # Aipha 回测配置模板 — ML 因子选股
 # 使用方式: aipha_backtest action=run_from_yaml yamlPath=configs/sample_ml_factor.yaml
+# Retired as a runnable backtest config: migrate this legacy shape with
+# `python scripts/migrate_research_config.py` before using the canonical PIT pipeline.
+lifecycle: retired
+replacement: aipha/configs/research/a_stock_ml.yaml
 
 data:
   source: akshare

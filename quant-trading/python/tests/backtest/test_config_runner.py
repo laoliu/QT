@@ -201,6 +201,11 @@ strategy:
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/path/config.yaml")
 
+    def test_rejects_retired_legacy_ml_sample(self):
+        legacy_path = Path(__file__).resolve().parents[2] / "configs" / "sample_ml_factor.yaml"
+        with pytest.raises(ValueError, match="retired.*migrate it"):
+            load_config(legacy_path)
+
 
 # ============================================================================
 # Config Validation Tests

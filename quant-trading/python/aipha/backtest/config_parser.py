@@ -63,6 +63,13 @@ def load_config(path: str | Path) -> BacktestRunConfig:
 
             raw = json.load(f)
 
+    if isinstance(raw, dict) and str(raw.get("lifecycle", "")).lower() == "retired":
+        replacement = str(raw.get("replacement", "the canonical A-share research config"))
+        raise ValueError(
+            f"config {path} is retired and cannot be used for a backtest; "
+            f"migrate it to {replacement}"
+        )
+
     # 展开 _preset 引用（§统一配置体系）
     from aipha.config_resolver import resolve_config_refs
 

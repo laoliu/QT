@@ -1,14 +1,15 @@
 """
-ML Ranking Screener — 将 aipha ML 排序能力注册为 QT screener 框架中的选股器
+Legacy heuristic factor screener retained for compatibility.
 
-使用 LightGBM/GRU 排序模型对全市场股票打分，输出 top-K。
-当模型文件不存在时退化为多因子综合评分。
+This screen uses hand-written factor scores; it does not load a trained model.
+Use the canonical ``ml_ranking`` research workflow for ML training and OOS
+prediction. The legacy ID remains registered only for compatibility.
 """
 from __future__ import annotations
 
 import sys
 import os
-from typing import Any, Optional
+from typing import Any
 
 # 确保可以导入 screeners 和 aipha
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -18,19 +19,18 @@ from screeners.base import BaseScreener, ScreenerResult, register_screener
 
 @register_screener
 class MLRankingScreener(BaseScreener):
-    """基于 aipha ML 排序模型的智能选股器"""
+    """Compatibility ID for deterministic heuristic factor scoring."""
 
     screener_id = "ml_ranking"
-    screener_name = "ML智能排序选股"
+    screener_name = "规则多因子筛选（兼容入口）"
     screener_description = (
-        "利用 aipha 机器学习排序模型 (LightGBM/GRU) 对股票进行多因子综合排序。"
+        "兼容用规则打分执行多因子预筛，不加载训练模型，也不替代 OOS 研究流程。"
         "自动提取动量、价值、质量、波动率、流动性、技术面等特征组，"
         "输出 top-K 股票及对应因子分数。"
     )
     supported_markets = ["cn_stock"]
 
     _DEFAULTS = {
-        "model_type": "lgbm_ranker",       # lgbm_ranker / gru_ranker
         "top_k": 30,
         "feature_groups": ["momentum", "value", "quality", "volatility", "liquidity", "technical"],
         "min_listing_days": 120,
@@ -44,6 +44,11 @@ class MLRankingScreener(BaseScreener):
         limit: int = 20,
     ) -> list[ScreenerResult]:
         params = {**self._DEFAULTS, **self.params}
+        if "model_type" in self.params:
+            raise ValueError(
+                "the legacy ml_ranking screener is heuristic-only; use the "
+                "canonical ml_ranking research workflow for trained models"
+            )
         top_k = min(params["top_k"], limit)
 
         # 1. 基础过滤
@@ -62,16 +67,7 @@ class MLRankingScreener(BaseScreener):
         if not candidates:
             return []
 
-        # 2. 尝试加载 ML 模型
-        ml_available = False
-        try:
-            from aipha.models.lgbm_ranker import LGBMRanker
-            from aipha.models.feature_eng import FeatureEngineer
-            ml_available = True
-        except ImportError:
-            pass
-
-        # 3. 多因子评分 (ML 退化模式 / 直接评分)
+        # Deterministic compatibility scoring; never claim this is ML inference.
         results: list[ScreenerResult] = []
         for code, data in candidates.items():
             score, factors, signals = self._compute_score(data, params)

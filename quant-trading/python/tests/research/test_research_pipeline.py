@@ -72,6 +72,7 @@ def test_default_yaml_is_canonical_and_safe() -> None:
     path = Path(__file__).parents[2] / "aipha" / "configs" / "research" / "a_stock_ml.yaml"
     config = load_research_config(path)
     assert config.data_provider == "tushare_pit"
+    assert config.adjust == "point_in_time"
     assert config.feature_version == "cn_equity_v1"
     assert config.rebalance == "monthly"
     assert config.forward_days == config.purge_days == 20
@@ -87,6 +88,9 @@ def test_config_rejects_non_paper_and_non_pit_modes(tmp_path: Path) -> None:
     cfg = tmp_path / "bad.yaml"
     cfg.write_text("data:\n  provider: akshare\n", encoding="utf-8")
     with pytest.raises(ValueError, match="tushare_pit"):
+        load_research_config(cfg)
+    cfg.write_text("data:\n  provider: tushare_pit\n  adjust: qfq\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="point_in_time"):
         load_research_config(cfg)
 
 

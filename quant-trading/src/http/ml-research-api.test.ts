@@ -1,4 +1,7 @@
 import { Readable } from "node:stream";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createMLResearchHandler } from "./ml-research-api.js";
@@ -74,6 +77,29 @@ describe("canonical ML research HTTP boundary", () => {
     await handler(request("POST", { action: "execute_paper", confirm: true, mode: "live", planPath: "plan.json", accountValue: 1000 }, { "idempotency-key": "live-1" }), live.res);
     expect(live.status).toBe(403);
     expect(live.body.code).toBe("LIVE_NOT_ALLOWED");
+  });
+
+  it("restores idempotent results after the handler is recreated", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "qt-ml-api-"));
+    try {
+      let calls = 0;
+      const run = async () => {
+        calls++;
+        return { ok: true, data: { ok: true, data: { runId: "run-durable" } } };
+      };
+      const firstHandler = createMLResearchHandler({ dataDir } as never, { run });
+      const first = response();
+      await firstHandler(request("POST", { action: "train", dataPath: "snapshot.parquet" }, { "idempotency-key": "durable-key" }), first.res);
+      const restartedHandler = createMLResearchHandler({ dataDir } as never, { run });
+      const replay = response();
+      await restartedHandler(request("POST", { action: "train", dataPath: "snapshot.parquet" }, { "idempotency-key": "durable-key" }), replay.res);
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
+      expect(replay.body.idempotentReplay).toBe(true);
+      expect(calls).toBe(1);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 });
 

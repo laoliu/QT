@@ -7,7 +7,7 @@
  * accepts a live execution action and never selects a broker.
  */
 import { createHash } from "node:crypto";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { QuantTradingRuntime } from "../runtime.js";
@@ -78,8 +78,27 @@ export function createMLResearchHandler(
   ));
   const audit = options.audit ?? ((event) => appendAudit(config, event));
   const idempotency = new Map<string, IdempotencyEntry>();
+  const restoreIdempotency = (async () => {
+    if (options.audit) return;
+    try {
+      const contents = await readFile(auditPath(config), "utf8");
+      for (const line of contents.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line) as JsonObject;
+          const key = typeof event.idempotencyKey === "string" ? event.idempotencyKey : "";
+          const digest = typeof event.payloadDigest === "string" ? event.payloadDigest : "";
+          const response = event.response as RouteResult | undefined;
+          if (key && digest && response && typeof response.status === "number" && response.body) {
+            idempotency.set(key, { digest, promise: Promise.resolve(response) });
+          }
+        } catch { /* tolerate a truncated final audit record */ }
+      }
+    } catch { /* a missing audit file means there is no prior request state */ }
+  })();
 
   const execute = async (req: IncomingMessage): Promise<RouteResult> => {
+    await restoreIdempotency;
     let body: JsonObject;
     try {
       body = await parseJsonBody<JsonObject>(req);
@@ -123,21 +142,21 @@ export function createMLResearchHandler(
         const bridge = await run(payload);
         if (!bridge.ok) {
           const result: RouteResult = { status: 502, body: { status: "error", code: "PYTHON_BRIDGE_FAILED", message: bridge.error ?? "Python bridge failed" } };
-          await audit({ ...request, idempotencyKey: key || undefined, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message });
+          await audit({ ...request, idempotencyKey: key || undefined, payloadDigest: digest, response: result, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message });
           return result;
         }
         const inner = bridge.data as JsonObject | undefined;
         if (inner?.ok === false) {
           const result: RouteResult = { status: action === "execute_paper" ? 422 : 400, body: { status: "error", code: "RESEARCH_ACTION_FAILED", message: String(inner.error ?? "研究 action 执行失败"), data: inner.data } };
-          await audit({ ...request, idempotencyKey: key || undefined, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message });
+          await audit({ ...request, idempotencyKey: key || undefined, payloadDigest: digest, response: result, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message });
           return result;
         }
         const result: RouteResult = { status: 200, body: { status: "ok", action, data: inner?.data ?? inner ?? bridge.data, idempotentReplay: false } };
-        await audit({ ...request, idempotencyKey: key || undefined, outcome: "succeeded", status: result.status, provenance: (inner?.data as JsonObject | undefined)?.provenance });
+        await audit({ ...request, idempotencyKey: key || undefined, payloadDigest: digest, response: result, outcome: "succeeded", status: result.status, provenance: (inner?.data as JsonObject | undefined)?.provenance });
         return result;
       } catch (error) {
         const result: RouteResult = { status: 500, body: { status: "error", code: "RESEARCH_ROUTE_FAILED", message: (error as Error).message } };
-        try { await audit({ ...request, idempotencyKey: key || undefined, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message }); } catch { /* preserve original error */ }
+        try { await audit({ ...request, idempotencyKey: key || undefined, payloadDigest: digest, response: result, outcome: "failed", status: result.status, code: result.body.code, error: result.body.message }); } catch { /* preserve original error */ }
         return result;
       }
     })();

@@ -29,7 +29,7 @@ from aipha.research.contracts import FinancialSnapshot, TargetPosition
 from aipha.research.pipeline import _filter_historical_universe
 from aipha.research.artifacts import load_verified_selector
 from aipha.research.execution_plan import build_execution_plan, execute_target_plan, read_execution_plan
-from aipha.research.snapshots import frame_content_sha256
+from aipha.research.snapshots import SNAPSHOT_GENERATOR_VERSION, frame_content_sha256
 
 
 def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
@@ -53,6 +53,7 @@ def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
                 "volume": 100000.0,
                 "amount": price * 100000.0,
                 "adj_factor": 1.0,
+                "price_adjustment": "point_in_time_factor",
                 "is_suspended": False,
                 "is_limit_up": False,
                 "is_limit_down": False,
@@ -457,7 +458,7 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
         "feature_version": "cn_equity_v1",
         "start_date": "2022-01-03", "end_date": "2023-05-19",
         "snapshot_schema_version": 1,
-        "generator_version": "test-fixture/1",
+        "generator_version": SNAPSHOT_GENERATOR_VERSION,
     }
     fixture.attrs["snapshot_metadata"]["snapshot_content_sha256"] = frame_content_sha256(fixture)
     result = pipeline.run(fixture, tmp_path / "runs", data_snapshot_id="fixture-v1")
@@ -465,6 +466,16 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert result["data_snapshot_id"] == "fixture-v1"
     with pytest.raises(ValueError, match="metadata"):
         pipeline.run(_panel(n_symbols=20), tmp_path / "missing-metadata", data_snapshot_id="fixture-v1")
+    unversioned = fixture.drop(columns="feature_version").copy()
+    unversioned.attrs["snapshot_metadata"] = dict(fixture.attrs["snapshot_metadata"])
+    unversioned.attrs["snapshot_metadata"]["snapshot_content_sha256"] = frame_content_sha256(unversioned)
+    with pytest.raises(ValueError, match="feature_version column"):
+        pipeline.run(unversioned, tmp_path / "unversioned", data_snapshot_id="fixture-v1")
+    spoofed = fixture.copy()
+    spoofed.attrs["snapshot_metadata"] = dict(fixture.attrs["snapshot_metadata"])
+    spoofed.attrs["snapshot_metadata"]["generator_version"] = "external/fake"
+    with pytest.raises(ValueError, match="canonical snapshot builder"):
+        pipeline.run(spoofed, tmp_path / "spoofed", data_snapshot_id="fixture-v1")
     assert (artifact_dir / "model" / "model_manifest.json").is_file()
     assert (artifact_dir / "input_snapshot.parquet").is_file()
     assert (artifact_dir / "input_snapshot.metadata.json").is_file()

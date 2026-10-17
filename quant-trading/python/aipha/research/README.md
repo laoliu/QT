@@ -75,6 +75,13 @@ The old `configs/sample_ml_factor.yaml` shape can be converted with
 unchanged, emits warnings for dropped legacy fields, and always writes a
 TuShare-PIT/paper configuration.
 
+Legacy SQLite history can be audited and migrated without replacing the old
+database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
+read-only comparison, `--conflicts` to export keyed row conflicts, or
+`--migrate OLD.db NEW.db` to publish a verified copy. Migration retains the
+old file and fences its future writes; an existing destination is never
+overwritten.
+
 The same canonical bridge is available over the authenticated Node HTTP API
 at `POST /quant/api/research/ml-ranking` (and `GET` for `list_models`).
 Mutating actions require an `Idempotency-Key`; `execute_paper` additionally

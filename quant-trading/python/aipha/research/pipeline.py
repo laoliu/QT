@@ -321,7 +321,7 @@ class ResearchPipeline:
                     f"expected feature_version={self.config.feature_version!r}; got {versions.tolist()}"
                 )
         else:
-            source["feature_version"] = self.config.feature_version
+            raise ValueError("versioned research input requires a feature_version column")
 
         metadata = _load_snapshot_metadata(features)
         if metadata["provider"] != self.config.data_provider:
@@ -761,8 +761,20 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
 
         if frame_content_sha256(frame) != content_hash:
             raise ValueError("snapshot_content_sha256 does not match the input panel")
-        if not metadata.get("generator_version"):
-            raise ValueError("tushare_pit snapshot metadata requires generator_version")
+        from .snapshots import SNAPSHOT_GENERATOR_VERSION, SNAPSHOT_SCHEMA_VERSION
+
+        if metadata.get("generator_version") != SNAPSHOT_GENERATOR_VERSION:
+            raise ValueError("tushare_pit snapshot was not produced by the canonical snapshot builder")
+        if metadata.get("snapshot_schema_version") != SNAPSHOT_SCHEMA_VERSION:
+            raise ValueError("unsupported TuShare PIT snapshot schema version")
+        if "feature_version" not in frame:
+            raise ValueError("TuShare PIT panel must carry a row-level feature_version")
+        versions = frame["feature_version"].dropna().astype(str).unique()
+        if len(versions) != 1 or versions[0] != normalized["feature_version"]:
+            raise ValueError("TuShare PIT row feature_version does not match snapshot metadata")
+        adjustment = frame.get("price_adjustment")
+        if adjustment is None or not adjustment.astype(str).eq("point_in_time_factor").all():
+            raise ValueError("TuShare PIT panel must use same-day point-in-time adjustment factors")
     return normalized
 
 

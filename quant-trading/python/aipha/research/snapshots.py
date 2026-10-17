@@ -369,7 +369,11 @@ def financial_snapshots_from_provider(
                 })
         statement_loader = getattr(pit_provider, "get_statement_history", None)
         if callable(statement_loader):
-            history_start = start_date or date.min
+            # Include facts announced before the market window.  The as-of
+            # join needs the last previously published statement to seed the
+            # first feature rows; starting at the first trade date would make
+            # those rows look like missing fundamentals until the next filing.
+            history_start = date.min
             history_end = end_date or date.max
             for statement_type in statement_types:
                 statements = statement_loader(

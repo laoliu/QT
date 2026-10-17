@@ -189,11 +189,18 @@ def test_tushare_snapshot_materializes_announced_indicator_and_statement_history
                 "balance": {"total_assets": 3500.0},
                 "cashflow": {"cash_from_operations": 450.0},
             }
-            return [SimpleNamespace(
+            announced_before_window = SimpleNamespace(
+                report_date=SimpleNamespace(to_date=lambda: date(2022, 12, 31)),
+                announce_date=date(2023, 3, 20),
+                data={"revenue": 900.0} if statement_type == "income" else {},
+            )
+            announced_in_window = SimpleNamespace(
                 report_date=SimpleNamespace(to_date=lambda: date(2023, 12, 31)),
                 announce_date=date(2024, 3, 20),
                 data=values[statement_type],
-            )]
+            )
+            assert start_date == date.min
+            return [announced_before_window, announced_in_window]
 
     facts = financial_snapshots_from_provider(
         PITFixture(), ["600000.SH"],
@@ -208,7 +215,8 @@ def test_tushare_snapshot_materializes_announced_indicator_and_statement_history
     }), facts)
     assert pd.isna(panel.loc[0, "roe"])
     assert panel.loc[1, "roe"] == pytest.approx(0.12)
-    assert pd.isna(panel.loc[2, "revenue"])
+    assert panel.loc[0, "revenue"] == pytest.approx(900.0)
+    assert panel.loc[2, "revenue"] == pytest.approx(900.0)
     assert panel.loc[3, "revenue"] == pytest.approx(1200.0)
     assert panel.loc[3, "total_assets"] == pytest.approx(3500.0)
     assert panel.loc[3, "cash_from_operations"] == pytest.approx(450.0)

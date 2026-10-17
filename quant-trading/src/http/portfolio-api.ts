@@ -439,10 +439,22 @@ export async function handlePnlApi(
 export async function handlePlaceOrderApi(
   getEngine: () => LiveEngine | null,
   body: Record<string, unknown>,
+  config?: QuantTradingConfig,
 ): Promise<Record<string, unknown>> {
   const engine = getEngine();
   if (!engine?.orderManager) {
     return { status: "error", message: "引擎未启动，无法下单" };
+  }
+  const brokerType = engine.broker?.brokerType;
+  const qmtPlanOnly = brokerType === "qmt" || brokerType === "remote-qmt"
+    || config?.tradingAccount?.broker === "qmt"
+    || config?.tradingAccount?.broker === "remote-qmt";
+  if (qmtPlanOnly) {
+    return {
+      status: "error",
+      code: "EXECUTION_PLAN_REQUIRED",
+      message: "QMT 实盘只接受经过校验的执行计划；请使用研究计划入口提交",
+    };
   }
   const symbol = body.symbol as string | undefined;
   const side = body.side as string | undefined;
@@ -484,6 +496,11 @@ export async function handlePlaceOrderApi(
     orderType: orderType as OrderType,
     quantity,
     price: body.price as number | undefined,
+    strategyId: typeof body.strategyId === "string" ? body.strategyId : undefined,
+    runId: typeof body.runId === "string" ? body.runId : undefined,
+    modelId: typeof body.modelId === "string" ? body.modelId : undefined,
+    signalId: typeof body.signalId === "string" ? body.signalId : undefined,
+    strategyVersion: typeof body.strategyVersion === "string" ? body.strategyVersion : undefined,
   };
   try {
     const result = await engine.orderManager.submit(req);

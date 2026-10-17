@@ -831,7 +831,7 @@ function registerTradingRoutes({ api, config, getEngine, secure }: RouteDeps): v
 
       if (req.method === "POST") {
         const body = await parseJsonBody<Record<string, unknown>>(req);
-        json(res, await handlePlaceOrderApi(getEngine, body));
+        json(res, await handlePlaceOrderApi(getEngine, body, config));
         return;
       }
 

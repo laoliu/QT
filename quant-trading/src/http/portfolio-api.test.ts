@@ -161,6 +161,21 @@ describe("handlePlaceOrderApi", () => {
     expect(result.message).toBe("超过限额");
   });
 
+  it("rejects direct QMT HTTP orders without a target execution plan", async () => {
+    const engine = {
+      broker: { brokerType: "qmt" },
+      orderManager: { submit: vi.fn() },
+    } as unknown as LiveEngine;
+    const result = await handlePlaceOrderApi(
+      () => engine,
+      { symbol: "600519", side: "buy", quantity: 100 },
+      { tradingAccount: { mode: "live", broker: "qmt" } } as any,
+    );
+    expect(result.status).toBe("error");
+    expect(result.code).toBe("EXECUTION_PLAN_REQUIRED");
+    expect(engine.orderManager!.submit).not.toHaveBeenCalled();
+  });
+
   it("rejects invalid side value", async () => {
     const engine = {
       orderManager: { submit: vi.fn() },

@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -184,6 +185,41 @@ def test_qmt_gateway_requires_active_validated_plan_for_raw_order(tmp_path, monk
     with pytest.raises(GatewayError, match="validated execution plan"):
         gateway.submit_order(Mock(metadata={"execution_plan_id": "forged-plan"}))
     gateway._submit_order_impl.assert_not_called()
+
+
+def test_qmt_gateway_plan_adapter_submits_only_plan_generated_orders(monkeypatch):
+    from aipha.execution import qmt_gateway
+    from aipha.research.contracts import TargetPosition
+    from aipha.research.execution_plan import build_execution_plan
+    from datetime import date
+
+    monkeypatch.setenv("QUANT_TRADING_ALLOW_LIVE", "true")
+    monkeypatch.setattr(qmt_gateway, "KILL_SWITCH_PATH", Path("__missing_qmt_kill_switch__"))
+    monkeypatch.setitem(sys.modules, "xtquant.xtconstant", SimpleNamespace(
+        STOCK_BUY=23, STOCK_SELL=24, FIX_PRICE=11, LATEST_PRICE=5,
+    ))
+    gateway = QMTGateway(QMTConfig(name="plan-test"))
+    gateway._ensure_connected = Mock()
+    gateway._account = object()
+    gateway._trader = Mock()
+    gateway._trader.order_stock.return_value = 24680
+    plan = build_execution_plan([TargetPosition(
+        rebalance_date=date(2024, 1, 31), symbol="600000.SH", target_weight=0.1,
+        reason="test", run_id="run-plan-test", model_id="model-plan-test",
+        signal_id="signal-plan-test",
+    )], mode="live", run_id="run-plan-test", model_id="model-plan-test", allow_live=True)
+
+    order_ids = gateway.submit_target_plan(
+        plan, prices={"600000.SH": 10.0}, account_value=100_000,
+        allow_live=True,
+    )
+
+    assert order_ids == ["24680"]
+    assert gateway._trader.order_stock.call_count == 1
+    order = gateway.get_order("24680")
+    assert order is not None
+    assert order.metadata["execution_plan_id"] == plan.plan_id
+    assert gateway._active_execution_plan_id is None
 
 
 def test_easytrader_gateway_blocks_direct_submission(tmp_path, monkeypatch):

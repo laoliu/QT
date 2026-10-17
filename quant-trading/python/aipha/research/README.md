@@ -9,8 +9,10 @@ the snapshot from the equity/PIT adapters, historical name-change ST status,
 same-day adjustment factors, limit prices, and (when available) the benchmark
 index bars before training.
 
-The Python bridge accepts `train`, `predict`, `evaluate`, `export`, and
-`list_models`. Historical Parquet inputs require a sibling metadata file named
+The Python bridge accepts `train`, `train_tushare`, `predict`, `evaluate`,
+`export`, and `list_models`. `train_tushare` materializes a frozen PIT
+snapshot through the configured TuShare adapters before training. Historical
+Parquet inputs require a sibling metadata file named
 `<stem>.metadata.json` (for example `daily.metadata.json`) with:
 
 ```json

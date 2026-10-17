@@ -19,6 +19,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
       "A 股低频 ML 选股排序工具（统一研究入口）。当前只支持可审计的 LightGBM 排序模型和线性基线。\n" +
       "• action=predict — 使用已训练模型预测股票排名（返回 top-N）\n" +
       "• action=train — 从本地冻结 Parquet 特征快照执行 Walk-Forward\n" +
+      "• action=train_tushare — 通过 TuShare PIT 适配器生成快照后训练\n" +
       "• action=predict — 校验特征版本后加载模型并排序\n" +
       "• action=evaluate — 评估 OOS RankIC/ICIR 与成本估计\n" +
       "• action=export — 导出目标持仓 JSON（仅供 Paper 审阅）\n" +
@@ -28,7 +29,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
       properties: {
         action: {
           type: "string",
-          enum: ["predict", "train", "evaluate", "export", "list_models"],
+          enum: ["predict", "train", "train_tushare", "evaluate", "export", "list_models"],
           description: "操作类型",
         },
         modelType: {
@@ -76,6 +77,12 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           type: "string",
           description: "外部数据快照标识，用于复现实验",
         },
+        startDate: { type: "string", description: "TuShare PIT 快照起始日 YYYYMMDD（train_tushare）" },
+        endDate: { type: "string", description: "TuShare PIT 快照结束日 YYYYMMDD（train_tushare）" },
+        indexCode: { type: "string", description: "历史指数成分代码（默认 000905.SH）" },
+        benchmarkCode: { type: "string", description: "基准指数代码（默认与 indexCode 相同）" },
+        cacheDir: { type: "string", description: "TuShare 本地缓存目录（train_tushare）" },
+        useCache: { type: "boolean", description: "是否使用 TuShare 缓存（train_tushare）" },
         featureColumns: {
           type: "array",
           items: { type: "string" },
@@ -106,6 +113,12 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
           outputDir: args.outputDir,
           outputPath: args.outputPath,
           dataSnapshotId: args.dataSnapshotId,
+          startDate: args.startDate,
+          endDate: args.endDate,
+          indexCode: args.indexCode,
+          benchmarkCode: args.benchmarkCode,
+          cacheDir: args.cacheDir,
+          useCache: args.useCache,
           featureColumns: args.featureColumns,
           runId: args.runId,
           modelId: args.modelId,

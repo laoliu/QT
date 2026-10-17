@@ -1,8 +1,9 @@
 """Canonical A-share research bridge.
 
 Actions: ``train`` (offline Parquet panel), ``predict``, ``evaluate``,
-``export`` (target positions), and ``list_models``. Historical training never
-falls back to a network provider: it consumes a frozen local feature panel.
+``export`` (target positions), ``train_tushare`` (materialize a frozen
+TuShare PIT snapshot then train), and ``list_models``. Historical training
+never falls back to AKShare.
 """
 from __future__ import annotations
 
@@ -55,7 +56,7 @@ def run(config: dict) -> dict:
         if action == "list_models":
             return {"ok": True, "data": {"models": ["lgbm", "linear"], "default": "lgbm",
                                            "linear_implementation": "elasticnet"}}
-        if action == "train":
+        if action in {"train", "train_tushare"}:
             from aipha.research import ResearchPipeline
 
             cfg = _load_config(config.get("configPath"))
@@ -75,11 +76,34 @@ def run(config: dict) -> dict:
             if overrides:
                 cfg = replace(cfg, **{key: int(value) for key, value in overrides.items()})
             pipeline = ResearchPipeline(cfg)
-            result = pipeline.run(
-                _read_parquet(config.get("dataPath")),
-                config.get("outputDir", "output/research/runs"),
-                data_snapshot_id=config.get("dataSnapshotId"),
-            )
+            if action == "train_tushare":
+                from aipha.data.tushare_equity_provider import get_equity_provider
+                from aipha.data.tushare_pit_provider import TuSharePITProvider
+
+                start_date = str(config.get("startDate", ""))
+                end_date = str(config.get("endDate", ""))
+                if not start_date or not end_date:
+                    raise ValueError("startDate and endDate are required for train_tushare")
+                equity_provider = get_equity_provider(
+                    token=config.get("tushareToken"),
+                    cache_dir=str(config.get("cacheDir", "data/cache/equity_tushare")),
+                )
+                result = pipeline.run_tushare(
+                    equity_provider,
+                    config.get("outputDir", "output/research/runs"),
+                    start_date=start_date,
+                    end_date=end_date,
+                    index_code=str(config.get("indexCode", "000905.SH")),
+                    benchmark_code=config.get("benchmarkCode"),
+                    pit_provider=TuSharePITProvider(equity_provider),
+                    use_cache=bool(config.get("useCache", True)),
+                )
+            else:
+                result = pipeline.run(
+                    _read_parquet(config.get("dataPath")),
+                    config.get("outputDir", "output/research/runs"),
+                    data_snapshot_id=config.get("dataSnapshotId"),
+                )
             result["runEnvelope"] = result.pop("run_envelope")
             result["runId"] = result["run_id"]
             result["strategyId"] = result["strategy_id"]

@@ -385,6 +385,18 @@ def run_task_f_auto_retrain(
     alerts: list[dict[str, Any]] = []
     try:
         cfg = RetrainConfig.from_yaml(config_path)
+        if not cfg.legacy_ml_compat:
+            return [{
+                "task": "auto_retrain",
+                "date": trade_date,
+                "severity": "info",
+                "skipped": True,
+                "message": (
+                    "Legacy selector retraining is disabled by default; "
+                    "use the canonical aipha.research pipeline or explicitly "
+                    "set legacy_ml_compat: true for a historical model"
+                ),
+            }]
         pipeline = AutoRetrainPipeline(cfg)
         result = pipeline.run(end_date=trade_date.replace("-", ""))
         alerts.append({

@@ -44,6 +44,7 @@ class RetrainConfig:
     psi_threshold: float = 0.20
     max_age_days: int = 90
     enable_incremental: bool = False
+    legacy_ml_compat: bool = False
     project_root: str = ""
 
     @classmethod
@@ -68,6 +69,7 @@ class RetrainConfig:
             psi_threshold=cfg.get("triggers", {}).get("psi_threshold", 0.20),
             max_age_days=cfg.get("triggers", {}).get("max_age_days", 90),
             enable_incremental=cfg.get("enable_incremental", False),
+            legacy_ml_compat=cfg.get("legacy_ml_compat", False) is True,
             project_root=proj,
         )
 
@@ -183,6 +185,13 @@ class AutoRetrainPipeline:
         tag = datetime.now().strftime("v%Y%m%d")
         result = PipelineResult(timestamp=datetime.now().isoformat())
         universe = self.config.universe
+
+        if not self.config.legacy_ml_compat:
+            raise RuntimeError(
+                "legacy automatic ML retraining is disabled; migrate to the canonical "
+                "aipha.research train_tushare pipeline or explicitly set "
+                "legacy_ml_compat: true for a historical model"
+            )
 
         logger.info(
             f"=== AutoRetrain [{universe}] start "

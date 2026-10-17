@@ -33,6 +33,7 @@ class TestRetrainConfig:
     def test_default_values(self):
         cfg = RetrainConfig()
         assert cfg.universe == "csi2000"
+        assert cfg.legacy_ml_compat is False
         assert cfg.ic_threshold == 0.10
         assert cfg.psi_threshold == 0.20
         assert cfg.max_age_days == 90
@@ -82,6 +83,7 @@ retrain:
         assert cfg.psi_threshold == 0.25
         assert cfg.max_age_days == 120
         assert cfg.ic_improvement_min == -0.01
+        assert cfg.legacy_ml_compat is False
 
 
 # ── PipelineResult 测试 ─────────────────────────────────────
@@ -154,6 +156,7 @@ class TestAutoRetrainPipeline:
             ic_threshold=0.10,
             ic_improvement_min=-0.005,
             project_root=str(tmp_path),
+            legacy_ml_compat=True,
         )
 
     @pytest.fixture
@@ -248,6 +251,12 @@ class TestAutoRetrainPipeline:
             result = pipeline.run(force=False)
         assert result.triggered is False
         assert "SKIP" in result.summary
+
+    def test_run_rejects_legacy_retraining_without_explicit_compat(self, cfg):
+        cfg.legacy_ml_compat = False
+        pipeline = AutoRetrainPipeline(cfg)
+        with pytest.raises(RuntimeError, match="legacy automatic ML retraining is disabled"):
+            pipeline.run(force=True)
 
     def test_run_dry_run(self, pipeline):
         """dry_run 模式：触发但不执行"""

@@ -10,6 +10,7 @@ retrain:
   predict_months: 3
   forward_days: 5
   deep_fundamental: true
+  legacy_ml_compat: true  # 历史重训脚本；迁移到 canonical train_tushare 后移除
 
   model_dir: "models/ml_csi1000_lgb_fund"
   archive_dir: "models/_archive"

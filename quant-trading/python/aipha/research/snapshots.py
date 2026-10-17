@@ -22,6 +22,7 @@ class SnapshotSpec:
     start_date: str
     end_date: str
     index_code: str = "000905.SH"
+    benchmark_code: str = "000905.SH"
     feature_version: str = "cn_equity_v1"
     adjust: str = "point_in_time"
 
@@ -153,6 +154,7 @@ def assemble_tushare_snapshot(
         "start_date": pd.to_datetime(panel["trade_date"].min()).strftime("%Y-%m-%d"),
         "end_date": pd.to_datetime(panel["trade_date"].max()).strftime("%Y-%m-%d"),
         "index_code": spec.index_code,
+        "benchmark_code": spec.benchmark_code,
         "adjust": spec.adjust,
     }
     panel.attrs["snapshot_metadata"] = metadata
@@ -283,6 +285,16 @@ def build_tushare_snapshot(
         if limit_loader is None:
             raise ValueError("TuShare equity provider does not implement load_limit_prices_range")
         limit_prices = limit_loader(spec.start_date, spec.end_date, use_cache=use_cache)
+    benchmark_loader = getattr(equity_provider, "load_index_bars_range", None)
+    if benchmark_loader is not None:
+        benchmark = benchmark_loader(
+            spec.benchmark_code, spec.start_date, spec.end_date, use_cache=use_cache,
+        )
+        if benchmark is not None and not benchmark.empty:
+            benchmark = benchmark[["trade_date", "close"]].copy()
+            benchmark["trade_date"] = pd.to_datetime(benchmark["trade_date"]).dt.strftime("%Y%m%d")
+            benchmark = benchmark.rename(columns={"close": "benchmark_close"})
+            market = market.merge(benchmark, on="trade_date", how="left", validate="many_to_one")
     if st_status is None:
         st_status = historical_st_status_from_provider(
             equity_provider, market, use_cache=use_cache,

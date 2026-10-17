@@ -60,6 +60,7 @@ def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
                 "listing_days": 1000,
                 "feature_version": "cn_equity_v1",
                 "momentum_signal": signal,
+                "benchmark_close": 100.0 + dates.get_loc(dt),
             })
     return pd.DataFrame(rows)
 
@@ -254,6 +255,8 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
         def load_adj_factor_bulk(self, *args, **kwargs):
             return pd.DataFrame([{"ts_code": s, "trade_date": d, "adj_factor": 1.0} for d in dates for s in symbols])
         def load_index_members_snapshots(self, *args, **kwargs): return {"20240101": symbols}
+        def load_index_bars_range(self, *args, **kwargs):
+            return pd.DataFrame({"trade_date": dates, "close": [100.0, 101.0]})
         def load_limit_prices_range(self, *args, **kwargs):
             return pd.DataFrame([{"ts_code": s, "trade_date": d, "up_limit": 11.0, "down_limit": 9.0} for d in dates for s in symbols])
         def load_namechange(self, ts_code: str, **kwargs): return pd.DataFrame()
@@ -275,6 +278,7 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
     assert result["run_id"] == "captured"
     assert observed["data_snapshot_id"].startswith("tushare_pit:")
     assert {"momentum_5", "volatility_20", "feature_version"} <= set(observed["frame"].columns)
+    assert "benchmark_close" in observed["frame"]
     assert observed["frame"]["is_index_member"].all()
 
 
@@ -405,6 +409,7 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert (artifact_dir / "portfolio_returns.parquet").is_file()
     assert (artifact_dir / "trades.json").is_file()
     assert report["walk_forward"]["n_folds"] >= 1
+    assert report["diagnostics"]["benchmark"]["available"] is True
     assert report["diagnostics"]["pbo_method"] in {
         "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
     }

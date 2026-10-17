@@ -586,6 +586,33 @@ class TuShareEquityProvider:
         )
         return result
 
+    def load_index_bars_range(
+        self,
+        index_code: str,
+        start_date: str,
+        end_date: str,
+        use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """Load daily benchmark closes from TuShare ``index_daily``."""
+        cache_path = self.cache_dir / (
+            f"index_daily_{index_code.replace('.', '_')}_{start_date}_{end_date}.parquet"
+        )
+        if use_cache and cache_path.exists():
+            cached = self._safe_read_parquet(cache_path)
+            if cached is not None and not cached.empty:
+                return cached
+        frame = self._retry_call(
+            self.api.index_daily,
+            ts_code=index_code,
+            start_date=start_date,
+            end_date=end_date,
+            fields="ts_code,trade_date,open,high,low,close,vol,amount",
+        )
+        if frame is None or frame.empty:
+            return pd.DataFrame(columns=["ts_code", "trade_date", "close"])
+        self._atomic_write_parquet(frame, cache_path)
+        return frame
+
     def load_daily_bars(
         self,
         trade_date: str,

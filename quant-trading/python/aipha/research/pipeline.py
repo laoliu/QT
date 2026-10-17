@@ -164,6 +164,7 @@ class ResearchPipeline:
         start_date: str,
         end_date: str,
         index_code: str = "000905.SH",
+        benchmark_code: str | None = None,
         pit_provider: Any | None = None,
         st_status: pd.DataFrame | None = None,
         limit_prices: pd.DataFrame | None = None,
@@ -189,6 +190,7 @@ class ResearchPipeline:
             start_date=start_date,
             end_date=end_date,
             index_code=index_code,
+            benchmark_code=benchmark_code or index_code,
             feature_version=self.config.feature_version,
         )
         snapshot = build_tushare_snapshot(
@@ -223,6 +225,7 @@ class ResearchPipeline:
             "datetime", "trade_date", "symbol", "open", "high", "low", "close",
             "volume", "amount", "vol", "pre_close", "change", "pct_chg",
             "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
+            "benchmark_close", "benchmark_return",
             "is_index_member", "is_st", "listing_days",
             "fwd_return", "fwd_return_rank", "fwd_return_raw", "label",
             "feature_version", "feature_set", "industry", "sector", "sw_industry",
@@ -660,6 +663,7 @@ def _feature_missing_rate(frame: pd.DataFrame) -> float:
     excluded = {
         "trade_date", "datetime", "symbol", "open", "high", "low", "close",
         "volume", "amount", "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
+        "benchmark_close", "benchmark_return",
         "is_index_member", "is_st", "listing_days",
         "feature_version", "feature_set", "industry", "sector", "sw_industry",
     }

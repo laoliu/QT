@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import tempfile
 from typing import Any
 
 import yaml
@@ -124,22 +126,41 @@ def migrate_legacy_ml_config_file(
     source: str | Path,
     destination: str | Path,
 ) -> tuple[Path, list[str]]:
-    """Read, convert and write a legacy ML config without modifying it."""
+    """Validate and publish a new config; never replace any existing file."""
     source_path = Path(source)
     destination_path = Path(destination)
+    if destination_path.exists() or destination_path.is_symlink():
+        raise FileExistsError(f"migration destination already exists: {destination_path}")
     raw = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
     canonical, warnings = migrate_legacy_ml_config(raw)
+    research_config_from_mapping(canonical)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
-    destination_path.write_text(
-        yaml.safe_dump(canonical, allow_unicode=True, sort_keys=False),
-        encoding="utf-8",
-    )
+    staged_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination_path.parent,
+            prefix=".research-config-", suffix=".yaml", delete=False,
+        ) as staged:
+            staged_path = Path(staged.name)
+            staged.write(yaml.safe_dump(canonical, allow_unicode=True, sort_keys=False))
+            staged.flush()
+            os.fsync(staged.fileno())
+        # Atomic, exclusive publication also protects against a concurrent writer.
+        os.link(staged_path, destination_path)
+    finally:
+        if staged_path is not None:
+            staged_path.unlink(missing_ok=True)
     return destination_path, warnings
 
 
 def load_research_config(path: str | Path) -> ResearchConfig:
     """Load and validate the canonical nested YAML research config."""
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return research_config_from_mapping(raw)
+
+
+def research_config_from_mapping(raw: dict[str, Any]) -> ResearchConfig:
+    """Apply the same configuration contract to in-memory migration output."""
     if not isinstance(raw, dict):
         raise ValueError("research config root must be a mapping")
     known = {"data", "universe", "features", "label", "model", "portfolio", "cost", "execution"}

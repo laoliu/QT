@@ -358,8 +358,10 @@ strings; `run_id`, `model_id`, and `signal_id` alone do not prove plan membershi
 
 The old `configs/sample_ml_factor.yaml` shape can be converted with
 `python scripts/migrate_research_config.py`. The command keeps the source
-unchanged, emits warnings for dropped legacy fields, and always writes a
-TuShare-PIT/paper configuration.
+unchanged, emits warnings for dropped legacy fields, validates the generated
+TuShare-PIT/paper configuration before publication, and refuses an existing
+destination (including the source path). Unsupported policies fail without
+publishing a partial configuration.
 
 The historical cache-backed trainer is opt-in: `python scripts/train_ml_factor.py`
 and the CSI1000/CSI2000 rolling retrainers refuse to train unless passed
@@ -382,8 +384,18 @@ LightGBM/ElasticNet and checks the stored model type against its manifest.
 
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
 read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.
-Adding `--strict` makes CI fail while any applicable ML config lacks a
-canonical snapshot/model manifest or an explicit legacy marker.
+Each ML component must declare its own snapshot, universe and model paths;
+one component cannot supply another's provenance or compatibility flag.
+Canonical status requires an actual signed current-version snapshot, its
+exchange calendar, compatible model schema/policy, artifact hashes, and
+numeric feature columns. The audit does not unpickle models or run inference:
+`verification_level=contracts_and_hashes` and `inference_exercised=false`
+describe this boundary. Inference and fitted fold checks still run at model
+load time. Snapshot templates require `--trade-date YYYY-MM-DD`; fixed paths
+default to their signed end date. Missing signing keys fail verification.
+Adding `--strict` makes CI fail for legacy, mixed, unmigrated or malformed
+configs, and for missing/empty directories. An explicit legacy marker is
+inventory evidence only and cannot pass this migration gate.
 
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a

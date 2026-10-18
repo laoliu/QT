@@ -53,7 +53,7 @@ def write_model_manifest(
     return target
 
 
-def load_verified_selector(
+def read_verified_model_manifest(
     model_dir: str | Path,
     *,
     expected_feature_version: str,
@@ -63,19 +63,19 @@ def load_verified_selector(
     expected_min_listing_days: int | None = None,
     expected_feature_groups=None,
     expected_feature_column_groups=None,
-) -> Any:
-    """Load a selector only when its schema manifest is present and compatible.
+) -> dict[str, Any]:
+    """Verify policy and artifact bytes without deserializing model pickles.
 
-    Legacy model folders without a manifest are intentionally rejected so that
-    incompatible feature order or semantics cannot silently reach prediction.
+    This proves the manifest contract and file integrity only. Fitted fold
+    metadata and inference still require ``load_verified_selector``.
     """
-    from aipha.models.ml_stock_selector import MLStockSelector
-
     path = Path(model_dir)
     manifest_path = path / "model_manifest.json"
     if not manifest_path.is_file():
         raise ValueError(f"model manifest missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("model manifest must be a JSON object")
     if manifest.get("schema_version") != 2:
         raise ValueError("model manifest schema_version=2 required; migrate or retrain the legacy model")
     if manifest.get("model_type") not in {"lightgbm", "elasticnet"}:
@@ -118,6 +118,32 @@ def load_verified_selector(
     files = manifest.get("model_files")
     if not isinstance(files, dict) or not files or files != model_file_hashes(path):
         raise ValueError("model artifact file hashes do not match the manifest")
+    return manifest
+
+
+def load_verified_selector(
+    model_dir: str | Path,
+    *,
+    expected_feature_version: str,
+    expected_feature_columns: list[str] | None = None,
+    expected_model_type: str | None = None,
+    expected_universe: str | None = None,
+    expected_min_listing_days: int | None = None,
+    expected_feature_groups=None,
+    expected_feature_column_groups=None,
+) -> Any:
+    """Verify the manifest before loading and validating the fitted selector."""
+    manifest = read_verified_model_manifest(
+        model_dir, expected_feature_version=expected_feature_version,
+        expected_feature_columns=expected_feature_columns, expected_model_type=expected_model_type,
+        expected_universe=expected_universe, expected_min_listing_days=expected_min_listing_days,
+        expected_feature_groups=expected_feature_groups,
+        expected_feature_column_groups=expected_feature_column_groups,
+    )
+    from aipha.models.ml_stock_selector import MLStockSelector
+
+    path = Path(model_dir)
+    actual = manifest["feature_columns"]
     selector = MLStockSelector()
     selector.load(path)
     if selector.config.model_type != manifest["model_type"]:

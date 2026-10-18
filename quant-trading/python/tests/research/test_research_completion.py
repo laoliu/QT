@@ -240,6 +240,52 @@ def test_research_config_migration_output_is_loadable(tmp_path: Path) -> None:
     assert config.model_type == "lightgbm"
 
 
+@pytest.mark.parametrize("same_path", [False, True])
+def test_config_migration_preserves_existing_source_and_destination(tmp_path, same_path):
+    from aipha.research.config import migrate_legacy_ml_config_file
+
+    source = tmp_path / "legacy.yaml"
+    source.write_text("ml_model:\n  type: lgbm\n", encoding="utf-8")
+    destination = source if same_path else tmp_path / "existing.yaml"
+    if not same_path:
+        destination.write_text("do not replace", encoding="utf-8")
+    before = {path: path.read_bytes() for path in {source, destination}}
+    with pytest.raises(FileExistsError):
+        migrate_legacy_ml_config_file(source, destination)
+    assert all(path.read_bytes() == content for path, content in before.items())
+
+
+def test_config_migration_rejects_invalid_generated_policy_before_publication(tmp_path):
+    from aipha.research.config import migrate_legacy_ml_config_file
+
+    source = tmp_path / "legacy.yaml"
+    source.write_text("ml_model:\n  type: lgbm\nlabel:\n  horizon_days: 40\n", encoding="utf-8")
+    destination = tmp_path / "new" / "invalid.yaml"
+    with pytest.raises(ValueError, match="purge_days"):
+        migrate_legacy_ml_config_file(source, destination)
+    assert not destination.parent.exists()
+    assert "horizon_days: 40" in source.read_text(encoding="utf-8")
+
+
+def test_config_migration_does_not_replace_racing_writer(tmp_path, monkeypatch):
+    import aipha.research.config as module
+
+    source = tmp_path / "legacy.yaml"
+    source.write_text("ml_model:\n  type: lgbm\n", encoding="utf-8")
+    destination = tmp_path / "canonical.yaml"
+    original_link = module.os.link
+
+    def race(staged, target):
+        target.write_text("concurrent config", encoding="utf-8")
+        return original_link(staged, target)
+
+    monkeypatch.setattr(module.os, "link", race)
+    with pytest.raises(FileExistsError):
+        module.migrate_legacy_ml_config_file(source, destination)
+    assert destination.read_text(encoding="utf-8") == "concurrent config"
+    assert not list(tmp_path.glob(".research-config-*"))
+
+
 def test_legacy_ml_engine_only_forwards_canonical_actions() -> None:
     from engines.aipha_ml_engine import run
 

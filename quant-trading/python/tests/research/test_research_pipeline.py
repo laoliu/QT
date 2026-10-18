@@ -401,6 +401,12 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
         def load_limit_prices_range(self, *args, **kwargs):
             return pd.DataFrame([{"ts_code": s, "trade_date": d, "up_limit": 11.0, "down_limit": 9.0} for d in dates for s in symbols])
         def load_namechange(self, ts_code: str, **kwargs): return pd.DataFrame()
+        def load_dividend_history(self, symbols, use_cache=True):
+            return pd.DataFrame([{
+                "ts_code": "600000.SH", "end_date": "20231231", "ann_date": "20240101",
+                "div_proc": "实施", "record_date": "20240102", "ex_date": "20240103",
+                "cash_div_tax": 0.1, "stk_div": 0.0, "pay_date": "20240105",
+            }])
 
     class PitProvider:
         def get_indicator_history(self, symbol: str): return []
@@ -421,6 +427,9 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
     assert {"momentum_5", "volatility_20", "feature_version"} <= set(observed["frame"].columns)
     assert "benchmark_close" in observed["frame"]
     assert observed["frame"]["is_index_member"].all()
+    from aipha.research.corporate_actions import read_corporate_actions
+    action, = read_corporate_actions(observed["frame"])
+    assert action.pay_date.isoformat() == "2024-01-05"
 
 
 def test_portfolio_replay_executes_next_open_and_obeys_limit_up() -> None:
@@ -646,6 +655,8 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert np.isfinite(report["metrics"]["portfolio_total_return"])
     assert (artifact_dir / "portfolio_returns.parquet").is_file()
     assert (artifact_dir / "trades.json").is_file()
+    assert (artifact_dir / "corporate_actions.json").is_file()
+    assert report["accounting"]["price_basis"] == "raw"
     assert report["walk_forward"]["n_folds"] >= 1
     assert report["diagnostics"]["benchmark"]["available"] is True
     assert report["diagnostics"]["benchmark"]["relative"]["available"] is True

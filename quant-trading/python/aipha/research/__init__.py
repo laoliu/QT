@@ -23,6 +23,7 @@ from .pipeline import (
     build_target_positions,
 )
 from .artifacts import load_verified_selector
+from .corporate_actions import CorporateAction, attach_corporate_actions, read_corporate_actions
 from .config import (
     load_research_config,
     migrate_legacy_ml_config,
@@ -56,6 +57,9 @@ from .snapshots import (
 
 __all__ = [
     "FeatureFrame",
+    "CorporateAction",
+    "attach_corporate_actions",
+    "read_corporate_actions",
     "FinancialSnapshot",
     "MarketFrame",
     "Prediction",

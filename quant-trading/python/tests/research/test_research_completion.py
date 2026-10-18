@@ -270,6 +270,8 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     for idx, symbol in enumerate(symbols):
         for day_idx, day in enumerate(dates):
             close = 10.0 + idx + day_idx * 0.01
+            if day_idx >= 290:
+                close -= 0.1
             market_rows.append({
                 "ts_code": symbol,
                 "trade_date": day.strftime("%Y%m%d"),
@@ -297,7 +299,22 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
             return pd.DataFrame({"ts_code": symbols, "list_date": ["20180101"] * len(symbols)})
 
         def load_adj_factor_bulk(self, *args, **kwargs):
-            return market[["ts_code", "trade_date"]].assign(adj_factor=1.0)
+            factors = market[["ts_code", "trade_date"]].copy()
+            factors["adj_factor"] = 1.0
+            for idx, symbol in enumerate(symbols):
+                before = 10.0 + idx + 289 * 0.01
+                mask = factors.ts_code.eq(symbol) & factors.trade_date.ge(dates[290].strftime("%Y%m%d"))
+                factors.loc[mask, "adj_factor"] = before / (before - 0.1)
+            return factors
+
+        def load_dividend_history(self, requested_symbols, use_cache=True):
+            assert requested_symbols == symbols
+            return pd.DataFrame([{
+                "ts_code": symbol, "end_date": "20221231", "ann_date": dates[285].strftime("%Y%m%d"),
+                "div_proc": "实施", "record_date": dates[289].strftime("%Y%m%d"),
+                "ex_date": dates[290].strftime("%Y%m%d"), "cash_div_tax": 0.1, "stk_div": 0.0,
+                "pay_date": dates[295].strftime("%Y%m%d"),
+            } for symbol in symbols])
 
         def load_index_members_snapshots(self, *args, **kwargs):
             return {"20200101": symbols}
@@ -334,3 +351,8 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     assert plan.mode == "paper"
     assert (artifact / "input_snapshot.metadata.json").is_file()
     assert (artifact / "oos_predictions.metadata.json").is_file()
+    report = json.loads((artifact / "report.json").read_text(encoding="utf-8"))
+    assert report["accounting"]["price_basis"] == "raw"
+    assert report["accounting"]["cash_dividends_paid"] > 0
+    events = json.loads((artifact / "corporate_actions.json").read_text(encoding="utf-8"))
+    assert any(event["event"] == "cash_paid" for event in events)

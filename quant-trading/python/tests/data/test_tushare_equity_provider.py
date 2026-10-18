@@ -73,6 +73,46 @@ class TestRetryCall:
 # ── load_stock_basic ──────────────────────────────────────
 
 
+class TestResearchDividendHistory:
+    def test_fetch_and_cache_preserve_settlement_dates(self, provider):
+        row = {"ts_code": "600000.SH", "end_date": "20231231", "ann_date": "20240101",
+               "div_proc": "实施", "record_date": "20240201", "ex_date": "20240202",
+               "cash_div_tax": 1.0, "stk_div": 0.1,
+               "pay_date": "20240206", "div_listdate": "20240207", "imp_ann_date": "20240130"}
+        provider.api.dividend.return_value = pd.DataFrame([row])
+        downloaded = provider.load_dividend_history(["600000.SH"], use_cache=False)
+        cached = provider.load_dividend_history(["600000.SH"])
+        pd.testing.assert_frame_equal(downloaded, cached)
+        assert cached.iloc[0]["pay_date"] == "20240206"
+        assert cached.iloc[0]["div_listdate"] == "20240207"
+        provider.api.dividend.assert_called_once()
+
+    def test_endpoint_failure_or_none_cannot_mean_no_actions(self, provider):
+        provider.api.dividend.side_effect = RuntimeError("unavailable")
+        with patch("aipha.data.tushare_equity_provider.time.sleep"):
+            with pytest.raises(RuntimeError, match="unavailable"):
+                provider.load_dividend_history(["600000.SH"], use_cache=False)
+            provider.api.dividend.side_effect = None
+            provider.api.dividend.return_value = None
+            with pytest.raises(ValueError, match="no result"):
+                provider.load_dividend_history(["600000.SH"], use_cache=False)
+
+    def test_empty_response_is_valid_but_wrong_symbol_is_rejected(self, provider):
+        provider.api.dividend.return_value = pd.DataFrame()
+        assert provider.load_dividend_history(["600000.SH"], use_cache=False).empty
+        provider.api.dividend.return_value = pd.DataFrame({"ts_code": ["600001.SH"]})
+        with pytest.raises(ValueError, match="different symbol"):
+            provider.load_dividend_history(["600000.SH"], use_cache=False)
+
+    def test_stale_dividend_cache_is_refreshed(self, provider):
+        provider.api.dividend.return_value = pd.DataFrame({"ts_code": ["600000.SH"], "pay_date": ["20240206"]})
+        provider.load_dividend_history(["600000.SH"], use_cache=False)
+        provider.api.dividend.return_value = pd.DataFrame({"ts_code": ["600000.SH"], "pay_date": ["20240207"]})
+        with patch("aipha.data.tushare_equity_provider.is_cache_fresh", return_value=False):
+            refreshed = provider.load_dividend_history(["600000.SH"])
+        assert refreshed.iloc[0]["pay_date"] == "20240207"
+
+
 class TestLoadStockBasic:
     def test_no_cache(self, provider):
         df_l = pd.DataFrame({"ts_code": ["000001.SZ"], "name": ["平安"], "industry": ["银行"]})

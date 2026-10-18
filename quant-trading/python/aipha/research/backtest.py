@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .contracts import TargetPosition, price_limit_flags, validate_market_frame
+from .corporate_actions import CorporateActionLedger, raw_accounting_bars
 from aipha.utils.metrics import compute_annualized_volatility, compute_sharpe_ratio
 
 
@@ -24,6 +25,8 @@ def run_portfolio_backtest(
 ) -> dict[str, Any]:
     bars = validate_market_frame(market)
     bars["_open_limit_up"], bars["_open_limit_down"] = price_limit_flags(bars)
+    ledger = CorporateActionLedger(bars)
+    bars = raw_accounting_bars(bars)
     bars["trade_date"] = pd.to_datetime(bars["trade_date"])
     bars = bars.sort_values(["trade_date", "symbol"])
     date_list = sorted(bars["trade_date"].unique())
@@ -70,6 +73,8 @@ def run_portfolio_backtest(
     for raw_day in date_list:
         day = pd.Timestamp(raw_day).normalize()
         frame = by_date[raw_day]
+        ledger.check_factor_changes(day.date(), frame, holdings)
+        cash += ledger.before_open(day.date(), holdings, last_prices, buy_dates)
         if day in execution_targets:
             desired_records, signal_day = execution_targets[day]
             desired = {symbol: weight for symbol, (weight, _) in desired_records.items()}
@@ -77,9 +82,16 @@ def run_portfolio_backtest(
             current_run_id = next((t.run_id for t in targets if t.rebalance_date == signal_day.date()), "")
             current_model_id = next((t.model_id for t in targets if t.rebalance_date == signal_day.date()), "")
             open_prices = frame["open"].to_dict()
-            # Value portfolio at prior close; convert weights to board lots.
-            prev_values = {s: q * last_prices.get(s, float(open_prices.get(s, 0) or 0)) for s, q in holdings.items()}
-            nav_for_sizing = cash + sum(prev_values.values())
+            # Raw currency prices determine actual shares and board lots.
+            # Receivables count toward equity, but cannot finance purchases
+            # until the dividend/share settlement date has arrived.
+            opening_marks = {
+                **last_prices,
+                **frame.loc[~frame.get("is_suspended", pd.Series(False, index=frame.index)).astype(bool), "open"].to_dict(),
+            }
+            opening_values = {s: q * opening_marks.get(s, 0.0) for s, q in holdings.items()}
+            cash_receivable, share_receivable = ledger.receivables(opening_marks)
+            nav_for_sizing = cash + sum(opening_values.values()) + cash_receivable + share_receivable
             desired_shares: dict[str, int] = {}
             for symbol, weight in desired.items():
                 price = float(open_prices.get(symbol, 0) or 0)
@@ -118,6 +130,10 @@ def run_portfolio_backtest(
                     if side < 0:
                         qty = min(qty, holdings.get(symbol, 0))
                         qty = (qty // 100) * 100
+                        # Bonus shares can leave an odd-lot remainder. A full
+                        # liquidation sells that remainder in the same order.
+                        if requested >= holdings.get(symbol, 0):
+                            qty = holdings.get(symbol, 0)
                     if qty <= 0:
                         skip_execution("turnover_or_lot_constraint")
                         continue
@@ -180,14 +196,18 @@ def run_portfolio_backtest(
                         "slippage_cost": slippage_cost, "slippage_bps": config.slippage_bps,
                     })
         close_values = 0.0
-        for symbol, qty in list(holdings.items()):
+        marked_symbols = set(holdings) | {a.symbol for a, _, shares in ledger.pending.values() if shares}
+        for symbol in marked_symbols:
             if symbol in frame.index and not bool(frame.loc[symbol].get("is_suspended", False)):
                 last_prices[symbol] = float(frame.loc[symbol, "close"])
-            close_values += qty * last_prices.get(symbol, 0.0)
-        nav = cash + close_values
+            close_values += holdings.get(symbol, 0) * last_prices.get(symbol, 0.0)
+        cash_receivable, share_receivable = ledger.receivables(last_prices)
+        nav = cash + close_values + cash_receivable + share_receivable
         ret = nav / previous_nav - 1.0 if previous_nav > 0 else 0.0
         daily.append({"trade_date": day.date().isoformat(), "nav": nav, "cash": cash,
-                      "position_value": close_values, "daily_return": ret})
+                      "position_value": close_values, "daily_return": ret,
+                      "dividend_receivable": cash_receivable, "share_receivable_value": share_receivable})
+        ledger.after_close(day.date(), holdings)
         previous_nav = nav
 
     returns = pd.Series([x["daily_return"] for x in daily], dtype=float)
@@ -203,6 +223,15 @@ def run_portfolio_backtest(
         "daily_returns": daily,
         "trades": trades,
         "n_unexecutable": unexecutable,
+        "corporate_actions": ledger.log,
+        "final_positions": dict(holdings),
+        "accounting": {
+            "price_basis": "raw", "dividend_tax_policy": "gross_before_holding_period_tax",
+            "cash_dividends_paid": ledger.cash_distributed,
+            "bonus_shares_delivered": ledger.shares_distributed,
+            "fractional_share_policy": "reject_without_explicit_allocation",
+            "unexplained_factor_change_policy": "reject_while_held",
+        },
         "metrics": {
             "portfolio_total_return": float(navs.iloc[-1] / config.initial_capital - 1) if len(navs) else 0.0,
             "portfolio_annualized_return": annual_return,

@@ -49,7 +49,7 @@ bridge; a provider string alone is not treated as proof of provenance.
 
 Runs write `run_manifest.json`, `report.json`, a version-checked model folder,
 `oos_predictions.parquet` and its metadata sidecar, `portfolio_returns.parquet`,
-`trades.json`, `target_positions.json`, and one validated paper execution plan
+`trades.json`, `corporate_actions.json`, `target_positions.json`, and one validated paper execution plan
 per rebalance date. Reports include the walk-forward PBO proxy plus formal
 CSCV PBO when enough OOS observations exist. The report separates the
 quintile-portfolio diagnostic (`pbo`) from the fixed Top-K parameter-selection
@@ -72,9 +72,22 @@ When price bands are present, replay eligibility compares raw opening prices
 against the day's unadjusted limits, independently of the later closing
 limit flags. Legacy local panels without bands retain their supplied flags.
 Buy sizing includes minimum commission and rechecks total fees before cash is
-debited. Replay still uses adjusted prices for board-lot sizing and valuation;
-corporate-action cash/share accounting requires a separate implementation
-before treating these quantities as a live account reconciliation.
+debited. Replay uses raw currency prices for board-lot sizing, fees and
+valuation; model features and labels retain their point-in-time adjusted
+series. Changing a constant adjustment anchor cannot change executed lots.
+
+The TuShare builder freezes implemented dividend/bonus-share terms in
+`corporate_actions_json`, covered by the snapshot content hash and signature.
+Entitlement is determined by shares held at record-date close. At ex-date,
+cash dividends and bonus shares become receivables, included in equity but
+unavailable for trading until pay-date/share-list-date. An absent symbol bar
+on ex-date does not discard the event. The report exposes receivables, actual
+cash/share delivery, final positions and its **gross dividend** tax policy;
+holding-period dividend withholding is not modeled. Fractional bonus-share
+allocation, overlapping unlisted bonus entitlements, and rights issues require explicit additional terms and are not
+inferred from adjustment factors. Missing actions or factor changes that do
+not reconcile with declared events cause a held-position replay to fail.
+This is not yet a complete live-account tax/reconciliation implementation.
 
 The canonical TuShare snapshot maps Shenwan L1 membership using the historical
 `in_date`/`out_date` interval; it does not reuse today's industry mapping for

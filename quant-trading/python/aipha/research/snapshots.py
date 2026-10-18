@@ -264,6 +264,7 @@ def assemble_tushare_snapshot(
     limit_prices: pd.DataFrame | None = None,
     financial_snapshots: pd.DataFrame | None = None,
     industry_history: pd.DataFrame | None = None,
+    dividend_history: pd.DataFrame | None = None,
     spec: SnapshotSpec,
 ) -> TushareSnapshot:
     """Normalize provider outputs into the pipeline's Market/Feature panel.
@@ -339,6 +340,10 @@ def assemble_tushare_snapshot(
     if financial_snapshots is not None and not financial_snapshots.empty:
         panel = join_pit_financials(panel, financial_snapshots)
     panel = build_cn_equity_features(panel)
+    if dividend_history is not None:
+        from .corporate_actions import attach_corporate_actions, normalize_tushare_dividends
+
+        panel = attach_corporate_actions(panel, normalize_tushare_dividends(dividend_history))
     panel["feature_version"] = spec.feature_version
     digest = hashlib.sha256(pd.util.hash_pandas_object(panel.sort_values(["trade_date", "symbol"]), index=False).values.tobytes()).hexdigest()
     metadata = {
@@ -594,11 +599,16 @@ def build_tushare_snapshot(
     snapshots = equity_provider.load_index_members_snapshots(spec.index_code, start_year, end_year, use_cache=use_cache)
     industry_loader = getattr(equity_provider, "load_sw_industry_history", None)
     industry_history = industry_loader(level="L1", use_cache=use_cache) if callable(industry_loader) else None
+    dividend_loader = getattr(equity_provider, "load_dividend_history", None)
+    dividend_history = dividend_loader(
+        sorted(market["ts_code"].dropna().astype(str).unique()), use_cache=use_cache,
+    ) if callable(dividend_loader) else None
     return assemble_tushare_snapshot(
         market, daily_basic=basic, stock_basic=stock,
         index_snapshots=snapshots, st_status=st_status,
         limit_prices=limit_prices, financial_snapshots=financial_snapshots,
         industry_history=industry_history, spec=spec,
+        dividend_history=dividend_history,
     )
 
 

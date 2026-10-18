@@ -440,6 +440,9 @@ class ResearchPipeline:
         pd.DataFrame(backtest["trades"]).to_json(
             run_root / "trades.json", orient="records", date_format="iso", force_ascii=False, indent=2,
         )
+        (run_root / "corporate_actions.json").write_text(
+            json.dumps(backtest["corporate_actions"], ensure_ascii=False, indent=2), encoding="utf-8",
+        )
         (run_root / "target_positions.json").write_text(
             json.dumps([position.to_wire() for position in targets], ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -469,6 +472,8 @@ class ResearchPipeline:
             "execution_plans": execution_plans,
             "feature_missing_rate": _feature_missing_rate(source),
             "snapshot_metadata": metadata,
+            "accounting": backtest["accounting"],
+            "final_positions": backtest["final_positions"],
             "artifact_attestation": {
                 "input_snapshot": input_metadata,
                 "oos_predictions": oos_artifact_metadata,
@@ -488,6 +493,7 @@ class ResearchPipeline:
             "input_snapshot_path": "input_snapshot.parquet",
             "portfolio_returns_path": "portfolio_returns.parquet",
             "trades_path": "trades.json",
+            "corporate_actions_path": "corporate_actions.json",
             "run_envelope": {
                 "schemaVersion": "1.0",
                 "runId": self.run_id,

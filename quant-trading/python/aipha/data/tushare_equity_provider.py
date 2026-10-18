@@ -740,8 +740,41 @@ class TuShareEquityProvider:
         return pd.concat(parts, ignore_index=True).drop_duplicates(["ts_code", "trade_date"])
 
     # ------------------------------------------------------------------
-    # 复权因子
+    # 分红送股与复权因子
     # ------------------------------------------------------------------
+
+    def load_dividend_history(
+        self, symbols: list[str], use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """Fetch dividend terms and actual cash/share settlement dates.
+
+        Query failures propagate: an unavailable dividend endpoint must never
+        be mistaken for proof that a held stock had no corporate actions.
+        """
+        fields = (
+            "ts_code,end_date,ann_date,div_proc,stk_div,cash_div_tax,"
+            "record_date,ex_date,pay_date,div_listdate,imp_ann_date"
+        )
+        parts = []
+        for symbol in sorted(set(symbols)):
+            cache_path = self.cache_dir / f"research_dividend_{symbol.replace('.', '_')}.parquet"
+            cached = self._safe_read_parquet(cache_path) if use_cache and cache_path.exists() else None
+            # Dividend schedules can change after the first announcement.
+            refresh = cached is None or not is_cache_fresh(cache_path, DEFAULT_TTL_POLICY.daily_snapshot)
+            if refresh:
+                def query_dividends(**params):
+                    result = self.api.dividend(**params)
+                    if result is None:
+                        raise ValueError(f"TuShare dividend query returned no result for {symbol}")
+                    return result
+                cached = self._retry_call(query_dividends, ts_code=symbol, fields=fields)
+            if not cached.empty:
+                if not cached["ts_code"].eq(symbol).all():
+                    raise ValueError("TuShare dividend query returned a different symbol")
+                parts.append(cached)
+            if refresh:
+                self._atomic_write_parquet(cached, cache_path)
+        return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=fields.split(","))
 
     def load_adj_factor(
         self,

@@ -152,6 +152,10 @@ class PBOAnalyzer:
         Returns:
             PBOResult
         """
+        # Freeze an owned contiguous numeric matrix. Parquet/pandas can supply
+        # read-only, strided views backed by another library's buffers; CSCV
+        # should not retain those aliases across repeated split construction.
+        performance_matrix = np.array(performance_matrix, dtype=float, order="C", copy=True)
         if performance_matrix.ndim != 2:
             raise ValueError("performance_matrix 须为 2D 数组 (T, N)")
         if not np.isfinite(performance_matrix).all():

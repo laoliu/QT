@@ -252,6 +252,13 @@ class TestPBOCompute:
         with pytest.raises(ValueError, match="scores must be finite"):
             analyzer.compute(np.zeros((8, 2)))
 
+    def test_readonly_strided_input_has_same_result_as_owned_matrix(self):
+        matrix = np.asfortranarray(_make_random_matrix(t=17, n=4))
+        view = matrix[1::2]
+        view.flags.writeable = False
+        analyzer = PBOAnalyzer(PBOConfig(num_subsamples=4))
+        assert analyzer.compute(view) == analyzer.compute(view.copy(order="C"))
+
 
 # ============================================================================
 # pbo_from_sweep_results

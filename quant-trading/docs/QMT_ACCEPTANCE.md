@@ -2,7 +2,7 @@
 
 验收日期：2026-10-18（Asia/Shanghai）。此记录是该时间点的观察，不表示服务当前始终在线。
 
-## 23:29 MiniQMT 更新后只读检查
+## 23:29—23:34 MiniQMT 更新后只读检查
 
 BIOS 更新重启后，用户自行启动 MiniQMT。实际观察到 `D:/st_lc/bin.x64/XtMiniQmt.exe`、18888 数据桥接在线；`/health` 返回 `xtdata=true`、`trading=true`、`trading_status=connected`。资金查询返回的账号与本机配置一致，持仓 10 项；账号及具体资产金额不入本记录。18889 RECEIVER、18891 管理服务当时未监听，本次未启动或重启它们。下方“miniQMT 不可用、完整客户端及空账户”的记录是当天早先观察，已不能代表当前状态。
 
@@ -12,7 +12,9 @@ BIOS 更新重启后，用户自行启动 MiniQMT。实际观察到 `D:/st_lc/bi
 
 `tests/execution/test_qmt_bridge_contract.py` **13 passed**，覆盖新旧 SDK 拼写、单笔/列表/股票过滤、已成交委托不被排除，以及缺少可选收益字段；均为离线替身，无真实下单。随后 `scripts/qmt-readonly-probe.py --timeout 20` 实机退出 0，资金账号匹配、持仓 10、委托 0，独立查询连接已断开。全部请求仅限连接/查询/断开，没有下单或撤单。
 
-**当前部署边界：18888 仍运行修复前代码，须经用户明确确认重启后才会加载修改并重新核验 HTTP 委托查询。** 源码修复及独立探测成功不等于在线进程已修复，也不构成实盘下单、成交回报或长期稳定性验收。带哈希的脱敏摘要见 [MiniQMT 证据](evidence/miniqmt_post_bios_20261018.json)。
+23:33 经用户明确授权“允许，仅重启 18888 桥接”，只停止原桥接 PID 28136，并使用相同解释器、入口、监听地址、端口、QMT/mini 路径和账户参数启动新桥接 PID 26768，日志独立保存。MiniQMT PID 20460 及其启动时间保持不变；未启动 18889/18891，未改 Paper 部署或交易模式。
+
+**修复现已加载至在线 18888 桥接。** `/health` 返回 `xtdata=true`、`trading=true`、`trading_status=connected`；HTTP 资金账号匹配、持仓 10 项、委托列表成功返回 0 项，原参数名错误未复现。两个品种行情及沪深300最近 5 根日线仍可读。截至 23:34，本次开机以来新增 WHEA 和 Python Application Error 1000 均为 0；Paper 任务仍启用、下次 2026-10-19 18:30。该结果是只读查询验收，不包含下单、撤单、成交回报、盘中刷新或长期稳定性验收。带哈希的脱敏摘要见 [MiniQMT 证据](evidence/miniqmt_post_bios_20261018.json)。
 
 ## 环境与路径
 

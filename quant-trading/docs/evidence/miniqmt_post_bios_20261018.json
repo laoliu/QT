@@ -1,7 +1,7 @@
 {
-  "observed_at": "2026-10-18T15:25:33.851896+00:00",
-  "scope": "User-started MiniQMT, read-only HTTP and separate SDK checks; no orders/cancels or service restarts",
-  "health": {
+  "observed_at": "2026-10-18T23:34:03.3526811+08:00",
+  "scope": "User-authorized port 18888 bridge restart and read-only HTTP verification; MiniQMT unchanged; no orders or cancels",
+  "initial_health": {
     "ok": true,
     "status": "ok",
     "version": 3,
@@ -10,25 +10,6 @@
     "trading_status": "connected",
     "error": null,
     "timestamp": "2026-10-18T23:25:33.530379"
-  },
-  "http_checks": {
-    "account_ok": true,
-    "configured_account_matches": true,
-    "asset_numeric_fields_valid": true,
-    "positions": {
-      "ok": true,
-      "count": 10
-    },
-    "orders": {
-      "ok": false,
-      "error": "query_orders error: XtQuantTrader.query_stock_orders() got an unexpected keyword argument 'cancel_able_only'. Did you mean 'cancelable_only'?"
-    },
-    "quote_codes": [
-      "000001.SZ",
-      "000300.SH"
-    ],
-    "index_bar_count": 5,
-    "index_last_bar_date": "20261016"
   },
   "direct_probe": {
     "started_at": "2026-10-18T15:28:54.127679+00:00",
@@ -50,8 +31,8 @@
     "passed": 13,
     "seconds": 0.11
   },
-  "running_http_fix_loaded": false,
-  "service_restart_authorized": false,
+  "running_http_fix_loaded": true,
+  "service_restart_authorized": true,
   "raw_evidence": [
     {
       "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_readonly.json",
@@ -76,6 +57,119 @@
     {
       "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\probe_direct.py",
       "sha256": "f752fd4c9e1effcae840fc7468c8ee3a5f63c6a0d4440d5d73f4e89d30e4e805"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_restart_before.json",
+      "sha256": "0f52390accb154d61826c5bab2686b5a3cf3fd4590c6ffae3ca60efb17468517"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_launch.json",
+      "sha256": "8be2848ad6a399e90c98884b4b4ed9a64a07d3040f6f1b0a6d068c8eaca1a85b"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_restart_process.json",
+      "sha256": "ba7b5bf67896c5c799346e2c8c77b3ccfc5e1ae581e94649296bbacd6263317d"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_restart_verified.json",
+      "sha256": "90dd8b3a7920509fe7571637a6bb608203ef270506c5c66abedd4d1ae45f215e"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_after_restart.json",
+      "sha256": "ec3f9444ab1df14bfe59f149c1d4db8e4a224993ffa93173393bf4191681e2b6"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\check_miniqmt_after_restart.py",
+      "sha256": "fcf92ab176cbfc4c3126abd5a8df0afffd601f170425a05aa1f99764f4c796f0"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_restarted.stdout.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "hash_scope": "bytes at evidence collection time; active log can grow"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\bridge_restarted.stderr.log",
+      "sha256": "e22ef33393edb13fde11f6336c16766e1c10db29d8c3c35800658c81f28e2fcb",
+      "hash_scope": "bytes at evidence collection time; active log can grow"
     }
-  ]
+  ],
+  "initial_http_observed_at": "2026-10-18T15:25:33.851896+00:00",
+  "initial_http_checks": {
+    "account_ok": true,
+    "configured_account_matches": true,
+    "asset_numeric_fields_valid": true,
+    "positions": {
+      "ok": true,
+      "count": 10
+    },
+    "orders": {
+      "ok": false,
+      "error": "query_orders error: XtQuantTrader.query_stock_orders() got an unexpected keyword argument 'cancel_able_only'. Did you mean 'cancelable_only'?"
+    },
+    "quote_codes": [
+      "000001.SZ",
+      "000300.SH"
+    ],
+    "index_bar_count": 5,
+    "index_last_bar_date": "20261016"
+  },
+  "restart_verification": {
+    "user_authorization": "Allow restart of port 18888 bridge only; keep MiniQMT running; read-only verification",
+    "process": {
+      "started_at": "2026-10-18T23:33:16.6047239+08:00",
+      "old_pid": 28136,
+      "new_pid": 26768,
+      "source_sha256": "f3cbfe5464fe6f5723a5c8453595c8502113485e8e222e2ef3235827b52569c0",
+      "user_authorized_only_port": 18888
+    },
+    "host": {
+      "observed_at": "2026-10-18T23:34:03.3526811+08:00",
+      "bridge_pid": 26768,
+      "bridge_start": "2026-10-18T23:33:16.6010179+08:00",
+      "mini_pid": 20460,
+      "mini_start": "2026-10-18T23:21:21.0452567+08:00",
+      "mini_unchanged": true,
+      "whea_since_boot": 0,
+      "python_application_errors_since_boot": 0,
+      "paper_task": {
+        "enabled": true,
+        "state": "Ready",
+        "next_run": "2026-10-19T18:30:00.0000000+08:00"
+      },
+      "listeners": [
+        {
+          "LocalAddress": "0.0.0.0",
+          "LocalPort": 18888,
+          "OwningProcess": 26768
+        }
+      ]
+    },
+    "health": {
+      "ok": true,
+      "status": "ok",
+      "version": 3,
+      "xtdata": true,
+      "trading": true,
+      "trading_status": "connected",
+      "error": null,
+      "timestamp": "2026-10-18T23:33:33.075562"
+    },
+    "account_ok": true,
+    "configured_account_matches": true,
+    "asset_numeric_fields_valid": true,
+    "positions": {
+      "ok": true,
+      "count": 10
+    },
+    "orders": {
+      "ok": true,
+      "count": 0
+    },
+    "quote_codes": [
+      "000001.SZ",
+      "000300.SH"
+    ],
+    "index_bar_count": 5,
+    "index_last_bar_date": "20261016"
+  }
 }

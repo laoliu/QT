@@ -1,0 +1,225 @@
+{
+  "scope": "Post-user-BIOS-update bounded verification; no live broker or global dependency changes",
+  "host_before": {
+    "observed_at": "2026-10-18T23:13:30.2926472+08:00",
+    "boot": "2026-10-18T23:07:38.5000000+08:00",
+    "bios": "A.K0",
+    "bios_date": "2026-08-19T08:00:00.0000000+08:00",
+    "cpu0_registry_microcode_raw": "37-01-00-00",
+    "cpu0_registry_microcode": "0x137",
+    "user_confirmed_change": "BIOS updated only; Intel defaults, XMP, undervolting and separate ME update unconfirmed",
+    "paper_task_state": "Disabled"
+  },
+  "host_after": {
+    "observed_at": "2026-10-18T23:21:02.3639255+08:00",
+    "boot": "2026-10-18T23:07:38.5000000+08:00",
+    "whea_since_boot": 0,
+    "python_application_errors_since_boot": 0,
+    "events": [],
+    "paper_task": {
+      "state": "Ready",
+      "enabled": true,
+      "arguments": "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"E:\\work\\QT\\scripts\\run-research-paper.ps1\" -Deployment \"G:/qtdata/research/operations/csi500/deployment.yaml\" -Python \"G:/qtdata/research/validation-env-py313/Scripts/python.exe\" -LogRoot \"G:/qtdata/research/operations/csi500/scheduler\" -CpuAffinity \"16,17,18,19\"",
+      "last_run": "2026-10-18T23:20:32.0000000+08:00",
+      "last_task_result": 0,
+      "next_run": "2026-10-19T18:30:00.0000000+08:00"
+    },
+    "scheduler_result": {
+      "started_at": "2026-10-18T23:20:32.4082726+08:00",
+      "finished_at": "2026-10-18T23:20:33.1029412+08:00",
+      "exit_code": 0,
+      "log_path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\run-20261018T152032408Z.log",
+      "cpu_affinity": "16,17,18,19",
+      "broker_contacted": false
+    },
+    "latest_operation": {
+      "status": "not_started",
+      "date": "2026-10-18",
+      "operational": false,
+      "broker_contacted": false,
+      "start_date": "2026-10-19"
+    },
+    "formal_book_exists": false,
+    "trading_service_listeners": []
+  },
+  "environment": {
+    "python": "3.13.4 (tags/v3.13.4:8a526ec, Jun  3 2025, 17:46:04) [MSC v.1943 64 bit (AMD64)]",
+    "executable": "D:\\Tools\\pyenv-win\\versions\\3.13.4\\python.exe",
+    "numpy": "2.4.1",
+    "pandas": "3.0.1",
+    "scipy": "1.17.1",
+    "lightgbm": "4.6.0",
+    "sklearn": "1.8.0",
+    "pyarrow": "23.0.1",
+    "process_affinity": "0xffffffff",
+    "system_affinity": "0xffffffff"
+  },
+  "checks": [
+    {
+      "name": "environment",
+      "started_at": "2026-10-18T15:13:31.607789+00:00",
+      "finished_at": "2026-10-18T15:13:38.937225+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\environment.log",
+      "sha256": "52d895ce29ff7dc658ae2d450f90e2738a7476774340eb95b3d9bf64a1fcaab5"
+    },
+    {
+      "name": "global_research_0",
+      "started_at": "2026-10-18T15:13:38.938786+00:00",
+      "finished_at": "2026-10-18T15:14:18.765842+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\global_research_0.log",
+      "sha256": "9ba7fcd57705cb26e77743427b0f8254d8252510b768d2751d818f1b4e9fd9ec",
+      "tests": {
+        "passed": 360,
+        "skipped": 5,
+        "warnings": 2
+      }
+    },
+    {
+      "name": "global_research_1",
+      "started_at": "2026-10-18T15:14:18.766478+00:00",
+      "finished_at": "2026-10-18T15:14:59.429209+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\global_research_1.log",
+      "sha256": "d8193eb9edbd22eaf38bdf803e55651131663f491f5b6a586ac9ef2ecd9d98cb",
+      "tests": {
+        "passed": 360,
+        "skipped": 5,
+        "warnings": 2
+      }
+    },
+    {
+      "name": "global_research_2",
+      "started_at": "2026-10-18T15:14:59.429761+00:00",
+      "finished_at": "2026-10-18T15:15:36.506956+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\global_research_2.log",
+      "sha256": "d8f9628dc94eb12b3b3028263290b9db4904cc0cf3689d5459cc4c64e3208d89",
+      "tests": {
+        "passed": 360,
+        "skipped": 5,
+        "warnings": 2
+      }
+    },
+    {
+      "name": "global_research_3",
+      "started_at": "2026-10-18T15:15:36.507720+00:00",
+      "finished_at": "2026-10-18T15:16:13.368990+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\global_research_3.log",
+      "sha256": "2d9b61ca2a1468363bcf0ac4d84e446f8a5fa0950cb9cf3b293a0ff96f5b0d6f",
+      "tests": {
+        "passed": 360,
+        "skipped": 5,
+        "warnings": 2
+      }
+    },
+    {
+      "name": "global_research_4",
+      "started_at": "2026-10-18T15:16:13.369635+00:00",
+      "finished_at": "2026-10-18T15:16:53.536872+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\global_research_4.log",
+      "sha256": "6f236be60c23b4de67d991ffebf4574e4322cf97932ca3b7bb3f6b1f7b20153c",
+      "tests": {
+        "passed": 360,
+        "skipped": 5,
+        "warnings": 2
+      }
+    },
+    {
+      "name": "original_hash_stress",
+      "started_at": "2026-10-18T15:16:53.537448+00:00",
+      "finished_at": "2026-10-18T15:18:18.964418+00:00",
+      "exit_code": 0,
+      "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\original_hash_stress.log",
+      "sha256": "284402eea4dbfe0e02d300b5b329154971699499261399842a025baea847f2b3"
+    }
+  ],
+  "stress": {
+    "iterations": 1000,
+    "progress_lines": 100,
+    "digest": "8e38a293dc3bac127ea2a959564b25d06cdd50385dac38fdc4851c7b11f41684",
+    "source_sha256": "7b70d47029e5f23bc05b5da429beced1c27128cdf8f76b0d789c930269d3355d"
+  },
+  "paper_preflight": {
+    "observed_at": "2026-10-18T15:20:23.880163+00:00",
+    "exit_code": 0,
+    "exit_code_evidence": "original runner reached its returncode == 0 branch; CLI log status preview and progress complete",
+    "log": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\paper_preflight.log",
+    "sha256": "f45d6fdcfec5fe2ce955695f869f264e1dd68559c5acc97d05b927c4f4a86247",
+    "prediction_rows": 494,
+    "predictions_exactly_match": true,
+    "preview": {
+      "status": "preview",
+      "date": "2026-10-16",
+      "operational": false,
+      "run_id": "paper-2026-10-16-f41ee827b38b",
+      "model_id": "f69fada02c684d7697ae287ae176b53f",
+      "predictions": 494,
+      "targets": 0,
+      "book_path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\paper_validation\\preflight\\paper.sqlite3",
+      "snapshot_path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\paper_validation\\preflight\\sessions\\2026-10-16\\snapshot.parquet",
+      "broker_contacted": false
+    },
+    "book_exists": false,
+    "collector_issue": "Initial collection used Windows GBK to read UTF-8 preview JSON and exited 1 after successful CLI. Explicit UTF-8 recollection completed; workload was not rerun."
+  },
+  "raw_evidence": [
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\host_before.json",
+      "sha256": "d4af2c3eb76abbaa1a6109a1039c3a13baa1e5031b3f88959647579ff336844e"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\host_after.json",
+      "sha256": "b6be5ed8e9d4c365380e1e98495eaf2a2a1b92b798fe2d7ec1bcddf1e59dbfff"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\verify_native.py",
+      "sha256": "e0211b277a12197fb344862fc1d7219487888311045e111a0160c1c715a02b39"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\results.json",
+      "sha256": "3b33b6b42f1b433c98dfb6e8bc7b5ff92732e0ac122c976f9b33311330c32bc7"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\environment.log",
+      "sha256": "52d895ce29ff7dc658ae2d450f90e2738a7476774340eb95b3d9bf64a1fcaab5"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\hash_stress_source.py",
+      "sha256": "7b70d47029e5f23bc05b5da429beced1c27128cdf8f76b0d789c930269d3355d"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\prepare_preflight.py",
+      "sha256": "5ce4512062913f63bb49bdad39fd72187186ec1283ee545073f3bde54195a0c6"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\run_preflight.py",
+      "sha256": "f34c480ed13344a10f9a76fee2e02a4f13758f6026e1aaa3761a1547f412b605"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\collect_preflight.py",
+      "sha256": "f6843a4af1e68a275d372c282a1bfe5b3136190f99ea3cff0adbe9bd155dfc86"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\preflight_inputs.json",
+      "sha256": "2a3c4af99da7e7907ddaa99dc72ba63c992171be1926851b11c38ca67e9cca25"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\paper_preflight_result.json",
+      "sha256": "0ea4b047e3fe59bb1be00a72ef01d27a757c7dcb166574fa0f8ad0834500482e"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\capture_after.ps1",
+      "sha256": "80c19ec7dd39d5f3ee3455e79fa19c77e1e8267e97978f3780a845fffea30920"
+    }
+  ],
+  "limits": [
+    "User confirmed BIOS update only; Intel defaults/XMP/undervolting/separate ME update remain unconfirmed.",
+    "Finite loads did not reproduce the crash; root cause, long-term stability and CPU physical condition are not established.",
+    "Daily Paper retains E-core affinity 16-19. Historical preview does not count toward five real operating sessions.",
+    "No trading services started; no QMT/live stability or execution acceptance."
+  ]
+}

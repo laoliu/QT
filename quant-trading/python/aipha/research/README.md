@@ -51,9 +51,11 @@ Runs write `run_manifest.json`, `report.json`, a version-checked model folder,
 `oos_predictions.parquet` and its metadata sidecar, `portfolio_returns.parquet`,
 `trades.json`, `corporate_actions.json`, `target_positions.json`, and one validated paper execution plan
 per rebalance date. Reports include the walk-forward PBO proxy plus formal
-CSCV PBO when enough OOS observations exist. The report separates the
-quintile-portfolio diagnostic (`pbo`) from the fixed Top-K parameter-selection
-diagnostic (`selection_pbo` and its candidate grid). It also includes long-short diagnostics,
+CSCV PBO over a fixed Top-K grid when enough OOS observations exist.
+`pbo` and the compatibility alias `selection_pbo` now refer to this same
+portfolio-size selection diagnostic (`cscv_net_top_k_portfolios`). Quintile
+forward-return means remain descriptive metrics; overlapping forward labels
+are never used as the CSCV return observations. It also includes long-short diagnostics,
 benchmark comparison, and causal style exposures when the snapshot contains
 the required columns. The portfolio replay models board lots, cash,
 configurable fees/slippage, daily turnover, T+1, suspension, and
@@ -76,6 +78,19 @@ Non-finite feature values count as missing. Fold reports retain actual train
 dates and purge boundaries; the manifest's aggregate training range is the
 union of those training windows, with the latest fold identified separately.
 Undefined statistical diagnostics are JSON `null`, never `NaN`/`Infinity`.
+
+CSCV candidates use the same monthly targets, industry/position limits,
+turnover, raw-price accounting, trading restrictions and costs as the main
+replay. Their daily net returns are saved in `cscv_returns.parquet` with a
+hash sidecar binding the parent OOS predictions. `cscv_analysis.json` records
+the candidate grid, metric configuration, partitions, IS selections and OOS
+ranks, so the statistic can be reproduced without training again. The
+analyzer retains remainder observations and uses ascending OOS average ranks
+divided by N+1; IS ties share selection probability equally. Insufficient
+candidate coverage, short samples and identical candidate returns produce
+an unavailable diagnostic. This measures Top-K selection on the frozen model
+scores; it does not estimate unrecorded model/factor search. The standalone
+prediction-only `evaluate` action requires a portfolio replay for formal PBO.
 
 Forward-return labels use the panel's shared trading calendar (the union of
 market dates), with entry at D+skip_days open and exit at

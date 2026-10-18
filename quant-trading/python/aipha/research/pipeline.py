@@ -410,6 +410,16 @@ class ResearchPipeline:
         }
         metrics = _evaluate_predictions(oos, targets, self.config)
         metrics.update(backtest["metrics"])
+        from .overfitting import portfolio_selection_cscv
+
+        cscv_returns, cscv_analysis = portfolio_selection_cscv(
+            source, oos, self.config, baseline_returns=backtest["daily_returns"],
+        )
+        cscv_method = cscv_analysis["method"] if cscv_analysis["available"] else f"unavailable_{cscv_analysis['reason']}"
+        metrics.update({
+            "pbo": cscv_analysis["pbo"], "pbo_method": cscv_method,
+            "selection_pbo": cscv_analysis["pbo"], "selection_pbo_method": cscv_method,
+        })
         metrics["pbo_proxy"] = _pbo_proxy(wf_summary)
         evaluation_diagnostics = _build_evaluation_diagnostics(
             source, oos, targets, self.config, portfolio_returns=backtest["daily_returns"],
@@ -445,6 +455,22 @@ class ResearchPipeline:
             run_root / "oos_predictions.parquet",
             oos_metadata,
             artifact_type="oos_predictions",
+        )
+        _, _, cscv_metadata = write_attested_parquet(
+            cscv_returns.reset_index(), run_root / "cscv_returns.parquet",
+            {**oos_metadata, "candidate_ids": list(cscv_returns.columns),
+             "start_date": str(cscv_returns.index.min().date()) if len(cscv_returns) else None,
+             "end_date": str(cscv_returns.index.max().date()) if len(cscv_returns) else None,
+             "parent_oos_content_sha256": oos_artifact_metadata["snapshot_content_sha256"],
+             "model_config_hash": self.config.model_config_hash()},
+            artifact_type="cscv_candidate_net_returns",
+        )
+        cscv_analysis.update({
+            "run_id": self.run_id, "model_id": self.run_id, "data_snapshot_id": data_snapshot_id,
+            "candidate_returns_content_sha256": cscv_metadata["snapshot_content_sha256"],
+        })
+        (run_root / "cscv_analysis.json").write_text(
+            json.dumps(cscv_analysis, ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8",
         )
         pd.DataFrame(backtest["daily_returns"]).to_parquet(
             run_root / "portfolio_returns.parquet", index=False,
@@ -493,6 +519,7 @@ class ResearchPipeline:
             "artifact_attestation": {
                 "input_snapshot": input_metadata,
                 "oos_predictions": oos_artifact_metadata,
+                "cscv_returns": cscv_metadata,
             },
             "diagnostics": {
                 "pbo_proxy": metrics["pbo_proxy"],
@@ -510,6 +537,9 @@ class ResearchPipeline:
             "portfolio_returns_path": "portfolio_returns.parquet",
             "trades_path": "trades.json",
             "corporate_actions_path": "corporate_actions.json",
+            "cscv_returns_path": "cscv_returns.parquet",
+            "cscv_analysis_path": "cscv_analysis.json",
+            "pbo_analysis": {key: value for key, value in cscv_analysis.items() if key != "result"},
             "run_envelope": {
                 "schemaVersion": "1.0",
                 "runId": self.run_id,
@@ -537,6 +567,7 @@ class ResearchPipeline:
             artifact_attestation={
                 "input_snapshot": input_metadata,
                 "oos_predictions": oos_artifact_metadata,
+                "cscv_returns": cscv_metadata,
             },
             evaluation_window=backtest["evaluation_window"],
             training_period=training_period,
@@ -578,6 +609,8 @@ class ResearchPipeline:
             "portfolio_returns": "portfolio_returns.parquet",
             "targets": "target_positions.json",
             "execution_plans": "execution_plans/",
+            "cscv_returns": "cscv_returns.parquet",
+            "cscv_analysis": "cscv_analysis.json",
             "artifact_attestation": artifact_attestation or {},
             "evaluation_window": evaluation_window or {},
             "training_period": training_period or {},
@@ -599,11 +632,7 @@ def _evaluate_predictions(
     top_returns: list[float] = []
     bottom_returns: list[float] = []
     quintile_returns: dict[int, list[float]] = {index: [] for index in range(1, 6)}
-    # A fixed, pre-declared Top-K grid is a more meaningful CSCV candidate set
-    # than rank buckets alone: it represents the portfolio-size choice that
-    # can be selected during research. It is independent of observed returns.
     top_k_grid = _top_k_candidate_grid(config.top_k)
-    top_k_returns: dict[int, list[float]] = {candidate: [] for candidate in top_k_grid}
     for _, group in predictions.groupby("trade_date", sort=True):
         valid = group.dropna(subset=["score", "fwd_return"])
         if len(valid) < 3:
@@ -614,11 +643,6 @@ def _evaluate_predictions(
         ranked = valid.sort_values("score", ascending=False)
         top_returns.append(float(ranked.head(config.top_k)["fwd_return"].mean()))
         bottom_returns.append(float(ranked.tail(config.top_k)["fwd_return"].mean()))
-        for candidate in top_k_grid:
-            top_k_returns[candidate].append(
-                float(ranked.head(candidate)["fwd_return"].mean())
-                if len(ranked) >= candidate else float("nan"),
-            )
         ranked = ranked.copy()
         ranked["quintile"] = pd.qcut(
             ranked["score"].rank(method="first", ascending=False),
@@ -657,8 +681,6 @@ def _evaluate_predictions(
     bottom_mean = float(np.mean(bottom_returns)) if bottom_returns else 0.0
     ic_mean = float(np.mean(daily_ic)) if daily_ic else 0.0
     ic_std = float(np.std(daily_ic, ddof=1)) if len(daily_ic) > 1 else 0.0
-    formal_pbo, pbo_method = _compute_quintile_cscv(quintile_returns)
-    selection_pbo, selection_pbo_method = _compute_candidate_cscv(top_k_returns)
     return {
         "rank_ic": ic_mean,
         "icir": ic_mean / ic_std if ic_std > 0 else 0.0,
@@ -669,11 +691,13 @@ def _evaluate_predictions(
         "quintile_5_mean_forward_return": float(np.mean(quintile_returns[5])) if quintile_returns[5] else 0.0,
         "estimated_turnover_cost": turnover_cost,
         "top_k_mean_forward_return_net_estimated_cost": top_mean - turnover_cost,
-        "pbo": formal_pbo,
-        "pbo_method": pbo_method,
-        "selection_pbo": selection_pbo,
-        "selection_pbo_method": selection_pbo_method,
-        "selection_pbo_candidates": sorted(top_k_returns),
+        # Overlapping forward labels are useful descriptive diagnostics, but
+        # cannot substitute for a matrix of realized daily portfolio returns.
+        "pbo": None,
+        "pbo_method": "unavailable_requires_portfolio_replay",
+        "selection_pbo": None,
+        "selection_pbo_method": "unavailable_requires_portfolio_replay",
+        "selection_pbo_candidates": list(top_k_grid),
     }
 
 
@@ -682,69 +706,6 @@ def _top_k_candidate_grid(top_k: int) -> tuple[int, ...]:
     base = max(1, int(top_k))
     candidates = {max(5, base // 2), base, base * 2, base * 4}
     return tuple(sorted(candidates))
-
-
-def _compute_candidate_cscv(
-    candidate_returns: dict[int, list[float]],
-) -> tuple[float | None, str]:
-    """Compute CSCV over fixed Top-K portfolio-size candidates.
-
-    This is a parameter-selection PBO diagnostic. It does not measure
-    arbitrary model/factor search; callers should report the candidate set
-    alongside the value and keep it fixed before looking at outcomes.
-    """
-    if len(candidate_returns) < 2:
-        return None, "unavailable_insufficient_candidates"
-    frame = pd.DataFrame(candidate_returns).sort_index(axis=1).dropna(how="any")
-    if len(frame) < 8 or frame.shape[1] < 2:
-        return None, "unavailable_insufficient_oos"
-    partitions = min(16, len(frame))
-    if partitions % 2:
-        partitions -= 1
-    if partitions < 4:
-        return None, "unavailable_insufficient_oos"
-    try:
-        from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
-
-        result = PBOAnalyzer(PBOConfig(num_subsamples=partitions)).compute(
-            frame.to_numpy(dtype=float),
-        )
-        return float(result.pbo), "cscv_top_k_selection"
-    except (ValueError, ImportError):
-        return None, "unavailable"
-
-
-def _compute_quintile_cscv(
-    quintile_returns: dict[int, list[float]],
-) -> tuple[float | None, str]:
-    """Run formal CSCV PBO over the OOS quintile portfolios.
-
-    The five cross-sectional buckets are the candidate portfolios available
-    from one ranking model.  This is a conservative, reproducible PBO
-    diagnostic; it is deliberately reported separately from the fold-level
-    ``pbo_proxy`` used for walk-forward degradation.
-    """
-    if not quintile_returns:
-        return None, "unavailable"
-    frame = pd.DataFrame(quintile_returns).sort_index(axis=1).dropna(how="any")
-    if len(frame) < 8 or frame.shape[1] < 2:
-        return None, "unavailable_insufficient_oos"
-    # Use the largest even number of temporal partitions supported by the
-    # sample.  Four is the minimum valid CSCV split.
-    partitions = min(16, len(frame))
-    if partitions % 2:
-        partitions -= 1
-    if partitions < 4:
-        return None, "unavailable_insufficient_oos"
-    try:
-        from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
-
-        result = PBOAnalyzer(PBOConfig(num_subsamples=partitions)).compute(
-            frame.to_numpy(dtype=float),
-        )
-        return float(result.pbo), "cscv_quintile_portfolios"
-    except (ValueError, ImportError):
-        return None, "unavailable"
 
 
 def _build_evaluation_diagnostics(

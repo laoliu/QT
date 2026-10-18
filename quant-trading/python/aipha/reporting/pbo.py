@@ -8,9 +8,9 @@
 2. 从 S 个子样本中取 S/2 个组成 "训练集"(IS)，剩余 S/2 组成 "测试集"(OOS)
 3. 对每种 C(S, S/2) 划分方式:
    a. 在 IS 上选出表现 "最优" 的策略 (或参数组合) k*
-   b. 在 OOS 上评估 k* 的排名: rank_oos(k*) / N
-   c. 如果 OOS 排名 > 0.5（即低于中位数），记为一次过拟合
-4. PBO = #{OOS 排名 > 0.5} / #{总划分数}
+   b. 在 OOS 上计算升序平均排名: rank_oos(k*) / (N+1)
+   c. 如果 OOS 排名 <= 0.5（不高于中位数），记为一次过拟合
+4. PBO = 各划分的过拟合概率均值（IS 并列最优时等权处理）
 5. PBO > 0.5 → 策略过拟合风险极高
 
 该框架可应用于:
@@ -31,6 +31,8 @@ from itertools import combinations
 from typing import Any
 
 import numpy as np
+
+from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +61,36 @@ class PBOConfig:
         performance_metric: 用于排名的绩效指标 ('sharpe', 'return', 'calmar')
         random_seed: 随机种子 (用于组合抽样)
         overfit_threshold: 过拟合判定阈值 (默认 0.5)
+        annualization_periods: 每年收益观察期数（默认 244 个交易日）
+        risk_free_rate: 年化无风险利率（默认 0，与净收益研究口径一致）
     """
     num_subsamples: int = DEFAULT_NUM_SUBSAMPLES
     max_combinations: int = MAX_COMBINATIONS
     performance_metric: str = "sharpe"
     random_seed: int = 42
     overfit_threshold: float = PBO_OVERFIT_THRESHOLD
+    annualization_periods: int = TRADING_DAYS_PER_YEAR
+    risk_free_rate: float = 0.0
 
     def __post_init__(self) -> None:
+        for name in ("num_subsamples", "max_combinations", "annualization_periods", "random_seed"):
+            value = getattr(self, name)
+            if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+                raise ValueError(f"{name} must be an integer")
+        if self.random_seed < 0:
+            raise ValueError("random_seed must be non-negative")
         if self.num_subsamples < 4 or self.num_subsamples % 2 != 0:
             raise ValueError(
                 f"num_subsamples 须为 >= 4 的偶数, got {self.num_subsamples}"
             )
+        if self.max_combinations < 1:
+            raise ValueError("max_combinations must be positive")
+        if self.performance_metric not in {"sharpe", "return", "calmar"}:
+            raise ValueError("unsupported performance_metric")
+        if self.annualization_periods < 1 or not math.isfinite(self.risk_free_rate):
+            raise ValueError("annualization periods must be positive and risk-free rate finite")
+        if not math.isfinite(self.overfit_threshold) or not 0 <= self.overfit_threshold <= 1:
+            raise ValueError("overfit_threshold must be in [0, 1]")
 
 
 @dataclass
@@ -82,7 +102,7 @@ class PBOResult:
         is_overfit: 是否标记为过拟合 (pbo > threshold)
         num_combinations_tested: 实际测试的组合数
         num_combinations_total: 理论组合总数
-        logit_distribution: 各划分的 logit(rank_oos) 分布
+        logit_distribution: 各划分的 logit(rank_oos) 均值（IS 并列时等权）
         best_strategy_idx: IS 中最常被选为最优的策略索引
         oos_rank_distribution: OOS 排名分布 [0,1]
         stochastic_dominance_ratio: OOS 均值收益 / IS 均值收益
@@ -95,6 +115,12 @@ class PBOResult:
     best_strategy_idx: int | None = None
     oos_rank_distribution: list[float] = field(default_factory=list)
     stochastic_dominance_ratio: float | None = None
+    num_observations: int = 0
+    subsample_sizes: list[int] = field(default_factory=list)
+    tied_is_selections: int = 0
+    tie_policy: str = "equal_weight_is_maximizers_average_oos_ranks"
+    is_winner_indices: list[list[int]] = field(default_factory=list)
+    oos_winner_ranks: list[list[float]] = field(default_factory=list)
 
 
 # ============================================================================
@@ -115,7 +141,6 @@ class PBOAnalyzer:
 
     def __init__(self, config: PBOConfig | None = None):
         self.config = config or PBOConfig()
-        self._rng = np.random.default_rng(self.config.random_seed)
 
     def compute(self, performance_matrix: np.ndarray) -> PBOResult:
         """执行 CSCV PBO 分析。
@@ -129,6 +154,10 @@ class PBOAnalyzer:
         """
         if performance_matrix.ndim != 2:
             raise ValueError("performance_matrix 须为 2D 数组 (T, N)")
+        if not np.isfinite(performance_matrix).all():
+            raise ValueError("performance_matrix must contain only finite returns")
+        if (performance_matrix < -1).any():
+            raise ValueError("simple portfolio returns cannot be below -100%")
 
         t_rows, n_strategies = performance_matrix.shape
         if n_strategies < 2:
@@ -159,10 +188,11 @@ class PBOAnalyzer:
                 total_combos, self.config.max_combinations,
             )
             is_combos = []
+            rng = np.random.default_rng(self.config.random_seed)
             seen: set[tuple[int, ...]] = set()
             while len(is_combos) < self.config.max_combinations:
                 perm = tuple(sorted(
-                    self._rng.choice(all_indices, half_s, replace=False)
+                    rng.choice(all_indices, half_s, replace=False)
                 ))
                 if perm not in seen:
                     seen.add(perm)
@@ -172,7 +202,10 @@ class PBOAnalyzer:
         overfit_count = 0
         logit_values: list[float] = []
         oos_ranks: list[float] = []
-        best_counts = np.zeros(n_strategies, dtype=int)
+        best_counts = np.zeros(n_strategies, dtype=float)
+        tied_selections = 0
+        winner_indices: list[list[int]] = []
+        winner_ranks: list[list[float]] = []
         is_mean_perf_sum = 0.0
         oos_mean_perf_sum = 0.0
 
@@ -187,31 +220,38 @@ class PBOAnalyzer:
 
             # IS 上选最优策略
             is_scores = self._compute_metric(is_returns)
-            best_k = int(np.argmax(is_scores))
-            best_counts[best_k] += 1
+            if not np.isfinite(is_scores).all():
+                raise ValueError("CSCV performance scores must be finite")
+            best = np.flatnonzero(is_scores == is_scores.max())
+            best_counts[best] += 1.0 / len(best)
+            tied_selections += int(len(best) > 1)
 
             # OOS 上评估 best_k 的排名
             oos_scores = self._compute_metric(oos_returns)
-            # 排名: 从 0 (最差) 到 N-1 (最好)
-            rank_order = np.argsort(np.argsort(oos_scores))
-            rank_k = rank_order[best_k]
-            # 归一化到 [0, 1]
-            relative_rank = rank_k / (n_strategies - 1) if n_strategies > 1 else 0.5
+            if not np.isfinite(oos_scores).all():
+                raise ValueError("CSCV performance scores must be finite")
+            # Ascending midranks in [1,N], normalized by N+1 as in CSCV.
+            # Equal IS maxima share selection mass, so column order cannot
+            # decide which OOS result is used when training scores tie.
+            _, inverse, counts = np.unique(oos_scores, return_inverse=True, return_counts=True)
+            midranks = (np.cumsum(counts) - (counts - 1) / 2)[inverse]
+            selected_ranks = midranks[best] / (n_strategies + 1)
+            relative_rank = float(selected_ranks.mean())
+            winner_indices.append(best.tolist())
+            winner_ranks.append(selected_ranks.tolist())
 
             oos_ranks.append(float(relative_rank))
 
             # logit 值: log(rank / (1 - rank))
-            rank_clipped = np.clip(relative_rank, 1e-6, 1.0 - 1e-6)
-            logit_val = float(np.log(rank_clipped / (1.0 - rank_clipped)))
+            logit_val = float(np.log(selected_ranks / (1.0 - selected_ranks)).mean())
             logit_values.append(logit_val)
 
             # 过拟合判定: OOS 排名低于中位数 → 过拟合
-            if relative_rank < 0.5:
-                overfit_count += 1
+            overfit_count += float((selected_ranks <= 0.5).mean())
 
             # 累计均值绩效
-            is_mean_perf_sum += float(is_scores[best_k])
-            oos_mean_perf_sum += float(oos_scores[best_k])
+            is_mean_perf_sum += float(is_scores[best].mean())
+            oos_mean_perf_sum += float(oos_scores[best].mean())
 
         pbo = overfit_count / n_tested if n_tested > 0 else 0.0
 
@@ -226,9 +266,14 @@ class PBOAnalyzer:
             num_combinations_tested=n_tested,
             num_combinations_total=total_combos,
             logit_distribution=logit_values,
-            best_strategy_idx=int(np.argmax(best_counts)),
+            best_strategy_idx=int(np.argmax(best_counts)) if (best_counts == best_counts.max()).sum() == 1 else None,
             oos_rank_distribution=oos_ranks,
             stochastic_dominance_ratio=sd_ratio,
+            num_observations=t_rows,
+            subsample_sizes=[len(sample) for sample in subsamples],
+            tied_is_selections=tied_selections,
+            is_winner_indices=winner_indices,
+            oos_winner_ranks=winner_ranks,
         )
 
         logger.info(
@@ -244,7 +289,7 @@ class PBOAnalyzer:
     ) -> list[np.ndarray]:
         """将 (T, N) 矩阵按时间切为 S 个子样本。
 
-        丢弃尾部无法整除的部分。
+        保留全部观察值，分区长度最多相差一行。
         """
         t_rows, _ = matrix.shape
         s = self.config.num_subsamples
@@ -253,12 +298,7 @@ class PBOAnalyzer:
             raise ValueError(
                 f"数据行数 {t_rows} 不足以切割为 {s} 个子样本"
             )
-        subsamples = []
-        for i in range(s):
-            start = i * chunk_size
-            end = start + chunk_size
-            subsamples.append(matrix[start:end])
-        return subsamples
+        return list(np.array_split(matrix, s))
 
     def _compute_metric(
         self, returns: np.ndarray,
@@ -273,10 +313,10 @@ class PBOAnalyzer:
             elif self.config.performance_metric == "return":
                 scores[j] = float(np.sum(col))
             elif self.config.performance_metric == "calmar":
-                total = float(np.sum(col))
-                cum = np.cumsum(col)
+                cum = np.r_[1.0, np.cumprod(1.0 + col)]
+                total = float(cum[-1] - 1.0)
                 peak = np.maximum.accumulate(cum)
-                dd = peak - cum
+                dd = 1.0 - cum / peak
                 max_dd = float(np.max(dd)) if len(dd) > 0 else 0.0
                 scores[j] = total / max_dd if max_dd > 1e-12 else total
             else:
@@ -286,7 +326,10 @@ class PBOAnalyzer:
     def _sharpe_ratio(self, returns: np.ndarray) -> float:
         """计算年化夏普比率 — §13.2 委托共享模块。"""
         from aipha.utils.metrics import compute_sharpe_ratio
-        return compute_sharpe_ratio(returns)
+        return compute_sharpe_ratio(
+            returns, risk_free_rate=self.config.risk_free_rate,
+            trading_days=self.config.annualization_periods,
+        )
 
 
 # ============================================================================

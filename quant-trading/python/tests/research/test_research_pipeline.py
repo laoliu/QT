@@ -680,12 +680,25 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert long_short["gross_exposure"] == 2.0
     assert np.isfinite(long_short["mean_net_return"])
     assert long_short["estimated_cost"] >= 0
-    assert report["diagnostics"]["pbo_method"] in {
-        "cscv_quintile_portfolios", "unavailable_insufficient_oos", "unavailable",
-    }
-    assert report["diagnostics"]["selection_pbo_method"] in {
-        "cscv_top_k_selection", "unavailable_insufficient_oos", "unavailable",
-    }
+    assert report["diagnostics"]["pbo_method"] == "cscv_net_top_k_portfolios"
+    assert report["diagnostics"]["selection_pbo_method"] == "cscv_net_top_k_portfolios"
+    assert report["pbo_analysis"]["return_basis"] == "net_portfolio_replay"
+    assert report["pbo_analysis"]["overlapping_return_intervals"] is False
+    from aipha.research.snapshots import verify_attested_parquet
+    from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
+    cscv_path = artifact_dir / "cscv_returns.parquet"
+    cscv_metadata = verify_attested_parquet(cscv_path, require_artifact_hash=True)
+    cscv_returns = pd.read_parquet(cscv_path).set_index("trade_date")
+    cscv_analysis = json.loads((artifact_dir / "cscv_analysis.json").read_text(encoding="utf-8"))
+    assert cscv_analysis["candidate_returns_content_sha256"] == cscv_metadata["snapshot_content_sha256"]
+    assert cscv_metadata["start_date"] == cscv_returns.index.min().date().isoformat()
+    assert cscv_metadata["end_date"] == cscv_returns.index.max().date().isoformat()
+    assert cscv_analysis["result"]["num_observations"] == len(returns) - 1
+    assert sum(cscv_analysis["result"]["subsample_sizes"]) == len(cscv_returns)
+    expected_returns = returns.set_index(pd.to_datetime(returns.trade_date)).daily_return.iloc[1:]
+    np.testing.assert_allclose(cscv_returns[f"top_k_{cfg.top_k}"], expected_returns)
+    reproduced_pbo = PBOAnalyzer(PBOConfig(**cscv_analysis["config"])).compute(cscv_returns.to_numpy())
+    assert reproduced_pbo.pbo == report["metrics"]["pbo"]
     assert report["diagnostics"]["selection_pbo_candidates"]
     model_manifest = json.loads((artifact_dir / "model" / "model_manifest.json").read_text(encoding="utf-8"))
     assert set(report["feature_missing_rates"]["columns"]) == set(model_manifest["feature_columns"])

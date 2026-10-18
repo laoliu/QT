@@ -192,6 +192,66 @@ class TestPBOCompute:
         r2 = compute_pbo(mat, cfg)
         assert r1.pbo == r2.pbo
 
+    def test_standard_rank_normalization_has_no_infinite_endpoint_logits(self):
+        matrix = np.tile([0.01, 0.02, 0.03], (8, 1))
+        result = compute_pbo(matrix, PBOConfig(num_subsamples=4, performance_metric="return"))
+        assert result.pbo == 0
+        assert result.oos_rank_distribution == [0.75] * 6
+        np.testing.assert_allclose(result.logit_distribution, np.log(3))
+
+    def test_is_ties_share_mass_and_oos_ties_use_midrank(self):
+        # Five partitions put every selected candidate at/below the OOS
+        # median. In the sixth all three tie in IS; only one loses OOS.
+        # Expected PBO = (5 + 1/3) / 6 = 8/9, independent of column order.
+        matrix = np.array([[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0], [0, 0, 0]])
+        config = PBOConfig(num_subsamples=4, performance_metric="return")
+        result = compute_pbo(matrix, config)
+        assert result.pbo == pytest.approx(8 / 9)
+        assert result.tied_is_selections == 2
+        assert result.oos_winner_ranks[-1] == [0.625, 0.625, 0.25]
+        assert compute_pbo(matrix[:, [2, 0, 1]], config).pbo == pytest.approx(result.pbo)
+
+    def test_remainder_observations_are_preserved(self):
+        matrix = np.arange(27, dtype=float).reshape(9, 3) / 1000
+        analyzer = PBOAnalyzer(PBOConfig(num_subsamples=4))
+        np.testing.assert_array_equal(np.vstack(analyzer._split_subsamples(matrix)), matrix)
+        result = analyzer.compute(matrix)
+        assert result.num_observations == 9
+        assert result.subsample_sizes == [3, 2, 2, 2]
+
+    def test_same_analyzer_sampling_restarts_from_configured_seed(self):
+        analyzer = PBOAnalyzer(PBOConfig(num_subsamples=8, max_combinations=3, performance_metric="return"))
+        matrix = _make_random_matrix(t=32, n=4)
+        first = analyzer.compute(matrix)
+        second = analyzer.compute(matrix)
+        assert first == second
+
+    @pytest.mark.parametrize("invalid", [np.nan, np.inf, -np.inf, -1.01])
+    def test_invalid_return_observations_are_rejected(self, invalid):
+        matrix = _make_random_matrix(t=8, n=3)
+        matrix[0, 0] = invalid
+        with pytest.raises(ValueError):
+            compute_pbo(matrix, PBOConfig(num_subsamples=4))
+
+    def test_calmar_accounts_for_loss_from_initial_capital(self):
+        analyzer = PBOAnalyzer(PBOConfig(num_subsamples=4, performance_metric="calmar"))
+        score = analyzer._compute_metric(np.array([[-0.1], [0.05]]))
+        assert score[0] == pytest.approx(-0.55)
+
+    @pytest.mark.parametrize("name,value", [
+        ("num_subsamples", 4.0), ("max_combinations", 1.5),
+        ("annualization_periods", True), ("random_seed", -1),
+    ])
+    def test_invalid_discrete_config_rejected(self, name, value):
+        with pytest.raises(ValueError):
+            PBOConfig(**{name: value})
+
+    def test_nonfinite_is_metric_rejected_before_selecting_winners(self, monkeypatch):
+        analyzer = PBOAnalyzer(PBOConfig(num_subsamples=4))
+        monkeypatch.setattr(analyzer, "_compute_metric", lambda _: np.array([np.nan, 1.0]))
+        with pytest.raises(ValueError, match="scores must be finite"):
+            analyzer.compute(np.zeros((8, 2)))
+
 
 # ============================================================================
 # pbo_from_sweep_results

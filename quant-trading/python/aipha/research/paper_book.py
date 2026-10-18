@@ -256,7 +256,9 @@ def advance_paper_book(
     validate_snapshot_universe(metadata, config.universe)
     if metadata["provider"] != config.data_provider or metadata["feature_version"] != config.feature_version:
         raise ValueError("Paper snapshot provider/feature_version does not match research config")
-    bars = validate_market_frame(snapshot)
+    bars = snapshot.copy(deep=False)
+    bars.attrs = {}  # Authenticated metadata above is audit data, not per-row accounting state.
+    bars = validate_market_frame(bars)
     if bars.empty or bars.trade_date.isna().any():
         raise ValueError("Paper snapshot requires non-empty dated market observations")
     if not math.isfinite(config.initial_capital) or config.initial_capital <= 0:
@@ -268,7 +270,7 @@ def advance_paper_book(
     first, day = str(bars.trade_date.min()), str(bars.trade_date.max())
     if first != str(pd.Timestamp(metadata["start_date"]).date()) or day != str(pd.Timestamp(metadata["end_date"]).date()):
         raise ValueError("Paper snapshot dates do not match its declared range")
-    eligible = filter_historical_universe(snapshot, min_listing_days=config.min_listing_days)
+    eligible = filter_historical_universe(bars, min_listing_days=config.min_listing_days)
     if plan is not None:
         plan.validate()
         if plan.mode != "paper" or plan.rebalance_date.isoformat() != day:
@@ -334,7 +336,7 @@ def advance_paper_book(
                 continue
             connection.executemany("INSERT INTO market VALUES (?,?,?)",
                                    [(observed_day, symbol, payload) for symbol, payload in rows.items()])
-        for action in read_corporate_actions(snapshot):
+        for action in read_corporate_actions(bars):
             if action.ex_date.isoformat() < book_start:
                 continue
             if action.announce_date.isoformat() > day:

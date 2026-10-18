@@ -54,6 +54,6 @@
 
 验证在新建独立环境 `G:/qtdata/research/validation-env-py313` 中完成，Python 3.13.4、NumPy 2.2.6、pandas 2.3.3、SciPy 1.15.3、LightGBM 4.6.0、scikit-learn 1.6.1、PyArrow 20.0.0。完整依赖已固定在 `python/requirements-research-validation.txt`，可在新的独立 venv 中用 `pip install -r requirements-research-validation.txt` 重建。完整命令与输出保存在暂存目录的 `regression_command.json`、`isolated_regression_v2.log`；跨环境 OOS 复现见 `real_research_reproduction_isolated.json`。
 
-本机全局环境（同 Python，NumPy 2.4.1/pandas 3.0.1/SciPy 1.17.1/scikit-learn 1.8.0/PyArrow 23.0.1）的大回归多次出现 Windows 原生访问冲突，位置包括 NumPy `vstack` 与 LightGBM；Python debug allocator 下仍可复现。独立环境的相同范围通过，且全部真实 OOS 分数一致。该对比确认了可用的隔离依赖组合，尚未定位到某一个库或某一行代码的根因；不能宣称全局环境已修复。诊断日志 `research_native_debug.log` 保留，中止的大套件不计通过，没有覆盖全局依赖或重启交易服务。
+本机全局环境（同 Python，NumPy 2.4.1/pandas 3.0.1/SciPy 1.17.1/scikit-learn 1.8.0/PyArrow 23.0.1）的大回归多次出现 Windows 原生访问冲突，位置包括 NumPy `vstack` 与 LightGBM；Python debug allocator 下仍可复现。独立环境的相同范围曾通过，且全部真实 OOS 分数一致，但后续真实逐日预演中独立环境也出现原生崩溃，不能将隔离依赖当成修复。新增 WHEA 处理器内部校验错误、跨版本对照与 E 核临时绕行证据见 [诊断记录](NATIVE_CRASH_DIAGNOSIS.md)。没有覆盖全局依赖或重启交易服务。
 
-仍未验收：连续交易日自动补数/推理/Paper 运营、真实 QMT 下单/撤单/成交回报、Linux/Docker 部署。完整持有期红利税、配股及零碎送股处理仍有限制，风格约束默认未启用。原方案首期不以真实下单为完成条件；该研究的负收益和高 PBO 不构成开启 live 的依据。
+连续交易日自动补数/推理/Paper 任务已部署，首日 2026-10-19，五日真实运营验收仍待完成，见 [运营说明](PAPER_DAILY_OPERATIONS.md)。真实 QMT 下单/撤单/成交回报、Linux/Docker 部署仍未验收。完整持有期红利税、配股及零碎送股处理仍有限制，风格约束默认未启用。原方案首期不以真实下单为完成条件；该研究的负收益和高 PBO 不构成开启 live 的依据。

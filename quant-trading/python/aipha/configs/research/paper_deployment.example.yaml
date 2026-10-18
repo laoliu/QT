@@ -1,0 +1,15 @@
+# Copy outside Git and pin an actually validated model before scheduling.
+schema_version: 1
+mode: paper
+start_date: '2026-10-19'
+history_start: '2023-01-01'
+financial_start: '2021-01-01'
+research_config: E:/work/QT/quant-trading/python/aipha/configs/research/a_stock_ml.yaml
+model_path: G:/qtdata/research/runs/REPLACE_WITH_VALIDATED_RUN/model
+model_manifest_sha256: REPLACE_WITH_MANIFEST_SHA256
+cache_dir: G:/qtdata/cache/equity_tushare
+output_root: G:/qtdata/research/operations/csi500
+env_file: E:/work/QT/.env
+corrections_path: G:/qtdata/research/REPLACE_WITH_REVIEWED_CORRECTIONS.json
+evidence_dir: G:/qtdata/research/REPLACE_WITH_ISSUER_EVIDENCE
+required_operating_days: 5

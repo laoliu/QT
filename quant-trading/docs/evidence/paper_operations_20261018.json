@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-18T13:52:54.258464+00:00",
+  "operating_acceptance": {
+    "required_days": 5,
+    "observed_days": 0,
+    "start_date": "2026-10-19",
+    "passed": false,
+    "historical_preflight_counts": false
+  },
+  "scheduler": {
+    "observed_at": "2026-10-18T21:52:54.1445380+08:00",
+    "task_name": "QT-Research-Paper-CSI500",
+    "state": "Ready",
+    "logon_type": "Interactive",
+    "run_level": "Limited",
+    "last_run": "2026-10-18T21:48:14.0000000+08:00",
+    "last_result": 0,
+    "next_run": "2026-10-19T18:30:00.0000000+08:00",
+    "formal_book_exists": false
+  },
+  "supervisor": {
+    "started_at": "2026-10-18T13:48:15.0172571+00:00",
+    "finished_at": "2026-10-18T13:48:16.1320011+00:00",
+    "exit_code": 0,
+    "log_path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\run-20261018T134815017Z.log",
+    "cpu_affinity": "16,17,18,19",
+    "broker_contacted": false
+  },
+  "preflight": {
+    "status": "preview",
+    "date": "2026-10-16",
+    "operational": false,
+    "model_id": "f69fada02c684d7697ae287ae176b53f",
+    "predictions": 494,
+    "targets": 0,
+    "broker_contacted": false
+  },
+  "regression": {
+    "scope": "tests/research",
+    "passed": 356,
+    "skipped": 5,
+    "warnings": 2,
+    "exit_code": 0,
+    "python": "G:\\qtdata\\research\\validation-env-py313\\Scripts\\python.exe",
+    "logical_cpus": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "basetemp": "G:\\qtdata\\research\\native_diagnostics\\operations-tests-v2"
+  },
+  "native_diagnosis": {
+    "hardware_error_confirmed": true,
+    "hardware_fixed": false,
+    "every_crash_cause_proven": false,
+    "cpu": "i9-13900KF",
+    "board": "MSI PRO Z790-P WIFI (MS-7E06)",
+    "bios": "A.50 / 2023-03-23",
+    "whea_event": 19,
+    "whea_error": "Processor Core / Internal parity error",
+    "apic_to_logical_cpu": {
+      "16": 4,
+      "25": 7
+    },
+    "experiments": {
+      "global_repeated.json": {
+        "attempts": 5,
+        "passed": 4,
+        "native_access_violations": 1
+      },
+      "numpy226_repeated.json": {
+        "attempts": 5,
+        "passed": 4,
+        "native_access_violations": 1
+      },
+      "pandas233_repeated.json": {
+        "attempts": 5,
+        "passed": 5,
+        "native_access_violations": 0
+      },
+      "python31311_repeated_v2.json": {
+        "attempts": 5,
+        "passed": 2,
+        "native_access_violations": 3
+      },
+      "ecores_repeated.json": {
+        "attempts": 3,
+        "passed": 3,
+        "native_access_violations": 0
+      }
+    }
+  },
+  "followup": {
+    "automation_id": "csi500-paper",
+    "local_time": "22:40 daily",
+    "notify": "meaningful change, failure, action needed, or completion"
+  },
+  "evidence_files": [
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\whea_events.json",
+      "sha256": "2db44c2b6e2e92e75c95b5564e3b4918b6da55901d1853d988ebd15570406455"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\cpu_apic_map.json",
+      "sha256": "376bcfad9788a465e572391e53d42fdae7adad3b878f6b0099e6efc3ed21a341"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\cpu_sets.json",
+      "sha256": "aa841d4a700bd251eefe271a36b5633772a3255ea93e760c344f44948858d5b7"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\global_repeated.json",
+      "sha256": "a0240b5f16525156488270de101777717056e2af8ec9507b12a2fa97a5da649f"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\numpy226_repeated.json",
+      "sha256": "b3194bf383f501a49b6a077dc4e0f0e1bfddcb3468394525c89f621c53c0e8d1"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\pandas233_repeated.json",
+      "sha256": "47e162a7c40a414c217564caed6579ea43dcfa0e7b1e9e06bc7aa6ddff856eb8"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\python31311_repeated_v2.json",
+      "sha256": "bc98d44d3898d2562b84c2115ba29ef239101f0195988795152b1c2f8c9e9655"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\ecores_repeated.json",
+      "sha256": "759a17385a86ce22836f8917f6666f202759312f856e7f9e54ef73d5de356b9a"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\hash_stress_global_v2\\exception.json",
+      "sha256": "8bdba029a8087fd0a363bbf4f4a91a45a7da960cc55511a93ba28d198efb6ace"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\operations_final_regression_v2.log",
+      "sha256": "aa4519319a83f2c6a6a79d80ce60c6dabe79a1eb7ea490b841c0c02dd180d610"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\scheduler_verification.json",
+      "sha256": "10a41ca8af8fc82bf5640e7658cbf8245ee78be81bcaffc186486add77dea494"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\deployment.yaml",
+      "sha256": "2cdb81fa8bf3e168946d11c6bfde934be781b54225f307dbe6338436c1b174cd"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\scheduled_task.xml",
+      "sha256": "9cd374cb462572cf9a310cd3f6f7d9e96e8fcf36c93c372b564182a7a241fa6c"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\latest_process_result.json",
+      "sha256": "de3a648ffd458bb93fff52c6d6f3d20f62334b0d20cb4dff188b654e033de325"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\code_validation\\preflight\\sessions\\2026-10-16\\preview.json",
+      "sha256": "e7b08f58ce587d3408092decac1a58bb6e5d7fd8f046957282db998ea0008473"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\code_validation\\preflight\\sessions\\2026-10-16\\snapshot.metadata.json",
+      "sha256": "b27e4a53569fa9a903cb7ff517d2c0610bf6341c0a75f43ee8305bed741b1886"
+    }
+  ]
+}

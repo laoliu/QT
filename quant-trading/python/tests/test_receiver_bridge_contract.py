@@ -1,5 +1,8 @@
 import importlib.util
+import threading
 from pathlib import Path
+
+import pytest
 
 
 _BRIDGE_PATH = Path(__file__).parents[1] / "strategies" / "BRIDGE.py"
@@ -7,6 +10,39 @@ _spec = importlib.util.spec_from_file_location("receiver_bridge", _BRIDGE_PATH)
 assert _spec and _spec.loader
 bridge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bridge)
+
+
+def test_bridge_restarts_on_a_reused_qmt_thread_after_manual_stop(monkeypatch):
+    # QMT keeps the worker alive after KeyboardInterrupt and re-executes the source.
+    current = threading.current_thread()
+    monkeypatch.setattr(current, "name", "bridge-sync-poll")
+    monkeypatch.setattr(bridge, "_bridge_started", False)
+    monkeypatch.setattr(bridge, "_init_log_file", lambda: None)
+    contexts = []
+
+    def stopped_loop(context):
+        contexts.append(context)
+        assert bridge._bridge_started
+        raise KeyboardInterrupt("strategy manually stopped")
+
+    monkeypatch.setattr(bridge, "_sync_poll_loop", stopped_loop)
+    for context in (object(), object()):
+        with pytest.raises(KeyboardInterrupt):
+            bridge.init(context)
+        assert not bridge._bridge_started
+        assert current.name == "bridge-sync-poll"
+    assert len(contexts) == 2
+
+
+def test_bridge_restores_qmt_thread_name_when_loop_returns(monkeypatch):
+    current = threading.current_thread()
+    monkeypatch.setattr(current, "name", "qmt-worker")
+    monkeypatch.setattr(bridge, "_bridge_started", False)
+    monkeypatch.setattr(bridge, "_init_log_file", lambda: None)
+    monkeypatch.setattr(bridge, "_sync_poll_loop", lambda context: None)
+    bridge.init(object())
+    assert not bridge._bridge_started
+    assert current.name == "qmt-worker"
 
 
 class FakeContext:

@@ -1,7 +1,7 @@
 # coding: gbk
 #
 # BRIDGE.py - QMT Strategy Mode Bridge (pure ASCII, Python 3.6+)
-# VERSION: 23
+# VERSION: 24
 #
 # Strategy mode only: runs inside QMT full client via init() callback.
 # Uses ContextInfo for market data + passorder()/get_trade_detail_data() for trading.
@@ -10,7 +10,7 @@
 # For miniQMT gateway, use qmt_data_bridge.py.
 #
 
-BRIDGE_VERSION = 23
+BRIDGE_VERSION = 24
 
 import json
 import os
@@ -1103,7 +1103,7 @@ def _sync_poll_loop(context):
 _bridge_started = False
 
 def init(context):
-    """QMT strategy init -- called by QMT exec(). Survives re-exec via env guard."""
+    """QMT strategy init; allow restart on a reused QMT worker thread."""
     global _bridge_started, _qmt_context
 
     _init_log_file()
@@ -1116,7 +1116,8 @@ def init(context):
         print("[bridge] already running (var), skip (context refreshed)")
         return
     existing = [t for t in threading.enumerate()
-                if getattr(t, 'name', '') == 'bridge-sync-poll' and t.is_alive()]
+                if t is not threading.current_thread()
+                and getattr(t, 'name', '') == 'bridge-sync-poll' and t.is_alive()]
     if existing:
         print("[bridge] already running (thread), skip (context refreshed)")
         return
@@ -1137,5 +1138,11 @@ def init(context):
     print("[bridge] Starting synchronous polling loop (trading + data, single thread)")
     print("[bridge] Polling: %s/pending" % MAC_RECEIVER_URL)
     print("[bridge] ========================================")
-    threading.current_thread().name = 'bridge-sync-poll'
-    _sync_poll_loop(context)
+    current = threading.current_thread()
+    previous_name = current.name
+    current.name = 'bridge-sync-poll'
+    try:
+        _sync_poll_loop(context)
+    finally:
+        _bridge_started = False
+        current.name = previous_name

@@ -165,6 +165,18 @@ def test_schema_one_is_rejected_and_verified_prediction_requires_every_column(fi
         load_verified_selector(fitted_model, expected_feature_version="cn_equity_v1")
 
 
+def test_previous_financial_feature_policy_cannot_score_corrected_features(fitted_model, monkeypatch):
+    from aipha.models.ml_stock_selector import MLStockSelector
+
+    path = fitted_model / "model_manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["feature_policy_version"] = "cn_equity_feature_groups/1"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(MLStockSelector, "load", lambda *a, **k: pytest.fail("loaded old financial semantics"))
+    with pytest.raises(ValueError, match="feature_policy_version"):
+        load_verified_selector(fitted_model, expected_feature_version="cn_equity_v1")
+
+
 def test_manifest_and_meta_cannot_override_fitted_fold_column_order(fitted_model):
     import joblib
     from aipha.research.artifacts import model_file_hashes

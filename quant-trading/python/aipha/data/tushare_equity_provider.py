@@ -65,6 +65,13 @@ def get_equity_provider(
     return _equity_provider_instance
 
 
+def _validate_pit_statement_rows(frame: pd.DataFrame) -> None:
+    required = {"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"}
+    missing = required - set(frame)
+    if missing:
+        raise ValueError(f"PIT financial statements missing fields: {sorted(missing)}")
+
+
 class TuShareEquityProvider:
     """TuShare Pro A 股数据提供者
 
@@ -1141,7 +1148,7 @@ class TuShareEquityProvider:
         Returns:
             DataFrame
         """
-        cache_path = self.cache_dir / f"fina_indicator_{ts_code.replace('.', '_')}.parquet"
+        cache_path = self.cache_dir / f"fina_indicator_pit_v2_{ts_code.replace('.', '_')}_{start_date or 'all'}_{end_date or 'all'}.parquet"
 
         # TS-1 Stage 1: new fields that must be present in cache
         _TS1_REQUIRED_COLS = {"or_yoy", "roic", "ocf_to_or", "assets_turn", "netprofit_yoy"}
@@ -1187,9 +1194,11 @@ class TuShareEquityProvider:
         if cache_path.exists():
             existing = self._safe_read_parquet(cache_path)
             if existing is not None:
-                df = pd.concat([existing, df], ignore_index=True).drop_duplicates(
-                    subset=["ts_code", "end_date", "ann_date"]
-                )
+                # A changed value sharing a publication identity is not a
+                # recoverable revision timestamp. Preserve it so the PIT
+                # adapter rejects the ambiguity instead of silently keeping
+                # whichever cache row happened to arrive first.
+                df = pd.concat([existing, df], ignore_index=True).drop_duplicates()
 
         self._atomic_write_parquet(df, cache_path)
         return df
@@ -1212,16 +1221,17 @@ class TuShareEquityProvider:
         Returns:
             DataFrame
         """
-        cache_path = self.cache_dir / f"income_{ts_code.replace('.', '_')}.parquet"
+        cache_path = self.cache_dir / f"income_pit_v2_{ts_code.replace('.', '_')}_{start_date or 'all'}_{end_date or 'all'}.parquet"
 
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
             if cached is not None and not cached.empty:
+                _validate_pit_statement_rows(cached)
                 return cached
 
         logger.info(f"从 TuShare API 下载 income: {ts_code}")
         fields = (
-            "ts_code,ann_date,end_date,report_type,"
+            "ts_code,ann_date,f_ann_date,end_date,report_type,"
             "revenue,operate_profit,total_profit,"
             "n_income,n_income_attr_p,total_cogs,"
             "oper_cost,sell_exp,admin_exp,fin_exp"
@@ -1238,12 +1248,14 @@ class TuShareEquityProvider:
         if df is None or df.empty:
             return pd.DataFrame()
 
+        _validate_pit_statement_rows(df)
         if cache_path.exists():
             existing = self._safe_read_parquet(cache_path)
             if existing is not None:
-                df = pd.concat([existing, df], ignore_index=True).drop_duplicates(
-                    subset=["ts_code", "end_date", "report_type"]
-                )
+                _validate_pit_statement_rows(existing)
+                # Preserve every distinct publication/revision; period-only
+                # deduplication destroys the original point-in-time values.
+                df = pd.concat([existing, df], ignore_index=True).drop_duplicates()
 
         self._atomic_write_parquet(df, cache_path)
         return df
@@ -1266,16 +1278,17 @@ class TuShareEquityProvider:
         Returns:
             DataFrame
         """
-        cache_path = self.cache_dir / f"balancesheet_{ts_code.replace('.', '_')}.parquet"
+        cache_path = self.cache_dir / f"balancesheet_pit_v2_{ts_code.replace('.', '_')}_{start_date or 'all'}_{end_date or 'all'}.parquet"
 
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
             if cached is not None and not cached.empty:
+                _validate_pit_statement_rows(cached)
                 return cached
 
         logger.info(f"从 TuShare API 下载 balancesheet: {ts_code}")
         fields = (
-            "ts_code,ann_date,end_date,report_type,"
+            "ts_code,ann_date,f_ann_date,end_date,report_type,"
             "total_assets,total_liab,"
             "total_hldr_eqy_exc_min_int,total_hldr_eqy_inc_min_int,"
             "money_cap,accounts_receiv,inventories,"
@@ -1293,12 +1306,14 @@ class TuShareEquityProvider:
         if df is None or df.empty:
             return pd.DataFrame()
 
+        _validate_pit_statement_rows(df)
         if cache_path.exists():
             existing = self._safe_read_parquet(cache_path)
             if existing is not None:
-                df = pd.concat([existing, df], ignore_index=True).drop_duplicates(
-                    subset=["ts_code", "end_date", "report_type"]
-                )
+                _validate_pit_statement_rows(existing)
+                # Preserve every distinct publication/revision; period-only
+                # deduplication destroys the original point-in-time values.
+                df = pd.concat([existing, df], ignore_index=True).drop_duplicates()
 
         self._atomic_write_parquet(df, cache_path)
         return df
@@ -1321,7 +1336,7 @@ class TuShareEquityProvider:
         Returns:
             DataFrame
         """
-        cache_path = self.cache_dir / f"cashflow_{ts_code.replace('.', '_')}.parquet"
+        cache_path = self.cache_dir / f"cashflow_pit_v2_{ts_code.replace('.', '_')}_{start_date or 'all'}_{end_date or 'all'}.parquet"
 
         # TS-1 Stage 2: capex field must be present in cache
         _TS1_CF_REQUIRED = {"c_pay_acq_const_fiolta"}
@@ -1329,6 +1344,7 @@ class TuShareEquityProvider:
             cached = self._safe_read_parquet(cache_path)
             if cached is not None and not cached.empty:
                 if _TS1_CF_REQUIRED.issubset(cached.columns):
+                    _validate_pit_statement_rows(cached)
                     return cached
                 logger.info(
                     "cashflow cache outdated for %s (missing TS-1 fields), re-fetching",
@@ -1337,7 +1353,7 @@ class TuShareEquityProvider:
 
         logger.info(f"从 TuShare API 下载 cashflow: {ts_code}")
         fields = (
-            "ts_code,ann_date,end_date,report_type,"
+            "ts_code,ann_date,f_ann_date,end_date,report_type,"
             "n_cashflow_act,n_cashflow_inv_act,n_cash_flows_fnc_act,"
             "c_fr_sale_sg,c_paid_goods_s,"
             # TS-1 Stage 2 expansion (R156): capex for FCF
@@ -1355,12 +1371,14 @@ class TuShareEquityProvider:
         if df is None or df.empty:
             return pd.DataFrame()
 
+        _validate_pit_statement_rows(df)
         if cache_path.exists():
             existing = self._safe_read_parquet(cache_path)
             if existing is not None:
-                df = pd.concat([existing, df], ignore_index=True).drop_duplicates(
-                    subset=["ts_code", "end_date", "report_type"]
-                )
+                _validate_pit_statement_rows(existing)
+                # Preserve every distinct publication/revision; period-only
+                # deduplication destroys the original point-in-time values.
+                df = pd.concat([existing, df], ignore_index=True).drop_duplicates()
 
         self._atomic_write_parquet(df, cache_path)
         return df

@@ -338,6 +338,72 @@ class TestLoadHistoricalIndustry:
 
 
 class TestLoadFinancials:
+    def test_indicator_cache_retains_ambiguous_updates_for_pit_rejection(self, provider):
+        from aipha.data.tushare_pit_provider import TuSharePITProvider
+        from datetime import date
+
+        row = pd.DataFrame({
+            "ts_code": ["000001.SZ"], "ann_date": ["20230425"], "end_date": ["20230331"],
+            "roe": [10.], "or_yoy": [1.], "roic": [2.], "ocf_to_or": [3.],
+            "assets_turn": [4.], "netprofit_yoy": [5.],
+        })
+        legacy = provider.cache_dir / "fina_indicator_000001_SZ.parquet"
+        row.to_parquet(legacy)
+        original = legacy.read_bytes()
+        provider.api.fina_indicator.return_value = row
+        provider.load_fina_indicator("000001.SZ", use_cache=False)
+        provider.api.fina_indicator.return_value = row.assign(roe=11.)
+        assert len(provider.load_fina_indicator("000001.SZ", use_cache=False)) == 2
+        with pytest.raises(ValueError, match="conflicting financial revisions"):
+            TuSharePITProvider(provider).get_indicator_pit("000001.SZ", date(2023, 5, 1), ["roe"])
+        assert legacy.read_bytes() == original
+
+    @pytest.mark.parametrize("endpoint", ["income", "balancesheet", "cashflow"])
+    def test_statement_cache_preserves_versions_and_legacy_file(self, provider, endpoint):
+        original = pd.DataFrame({
+            "ts_code": ["000001.SZ"], "ann_date": ["20230425"], "f_ann_date": ["20230425"],
+            "end_date": ["20230331"], "report_type": ["1"], "revenue": [100.],
+            "c_pay_acq_const_fiolta": [10.],
+        })
+        legacy = provider.cache_dir / f"{endpoint}_000001_SZ.parquet"
+        original.drop(columns="f_ann_date").to_parquet(legacy)
+        legacy_bytes = legacy.read_bytes()
+        api = getattr(provider.api, endpoint)
+        load = getattr(provider, "load_" + endpoint)
+        api.return_value = original
+        assert len(load("000001.SZ", use_cache=False)) == 1
+        api.return_value = original.assign(f_ann_date="20230508", revenue=120.)
+        merged = load("000001.SZ", use_cache=False)
+        assert merged.revenue.tolist() == [100., 120.]
+        assert merged.f_ann_date.tolist() == ["20230425", "20230508"]
+        assert "f_ann_date" in api.call_args.kwargs["fields"].split(",")
+        assert len(load("000001.SZ")) == 2
+        assert api.call_count == 2
+        assert legacy.read_bytes() == legacy_bytes
+
+    @pytest.mark.parametrize("endpoint", ["income", "balancesheet", "cashflow"])
+    def test_partial_statement_cache_is_not_reused_as_full_history(self, provider, endpoint):
+        row = pd.DataFrame({
+            "ts_code": ["000001.SZ"], "ann_date": ["20230425"], "f_ann_date": ["20230425"],
+            "end_date": ["20230331"], "report_type": ["1"], "revenue": [100.],
+            "c_pay_acq_const_fiolta": [10.],
+        })
+        api = getattr(provider.api, endpoint)
+        load = getattr(provider, "load_" + endpoint)
+        api.return_value = row
+        load("000001.SZ", start_date="20230101", end_date="20231231")
+        api.return_value = pd.concat([row, row.assign(ann_date="20220425", f_ann_date="20220425", end_date="20220331")])
+        assert len(load("000001.SZ")) == 2
+        assert api.call_count == 2
+
+    def test_statement_api_must_return_requested_actual_date_field(self, provider):
+        provider.api.income.return_value = pd.DataFrame({
+            "ts_code": ["000001.SZ"], "ann_date": ["20230425"], "end_date": ["20230331"],
+            "report_type": ["1"], "revenue": [100.],
+        })
+        with pytest.raises(ValueError, match="f_ann_date"):
+            provider.load_income("000001.SZ", use_cache=False)
+
     def test_load_fina_indicator(self, provider):
         df = pd.DataFrame({
             "ts_code": ["000001.SZ"],
@@ -353,6 +419,7 @@ class TestLoadFinancials:
         df = pd.DataFrame({
             "ts_code": ["000001.SZ"],
             "ann_date": ["20230425"],
+            "f_ann_date": ["20230425"],
             "end_date": ["20230331"],
             "report_type": ["1"],
             "revenue": [1e9],
@@ -365,6 +432,7 @@ class TestLoadFinancials:
         df = pd.DataFrame({
             "ts_code": ["000001.SZ"],
             "ann_date": ["20230425"],
+            "f_ann_date": ["20230425"],
             "end_date": ["20230331"],
             "report_type": ["1"],
             "total_assets": [1e12],
@@ -377,6 +445,7 @@ class TestLoadFinancials:
         df = pd.DataFrame({
             "ts_code": ["000001.SZ"],
             "ann_date": ["20230425"],
+            "f_ann_date": ["20230425"],
             "end_date": ["20230331"],
             "report_type": ["1"],
             "n_cashflow_act": [5e8],

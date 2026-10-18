@@ -56,7 +56,7 @@ the source signature, generator, row feature version and complete date range
 before loading a model.
 
 `features.groups` selects the actual model inputs through the versioned
-`cn_equity_feature_groups/1` catalog. Only registered factors in enabled groups
+`cn_equity_feature_groups/2` catalog. Only registered factors in enabled groups
 enter training, in stable column order. Raw financial fields, unknown numeric
 columns, prices, status flags and labels are excluded by default. TuShare
 snapshot construction computes the existing Alpha158 implementation from PIT
@@ -90,6 +90,34 @@ Financial features must already have been joined by announcement date. The
 `visible_financial_snapshots` helper provides the same announce-date cutoff for
 long-form financial snapshots. A sidecar with another provider, mismatched
 feature version, or mismatched date range is rejected.
+
+The v3 snapshot generator uses the conservative availability date
+`max(ann_date, f_ann_date)` for statements when an actual publication date is
+present; a null actual date retains the declared `ann_date`. Invalid actual
+dates fail instead of being treated as earlier availability. Statement inputs
+are consolidated cumulative filings (`report_type=1`) and their consolidated
+restatements (`4`); parent-only and single-quarter forms are excluded.
+PIT queries choose the latest visible report period, then its latest visible
+revision. A late correction of an older period remains in the history but
+does not replace a newer report's current value. The long-form feature join
+applies this rule independently per metric, without changing market row
+identity or exposing financial join keys as model features. Conflicting
+values with the same report/announcement identity fail rather than depend
+on API row order.
+
+Financial provider caches use separate `*_pit_v2_*_<start>_<end>.parquet`
+files. They retain all distinct source rows and isolate requested date
+ranges, preserving old caches unchanged. Statement API responses must include
+`f_ann_date` even when its values are null. TuShare indicator histories expose
+`ann_date`; changed values sharing the same report/publication identity are
+retained and rejected as ambiguous. Missing historical revisions cannot be
+reconstructed or assigned a new availability date from download time. These
+checks do not establish that TuShare supplied every historical version.
+Snapshots from generator v1/v2 must be rebuilt; their files are not deleted.
+The feature policy is also advanced to v2 so a model fitted under the older
+financial timing policy cannot silently score the corrected features.
+Models trained with those earlier timing errors require retraining; attaching
+new metadata alone cannot repair the values used during their training.
 
 TuShare PIT sidecars are HMAC authenticated with the deployment-held
 `AIPHA_PIT_SNAPSHOT_KEY`; canonical ML and Paper readers fail closed when the

@@ -23,7 +23,7 @@ import numpy as np
 # here rather than in a caller so that every TuShare snapshot writer uses the
 # same attestation format.
 SNAPSHOT_SCHEMA_VERSION = 1
-SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/2"
+SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/3"
 SNAPSHOT_SIGNING_KEY_ENV = "AIPHA_PIT_SNAPSHOT_KEY"
 _SIGNED_SOURCE_FIELDS = (
     "provider", "data_snapshot_id", "feature_version", "start_date", "end_date",
@@ -421,45 +421,58 @@ def build_cn_equity_features(panel: pd.DataFrame) -> pd.DataFrame:
 
 
 def join_pit_financials(panel: pd.DataFrame, snapshots: pd.DataFrame) -> pd.DataFrame:
-    """As-of join long-form financial facts using announcement dates only."""
+    """Use the newest visible report period and its latest announced revision."""
     required = {"symbol", "report_date", "announce_date", "metric_name", "value"}
     missing = required - set(snapshots.columns)
     if missing:
         raise ValueError(f"PIT financial snapshot missing columns: {', '.join(sorted(missing))}")
+    if not {"trade_date", "symbol"} <= set(panel):
+        raise ValueError("PIT market panel requires trade_date and symbol")
     facts = snapshots.copy()
-    # merge_asof requires identical datetime units.  Pandas 2/3 can infer
-    # different units from Python ``date`` objects versus frame timestamps;
-    # normalize both sides explicitly before the causal join.
-    facts["announce_date"] = pd.to_datetime(facts["announce_date"]).astype("datetime64[ns]")
-    facts["report_date"] = pd.to_datetime(facts["report_date"]).astype("datetime64[ns]")
+    # Pandas 2/3 can infer different datetime units; merge_asof requires ns.
+    for column in ("announce_date", "report_date"):
+        facts[column] = pd.to_datetime(facts[column], errors="raise").astype("datetime64[ns]")
+    if facts[["symbol", "metric_name", "announce_date", "report_date"]].isna().any().any():
+        raise ValueError("PIT financial identity and dates cannot be missing")
     if (facts["announce_date"] < facts["report_date"]).any():
         raise ValueError("PIT announce_date cannot precede report_date")
-    facts = facts.sort_values(["symbol", "metric_name", "announce_date"])
+    identity = ["symbol", "metric_name", "report_date", "announce_date"]
+    if (facts.groupby(identity)["value"].nunique(dropna=False) > 1).any():
+        raise ValueError("conflicting PIT financial values share report and announcement date")
+    facts = facts.drop_duplicates(identity).sort_values(["symbol", "metric_name", "announce_date", "report_date"])
+    metrics = facts.metric_name.unique().tolist()
+    reserved = {"announce_date", "report_date", "_asof_date", "_pit_row_id"}
+    if any(not isinstance(metric, str) or not metric.strip() or metric in panel or metric in reserved for metric in metrics):
+        raise ValueError("PIT financial metric names must be non-empty and cannot overwrite panel columns")
+    if reserved & set(panel):
+        raise ValueError("PIT market panel contains reserved financial join columns")
     result = panel.copy()
-    result["_asof_date"] = pd.to_datetime(result["trade_date"]).astype("datetime64[ns]")
+    result["_asof_date"] = pd.to_datetime(result["trade_date"], errors="raise").astype("datetime64[ns]")
+    if result["_asof_date"].isna().any():
+        raise ValueError("PIT market trade_date cannot be missing")
+    result["_pit_row_id"] = np.arange(len(result))
     for metric, metric_rows in facts.groupby("metric_name", sort=True):
-        metric_rows = metric_rows.rename(columns={"value": str(metric)})
-        metric_rows = metric_rows[["symbol", "announce_date", str(metric)]].drop_duplicates(
-            ["symbol", "announce_date"], keep="last",
-        )
-        merged_parts: list[pd.DataFrame] = []
+        events = {}
+        for symbol, history in metric_rows.groupby("symbol", sort=False):
+            # Once a newer period is visible, a late correction of an older
+            # period must not replace the current fundamental observation.
+            history = history.loc[history.report_date.eq(history.report_date.cummax())]
+            history = history.drop_duplicates("announce_date", keep="last")
+            events[symbol] = history[["announce_date", "value"]].rename(columns={"value": metric})
+        merged_parts = []
         for symbol, rows in result.groupby("symbol", sort=False):
             left = rows.sort_values("_asof_date")
-            right = metric_rows[metric_rows["symbol"] == symbol].sort_values("announce_date")
-            if right.empty:
-                left[str(metric)] = pd.NA
+            right = events.get(symbol)
+            if right is None:
+                left[metric] = np.nan
             else:
-                left = pd.merge_asof(
-                    left, right.drop(columns=["symbol"]),
-                    left_on="_asof_date", right_on="announce_date", direction="backward",
-                )
-                # The announcement key is only a join aid.  Drop it after
-                # every metric so the next metric cannot create duplicate
-                # announce_date columns in the evolving panel.
-                left = left.drop(columns=["announce_date"], errors="ignore")
+                left = pd.merge_asof(left, right, left_on="_asof_date", right_on="announce_date", direction="backward")
+                left = left.drop(columns="announce_date")
             merged_parts.append(left)
-        result = pd.concat(merged_parts).sort_index()
-    return result.drop(columns=["_asof_date"], errors="ignore")
+        result = pd.concat(merged_parts).sort_values("_pit_row_id") if merged_parts else result.assign(**{metric: np.nan})
+    result = result.drop(columns=["_asof_date", "_pit_row_id"])
+    result.index = panel.index
+    return result
 
 
 def financial_snapshots_from_provider(
@@ -510,7 +523,10 @@ def financial_snapshots_from_provider(
                             "metric_name": metric,
                             "value": None if value is None else float(value),
                         })
-    return pd.DataFrame(rows, columns=["symbol", "report_date", "announce_date", "metric_name", "value"])
+    result = pd.DataFrame(rows, columns=["symbol", "report_date", "announce_date", "metric_name", "value"])
+    if end_date is not None and not result.empty:
+        result = result.loc[pd.to_datetime(result.announce_date).dt.date <= end_date].reset_index(drop=True)
+    return result
 
 
 def _historical_membership(

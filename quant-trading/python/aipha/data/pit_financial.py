@@ -107,6 +107,12 @@ class FinancialIndicator:
     indicators: dict[str, Decimal] = field(default_factory=dict)
 
 
+def latest_available_financial(records, query_date: date):
+    """Select the newest visible report period, then its latest visible revision."""
+    visible = [record for record in records if record.announce_date <= query_date]
+    return max(visible, key=lambda record: (record.report_date.to_date(), record.announce_date), default=None)
+
+
 class PITFinancialProvider(ABC):
     """点时财务数据提供者接口
 
@@ -244,7 +250,7 @@ class InMemoryPITProvider(PITFinancialProvider):
         if not available:
             return None
 
-        return available[-1]  # 返回最新的
+        return latest_available_financial(available, query_date)
 
     def get_indicator_pit(
         self,
@@ -259,7 +265,7 @@ class InMemoryPITProvider(PITFinancialProvider):
         if not available:
             return None
 
-        latest = available[-1]
+        latest = latest_available_financial(available, query_date)
 
         # 过滤请求的指标
         filtered_indicators = {

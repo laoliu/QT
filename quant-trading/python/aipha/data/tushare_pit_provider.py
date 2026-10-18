@@ -7,8 +7,8 @@
 - cashflow: 现金流量表（经营/投资/筹资现金流）
 
 PIT 核心原则：
-- 使用 ann_date（公告日期）而非 end_date（报告期）判断数据可用时点
-- 对给定 query_date，仅返回 ann_date <= query_date 的最新数据
+- 使用 max(ann_date, f_ann_date) 判断报表可用时点，实际公告日为空时用 ann_date
+- 对给定 query_date，选择已可得的最新报告期及该期最新可得修订
 - 避免前视偏差：因子计算只能看到"当时已公告"的财报
 
 缓存策略：
@@ -42,6 +42,7 @@ from aipha.data.pit_financial import (
     PITFinancialProvider,
     ReportDate,
     ReportPeriod,
+    latest_available_financial,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,43 @@ def _to_decimal(val: Any) -> Decimal | None:
         return None
 
 
+def _announcement_date(row) -> date | None:
+    """Actual publication cannot make a filing visible before either date."""
+    nominal = row.get("ann_date", "")
+    announced = nominal.date() if isinstance(nominal, pd.Timestamp) else (
+        nominal if isinstance(nominal, date) else _parse_date(str(nominal))
+    )
+    actual = row.get("f_ann_date")
+    if actual is None or pd.isna(actual) or str(actual).strip() == "":
+        return announced
+    parsed = actual.date() if isinstance(actual, pd.Timestamp) else (
+        actual if isinstance(actual, date) else _parse_date(str(actual))
+    )
+    if parsed is None:
+        raise ValueError("invalid financial f_ann_date")
+    return max(announced, parsed) if announced else parsed
+
+
+def _source_report_date(end_date: str) -> ReportDate:
+    parsed = _parse_date(end_date)
+    if parsed is None or parsed.strftime("%m%d") not in {"0331", "0630", "0930", "1231"}:
+        raise ValueError("financial end_date must be a valid quarter end")
+    return _end_date_to_report_date(end_date)
+
+
+def _validate_records(records):
+    """Refuse conflicting versions without a distinct availability date."""
+    unique = {}
+    for record in records:
+        if record.announce_date < record.report_date.to_date():
+            raise ValueError("financial announcement cannot precede report period end")
+        key = (record.report_date.to_date(), record.announce_date)
+        if key in unique and record != unique[key]:
+            raise ValueError("conflicting financial revisions share the same report and announcement date")
+        unique[key] = record
+    return sorted(unique.values(), key=lambda record: (record.announce_date, record.report_date.to_date()))
+
+
 class TuSharePITProvider(PITFinancialProvider):
     """TuShare Pro PIT 财务数据提供者
 
@@ -119,8 +157,7 @@ class TuSharePITProvider(PITFinancialProvider):
 
         statements = self._statement_cache.get(key, [])
         # 找 ann_date <= query_date 的最新报表
-        available = [s for s in statements if s.announce_date <= query_date]
-        return available[-1] if available else None
+        return latest_available_financial(statements, query_date)
 
     def get_indicator_pit(
         self,
@@ -137,7 +174,7 @@ class TuSharePITProvider(PITFinancialProvider):
         if not available:
             return None
 
-        latest = available[-1]
+        latest = latest_available_financial(available, query_date)
 
         # 过滤请求的指标
         filtered = {
@@ -319,13 +356,13 @@ class TuSharePITProvider(PITFinancialProvider):
 
         indicators: list[FinancialIndicator] = []
         for _, row in df.iterrows():
-            ann_date = _parse_date(str(row.get("ann_date", "")))
+            ann_date = _announcement_date(row)
             end_date = str(row.get("end_date", ""))
 
             if ann_date is None or not end_date or len(end_date) < 8:
                 continue
 
-            report_date = _end_date_to_report_date(end_date)
+            report_date = _source_report_date(end_date)
 
             ind_data: dict[str, Decimal] = {}
             for field_name in [
@@ -357,8 +394,7 @@ class TuSharePITProvider(PITFinancialProvider):
             ))
 
         # 按 ann_date 排序
-        indicators.sort(key=lambda x: x.announce_date)
-        self._indicator_cache[symbol] = indicators
+        self._indicator_cache[symbol] = _validate_records(indicators)
 
     def _load_statements(self, symbol: str, statement_type: str) -> None:
         """加载报表数据并转为 FinancialStatement"""
@@ -381,18 +417,26 @@ class TuSharePITProvider(PITFinancialProvider):
 
         statements: list[FinancialStatement] = []
         for _, row in df.iterrows():
-            ann_date = _parse_date(str(row.get("ann_date", "")))
+            # Consolidated cumulative filings and their restatements only.
+            # Parent-only and single-quarter forms have different semantics.
+            report_type = pd.to_numeric(row.get("report_type"), errors="coerce")
+            if pd.isna(report_type):
+                raise ValueError("financial statements require report_type")
+            if report_type not in {1, 4}:
+                continue
+            ann_date = _announcement_date(row)
             end_date = str(row.get("end_date", ""))
 
             if ann_date is None or not end_date or len(end_date) < 8:
                 continue
 
-            report_date = _end_date_to_report_date(end_date)
+            report_date = _source_report_date(end_date)
 
             # 将所有数值列放入 data
             stmt_data: dict[str, Decimal] = {}
             for col in df.columns:
-                if col in ("ts_code", "ann_date", "end_date", "report_type"):
+                if col in ("ts_code", "ann_date", "f_ann_date", "end_date", "report_type",
+                           "comp_type", "end_type", "update_flag"):
                     continue
                 val = _to_decimal(row.get(col))
                 if val is not None:
@@ -407,8 +451,7 @@ class TuSharePITProvider(PITFinancialProvider):
                 data=stmt_data,
             ))
 
-        statements.sort(key=lambda x: x.announce_date)
-        self._statement_cache[(symbol, statement_type)] = statements
+        self._statement_cache[(symbol, statement_type)] = _validate_records(statements)
 
 
 # ---------------------------------------------------------------------------

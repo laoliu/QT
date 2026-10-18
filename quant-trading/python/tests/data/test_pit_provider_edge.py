@@ -132,6 +132,7 @@ class TestPITProviderEdge:
         mock_eq.load_income.return_value = pd.DataFrame({
             "ann_date": ["20240301"],
             "end_date": ["20231231"],
+            "report_type": ["1"],
             "revenue": [1e9],
             "n_income": [1e8],
         })

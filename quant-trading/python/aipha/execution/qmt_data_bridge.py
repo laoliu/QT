@@ -476,7 +476,8 @@ def _trading_query_order(params: dict) -> dict:
         return {"ok": False, "error": "Not connected"}
     order_id = int(params.get("order_id", 0))
     try:
-        orders = _trading_trader.query_stock_orders(_trading_account, cancel_able_only=False)
+        # SDK versions spell this argument differently; False requests all orders.
+        orders = _trading_trader.query_stock_orders(_trading_account, False)
         for o in (orders or []):
             if o.order_id == order_id:
                 return {"ok": True, "data": _serialize_qmt_order(o)}
@@ -490,7 +491,7 @@ def _trading_query_orders(params: dict) -> dict:
         return {"ok": False, "error": "Not connected"}
     stock_code = params.get("stock_code")
     try:
-        orders = _trading_trader.query_stock_orders(_trading_account, cancel_able_only=False) or []
+        orders = _trading_trader.query_stock_orders(_trading_account, False) or []
         result = [_serialize_qmt_order(o) for o in orders]
         if stock_code:
             result = [o for o in result if o["stock_code"] == stock_code]

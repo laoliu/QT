@@ -2,6 +2,18 @@
 
 验收日期：2026-10-18（Asia/Shanghai）。此记录是该时间点的观察，不表示服务当前始终在线。
 
+## 23:29 MiniQMT 更新后只读检查
+
+BIOS 更新重启后，用户自行启动 MiniQMT。实际观察到 `D:/st_lc/bin.x64/XtMiniQmt.exe`、18888 数据桥接在线；`/health` 返回 `xtdata=true`、`trading=true`、`trading_status=connected`。资金查询返回的账号与本机配置一致，持仓 10 项；账号及具体资产金额不入本记录。18889 RECEIVER、18891 管理服务当时未监听，本次未启动或重启它们。下方“miniQMT 不可用、完整客户端及空账户”的记录是当天早先观察，已不能代表当前状态。
+
+经正在运行的 18888 桥接，沪深300及平安银行行情可读，沪深300最近 5 根日线截止 2026-10-16。周日读取到本地行情不能证明下一交易日盘中刷新或在线补数正常。
+
+实机发现 `query_stock_orders` 在当前 SDK 的参数名称为 `cancelable_only`，旧代码传入 `cancel_able_only` 导致 HTTP 委托查询失败。两个 HTTP 桥接及独立 broker 已统一用第二个位置参数 `False` 请求全部委托，兼容两种参数拼写；没有扩大下单/撤单能力。独立 broker 还遇到当前 `XtAsset` 不提供 `profit/profit_ratio`，现保留必需资产字段，将可选字段缺失列入 `_unavailable_fields`；兼容默认值不代表实际收益为零。
+
+`tests/execution/test_qmt_bridge_contract.py` **13 passed**，覆盖新旧 SDK 拼写、单笔/列表/股票过滤、已成交委托不被排除，以及缺少可选收益字段；均为离线替身，无真实下单。随后 `scripts/qmt-readonly-probe.py --timeout 20` 实机退出 0，资金账号匹配、持仓 10、委托 0，独立查询连接已断开。全部请求仅限连接/查询/断开，没有下单或撤单。
+
+**当前部署边界：18888 仍运行修复前代码，须经用户明确确认重启后才会加载修改并重新核验 HTTP 委托查询。** 源码修复及独立探测成功不等于在线进程已修复，也不构成实盘下单、成交回报或长期稳定性验收。带哈希的脱敏摘要见 [MiniQMT 证据](evidence/miniqmt_post_bios_20261018.json)。
+
 ## 环境与路径
 
 - 完整联储证券 QMT 客户端运行 BRIDGE v24；miniQMT 不可用。

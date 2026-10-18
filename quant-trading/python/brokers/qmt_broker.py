@@ -233,7 +233,8 @@ class QMTBrokerBridge:
         if not self.trader or not self.account:
             raise RuntimeError("Not connected")
         order_id = int(params["order_id"])
-        orders = self.trader.query_stock_orders(self.account, cancel_able_only=False)
+        # SDK versions spell this argument differently; False requests all orders.
+        orders = self.trader.query_stock_orders(self.account, False)
         for o in (orders or []):
             if o.order_id == order_id:
                 return self._serialize_order(o)
@@ -243,7 +244,7 @@ class QMTBrokerBridge:
         if not self.trader or not self.account:
             raise RuntimeError("Not connected")
         stock_code = params.get("stock_code")
-        orders = self.trader.query_stock_orders(self.account, cancel_able_only=False) or []
+        orders = self.trader.query_stock_orders(self.account, False) or []
         result = [self._serialize_order(o) for o in orders]
         if stock_code:
             result = [o for o in result if o["stock_code"] == stock_code]
@@ -299,15 +300,19 @@ class QMTBrokerBridge:
                 "profit_ratio": 0,
                 "_unavailable": True,
             }
-        return {
+        result = {
             "account_id": self.account_id,
             "cash": assets.cash,
             "frozen_cash": assets.frozen_cash,
             "total_asset": assets.total_asset,
             "market_value": assets.market_value,
-            "profit": assets.profit,
-            "profit_ratio": assets.profit_ratio,
+            "profit": getattr(assets, "profit", 0),
+            "profit_ratio": getattr(assets, "profit_ratio", 0),
         }
+        missing = [name for name in ("profit", "profit_ratio") if not hasattr(assets, name)]
+        if missing:
+            result["_unavailable_fields"] = missing
+        return result
 
     def subscribe_quote(self, params: dict) -> dict:
         codes = params.get("stock_codes", [])

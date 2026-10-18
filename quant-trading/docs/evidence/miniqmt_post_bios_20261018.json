@@ -1,0 +1,81 @@
+{
+  "observed_at": "2026-10-18T15:25:33.851896+00:00",
+  "scope": "User-started MiniQMT, read-only HTTP and separate SDK checks; no orders/cancels or service restarts",
+  "health": {
+    "ok": true,
+    "status": "ok",
+    "version": 3,
+    "xtdata": true,
+    "trading": true,
+    "trading_status": "connected",
+    "error": null,
+    "timestamp": "2026-10-18T23:25:33.530379"
+  },
+  "http_checks": {
+    "account_ok": true,
+    "configured_account_matches": true,
+    "asset_numeric_fields_valid": true,
+    "positions": {
+      "ok": true,
+      "count": 10
+    },
+    "orders": {
+      "ok": false,
+      "error": "query_orders error: XtQuantTrader.query_stock_orders() got an unexpected keyword argument 'cancel_able_only'. Did you mean 'cancelable_only'?"
+    },
+    "quote_codes": [
+      "000001.SZ",
+      "000300.SH"
+    ],
+    "index_bar_count": 5,
+    "index_last_bar_date": "20261016"
+  },
+  "direct_probe": {
+    "started_at": "2026-10-18T15:28:54.127679+00:00",
+    "finished_at": "2026-10-18T15:28:56.547245+00:00",
+    "exit_code": 0,
+    "ok": true,
+    "position_count": 10,
+    "order_count": 0,
+    "configured_account_matches": true,
+    "error": null
+  },
+  "initial_direct_probe_failure": {
+    "exit_code": 1,
+    "error": "'xtquant.xtpythonclient.XtAsset' object has no attribute 'profit'",
+    "note": "Initial raw probe files superseded by corrected probe; failure recorded from captured tool result"
+  },
+  "offline_regression": {
+    "path": "tests/execution/test_qmt_bridge_contract.py",
+    "passed": 13,
+    "seconds": 0.11
+  },
+  "running_http_fix_loaded": false,
+  "service_restart_authorized": false,
+  "raw_evidence": [
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_readonly.json",
+      "sha256": "d58b88f5f7d1b3df1a4d73d0f533714b72bd430772756eddc811ee5df9f7150c"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_direct_probe.json",
+      "sha256": "06efab3d33905363820574738e6497ddb2b10dedee6cc1963295ac5d7d12e6e3"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_direct_probe.stdout.log",
+      "sha256": "39830c3ce23440b44b7fa36c36cb6f3978bada5e28ef7e7d9a1329ccd920ad95"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\miniqmt_direct_probe.stderr.log",
+      "sha256": "def80696d69186e6558480ddceb6ecf2f8cdbdf35977c134fd0df42f6de91c91"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\check_miniqmt.py",
+      "sha256": "8c6c70ea2037775c986f25577dabf0b42178d02ca2a8ba36fb2f2f3fefed575a"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\post_bios_20261018\\probe_direct.py",
+      "sha256": "f752fd4c9e1effcae840fc7468c8ee3a5f63c6a0d4440d5d73f4e89d30e4e805"
+    }
+  ]
+}

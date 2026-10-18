@@ -4,6 +4,11 @@
 a frozen market/feature panel, applies the row-wise historical universe filter,
 creates forward labels, trains the configured walk-forward model, replays the
 monthly portfolio at next-session open, and writes an immutable run folder.
+Labels are calculated on the complete frozen market tape, then rows are
+filtered by signal-date universe eligibility. Rows that become ST, suspended,
+or leave the index remain in the saved tape for fixed-horizon label prices
+and portfolio valuation/exits. Historical industry classifications are joined
+back onto OOS scores by date/symbol before portfolio constraints are applied.
 For live TuShare research, call `ResearchPipeline.run_tushare(...)`; it builds
 the snapshot from the equity/PIT adapters, historical name-change ST status,
 same-day adjustment factors, dated Shenwan industry membership intervals,

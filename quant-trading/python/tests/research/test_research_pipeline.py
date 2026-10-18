@@ -163,6 +163,35 @@ def test_forward_labels_respect_t_plus_one_skip() -> None:
     assert "fwd_return" not in frame
 
 
+def test_training_labels_use_complete_tape_before_signal_universe_filter(monkeypatch) -> None:
+    from aipha.models.ml_stock_selector import MLStockSelector
+
+    frame = _panel(n_days=8, n_symbols=3)
+    selected = frame["symbol"] == "600000.SH"
+    dates = sorted(frame["trade_date"].unique())
+    frame.loc[selected, "open"] = np.arange(10.0, 18.0)
+    frame.loc[selected, "close"] = np.arange(20.0, 28.0)
+    # A later status change must not alter an earlier signal's holding dates.
+    frame.loc[selected & frame["trade_date"].isin(dates[1:3]), "is_st"] = True
+    frame["open_raw"] = 999.0
+    frame["up_limit"] = 1000.0
+    observed = {}
+
+    def capture(selector, labelled):
+        observed["labelled"] = labelled
+        observed["features"] = selector.config.feature_cols
+        return labelled[["datetime", "symbol", "fwd_return"]].assign(pred_score=0.5)
+
+    monkeypatch.setattr(MLStockSelector, "walk_forward_train", capture)
+    ResearchPipeline(ResearchConfig(forward_days=1)).train_oos(frame)
+    labelled = observed["labelled"]
+    first_signal = labelled.loc[(labelled["symbol"] == "600000.SH") & (labelled["datetime"] == dates[0])]
+    assert first_signal.iloc[0]["fwd_return"] == pytest.approx(22 / 11 - 1)
+    assert not labelled["is_st"].any()
+    assert "open_raw" not in observed["features"]
+    assert "up_limit" not in observed["features"]
+
+
 def test_financial_facts_are_filtered_by_announcement_date() -> None:
     rows = [
         FinancialSnapshot("600000.SH", pd.Timestamp("2023-12-31").date(), pd.Timestamp("2024-03-20").date(), "roe", 0.1),
@@ -535,10 +564,16 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
         purge_days=10,
         top_k=4,
         max_position_weight=0.25,
+        max_industry_weight=0.5,
         n_estimators=5,
     )
     pipeline = ResearchPipeline(cfg)
     fixture = _panel(n_symbols=20)
+    fixture["industry"] = fixture["symbol"].map(
+        lambda symbol: "bank" if int(symbol[:6]) % 2 == 0 else "tech",
+    )
+    # Market rows remain available after a stock exits the signal universe.
+    fixture.loc[fixture.index[-1], "is_index_member"] = False
     fixture.attrs["snapshot_metadata"] = attest_snapshot_metadata(fixture, {
         "provider": "tushare_pit", "data_snapshot_id": "fixture-v1",
         "feature_version": "cn_equity_v1",
@@ -567,14 +602,22 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
         pipeline.run(spoofed, tmp_path / "spoofed", data_snapshot_id="fixture-v1")
     assert (artifact_dir / "model" / "model_manifest.json").is_file()
     assert (artifact_dir / "input_snapshot.parquet").is_file()
+    frozen = pd.read_parquet(artifact_dir / "input_snapshot.parquet")
+    assert len(frozen) == len(fixture)
+    assert not frozen["is_index_member"].all()
     assert (artifact_dir / "input_snapshot.metadata.json").is_file()
     assert (artifact_dir / "oos_predictions.parquet").is_file()
+    predictions = pd.read_parquet(artifact_dir / "oos_predictions.parquet")
+    assert predictions["industry"].notna().all()
     assert (artifact_dir / "target_positions.json").is_file()
     plan_paths = result["execution_plans"]
     assert plan_paths
     plan = read_execution_plan(artifact_dir / plan_paths[0])
     assert plan.mode == "paper"
     assert plan.run_id == result["run_id"]
+    industries = fixture.drop_duplicates("symbol").set_index("symbol")["industry"].to_dict()
+    for industry in {industries[target.symbol] for target in plan.targets}:
+        assert sum(t.target_weight for t in plan.targets if industries[t.symbol] == industry) <= 0.5
     # The same frozen plan is consumable by the PaperGateway boundary.  This
     # closes the offline chain after target generation and verifies that order
     # provenance survives the broker-neutral handoff.

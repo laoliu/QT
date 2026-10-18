@@ -252,10 +252,19 @@ class ResearchPipeline:
             market = labelled.drop(columns=["datetime"], errors="ignore")
             labelled = self.prepare_labels(market)
             labelled["datetime"] = pd.to_datetime(labelled["trade_date"])
+        # Form labels on the complete market tape before checking eligibility
+        # at the signal date. Removing a later ST/suspended/non-member row
+        # first would silently move its earlier signal's entry/exit forward.
+        labelled = _filter_historical_universe(labelled)
+        if "fwd_return" in labelled:
+            labelled["fwd_return_rank"] = labelled.groupby("datetime")["fwd_return"].rank(
+                method="average", pct=True,
+            )
         excluded = {
             "datetime", "trade_date", "symbol", "open", "high", "low", "close",
             "volume", "amount", "vol", "pre_close", "change", "pct_chg",
             "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
+            "up_limit", "down_limit",
             "benchmark_close", "benchmark_return",
             "is_index_member", "is_st", "listing_days",
             "fwd_return", "fwd_return_rank", "fwd_return_raw", "label",
@@ -263,7 +272,8 @@ class ResearchPipeline:
         }
         feature_cols = [
             column for column in labelled.columns
-            if column not in excluded and labelled[column].dtype.kind in ("f", "i", "u")
+            if column not in excluded and not column.endswith("_raw")
+            and labelled[column].dtype.kind in ("f", "i", "u")
         ]
         if not feature_cols:
             raise ValueError("no numeric feature columns found after excluding labels and market metadata")
@@ -310,8 +320,7 @@ class ResearchPipeline:
         input_start = pd.Timestamp(source["trade_date"].min()).date().isoformat()
         input_end = pd.Timestamp(source["trade_date"].max()).date().isoformat()
         source["datetime"] = pd.to_datetime(source["trade_date"])
-        source = _filter_historical_universe(source)
-        if source.empty:
+        if _filter_historical_universe(source).empty:
             raise ValueError("historical universe filter removed all rows")
         # Preserve only explicitly versioned inputs when the caller supplies it.
         if "feature_version" in source:
@@ -343,6 +352,17 @@ class ResearchPipeline:
         oos["trade_date"] = pd.to_datetime(oos["trade_date"]).dt.date
         oos["model_id"] = self.run_id
         oos["feature_version"] = self.config.feature_version
+        # Selector predictions deliberately contain only scores/labels.
+        # Carry the signal-date classification into the portfolio boundary;
+        # otherwise a cap configured in YAML silently becomes ineffective.
+        industry_columns = [c for c in ("industry", "sector", "sw_industry") if c in source]
+        if industry_columns:
+            classifications = source[["trade_date", "symbol", *industry_columns]].copy()
+            oos = oos.drop(columns=industry_columns, errors="ignore").merge(
+                classifications, on=["trade_date", "symbol"], how="left", validate="one_to_one",
+            )
+            if "industry" not in oos:
+                oos["industry"] = oos[industry_columns[0]]
         targets = build_target_positions(
             oos,
             top_k=self.config.top_k,

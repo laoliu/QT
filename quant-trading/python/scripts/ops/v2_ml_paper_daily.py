@@ -1,38 +1,19 @@
 #!/usr/bin/env python3
-"""V2 ML 选股策略 —— 模拟盘每日推进（EOD）
+"""A 股低频 Paper 每日收盘记账，复用规范组合回放引擎。
 
-职责只有两件：
-1. **打分**：把当日特征面板喂给已训练好的模型（可多模型集成），取 Top-K
-2. **记账**：按 Top-K 调仓，更新现金/持仓/NAV，落盘状态
+默认消费完整的签名 TuShare PIT 快照和可选的版本化 Paper 目标计划；
+当日收盘接受计划，下一交易日开盘成交。首次推进以现金开户，之后保留
+连续现金、持仓、成本与公司事件账本。模型训练和打分由 ml_ranking 完成。
 
-明确**不做**的事：
-
-- **不构造特征**。规范入口只接受已物化且带 TuShare PIT sidecar 的特征
-  快照。历史面板仍可通过 ``--legacy-compat --add-fundamentals`` 显式回放。
-- **不拉数据**。当日面板由 ``--panel`` 传入（盘前 ``scripts/ops/data_preheat.py``
-  灌缓存、训练/特征流水线产出面板）。这个脚本不去猜数据从哪来。
-
-## 状态文件
-
-``data/paper_state/v2_ml/state.json``，与 ``scripts/ops/state_stale_checker.py``
-扫的是同一个位置、同一个文件名 —— 引擎哪天没跑，陈旧检查就能看见。
-``--execute`` 时还会往同目录追加一行 ``nav_history.jsonl``，让
-``scripts/ops/s4_validator.py`` 能把这个组合纳入 S4 门禁统计；只写在
-state.json 里的 NAV 那些工具是看不到的。
-
-状态读坏时**直接报错，不回退到初始资金**：静默重置等于把亏损洗掉，账面会
-凭空多出一笔钱，比崩掉难查得多。
-
-## 默认 dry-run
-
-按 ``scripts/ops/__init__.py`` 的约定，会改持久状态的操作默认只预演，要真
-写盘必须显式 ``--execute``。
+默认只预演；--execute 提交到独立的 data/research/paper/v2_ml.sqlite3。
+--replay 只读重算账本并核验摘要。旧 state.json 及其收盘价调仓逻辑
+仅在 --legacy-compat 下使用，保留历史文件，不自动转换为规范账本。
 
 用法::
 
-    python scripts/ops/v2_ml_paper_daily.py --panel output/panel_20260910.parquet \\
-        --model-dir models/ml_csi500 --date 20260910           # 预演
-    python scripts/ops/v2_ml_paper_daily.py --panel ... --model-dir ... --execute
+    python scripts/ops/v2_ml_paper_daily.py --panel snapshot.parquet --plan-path plan.json
+    python scripts/ops/v2_ml_paper_daily.py --panel next_snapshot.parquet --execute
+    python scripts/ops/v2_ml_paper_daily.py --replay --json
 """
 
 from __future__ import annotations
@@ -621,16 +602,19 @@ def main(argv: list[str] | None = None) -> int:
     """CLI 入口，返回进程退出码。"""
     parser = argparse.ArgumentParser(description="V2 ML 策略模拟盘每日推进")
     parser.add_argument(
-        "--panel", required=True,
-        help="当日特征面板（parquet/csv），需含 datetime/symbol + 训练时的特征列",
+        "--panel",
+        help="截至本日收盘的完整签名 TuShare PIT Parquet 快照；兼容模式允许旧面板",
     )
     parser.add_argument(
         "--model-dir", action="append", default=[],
-        help="模型目录，可重复传以做集成",
+        help="仅 --legacy-compat：模型目录，可重复传以做集成",
     )
     parser.add_argument("--date", default=None, help="交易日 YYYYMMDD，默认取面板最后一日")
-    parser.add_argument("--top-k", type=int, default=None, help="省略时沿用研究 YAML 的 portfolio.top_k")
+    parser.add_argument("--top-k", type=int, default=None, help="仅兼容模式：选股数量")
     parser.add_argument("--research-config", help="规范研究 YAML；省略时使用研究默认策略")
+    parser.add_argument("--plan-path", help="本次信号收盘的 Paper 执行计划；省略时只推进既有计划和估值")
+    parser.add_argument("--book-path", help="独立 SQLite 账本路径；默认 data/research/paper/v2_ml.sqlite3")
+    parser.add_argument("--replay", action="store_true", help="只读重放已提交的规范账本并核验摘要")
     parser.add_argument(
         "--add-fundamentals", action="store_true",
         help="仅兼容模式：面板里只有原始 daily_basic 列时补旧基本面因子",
@@ -650,7 +634,45 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="以 JSON 输出结果")
     args = parser.parse_args(argv)
 
-    if not args.model_dir:
+    if not args.legacy_compat:
+        try:
+            from aipha.engines.aipha_ml_engine import _read_parquet
+            from aipha.research.config import load_research_config
+            from aipha.research.execution_plan import read_execution_plan
+            from aipha.research.paper_book import advance_paper_book, replay_paper_book
+
+            if args.model_dir or args.add_fundamentals or args.top_k is not None or args.feature_version:
+                raise ValueError("规范入口消费已导出的计划；模型/Top-K/特征选项请通过 ml_ranking 配置，旧回放使用 --legacy-compat")
+            book = Path(args.book_path) if args.book_path else DATA_DIR / "research/paper/v2_ml.sqlite3"
+            if args.replay:
+                if args.panel or args.plan_path or args.execute or args.date:
+                    raise ValueError("--replay 为只读操作，不能同时传入快照、计划、日期或 --execute")
+                result = replay_paper_book(book)
+            else:
+                if not args.panel:
+                    raise ValueError("必须传入 --panel，或使用 --replay 只读重算")
+                policy = load_research_config(args.research_config or (
+                    Path(__file__).resolve().parents[2] / "aipha/configs/research/a_stock_ml.yaml"
+                ))
+                panel = _read_parquet(args.panel)
+                if args.date and pd.Timestamp(args.date).date() != pd.to_datetime(panel.trade_date).max().date():
+                    raise ValueError("--date 必须等于完整签名快照的最后交易日")
+                plan = read_execution_plan(args.plan_path) if args.plan_path else None
+                result = advance_paper_book(book, panel, policy, plan=plan, commit=args.execute)
+                result = {**result, "committed": args.execute, "book_path": str(book)}
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+            else:
+                logger.info("Paper %s", json.dumps(result, ensure_ascii=False, default=str))
+            return 0
+        except Exception as exc:
+            logger.error("规范 Paper 记账失败: %s", exc)
+            return 2
+
+    if args.plan_path or args.book_path or args.replay:
+        logger.error("--plan-path/--book-path/--replay 不适用于旧兼容模式")
+        return 2
+    if not args.panel or not args.model_dir:
         logger.error("必须至少指定一个 --model-dir，拒绝在没有模型的情况下调仓")
         return 2
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -35,9 +36,15 @@ class ExecutionPlan:
             raise ValueError("execution plan requires run_id, model_id and signal_id")
         if not self.targets:
             raise ValueError("execution plan contains no targets")
+        if len({target.symbol for target in self.targets}) != len(self.targets):
+            raise ValueError("execution plan contains duplicate symbols")
+        if len({target.signal_id for target in self.targets}) != len(self.targets):
+            raise ValueError("every target must have a unique signal_id")
         if abs(sum(float(target.target_weight) for target in self.targets)) > 1.0 + 1e-9:
             raise ValueError("execution plan target weights exceed 100%")
         for target in self.targets:
+            if not target.symbol or not target.symbol.strip():
+                raise ValueError("execution plan contains an empty symbol")
             if not target.run_id or not target.model_id or not target.signal_id:
                 raise ValueError("every target must carry run_id, model_id and signal_id")
             if target.run_id != self.run_id or target.model_id != self.model_id:
@@ -101,8 +108,8 @@ def validate_execution_risk(
     the research-to-Paper boundary fail closed even when a caller bypasses the
     Node order manager and invokes ``PaperGateway`` directly.
     """
-    if account_value <= 0:
-        raise ValueError("account_value must be positive")
+    if not math.isfinite(account_value) or account_value <= 0:
+        raise ValueError("account_value must be positive and finite")
     if not 0 < max_position_weight <= 1:
         raise ValueError("max_position_weight must be in (0, 1]")
     if not 0 < max_total_weight <= 1:
@@ -118,7 +125,7 @@ def validate_execution_risk(
             )
         total += weight
         price = float(prices.get(target.symbol, 0.0))
-        if price <= 0:
+        if not math.isfinite(price) or price <= 0:
             raise ValueError(f"missing positive price for {target.symbol}")
     if total > max_total_weight + 1e-9:
         raise ValueError("execution plan total target weight exceeds risk limit")

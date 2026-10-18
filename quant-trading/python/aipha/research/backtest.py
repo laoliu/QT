@@ -109,7 +109,7 @@ def run_portfolio_backtest(
                     continue
                 budget = min(float(weight), config.max_position_weight) * nav_for_sizing
                 desired_shares[symbol] = int(budget / price / 100) * 100
-            union = set(holdings) | set(desired_shares)
+            union = sorted(set(holdings) | set(desired_shares))
             deltas = {s: desired_shares.get(s, 0) - holdings.get(s, 0) for s in union}
             gross_value = sum(abs(q * float(open_prices.get(s, last_prices.get(s, 0)) or 0)) for s, q in deltas.items())
             turnover_cap = config.max_daily_turnover * max(nav_for_sizing, 0.0)
@@ -206,7 +206,7 @@ def run_portfolio_backtest(
                     })
         close_values = 0.0
         marked_symbols = set(holdings) | {a.symbol for a, _, shares in ledger.pending.values() if shares}
-        for symbol in marked_symbols:
+        for symbol in sorted(marked_symbols):
             if symbol in frame.index and not bool(frame.loc[symbol].get("is_suspended", False)):
                 last_prices[symbol] = float(frame.loc[symbol, "close"])
             close_values += holdings.get(symbol, 0) * last_prices.get(symbol, 0.0)

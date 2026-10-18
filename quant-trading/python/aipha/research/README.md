@@ -223,6 +223,52 @@ rebalance for Paper review and `executionPlanPaths` lists the full history.
 Pass a single dated plan path to `execute_paper`; historical rebalances must
 not be submitted together as if they were current orders.
 
+The bridge's `execute_paper` response is a durable **plan-acceptance receipt**
+from a short-lived gateway. It does not advance a continuous daily cash,
+position or fill ledger. For canonical daily Paper accounting, use:
+
+```powershell
+python scripts/ops/v2_ml_paper_daily.py --research-config aipha/configs/research/a_stock_ml.yaml --panel snapshot.parquet --plan-path plan.json --book-path data/research/paper/v2_ml.sqlite3 --json
+python scripts/ops/v2_ml_paper_daily.py --research-config aipha/configs/research/a_stock_ml.yaml --panel snapshot.parquet --plan-path plan.json --book-path data/research/paper/v2_ml.sqlite3 --execute --json
+python scripts/ops/v2_ml_paper_daily.py --research-config aipha/configs/research/a_stock_ml.yaml --panel next_snapshot.parquet --book-path data/research/paper/v2_ml.sqlite3 --execute --json
+python scripts/ops/v2_ml_paper_daily.py --book-path data/research/paper/v2_ml.sqlite3 --replay --json
+```
+
+The first command previews on an in-memory database copy and creates no book.
+Only `--execute` commits an observed close. A new book opens in cash at that
+close; it does not invent historical positions from the training tape.
+An optional same-close paper plan is queued for the next observed session's
+open. Each month accepts at most one plan. Calls without a plan still execute
+an earlier pending plan and mark existing positions. Trading blocks consume
+that session's attempt; fills are not silently deferred to a later price.
+The full signed market tape must retain ST, suspended and departed constituents
+for valuation and exits; the signal universe only gates new positive targets.
+
+SQLite transactions protect cash/position history, accepted plans and receipts
+together. The book freezes the research config and past market observations,
+requires snapshots to advance and overlap the previous close, rejects changed
+corporate event terms or events arriving after a committed record close, and
+returns the prior receipt for an identical same-day request. Conflicting
+same-day requests fail. Snapshot sessions are observed market dates; the
+current sidecar's calendar hash alone cannot independently prove that an
+upstream snapshot omitted no intervening open session.
+
+Daily accounting replays the accumulated tape and target plans with the same
+portfolio engine used in research, including raw-price lot sizing, turnover,
+trading restrictions, costs and supported corporate events. Receipts include
+NAV, cash, final holdings, new fills, cost/block diagnostics and a replay hash;
+fills carry plan/run/model/signal provenance. Read-only `--replay` recomputes
+the ledger and verifies its latest receipt. This replay trades storage and
+CPU for one accounting implementation; it is intended for low-frequency
+books. Offline continuity fixtures do not establish real-market daily
+operation or account reconciliation.
+
+Old `data/paper_state/v2_ml/state.json` files are preserved separately. Only
+`--legacy-compat --model-dir ...` uses the historical model-scoring/close-price
+accounting and its `nav_history.jsonl` monitoring outputs. The canonical book
+does not silently import those positions or overwrite the legacy monitor feed;
+use its receipts or read-only replay to inspect canonical NAV.
+
 Legacy model folders without `model_manifest.json`, and schema v1 manifests,
 are rejected. Retrain with the canonical pipeline or explicitly migrate a
 trusted legacy model. Migration requires the operator to supply the feature
@@ -298,7 +344,9 @@ explicitly sets `legacy_ml_compat: true`; that flag is a migration marker and
 does not make the legacy model provenance-safe.
 Canonical scorers also accept `feature_groups` and `feature_column_groups`,
 using the same defaults as `ResearchConfig`. The daily Paper CLI accepts
-`--research-config` to use the training YAML's universe, listing threshold,
-feature policy, model type, feature version and default Top-K. Omission uses
-`aipha/configs/research/a_stock_ml.yaml`; an explicit incompatible feature
-version fails instead of overriding the trained contract.
+`--research-config` to enforce the research universe, listing threshold,
+feature version, portfolio and accounting policy against its target plan.
+Scoring and Top-K selection take place in the canonical model/export path.
+Omission uses `aipha/configs/research/a_stock_ml.yaml`. The canonical daily CLI
+rejects model, Top-K and feature-version overrides; regenerate the source
+model/plan through the research pipeline when changing those policies.

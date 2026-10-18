@@ -19,6 +19,10 @@ universe:
 features:
   version: cn_equity_v1
   groups: [value, quality, momentum, volatility, liquidity, technical]
+  # Only registered columns in enabled groups enter the model. Missing groups
+  # are disclosed in the report; unknown numeric columns are excluded.
+  # Register custom causal factors explicitly, e.g. {my_alpha: momentum}.
+  column_groups: {}
 
 label:
   type: forward_return_rank

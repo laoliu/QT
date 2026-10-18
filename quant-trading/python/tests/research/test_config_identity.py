@@ -112,12 +112,19 @@ def test_prediction_checks_yaml_model_and_input_snapshot_identity(monkeypatch):
     observed = {}
     def load(*a, **kwargs):
         observed.update(kwargs)
-        return SimpleNamespace(predict=lambda frame: pd.Series([1.] * len(frame)))
+        return SimpleNamespace(predict=lambda frame: pd.Series([1.] * len(frame)),
+                               research_manifest={"model_id": "fixture-model", "feature_version": "cn_equity_v1"})
     monkeypatch.setattr(aipha.research, "load_verified_selector", load)
     result = engine.run({"action": "predict", "modelPath": "fixture", "featurePath": "fixture"})
     assert result["ok"]
     assert observed["expected_model_type"] == "elasticnet"
+    assert observed["expected_universe"] == "csi1000"
+    assert observed["expected_min_listing_days"] == 252
+    assert observed["expected_feature_groups"] == ResearchConfig().feature_groups
+    assert observed["expected_feature_column_groups"] == ()
     assert result["data"]["rankings"][0]["symbol"] == "600000.SH"
+    assert result["data"]["rankings"][0]["model_id"] == "fixture-model"
+    assert result["data"]["rankings"][0]["feature_version"] == "cn_equity_v1"
 
 
 @pytest.mark.parametrize("changes,error", [

@@ -26,7 +26,7 @@ def _universe():
         "symbol": ["new", "boundary", "under_custom", "custom"],
         "is_index_member": True, "is_st": False, "is_suspended": False,
         "listing_days": [251, 252, 299, 300], "listing_days_basis": LISTING_DAYS_BASIS,
-        "feature_version": "cn_equity_v1", "factor": [1., 2., 3., 4.],
+        "feature_version": "cn_equity_v1", "momentum_5": [1., 2., 3., 4.],
         "fwd_return": [0.01, 0.02, 0.03, 0.04], "fwd_return_rank": [1, 2, 3, 4],
     })
 
@@ -134,7 +134,7 @@ def test_predict_bridge_applies_same_configured_age_before_ranking(monkeypatch):
     def predict(frame):
         calls.append(frame.symbol.tolist())
         return pd.Series(np.ones(len(frame)), index=frame.index)
-    monkeypatch.setattr(aipha.research, "load_verified_selector", lambda *a, **k: SimpleNamespace(predict=predict))
+    monkeypatch.setattr(aipha.research, "load_verified_selector", lambda *a, **k: SimpleNamespace(predict=predict, research_manifest={"model_id": "fixture", "feature_version": "cn_equity_v1"}))
     result = engine.run({"action": "predict", "modelPath": "fixture", "featurePath": "fixture"})
     assert result["ok"] is True
     assert calls == [["custom"]]

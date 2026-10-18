@@ -55,6 +55,37 @@ snapshots with an absent or mismatched index identity. Prediction also checks
 the source signature, generator, row feature version and complete date range
 before loading a model.
 
+`features.groups` selects the actual model inputs through the versioned
+`cn_equity_feature_groups/1` catalog. Only registered factors in enabled groups
+enter training, in stable column order. Raw financial fields, unknown numeric
+columns, prices, status flags and labels are excluded by default. TuShare
+snapshot construction computes the existing Alpha158 implementation from PIT
+OHLCV for the technical group. Register additional causal columns explicitly:
+
+```yaml
+features:
+  version: cn_equity_v1
+  groups: [quality, momentum]
+  column_groups:
+    my_quality_alpha: quality
+```
+
+Custom mappings cannot reclassify standard factors or register reserved
+price/status/label columns. A configuration with no available registered
+columns fails. Partially unavailable groups are disclosed under
+`walk_forward.feature_selection.unavailable_groups`; per-column missing rates
+remain in the report, including entirely null registered columns.
+
+Model manifest schema v2 binds the training universe, listing-session
+threshold, enabled groups, custom column mappings, feature policy version,
+ordered feature columns, model/config/snapshot identifiers, and hashes of
+`meta.pkl` and every `fold_*` artifact. Prediction and canonical Paper check
+their policy against this manifest before deserialization. Missing input
+columns fail rather than silently shrinking the feature set. File hashes
+detect changed or exchanged bytes; they are not a signature proving model
+origin. OOS and bridge rankings include model ID, feature version and a
+deterministic date-wise rank (ties sorted by symbol).
+
 Financial features must already have been joined by announcement date. The
 `visible_financial_snapshots` helper provides the same announce-date cutoff for
 long-form financial snapshots. A sidecar with another provider, mismatched
@@ -164,9 +195,20 @@ rebalance for Paper review and `executionPlanPaths` lists the full history.
 Pass a single dated plan path to `execute_paper`; historical rebalances must
 not be submitted together as if they were current orders.
 
-Legacy model folders without `model_manifest.json` are rejected. Use
-`migrate_legacy_model` only with an explicit feature version, column order,
-snapshot identifier, and operator attestation. QMT consumption is available
+Legacy model folders without `model_manifest.json`, and schema v1 manifests,
+are rejected. Retrain with the canonical pipeline or explicitly migrate a
+trusted legacy model. Migration requires the operator to supply the feature
+version/order, training universe, listing threshold, groups/custom mappings,
+model/config/snapshot identifiers and attest those declarations. It validates
+the copied selector before publishing a new directory; it neither overwrites
+the destination nor modifies the source. It cannot establish PIT provenance
+for historical training data by itself. For example:
+
+```powershell
+python scripts/migrate_legacy_model.py OLD NEW --feature-version cn_equity_v1 --feature-columns momentum_20 volatility_20 --model-type lightgbm --data-snapshot-id VERIFIED_SNAPSHOT --universe CSI500 --min-listing-days 252 --feature-groups momentum volatility --model-id ATTESTED_MODEL --model-config-hash VERIFIED_CONFIG_HASH --acknowledge-legacy
+```
+
+QMT consumption is available
 through the versioned execution-plan adapter and requires an explicit live
 gate. The generic HTTP and polling bridge `place_order` methods are disabled:
 they accept a single raw order and cannot establish membership in a validated
@@ -226,3 +268,9 @@ Runtime Paper scorers follow the same boundary. Configure
 `train_ml_factor` scorer is disabled unless a historical Paper configuration
 explicitly sets `legacy_ml_compat: true`; that flag is a migration marker and
 does not make the legacy model provenance-safe.
+Canonical scorers also accept `feature_groups` and `feature_column_groups`,
+using the same defaults as `ResearchConfig`. The daily Paper CLI accepts
+`--research-config` to use the training YAML's universe, listing threshold,
+feature policy, model type, feature version and default Top-K. Omission uses
+`aipha/configs/research/a_stock_ml.yaml`; an explicit incompatible feature
+version fails instead of overriding the trained contract.

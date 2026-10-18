@@ -140,12 +140,16 @@ def test_ensemble_predict_uses_verified_canonical_model(tmp_path, sample_ohlcv, 
         def predict(self, frame):
             return pd.Series(np.arange(len(frame), dtype=float), index=frame.index)
 
-    monkeypatch.setattr(
-        "aipha.research.load_verified_selector",
-        lambda path, expected_feature_version: _Selector(),
-    )
+    captured = {}
+    def load(path, **kwargs):
+        captured.update(kwargs)
+        return _Selector()
+    monkeypatch.setattr("aipha.research.load_verified_selector", load)
     result = ensemble_predict(sample_ohlcv.tail(5), [model_dir])
     assert result.tolist() == [0.0, 1.0, 2.0, 3.0, 4.0]
+    assert captured["expected_universe"] == "csi500"
+    assert captured["expected_min_listing_days"] == 252
+    assert captured["expected_feature_groups"]
 
 
 def test_load_feature_panel_requires_attested_pit_snapshot(tmp_path):
@@ -157,6 +161,7 @@ def test_load_feature_panel_requires_attested_pit_snapshot(tmp_path):
         "volume": [1000.0], "amount": [10000.0], "adj_factor": [1.0],
         "is_suspended": [False], "is_limit_up": [False], "is_limit_down": [False],
         "is_index_member": [True], "is_st": [False], "listing_days": [500],
+        "listing_days_basis": ["exchange_open_sessions"],
         "price_adjustment": ["point_in_time_factor"],
         "feature_version": ["cn_equity_v1"],
     })
@@ -167,11 +172,16 @@ def test_load_feature_panel_requires_attested_pit_snapshot(tmp_path):
         {
             "provider": "tushare_pit", "feature_version": "cn_equity_v1",
             "data_snapshot_id": "fixture", "start_date": "2026-03-02",
-            "end_date": "2026-03-02",
+            "end_date": "2026-03-02", "index_code": "000905.SH",
         },
     )
     loaded = _load_feature_panel(path, feature_version="cn_equity_v1")
     assert loaded.loc[0, "datetime"] == pd.Timestamp("2026-03-02")
+    from aipha.research import ResearchConfig
+    with pytest.raises(ValueError, match="universe mismatch"):
+        _load_feature_panel(path, feature_version="cn_equity_v1", research_config=ResearchConfig(universe="csi1000"))
+    older_threshold = _load_feature_panel(path, feature_version="cn_equity_v1", research_config=ResearchConfig(min_listing_days=600))
+    assert older_threshold.empty
 
     path.with_suffix(".metadata.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="sidecar|provider"):

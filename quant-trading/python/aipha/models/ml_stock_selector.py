@@ -604,6 +604,11 @@ class MLStockSelector:
         """
         if not self._models:
             raise RuntimeError("No model available. Call walk_forward_train first.")
+        verified = getattr(self, "_verified_feature_columns", None)
+        if verified is not None:
+            missing = [column for column in verified if column not in df]
+            if missing:
+                raise ValueError(f"verified model input is missing feature columns: {missing}")
         model = self._models[-1]  # 最新折模型
         feature_cols = self._resolve_features(df)
         X = df[feature_cols].fillna(0.0).values

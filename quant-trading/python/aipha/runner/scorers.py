@@ -783,6 +783,8 @@ def _load_ml_cross_section(comp_cfg: dict, universe: str, trade_date: str) -> An
             str(snapshot_path), universe, trade_date,
             feature_version=str(comp_cfg.get("feature_version", "cn_equity_v1")),
             min_listing_days=comp_cfg.get("min_listing_days", 252),
+            feature_groups=comp_cfg.get("feature_groups"),
+            feature_column_groups=comp_cfg.get("feature_column_groups", {}),
         )
 
     if comp_cfg.get("legacy_ml_compat") is not True:
@@ -839,6 +841,8 @@ def _load_canonical_ml_cross_section(
     *,
     feature_version: str,
     min_listing_days: int = 252,
+    feature_groups=None,
+    feature_column_groups=(),
 ) -> Any:
     """Read one date from an attested canonical PIT feature snapshot.
 
@@ -899,6 +903,11 @@ def _load_canonical_ml_cross_section(
     cross.attrs["feature_version"] = feature_version
     cross.attrs["universe"] = universe
     cross.attrs["canonical_pit"] = True
+    from aipha.features.schema import FEATURE_GROUPS, normalize_feature_groups, normalize_column_groups
+
+    cross.attrs["min_listing_days"] = min_listing_days
+    cross.attrs["feature_groups"] = normalize_feature_groups(FEATURE_GROUPS if feature_groups is None else feature_groups)
+    cross.attrs["feature_column_groups"] = normalize_column_groups(feature_column_groups)
     return cross
 
 
@@ -956,6 +965,12 @@ def _predict_ranks(model_dir: Path, cross: Any) -> Any:
         selector = load_verified_selector(
             model_dir,
             expected_feature_version=str(cross.attrs.get("feature_version", "cn_equity_v1")),
+            **({
+                "expected_universe": cross.attrs["universe"],
+                "expected_min_listing_days": cross.attrs["min_listing_days"],
+                "expected_feature_groups": cross.attrs["feature_groups"],
+                "expected_feature_column_groups": cross.attrs["feature_column_groups"],
+            } if cross.attrs.get("canonical_pit") else {}),
         )
     else:
         if cross.attrs.get("canonical_pit"):

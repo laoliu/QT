@@ -67,7 +67,7 @@ def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
                 "listing_days": 1000,
                 "listing_days_basis": "exchange_open_sessions",
                 "feature_version": "cn_equity_v1",
-                "momentum_signal": signal,
+                "momentum_5": signal,
                 "momentum_20": signal,
                 "volatility_20": abs(signal),
                 "benchmark_close": 100.0 + dates.get_loc(dt),
@@ -721,13 +721,28 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert reproduced_pbo.pbo == report["metrics"]["pbo"]
     assert report["diagnostics"]["selection_pbo_candidates"]
     model_manifest = json.loads((artifact_dir / "model" / "model_manifest.json").read_text(encoding="utf-8"))
+    assert model_manifest["schema_version"] == 2
+    assert model_manifest["model_id"] == result["run_id"]
+    assert model_manifest["data_snapshot_id"] == "fixture-v1"
+    assert model_manifest["universe"] == cfg.universe
+    assert model_manifest["min_listing_days"] == cfg.min_listing_days
+    assert model_manifest["feature_groups"] == list(cfg.feature_groups)
+    assert model_manifest["model_files"]["meta.pkl"]
+    assert report["walk_forward"]["feature_selection"]["unavailable_groups"] == ["value", "quality", "liquidity", "technical"]
+    predictions = pd.read_parquet(artifact_dir / "oos_predictions.parquet")
+    assert predictions.model_id.eq(model_manifest["model_id"]).all()
+    assert predictions.feature_version.eq(cfg.feature_version).all()
+    for _, day in predictions.groupby("trade_date"):
+        assert sorted(day["rank"]) == list(range(1, len(day) + 1))
     assert set(report["feature_missing_rates"]["columns"]) == set(model_manifest["feature_columns"])
-    assert "momentum_signal" in model_manifest["feature_columns"]
+    assert "momentum_5" in model_manifest["feature_columns"]
     assert "is_limit_up" not in model_manifest["feature_columns"]
     assert "fwd_return" not in model_manifest["feature_columns"]
     selector = load_verified_selector(
         artifact_dir / "model", expected_feature_version="cn_equity_v1",
         expected_feature_columns=model_manifest["feature_columns"], expected_model_type="lightgbm",
+        expected_universe=cfg.universe, expected_min_listing_days=cfg.min_listing_days,
+        expected_feature_groups=cfg.feature_groups, expected_feature_column_groups=cfg.feature_column_groups,
     )
     assert np.isfinite(selector.predict(fixture.head(20)).to_numpy()).all()
 
@@ -736,7 +751,7 @@ def test_saved_selector_rejects_feature_version_or_column_order_mismatch(tmp_pat
     model_dir = tmp_path / "model"
     model_dir.mkdir()
     (model_dir / "model_manifest.json").write_text(json.dumps({
-        "schema_version": 1,
+        "schema_version": 2,
         "model_type": "lightgbm",
         "feature_version": "cn_equity_v1",
         "feature_columns": ["a", "b"],
@@ -763,7 +778,7 @@ def test_linear_elasticnet_baseline_is_a_real_walk_forward_model() -> None:
 
 def test_canonical_loader_rejects_experimental_manifest_before_loading(tmp_path: Path) -> None:
     (tmp_path / "model_manifest.json").write_text(json.dumps({
-        "schema_version": 1, "model_type": "double_ensemble",
+        "schema_version": 2, "model_type": "double_ensemble",
         "feature_version": "cn_equity_v1", "feature_columns": ["a"],
     }), encoding="utf-8")
     with pytest.raises(ValueError, match="lightgbm or elasticnet only"):
@@ -774,9 +789,12 @@ def test_canonical_loader_rejects_model_type_mismatch(tmp_path: Path) -> None:
     from aipha.models.ml_stock_selector import MLSelectorConfig, MLStockSelector
 
     MLStockSelector(MLSelectorConfig(model_type="elasticnet", feature_cols=["a"])).save(tmp_path)
-    (tmp_path / "model_manifest.json").write_text(json.dumps({
-        "schema_version": 1, "model_type": "lightgbm",
-        "feature_version": "cn_equity_v1", "feature_columns": ["a"],
-    }), encoding="utf-8")
+    from aipha.research.artifacts import write_model_manifest
+    write_model_manifest(
+        tmp_path, model_type="lightgbm", feature_version="cn_equity_v1", feature_cols=["a"],
+        model_config_hash="fixture", universe="csi500", min_listing_days=252,
+        feature_groups=["momentum"], feature_column_groups={"a": "momentum"},
+        model_id="fixture", data_snapshot_id="fixture",
+    )
     with pytest.raises(ValueError, match="saved model type does not match"):
         load_verified_selector(tmp_path, expected_feature_version="cn_equity_v1")

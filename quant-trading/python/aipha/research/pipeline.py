@@ -54,13 +54,17 @@ class ResearchConfig:
     feature_groups: tuple[str, ...] = (
         "value", "quality", "momentum", "volatility", "liquidity", "technical",
     )
+    feature_column_groups: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         from aipha.universe.historical import validate_listing_threshold
         from aipha.universe.indices import normalize_universe
+        from aipha.features.schema import normalize_feature_groups, normalize_column_groups
 
         validate_listing_threshold(self.min_listing_days)
         object.__setattr__(self, "universe", normalize_universe(self.universe))
+        object.__setattr__(self, "feature_groups", normalize_feature_groups(self.feature_groups))
+        object.__setattr__(self, "feature_column_groups", normalize_column_groups(self.feature_column_groups))
         if self.data_provider != "tushare_pit":
             raise ValueError("canonical historical research requires data_provider=tushare_pit")
         if self.model_type not in {"lightgbm", "elasticnet"}:
@@ -297,23 +301,11 @@ class ResearchPipeline:
             labelled["fwd_return_rank"] = labelled.groupby("datetime")["fwd_return"].rank(
                 method="average", pct=True,
             )
-        excluded = {
-            "datetime", "trade_date", "symbol", "open", "high", "low", "close",
-            "volume", "amount", "vol", "pre_close", "change", "pct_chg",
-            "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
-            "up_limit", "down_limit",
-            "benchmark_close", "benchmark_return",
-            "is_index_member", "is_st", "listing_days",
-            "fwd_return", "fwd_return_rank", "fwd_return_raw", "label",
-            "feature_version", "feature_set", "industry", "sector", "sw_industry",
-        }
-        feature_cols = [
-            column for column in labelled.columns
-            if column not in excluded and not column.endswith("_raw")
-            and labelled[column].dtype.kind in ("f", "i", "u")
-        ]
-        if not feature_cols:
-            raise ValueError("no numeric feature columns found after excluding labels and market metadata")
+        from aipha.features.schema import select_feature_columns
+
+        feature_cols, feature_selection = select_feature_columns(
+            labelled, self.config.feature_groups, self.config.feature_column_groups,
+        )
         selector_config = MLSelectorConfig(
             model_type=self.config.model_type,
             objective=self.config.objective,
@@ -334,6 +326,7 @@ class ResearchPipeline:
             "feature_version": self.config.feature_version,
             "model_config_hash": self.config.model_config_hash(),
             "model_type": self.config.model_type,
+            "feature_selection": feature_selection,
         })
         return oos, summary, selector
 
@@ -392,6 +385,8 @@ class ResearchPipeline:
         oos["trade_date"] = pd.to_datetime(oos["trade_date"]).dt.date
         oos["model_id"] = self.run_id
         oos["feature_version"] = self.config.feature_version
+        oos = oos.sort_values(["trade_date", "symbol"])
+        oos["rank"] = oos.groupby("trade_date")["score"].rank(ascending=False, method="first").astype(int)
         # Selector predictions deliberately contain only scores/labels.
         # Carry the signal-date classification into the portfolio boundary;
         # otherwise a cap configured in YAML silently becomes ineffective.
@@ -455,12 +450,17 @@ class ResearchPipeline:
             artifact_type="research_input_snapshot",
         )
         selector.save(run_root / "model")
-        _write_model_manifest(
+        from .artifacts import write_model_manifest
+
+        write_model_manifest(
             run_root / "model",
             model_type=self.config.model_type,
             feature_version=self.config.feature_version,
             feature_cols=selector.config.feature_cols,
             model_config_hash=self.config.model_config_hash(),
+            universe=self.config.universe, min_listing_days=self.config.min_listing_days,
+            feature_groups=self.config.feature_groups, feature_column_groups=self.config.feature_column_groups,
+            model_id=self.run_id, data_snapshot_id=data_snapshot_id,
         )
         oos_metadata = {
             "provider": "aipha_research",
@@ -934,24 +934,3 @@ def _filter_historical_universe(frame: pd.DataFrame, *, min_listing_days: int = 
     from aipha.universe.historical import filter_historical_universe
 
     return filter_historical_universe(frame, min_listing_days=min_listing_days)
-
-
-def _write_model_manifest(
-    model_dir: Path,
-    *,
-    model_type: str,
-    feature_version: str,
-    feature_cols: list[str],
-    model_config_hash: str,
-) -> Path:
-    """Write the schema guard consumed before a saved model is loaded."""
-    manifest = {
-        "schema_version": 1,
-        "model_type": model_type,
-        "feature_version": feature_version,
-        "feature_columns": list(feature_cols),
-        "model_config_hash": model_config_hash,
-    }
-    path = model_dir / "model_manifest.json"
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path

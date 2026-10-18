@@ -426,6 +426,7 @@ def ensemble_predict(
     method: str = "rank_average",
     feature_version: str = "cn_equity_v1",
     allow_legacy: bool = False,
+    research_config=None,
 ) -> pd.Series:
     """多模型集成打分，返回 ``index = df.index`` 的分数 Series（越大越好）。
 
@@ -461,6 +462,11 @@ def ensemble_predict(
             raise ValueError(f"模型目录不存在: {p}")
 
     preds: list[pd.Series] = []
+    from aipha.research.pipeline import ResearchConfig
+
+    policy = research_config or ResearchConfig(feature_version=feature_version)
+    if policy.feature_version != feature_version:
+        raise ValueError("feature_version does not match research config")
     for p in paths:
         manifest = p / "model_manifest.json"
         if manifest.is_file():
@@ -469,6 +475,11 @@ def ensemble_predict(
             sel = load_verified_selector(
                 p,
                 expected_feature_version=feature_version,
+                expected_universe=policy.universe,
+                expected_min_listing_days=policy.min_listing_days,
+                expected_feature_groups=policy.feature_groups,
+                expected_feature_column_groups=policy.feature_column_groups,
+                expected_model_type=policy.model_type,
             )
             scores = sel.predict(df)
         elif not allow_legacy:
@@ -545,6 +556,7 @@ def _load_feature_panel(
     *,
     feature_version: str,
     allow_legacy: bool = False,
+    research_config=None,
 ) -> pd.DataFrame:
     """Load a canonical PIT snapshot, or an explicitly opted-in legacy panel."""
     if not panel_path.is_file():
@@ -567,6 +579,13 @@ def _load_feature_panel(
                 f"feature version mismatch: snapshot={metadata.get('feature_version')!r}, "
                 f"requested={feature_version!r}"
             )
+        from aipha.research.pipeline import ResearchConfig
+        from aipha.universe.indices import validate_snapshot_universe
+
+        policy = research_config or ResearchConfig(feature_version=feature_version)
+        if policy.feature_version != feature_version:
+            raise ValueError("feature_version does not match research config")
+        validate_snapshot_universe(metadata, policy.universe)
 
     panel = (
         pd.read_parquet(panel_path) if panel_path.suffix.lower() == ".parquet"
@@ -584,6 +603,9 @@ def _load_feature_panel(
             raise ValueError("TuShare PIT snapshot must use point_in_time_factor adjusted prices")
         panel = panel.copy()
         panel["datetime"] = pd.to_datetime(panel["trade_date"], errors="raise")
+        from aipha.universe.historical import filter_historical_universe
+
+        panel = filter_historical_universe(panel, min_listing_days=policy.min_listing_days)
     return panel
 
 
@@ -607,13 +629,14 @@ def main(argv: list[str] | None = None) -> int:
         help="模型目录，可重复传以做集成",
     )
     parser.add_argument("--date", default=None, help="交易日 YYYYMMDD，默认取面板最后一日")
-    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    parser.add_argument("--top-k", type=int, default=None, help="省略时沿用研究 YAML 的 portfolio.top_k")
+    parser.add_argument("--research-config", help="规范研究 YAML；省略时使用研究默认策略")
     parser.add_argument(
         "--add-fundamentals", action="store_true",
         help="仅兼容模式：面板里只有原始 daily_basic 列时补旧基本面因子",
     )
     parser.add_argument(
-        "--feature-version", default="cn_equity_v1",
+        "--feature-version", default=None,
         help="规范模型 manifest 要求的 feature_version",
     )
     parser.add_argument(
@@ -633,10 +656,17 @@ def main(argv: list[str] | None = None) -> int:
 
     panel_path = Path(args.panel)
     try:
+        from aipha.research.config import load_research_config
+
+        policy = load_research_config(args.research_config or (
+            Path(__file__).resolve().parents[2] / "aipha/configs/research/a_stock_ml.yaml"
+        ))
+        feature_version = args.feature_version or policy.feature_version
         panel = _load_feature_panel(
             panel_path,
-            feature_version=args.feature_version,
+            feature_version=feature_version,
             allow_legacy=args.legacy_compat,
+            research_config=policy,
         )
     except Exception as exc:
         logger.error("特征面板校验失败: %s", exc)
@@ -650,10 +680,12 @@ def main(argv: list[str] | None = None) -> int:
     scores = ensemble_predict(
         today,
         args.model_dir,
-        feature_version=args.feature_version,
+        feature_version=feature_version,
         allow_legacy=args.legacy_compat,
+        research_config=policy,
     )
-    targets = select_top_k(scores, today, args.top_k)
+    top_k = args.top_k if args.top_k is not None else (DEFAULT_TOP_K if args.legacy_compat else policy.top_k)
+    targets = select_top_k(scores, today, top_k)
 
     prices = {}
     if "close" in today.columns:

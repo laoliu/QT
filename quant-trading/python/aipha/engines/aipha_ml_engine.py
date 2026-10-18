@@ -171,10 +171,17 @@ def run(config: dict) -> dict:
                 expected_feature_version=cfg.feature_version,
                 expected_feature_columns=config.get("featureColumns"),
                 expected_model_type=model_type,
+                expected_universe=cfg.universe,
+                expected_min_listing_days=cfg.min_listing_days,
+                expected_feature_groups=cfg.feature_groups,
+                expected_feature_column_groups=cfg.feature_column_groups,
             )
             frame = frame.copy()
             frame["score"] = selector.predict(frame).to_numpy() if len(frame) else []
             frame["trade_date"] = frame["datetime"]
+            frame["model_id"] = selector.research_manifest["model_id"]
+            frame["feature_version"] = selector.research_manifest["feature_version"]
+            frame = frame.sort_values(["trade_date", "symbol"])
             frame["rank"] = frame.groupby("trade_date")["score"].rank(
                 ascending=False, method="first",
             ).astype(int)
@@ -182,7 +189,7 @@ def run(config: dict) -> dict:
             result = frame.sort_values(["trade_date", "rank"]).groupby(
                 "trade_date", sort=True,
             ).head(top_n)
-            columns = ["trade_date", "symbol", "score", "rank"]
+            columns = ["trade_date", "symbol", "score", "rank", "model_id", "feature_version"]
             result = result[columns]
             return {"ok": True, "data": {"rankings": result.to_dict("records"), "totalSymbols": int(len(frame)), "topN": top_n}}
         if action == "evaluate":

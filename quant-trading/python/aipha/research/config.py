@@ -206,7 +206,8 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         stamp_tax_rate=float(cost.get("stamp_tax_rate", 0.0005)),
         transfer_fee_rate=float(cost.get("transfer_fee_rate", 0.00001)),
         slippage_bps=float(cost.get("slippage_bps", 15.0)),
-        feature_groups=tuple(features.get("groups", (
+        feature_groups=features.get("groups", (
             "value", "quality", "momentum", "volatility", "liquidity", "technical",
-        ))),
+        )),
+        feature_column_groups=features.get("column_groups", {}),
     )

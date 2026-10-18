@@ -377,7 +377,7 @@ def assemble_tushare_snapshot(
 
 
 def build_cn_equity_features(panel: pd.DataFrame) -> pd.DataFrame:
-    """Create a compact, causal low-frequency feature set from frozen rows."""
+    """Create causal low-frequency and Alpha158 features from frozen rows."""
     required = {"trade_date", "symbol", "close", "volume", "amount"}
     missing = required - set(panel.columns)
     if missing:
@@ -407,6 +407,15 @@ def build_cn_equity_features(panel: pd.DataFrame) -> pd.DataFrame:
     for column in ("pe_ttm", "pb", "dv_ttm", "roe", "roa", "grossprofit_margin", "revenue_yoy"):
         if column in out:
             out[f"factor_{column}"] = pd.to_numeric(out[column], errors="coerce")
+    if {"open", "high", "low"} <= set(out):
+        from aipha.factors.qlib_alpha import Alpha158
+
+        calculator = Alpha158()
+        technical = calculator.compute(out.assign(datetime=out["trade_date"]))
+        out = out.drop(columns=calculator.factor_names, errors="ignore").merge(
+            technical[["trade_date", "symbol", *calculator.factor_names]].replace([np.inf, -np.inf], np.nan),
+            on=["trade_date", "symbol"], how="left", validate="one_to_one", sort=False,
+        )
     out["feature_set"] = "cn_equity_v1"
     return out
 

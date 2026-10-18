@@ -83,4 +83,34 @@ describe("RemoteQMTBroker provenance boundary", () => {
       strategyVersion: "1.0.0",
     });
   });
+
+  it("keeps local identity and cached provenance in list and single-order queries", async () => {
+    const raw = {
+      order_id: "REMOTE-LIST-1", stock_code: "600519.SH", order_type: 23,
+      price: 50, order_volume: 100, traded_volume: 50, traded_price: 50, order_status: 56,
+    };
+    const fetchMock = vi.fn(async (_url: unknown, init: RequestInit) => {
+      const { method } = JSON.parse(String(init.body));
+      const data = method === "place_order" ? { broker_order_id: raw.order_id }
+        : method === "query_orders" ? [raw] : raw;
+      return { ok: true, json: async () => ({ ok: true, data }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    // Only the mocked transport permits legacy raw orders; production live gates stay enabled.
+    const broker = new RemoteQMTBroker({ ...config,
+      tradingAccount: { ...config.tradingAccount!, requireExecutionPlan: false } });
+    const metadata = {
+      clientOrderId: "client-remote-list", strategyId: "aipha-ml-ranking", modelId: "model-list",
+      runId: "run-list", signalId: "signal-list", strategyVersion: "1.0.0",
+      dataTimestamp: "2026-01-05T09:30:00+08:00",
+    };
+    const placed = await broker.placeOrder({
+      symbol: "600519", market: "cn_stock", side: "buy", orderType: "limit",
+      price: 50, quantity: 100, ...metadata,
+    });
+    const expected = { ...metadata, orderId: placed.orderId, createdAt: placed.createdAt,
+      brokerOrderId: raw.order_id, filledQty: 50, status: "partial" };
+    await expect(broker.queryOrders()).resolves.toMatchObject([expected]);
+    await expect(broker.queryOrder(placed.orderId)).resolves.toMatchObject(expected);
+  });
 });

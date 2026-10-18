@@ -545,9 +545,12 @@ export class RemoteQMTBroker implements IBrokerAdapter {
 
   private mapRawOrder(r: Record<string, unknown>, localId?: string): Order {
     const now = nowCSTISO();
+    localId ??= this.findLocalOrderId(String(r.order_id ?? ""));
+    const cached = localId ? this.orderCache.get(localId) : undefined;
     const sym = fromQmtSymbol(String(r.stock_code ?? ""));
     return {
       orderId: localId ?? String(r.order_id ?? ""),
+      clientOrderId: cached?.clientOrderId,
       brokerOrderId: String(r.order_id ?? ""),
       symbol: sym,
       market: "cn_stock" as MarketType,
@@ -558,13 +561,14 @@ export class RemoteQMTBroker implements IBrokerAdapter {
       filledQty: (r.traded_volume as number) ?? 0,
       avgFillPrice: (r.traded_price as number) ?? undefined,
       status: mapQmtStatus((r.order_status as number) ?? 0),
-      strategyId: (r.strategy_name as string) || undefined,
-      modelId: RemoteQMTBroker.remarkProvenance(r.order_remark, "model_id"),
-      runId: RemoteQMTBroker.remarkProvenance(r.order_remark, "run_id"),
-      signalId: RemoteQMTBroker.remarkProvenance(r.order_remark, "signal_id"),
-      strategyVersion: RemoteQMTBroker.remarkProvenance(r.order_remark, "strategy_version"),
+      strategyId: (r.strategy_name as string) || cached?.strategyId,
+      modelId: cached?.modelId ?? RemoteQMTBroker.remarkProvenance(r.order_remark, "model_id"),
+      runId: cached?.runId ?? RemoteQMTBroker.remarkProvenance(r.order_remark, "run_id"),
+      signalId: cached?.signalId ?? RemoteQMTBroker.remarkProvenance(r.order_remark, "signal_id"),
+      strategyVersion: cached?.strategyVersion ?? RemoteQMTBroker.remarkProvenance(r.order_remark, "strategy_version"),
+      dataTimestamp: cached?.dataTimestamp,
       brokerType: "qmt",
-      createdAt: now,
+      createdAt: cached?.createdAt ?? (r.order_time as string) ?? now,
       updatedAt: now,
     };
   }

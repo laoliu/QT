@@ -599,6 +599,7 @@ export class QMTBroker implements IBrokerAdapter {
 
   private mapRawOrder(r: RawOrder, localId?: string): Order {
     const now = nowCSTISO();
+    localId ??= this.findLocalOrderId(r.order_id);
     const cached = localId ? this.orderCache.get(localId) : undefined;
     const sym = fromQmtSymbol(r.stock_code);
     const side = mapQmtSide(r.order_type);
@@ -608,6 +609,7 @@ export class QMTBroker implements IBrokerAdapter {
     const market = isOptionSide ? detectOptionMarketFromQmt(sym) : "cn_stock";
     return {
       orderId: localId ?? r.order_id,
+      clientOrderId: cached?.clientOrderId,
       brokerOrderId: r.order_id,
       symbol: sym,
       market,
@@ -618,15 +620,15 @@ export class QMTBroker implements IBrokerAdapter {
       filledQty: r.traded_volume,
       avgFillPrice: r.traded_price || undefined,
       status: mapQmtStatus(r.order_status),
-      strategyId: r.strategy_name || undefined,
+      strategyId: r.strategy_name || cached?.strategyId,
       modelId: cached?.modelId ?? QMTBroker.remarkProvenance(r.order_remark, "model_id"),
       signalId: cached?.signalId ?? QMTBroker.remarkProvenance(r.order_remark, "signal_id"),
       runId: cached?.runId ?? QMTBroker.remarkProvenance(r.order_remark, "run_id"),
-      strategyVersion: cached?.strategyVersion,
+      strategyVersion: cached?.strategyVersion ?? QMTBroker.remarkProvenance(r.order_remark, "strategy_version"),
       dataTimestamp: cached?.dataTimestamp,
       errorMsg: r.strategy_error_msg,
       brokerType: "qmt",
-      createdAt: r.order_time ?? now,
+      createdAt: cached?.createdAt ?? r.order_time ?? now,
       updatedAt: now,
     };
   }

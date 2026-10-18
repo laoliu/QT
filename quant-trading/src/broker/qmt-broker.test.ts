@@ -369,7 +369,37 @@ describe("QMTBroker", () => {
         runId: "run-history",
         modelId: "model-history",
         signalId: "signal-history",
+        strategyVersion: "1.0.0",
       }]);
+      await broker.disconnect();
+    });
+
+    it("keeps local identity and provenance when the order list has no remark", async () => {
+      const raw = {
+        order_id: "QMT-LIST-1", stock_code: "600519.SH", order_type: 23,
+        price: 50, order_volume: 100, traded_volume: 50, traded_price: 50, order_status: 56,
+      };
+      mockCall.mockImplementation((method: string) => {
+        if (method === "place_order") return { broker_order_id: raw.order_id };
+        if (method === "query_orders") return [raw];
+        if (method === "query_order") return raw;
+        return {};
+      });
+      const broker = new QMTBroker(config);
+      await broker.connect();
+      const metadata = {
+        clientOrderId: "client-list-1", strategyId: "aipha-ml-ranking", modelId: "model-list-1",
+        runId: "run-list-1", signalId: "signal-list-1", strategyVersion: "1.0.0",
+        dataTimestamp: "2026-01-05T09:30:00+08:00",
+      };
+      const placed = await broker.placeOrder({
+        symbol: "600519", market: "cn_stock", side: "buy", orderType: "limit",
+        price: 50, quantity: 100, ...metadata,
+      });
+      const expected = { ...metadata, orderId: placed.orderId, createdAt: placed.createdAt,
+        brokerOrderId: raw.order_id, filledQty: 50, status: "partial" };
+      await expect(broker.queryOrders()).resolves.toMatchObject([expected]);
+      await expect(broker.queryOrder(placed.orderId)).resolves.toMatchObject(expected);
       await broker.disconnect();
     });
 

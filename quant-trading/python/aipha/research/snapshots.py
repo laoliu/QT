@@ -23,12 +23,13 @@ import numpy as np
 # here rather than in a caller so that every TuShare snapshot writer uses the
 # same attestation format.
 SNAPSHOT_SCHEMA_VERSION = 1
-SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/1"
+SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/2"
 SNAPSHOT_SIGNING_KEY_ENV = "AIPHA_PIT_SNAPSHOT_KEY"
 _SIGNED_SOURCE_FIELDS = (
     "provider", "data_snapshot_id", "feature_version", "start_date", "end_date",
     "index_code", "benchmark_code", "adjust", "snapshot_schema_version",
     "generator_version", "snapshot_content_sha256", "row_count", "column_count",
+    "listing_calendar",
 )
 
 
@@ -265,6 +266,7 @@ def assemble_tushare_snapshot(
     financial_snapshots: pd.DataFrame | None = None,
     industry_history: pd.DataFrame | None = None,
     dividend_history: pd.DataFrame | None = None,
+    trade_calendar: pd.DataFrame | None = None,
     spec: SnapshotSpec,
 ) -> TushareSnapshot:
     """Normalize provider outputs into the pipeline's Market/Feature panel.
@@ -293,9 +295,14 @@ def assemble_tushare_snapshot(
     out = market.copy()
     out["trade_date"] = pd.to_datetime(out["trade_date"]).dt.strftime("%Y%m%d")
     out = out.merge(stock_basic[["ts_code", "list_date"]], on="ts_code", how="left", validate="many_to_one")
-    out["listing_days"] = (
-        pd.to_datetime(out["trade_date"]) - pd.to_datetime(out["list_date"], format="%Y%m%d", errors="coerce")
-    ).dt.days
+    from aipha.universe.historical import LISTING_DAYS_BASIS, listing_session_counts, normalize_trade_calendar
+
+    out["listing_days"] = listing_session_counts(out["trade_date"], out["list_date"], trade_calendar)
+    out["listing_days_basis"] = LISTING_DAYS_BASIS
+    listing_calendar = normalize_trade_calendar(
+        trade_calendar, pd.to_datetime(out["list_date"].astype(str)).min(),
+        pd.to_datetime(out["trade_date"].astype(str)).max(),
+    )[["cal_date", "is_open"]]
     status = st_status[["trade_date", "ts_code", "is_st"]].copy()
     status["trade_date"] = pd.to_datetime(status["trade_date"]).dt.strftime("%Y%m%d")
     out = out.merge(status, on=["trade_date", "ts_code"], how="left", validate="one_to_one")
@@ -355,6 +362,14 @@ def assemble_tushare_snapshot(
         "index_code": spec.index_code,
         "benchmark_code": spec.benchmark_code,
         "adjust": spec.adjust,
+        "listing_calendar": {
+            "provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+            "start_date": listing_calendar.cal_date.min().date().isoformat(),
+            "end_date": listing_calendar.cal_date.max().date().isoformat(),
+            "content_sha256": frame_content_sha256(listing_calendar),
+            "listing_days_basis": LISTING_DAYS_BASIS,
+            "count_includes_listing_session": True,
+        },
     }
     metadata = attest_snapshot_metadata(panel, metadata)
     panel.attrs["snapshot_metadata"] = metadata
@@ -566,6 +581,14 @@ def build_tushare_snapshot(
     market = equity_provider.load_daily_bars_range(spec.start_date, spec.end_date, use_cache=use_cache)
     basic = equity_provider.load_daily_basic_range(spec.start_date, spec.end_date, use_cache=use_cache)
     stock = equity_provider.load_stock_basic(use_cache=use_cache)
+    calendar_loader = getattr(equity_provider, "load_trade_calendar", None)
+    if not callable(calendar_loader):
+        raise ValueError("TuShare equity provider must implement load_trade_calendar")
+    listings = stock.set_index("ts_code")["list_date"].reindex(market["ts_code"].unique())
+    if listings.isna().any() or listings.empty:
+        raise ValueError("listing dates are required for every market symbol")
+    first_listing = pd.to_datetime(listings.astype(str), errors="raise").min().strftime("%Y%m%d")
+    trade_calendar = calendar_loader(first_listing, spec.end_date, use_cache=use_cache)
     factors = equity_provider.load_adj_factor_bulk(spec.start_date, spec.end_date, use_cache=use_cache)
     market = market.merge(factors[["ts_code", "trade_date", "adj_factor"]], on=["ts_code", "trade_date"], how="left", validate="one_to_one")
     if limit_prices is None:
@@ -609,6 +632,7 @@ def build_tushare_snapshot(
         limit_prices=limit_prices, financial_snapshots=financial_snapshots,
         industry_history=industry_history, spec=spec,
         dividend_history=dividend_history,
+        trade_calendar=trade_calendar,
     )
 
 

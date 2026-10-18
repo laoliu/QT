@@ -285,6 +285,10 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     market = pd.DataFrame(market_rows)
 
     class EquityFixture:
+        def load_trade_calendar(self, start_date, end_date, **kwargs):
+            days = pd.date_range(start_date, end_date)
+            return pd.DataFrame({"cal_date": days, "is_open": days.dayofweek < 5})
+
         def load_daily_bars_range(self, *args, **kwargs):
             return market.copy()
 

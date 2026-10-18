@@ -33,6 +33,17 @@ Parquet inputs require a sibling metadata file named
 The panel must include daily OHLCV, `is_index_member`, `is_st`,
 `is_suspended`, and `listing_days`; membership and status fields must be
 point-in-time values.
+`listing_days` counts exchange open sessions from the listing session through
+the signal close, inclusive. It must carry `listing_days_basis=exchange_open_sessions`;
+snapshots using natural days or an undeclared basis must be rebuilt. The v2
+TuShare builder requests a complete SSE `trade_cal` history from the earliest
+issuer listing through the snapshot end, retaining closed dates to detect
+coverage gaps. It never estimates age from weekdays or the truncated market
+tape. Its signed metadata records the calendar range and content hash.
+`universe.min_listing_days` (integer, at least 252) applies to training,
+feature-missingness reporting and prediction; canonical Paper scorers accept
+the same `min_listing_days` parameter. Existing snapshots are preserved; the
+old v1 builder's age semantics cannot be silently reused for canonical runs.
 Financial features must already have been joined by announcement date. The
 `visible_financial_snapshots` helper provides the same announce-date cutoff for
 long-form financial snapshots. A sidecar with another provider, mismatched

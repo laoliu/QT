@@ -291,6 +291,38 @@ class TuShareEquityProvider:
         return df
 
     # ------------------------------------------------------------------
+    # TuShare exchange calendar — no weekday fallback for historical research
+    # ------------------------------------------------------------------
+
+    def load_trade_calendar(self, start_date: str, end_date: str, *, use_cache: bool = True) -> pd.DataFrame:
+        """Load SSE open/closed dates in bounded annual chunks, failing on gaps."""
+        from aipha.universe.historical import normalize_trade_calendar
+
+        start, end = pd.Timestamp(start_date), pd.Timestamp(end_date)
+        if pd.isna(start) or pd.isna(end) or start > end:
+            raise ValueError("invalid trade calendar range")
+        chunks = []
+        for year in range(start.year, end.year + 1):
+            first = max(start, pd.Timestamp(year=year, month=1, day=1)).strftime("%Y%m%d")
+            last = min(end, pd.Timestamp(year=year, month=12, day=31)).strftime("%Y%m%d")
+            path = self.cache_dir / f"trade_cal_SSE_{first}_{last}.parquet"
+            cached = self._safe_read_parquet(path) if use_cache and path.exists() else None
+            if cached is not None:
+                try:
+                    chunk = normalize_trade_calendar(cached, first, last)
+                except ValueError:
+                    cached = None
+            if cached is None:
+                result = self._retry_call(
+                    self.api.trade_cal, exchange="SSE", start_date=first, end_date=last,
+                    fields="exchange,cal_date,is_open",
+                )
+                chunk = normalize_trade_calendar(result, first, last)
+                self._atomic_write_parquet(chunk, path)
+            chunks.append(chunk)
+        return normalize_trade_calendar(pd.concat(chunks, ignore_index=True), start, end)
+
+    # ------------------------------------------------------------------
     # daily_basic — 每日指标（市值/PE/PB/换手率）
     # ------------------------------------------------------------------
 

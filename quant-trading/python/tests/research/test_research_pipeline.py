@@ -65,6 +65,7 @@ def _panel(n_days: int = 360, n_symbols: int = 8) -> pd.DataFrame:
                 "is_index_member": True,
                 "is_st": False,
                 "listing_days": 1000,
+                "listing_days_basis": "exchange_open_sessions",
                 "feature_version": "cn_equity_v1",
                 "momentum_signal": signal,
                 "momentum_20": signal,
@@ -291,6 +292,10 @@ def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -
         index_snapshots={"20240101": ["600000.SH"], "20240103": ["600001.SH"]},
         st_status=status, limit_prices=limits, financial_snapshots=facts,
         industry_history=industries,
+        trade_calendar=pd.DataFrame({
+            "cal_date": pd.date_range("2020-01-01", "2024-01-03"),
+            "is_open": pd.date_range("2020-01-01", "2024-01-03").dayofweek < 5,
+        }),
         spec=SnapshotSpec("20240102", "20240103"),
     )
     panel = snapshot.panel.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
@@ -304,6 +309,17 @@ def test_tushare_snapshot_uses_historical_membership_pit_and_same_day_factor() -
     assert panel.loc[0, "industry"] == "农林牧渔"
     assert panel.loc[2, "industry"] == "采掘"
     assert snapshot.metadata["provider"] == "tushare_pit"
+    assert snapshot.metadata["listing_calendar"]["start_date"] == "2020-01-01"
+    assert snapshot.metadata["listing_calendar"]["listing_days_basis"] == "exchange_open_sessions"
+    assert panel.listing_days_basis.eq("exchange_open_sessions").all()
+    assert panel.loc[0, "listing_days"] == len(pd.bdate_range("2020-01-01", "2024-01-02"))
+    from copy import deepcopy
+    from aipha.research.snapshots import verify_snapshot_signature
+
+    tampered = deepcopy(snapshot.metadata)
+    tampered["listing_calendar"]["content_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="signature"):
+        verify_snapshot_signature(tampered)
 
 
 def test_historical_industry_rejects_overlapping_classifications() -> None:
@@ -389,6 +405,9 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
     ])
 
     class EquityProvider:
+        def load_trade_calendar(self, start_date, end_date, **kwargs):
+            days = pd.date_range(start_date, end_date)
+            return pd.DataFrame({"cal_date": days, "is_open": days.dayofweek < 5})
         def load_daily_bars_range(self, *args, **kwargs): return market.copy()
         def load_daily_basic_range(self, *args, **kwargs): return pd.DataFrame()
         def load_stock_basic(self, **kwargs):

@@ -782,6 +782,7 @@ def _load_ml_cross_section(comp_cfg: dict, universe: str, trade_date: str) -> An
         return _load_canonical_ml_cross_section(
             str(snapshot_path), universe, trade_date,
             feature_version=str(comp_cfg.get("feature_version", "cn_equity_v1")),
+            min_listing_days=comp_cfg.get("min_listing_days", 252),
         )
 
     if comp_cfg.get("legacy_ml_compat") is not True:
@@ -837,6 +838,7 @@ def _load_canonical_ml_cross_section(
     trade_date: str,
     *,
     feature_version: str,
+    min_listing_days: int = 252,
 ) -> Any:
     """Read one date from an attested canonical PIT feature snapshot.
 
@@ -898,11 +900,9 @@ def _load_canonical_ml_cross_section(
         raise RuntimeError(f"canonical feature snapshot has no rows for {trade_date}")
     # The snapshot is normally already scoped to its configured index.  The
     # row-level check makes this true even when a combined snapshot is used.
-    cross = cross[cross["is_index_member"].astype(bool)]
-    cross = cross[~cross["is_st"].astype(bool)]
-    cross = cross[cross["listing_days"] >= 252]
-    if "is_suspended" in cross:
-        cross = cross[~cross["is_suspended"].astype(bool)]
+    from aipha.universe.historical import filter_historical_universe
+
+    cross = filter_historical_universe(cross, min_listing_days=min_listing_days)
     cross.attrs["feature_version"] = feature_version
     cross.attrs["universe"] = universe
     cross.attrs["canonical_pit"] = True

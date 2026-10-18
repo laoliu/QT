@@ -168,8 +168,9 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         raise ValueError("research config execution.mode must be paper")
     if universe.get("exclude_st", True) is not True or universe.get("exclude_suspended", True) is not True:
         raise ValueError("canonical A-share universe must exclude ST and suspended stocks")
-    if int(universe.get("min_listing_days", 252)) < 252:
-        raise ValueError("min_listing_days must be at least 252")
+    from aipha.universe.historical import validate_listing_threshold
+
+    min_listing_days = validate_listing_threshold(universe.get("min_listing_days", 252))
     label_type = label.get("type", "forward_return_rank")
     if label_type != "forward_return_rank":
         raise ValueError("canonical pipeline currently requires label.type=forward_return_rank")
@@ -182,6 +183,7 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         adjust=data.get("adjust", "point_in_time"),
         feature_version=features.get("version", "cn_equity_v1"),
         universe=universe.get("base_index", "CSI500").lower().replace("csi", "csi"),
+        min_listing_days=min_listing_days,
         rebalance=portfolio.get("rebalance", "monthly"),
         train_years=int(model.get("train_years", 3)),
         test_months=int(model.get("test_months", 1)),

@@ -784,6 +784,7 @@ class TestMLScorer:
             "is_index_member": [True, True, False, True],
             "is_st": [False, False, True, False],
             "listing_days": [400, 400, 400, 100],
+            "listing_days_basis": ["exchange_open_sessions"] * 4,
             "price_adjustment": ["point_in_time_factor"] * 4,
             "feature_version": ["cn_equity_v1"] * 4,
             "f1": [1.0, 2.0, 3.0, 4.0],
@@ -802,6 +803,19 @@ class TestMLScorer:
         )
         assert result["symbol"].tolist() == ["A"]
         assert result.attrs["canonical_pit"] is True
+        assert scorers._load_canonical_ml_cross_section(
+            str(path), "csi500", "20250106", feature_version="cn_equity_v1", min_listing_days=401,
+        ).empty
+        frame["listing_days_basis"] = "calendar_days"
+        write_attested_parquet(frame, path, {
+            "provider": "tushare_pit", "feature_version": "cn_equity_v1",
+            "data_snapshot_id": "legacy-age", "start_date": "2025-01-06",
+            "end_date": "2025-01-06", "index_code": "000905.SH",
+        })
+        with pytest.raises(ValueError, match="rebuild legacy snapshots"):
+            scorers._load_canonical_ml_cross_section(
+                str(path), "csi500", "20250106", feature_version="cn_equity_v1",
+            )
 
 
 class TestV2Ensemble:

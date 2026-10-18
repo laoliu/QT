@@ -31,6 +31,7 @@ class ResearchConfig:
     adjust: str = "point_in_time"
     feature_version: str = "cn_equity_v1"
     universe: str = "csi500"
+    min_listing_days: int = 252
     rebalance: str = "monthly"
     train_years: int = 3
     test_months: int = 1
@@ -55,6 +56,9 @@ class ResearchConfig:
     )
 
     def __post_init__(self) -> None:
+        from aipha.universe.historical import validate_listing_threshold
+
+        validate_listing_threshold(self.min_listing_days)
         if self.model_type not in {"lightgbm", "elasticnet"}:
             raise ValueError("canonical research pipeline supports model_type=lightgbm or elasticnet")
         if self.adjust != "point_in_time":
@@ -278,7 +282,7 @@ class ResearchPipeline:
         # Form labels on the complete market tape before checking eligibility
         # at the signal date. Removing a later ST/suspended/non-member row
         # first would silently move its earlier signal's entry/exit forward.
-        labelled = _filter_historical_universe(labelled)
+        labelled = _filter_historical_universe(labelled, min_listing_days=self.config.min_listing_days)
         if "fwd_return" in labelled:
             labelled["fwd_return_rank"] = labelled.groupby("datetime")["fwd_return"].rank(
                 method="average", pct=True,
@@ -343,7 +347,7 @@ class ResearchPipeline:
         input_start = pd.Timestamp(source["trade_date"].min()).date().isoformat()
         input_end = pd.Timestamp(source["trade_date"].max()).date().isoformat()
         source["datetime"] = pd.to_datetime(source["trade_date"])
-        if _filter_historical_universe(source).empty:
+        if _filter_historical_universe(source, min_listing_days=self.config.min_listing_days).empty:
             raise ValueError("historical universe filter removed all rows")
         # Preserve only explicitly versioned inputs when the caller supplies it.
         if "feature_version" in source:
@@ -397,7 +401,10 @@ class ResearchPipeline:
         from .backtest import run_portfolio_backtest
 
         backtest = run_portfolio_backtest(source, oos, targets, self.config)
-        feature_coverage = feature_missing_rates(_filter_historical_universe(source), selector.config.feature_cols)
+        feature_coverage = feature_missing_rates(
+            _filter_historical_universe(source, min_listing_days=self.config.min_listing_days),
+            selector.config.feature_cols,
+        )
         folds = wf_summary.get("folds", [])
         if not folds or any(not row.get("train_start") or not row.get("train_end") for row in folds):
             raise ValueError("walk-forward training must report actual training dates for every fold")
@@ -910,28 +917,10 @@ def _pbo_proxy(wf_summary: dict[str, Any]) -> float:
     return float(failures / len(comparable))
 
 
-def _filter_historical_universe(frame: pd.DataFrame) -> pd.DataFrame:
-    required = {"is_index_member", "is_st", "listing_days", "is_suspended"}
-    missing = required - set(frame.columns)
-    if missing:
-        raise ValueError(
-            "historical point-in-time universe fields required: " + ", ".join(sorted(missing))
-        )
-    out = frame.copy()
-    if out[list(required)].isna().any().any():
-        raise ValueError("historical universe fields cannot be missing")
-    def as_bool(series: pd.Series) -> pd.Series:
-        if pd.api.types.is_bool_dtype(series):
-            return series
-        return series.astype(str).str.strip().str.lower().isin({"1", "true", "yes", "y"})
+def _filter_historical_universe(frame: pd.DataFrame, *, min_listing_days: int = 252) -> pd.DataFrame:
+    from aipha.universe.historical import filter_historical_universe
 
-    eligible = (
-        as_bool(out["is_index_member"])
-        & ~as_bool(out["is_st"])
-        & (pd.to_numeric(out["listing_days"], errors="coerce") >= 252)
-        & ~out["is_suspended"].astype(bool)
-    )
-    return out.loc[eligible].reset_index(drop=True)
+    return filter_historical_universe(frame, min_listing_days=min_listing_days)
 
 
 def _write_model_manifest(

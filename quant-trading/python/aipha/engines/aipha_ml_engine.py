@@ -133,6 +133,9 @@ def run(config: dict) -> dict:
             cfg = _load_config(config.get("configPath"))
             feature_path = config.get("featurePath") or config.get("dataPath")
             frame = _read_parquet(feature_path)
+            from aipha.universe.historical import filter_historical_universe
+
+            frame = filter_historical_universe(frame, min_listing_days=cfg.min_listing_days)
             if "datetime" not in frame and "trade_date" in frame:
                 frame["datetime"] = frame["trade_date"]
             model_path = config.get("modelPath")
@@ -145,7 +148,7 @@ def run(config: dict) -> dict:
                 expected_model_type="elasticnet" if str(config.get("modelType", "lgbm")).lower() == "linear" else "lightgbm",
             )
             frame = frame.copy()
-            frame["score"] = selector.predict(frame).to_numpy()
+            frame["score"] = selector.predict(frame).to_numpy() if len(frame) else []
             frame["trade_date"] = frame["datetime"]
             frame["rank"] = frame.groupby("trade_date")["score"].rank(
                 ascending=False, method="first",

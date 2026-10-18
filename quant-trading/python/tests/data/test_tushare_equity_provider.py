@@ -113,6 +113,48 @@ class TestResearchDividendHistory:
         assert refreshed.iloc[0]["pay_date"] == "20240207"
 
 
+class TestResearchTradeCalendar:
+    @staticmethod
+    def calendar(start, end):
+        dates = pd.date_range(start, end)
+        return pd.DataFrame({"exchange": "SSE", "cal_date": dates.strftime("%Y%m%d"),
+                             "is_open": ((dates.dayofweek < 5) & (dates != pd.Timestamp("2024-01-01"))).astype(int)})
+
+    def test_annual_download_preserves_closures_and_reuses_cache(self, provider):
+        def fetch(**kwargs):
+            assert kwargs["exchange"] == "SSE" and "is_open" not in kwargs
+            return self.calendar(kwargs["start_date"], kwargs["end_date"])
+        provider.api.trade_cal.side_effect = fetch
+        result = provider.load_trade_calendar("20231229", "20240103", use_cache=False)
+        assert provider.api.trade_cal.call_count == 2
+        assert len(result) == 6 and result.is_open.tolist() == [1, 0, 0, 0, 1, 1]
+        cached = provider.load_trade_calendar("20231229", "20240103")
+        pd.testing.assert_frame_equal(result, cached)
+        assert provider.api.trade_cal.call_count == 2
+
+    @pytest.mark.parametrize("bad", ["empty", "truncated", "missing_closed"])
+    def test_calendar_does_not_cache_incomplete_endpoint_result(self, provider, bad):
+        result = self.calendar("20240101", "20240103")
+        if bad == "empty":
+            result = pd.DataFrame()
+        elif bad == "truncated":
+            result = result.iloc[:-1]
+        else:
+            result = result[result.is_open.eq(1)]
+        provider.api.trade_cal.return_value = result
+        with pytest.raises(ValueError, match="trade calendar"):
+            provider.load_trade_calendar("20240101", "20240103")
+        assert not list(provider.cache_dir.glob("trade_cal_*.parquet"))
+
+    def test_incomplete_cache_is_refetched(self, provider):
+        path = provider.cache_dir / "trade_cal_SSE_20240101_20240103.parquet"
+        self.calendar("20240102", "20240103").to_parquet(path)
+        provider.api.trade_cal.return_value = self.calendar("20240101", "20240103")
+        result = provider.load_trade_calendar("20240101", "20240103")
+        assert len(result) == 3
+        provider.api.trade_cal.assert_called_once()
+
+
 class TestLoadStockBasic:
     def test_no_cache(self, provider):
         df_l = pd.DataFrame({"ts_code": ["000001.SZ"], "name": ["平安"], "industry": ["银行"]})

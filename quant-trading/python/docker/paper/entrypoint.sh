@@ -28,6 +28,7 @@ ENV_KEYS=(
   TZ
   AIPHA_PROJECT_ROOT
   TUSHARE_TOKEN
+  AIPHA_PIT_SNAPSHOT_KEY
   AKSHARE_TOKEN
   FEISHU_WEBHOOK_URL
   FEISHU_CHAT_ID
@@ -48,7 +49,7 @@ for key in "${ENV_KEYS[@]}"; do
       continue
     fi
     printf '%s="%s"\n' "${key}" "${value}" >> /etc/environment
-    if [[ "${key}" == *TOKEN* || "${key}" == *SECRET* || "${key}" == *WEBHOOK* ]]; then
+    if [[ "${key}" == *TOKEN* || "${key}" == *SECRET* || "${key}" == *WEBHOOK* || "${key}" == *KEY* ]]; then
       log "  ${key}=<已设置，长度 ${#value}>"   # 凭据不进日志
     else
       log "  ${key}=${value}"
@@ -57,7 +58,7 @@ for key in "${ENV_KEYS[@]}"; do
     log "  ${key}=<未设置>"
   fi
 done
-chmod 644 /etc/environment
+chmod 600 /etc/environment
 
 # ---------------------------------------------------------------------------
 # 2. 准备日志目录

@@ -39,6 +39,8 @@ services:
       - PYTHONUNBUFFERED=1
       - AIPHA_PROJECT_ROOT=/app
       - TUSHARE_TOKEN=${TUSHARE_TOKEN:-}
+      # Same deployment key used to sign the canonical PIT snapshots.
+      - AIPHA_PIT_SNAPSHOT_KEY=${AIPHA_PIT_SNAPSHOT_KEY:-}
       - AKSHARE_TOKEN=${AKSHARE_TOKEN:-}
       - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL:-}
       - FEISHU_CHAT_ID=${FEISHU_CHAT_ID:-}
@@ -65,7 +67,8 @@ services:
       - type: bind
         source: ../data
         target: /app/data
-      # 模拟盘账本单独再挂一条：它是唯一**必须**持久化且可写的目录。
+      # The data bind also persists canonical books at data/research/paper.
+      # 历史模拟盘账本继续单独挂载，保留旧部署的持久化目录约定。
       # 显式写出来，是为了让「有人把 ../data 改成 read_only」这类事故在
       # 启动时就暴露，而不是等到某天状态写不进去、重启后按纯现金重算 NAV。
       - type: bind

@@ -28,6 +28,8 @@ MAILTO=""
 # paper_launcher.py 自己会先检查 Kill Switch / paper_trading_enabled /
 # paper_auto_start 三道闸门；当前 configs/paper/system_settings.json 里
 # paper_auto_start=false，所以这条记录在设置改动之前**不会启动任何组合**。
+# Default preview. Committing requires an operator to add --execute in addition
+# to enabling the existing Paper gates; the launcher never changes those gates.
 30 15 * * 1-5 timeout 7200 python /app/scripts/paper_launcher.py >> /app/logs/cron/paper_launcher.log 2>&1
 
 # ── 盘后 16:10（周一至周五）：因子衰减 / 特征漂移 / 合规撤单率监控 ──

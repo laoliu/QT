@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """模拟盘批量启动器（Docker cron 每交易日盘后调用）
 
-``aipha/runner/paper_engine_eod.py`` 是**单个**组合的引擎入口
-（``python -m aipha.runner.paper_engine_eod --config configs/paper/x.yml``）。
+规范 ``research_paper`` profile 调用版本化快照/计划的连续 SQLite 账本；
+历史组合仍由 ``aipha.runner.paper_engine_eod`` 兼容执行。
 容器里每天要跑一批组合，跑哪些由 ``configs/paper/system_settings.json``
 决定 —— 这个启动器就是「读设置 → 逐个拉起引擎 → 汇总退出码」这一层，
 不含任何交易逻辑。
@@ -23,8 +23,8 @@
 ``selected_portfolios`` 非空时用它，否则用 ``daily_batch_portfolios``
 （后者是 EOD 日频批处理的活跃清单，与 ``paper_config_auditor`` /
 ``paper_backtest_reconciliation`` 同口径），再减去
-``disabled_portfolios``。找不到对应 YAML 的名字跳过并告警，
-不去猜文件名。
+``disabled_portfolios``。缺失或无效 YAML 按失败报告，不猜文件名。
+默认预演，加 ``--execute`` 才提交；所有安全闸门仍然有效。
 
 ## 为什么串行 + 超时
 
@@ -38,7 +38,8 @@
 用法::
 
     python scripts/paper_launcher.py --list        # 只打印计划，不启动
-    python scripts/paper_launcher.py --dry-run     # 引擎只更新 NAV 不调仓
+    python scripts/paper_launcher.py --dry-run     # 规范账本不落盘；旧引擎只更新 NAV
+    python scripts/paper_launcher.py --execute     # 显式提交每日 Paper 运行
     python scripts/paper_launcher.py --force       # 忽略 paper_auto_start
 """
 
@@ -49,16 +50,20 @@ import json
 import logging
 import subprocess
 import sys
-from datetime import datetime
+import re
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 # cron 环境里 PYTHONPATH 可能是空的，见 scripts/ops/daily_ops.py 的说明。
 # 层数：scripts/paper_launcher.py → scripts → <项目根>。
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from aipha.utils.paths import CONFIGS_DIR, KILL_SWITCH_PATH  # noqa: E402
+from aipha.utils.paths import CONFIGS_DIR, KILL_SWITCH_PATH, PROJECT_ROOT  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -93,11 +98,19 @@ def load_settings(path: str | Path = SETTINGS_PATH) -> dict[str, Any] | None:
 
 def resolve_portfolios(settings: dict[str, Any]) -> list[str]:
     """按设置解析出今天要跑的组合名列表（已剔除禁用项）。"""
-    selected = list(settings.get("selected_portfolios") or [])
-    batch = list(settings.get("daily_batch_portfolios") or [])
+    selected = settings.get("selected_portfolios") or []
+    batch = settings.get("daily_batch_portfolios") or []
+    for value in (selected, batch):
+        if not isinstance(value, list) or any(
+            not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) is None
+            for name in value
+        ):
+            raise ValueError("portfolio selections must be lists of simple profile names")
     names = selected or batch
 
     disabled = settings.get("disabled_portfolios") or {}
+    if not isinstance(disabled, (dict, list)):
+        raise ValueError("disabled_portfolios must be a mapping or list")
     # disabled_portfolios 现在是 {名字: 原因} 的 dict，历史上是 list，
     # 两种都要能读 —— `in` 对 dict 判的是键，正好通用。
     result: list[str] = []
@@ -108,12 +121,15 @@ def resolve_portfolios(settings: dict[str, Any]) -> list[str]:
             )
             logger.warning("跳过 %s（已禁用: %s）", name, reason)
             continue
-        result.append(name)
+        if name not in result:
+            result.append(name)
     return result
 
 
 def config_path_for(name: str) -> Path | None:
     """组合名 → YAML 路径；文件不存在返回 None。"""
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name) is None:
+        raise ValueError("invalid portfolio profile name")
     for suffix in (".yml", ".yaml"):
         p = PAPER_CONFIG_DIR / f"{name}{suffix}"
         if p.is_file():
@@ -125,9 +141,9 @@ def check_gates(settings: dict[str, Any], force: bool = False) -> str | None:
     """检查三道闸门。返回拒绝原因；全部通过返回 None。"""
     if KILL_SWITCH_PATH.exists():
         return f"Kill Switch 已激活: {KILL_SWITCH_PATH}"
-    if not settings.get("paper_trading_enabled", False):
+    if settings.get("paper_trading_enabled") is not True:
         return "paper_trading_enabled=false"
-    if not settings.get("paper_auto_start", False) and not force:
+    if settings.get("paper_auto_start") is not True and not force:
         return (
             "paper_auto_start=false（安全默认）；"
             "确认要自动启动请改设置或加 --force"
@@ -135,21 +151,91 @@ def check_gates(settings: dict[str, Any], force: bool = False) -> str | None:
     return None
 
 
+def _profile_path(value: Any, *, signal_date: date | None = None) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("profile paths must be nonempty strings")
+    text = value.strip()
+    if signal_date is not None:
+        text = text.replace("{date}", signal_date.isoformat()).replace("{trade_date}", signal_date.strftime("%Y%m%d"))
+    if "{" in text or "}" in text:
+        raise ValueError("only snapshot/plan paths support {date} and {trade_date} templates")
+    path = Path(text).expanduser()
+    return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
+
+
+def prepare_launch(config: Path, *, dry_run: bool = True, trade_date: str | None = None) -> dict[str, Any]:
+    """Resolve one deployment without reading models, writing books or sending orders."""
+    raw = yaml.safe_load(config.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Paper profile must be a YAML mapping")
+    if "research_paper" not in raw:
+        if any(key in raw for key in ("features", "label", "model")):
+            raise ValueError("research YAML is not a launch profile; declare research_paper paths")
+        if trade_date is not None:
+            raise ValueError("--date applies only to research_paper profiles; legacy EOD cannot replay a selected date")
+        cmd = [sys.executable, "-m", ENGINE_MODULE, "--config", str(config.resolve())]
+        if dry_run:
+            cmd.append("--dry-run")
+        return {"command": cmd, "engine": "legacy_eod", "book_path": None}
+    if set(raw) - {"research_paper", "profile_name", "description"}:
+        raise ValueError("research_paper profile cannot mix legacy engine/strategy settings")
+    profile = raw["research_paper"]
+    known = {"schema_version", "research_config", "snapshot_path", "book_path", "plan_path", "plan_dir"}
+    if not isinstance(profile, dict) or set(profile) - known:
+        raise ValueError("invalid research_paper profile fields")
+    if type(profile.get("schema_version")) is not int or profile["schema_version"] != 1:
+        raise ValueError("research_paper schema_version=1 required")
+    if "plan_path" in profile and "plan_dir" in profile:
+        raise ValueError("declare plan_path or plan_dir, not both")
+    signal_date = date.fromisoformat(trade_date) if trade_date else datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    research = _profile_path(profile.get("research_config"))
+    snapshot = _profile_path(profile.get("snapshot_path"), signal_date=signal_date)
+    book = _profile_path(profile.get("book_path"))
+    if not research.is_file() or not snapshot.is_file():
+        raise FileNotFoundError(f"research config and signed snapshot must exist: {research}, {snapshot}")
+    if snapshot.suffix.lower() != ".parquet" or book.suffix.lower() != ".sqlite3":
+        raise ValueError("research_paper requires a Parquet snapshot and a .sqlite3 book")
+    from aipha.research.config import load_research_config
+
+    load_research_config(research)  # Enforces TuShare PIT, monthly, paper policy.
+    cmd = [sys.executable, str(_PROJECT_ROOT / "scripts/ops/v2_ml_paper_daily.py"),
+           "--research-config", str(research), "--panel", str(snapshot),
+           "--book-path", str(book), "--date", signal_date.isoformat(), "--json"]
+    plan = None
+    if "plan_path" in profile:
+        plan = _profile_path(profile["plan_path"], signal_date=signal_date)
+        if not plan.is_file():
+            raise FileNotFoundError(f"explicit Paper plan not found: {plan}")
+    elif "plan_dir" in profile:
+        directory = _profile_path(profile["plan_dir"])
+        if not directory.is_dir():
+            raise FileNotFoundError(f"Paper plan directory not found: {directory}")
+        dated = directory / f"{signal_date.isoformat()}.json"
+        if (dated.exists() or dated.is_symlink()) and not dated.is_file():
+            raise ValueError(f"dated Paper plan is not a file: {dated}")
+        if dated.is_file():
+            plan = dated
+    if plan is not None:
+        cmd.extend(["--plan-path", str(plan)])
+    if not dry_run:
+        cmd.append("--execute")
+    return {"command": cmd, "engine": "research_paper", "book_path": str(book)}
+
+
 def launch_one(
     config: Path,
-    dry_run: bool = False,
+    dry_run: bool = True,
     timeout: int = DEFAULT_PER_TIMEOUT,
+    *,
+    trade_date: str | None = None,
+    prepared: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """拉起单个组合的 EOD 引擎，返回结果记录。"""
-    cmd = [
-        sys.executable, "-m", ENGINE_MODULE, "--config", str(config),
-    ]
-    if dry_run:
-        cmd.append("--dry-run")
-
-    logger.info("启动: %s", " ".join(cmd))
     started = datetime.now()
     try:
+        spec = prepared or prepare_launch(config, dry_run=dry_run, trade_date=trade_date)
+        cmd = spec["command"]
+        logger.info("启动: %s", " ".join(cmd))
         proc = subprocess.run(  # noqa: S603 - 命令由本地配置拼出
             cmd,
             cwd=str(_PROJECT_ROOT),
@@ -162,7 +248,7 @@ def launch_one(
         returncode = -1
         message = f"超时 {timeout}s，已终止"
         logger.error("%s: %s", config.stem, message)
-    except OSError as exc:
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         returncode = -1
         message = f"启动失败: {exc}"
         logger.error("%s: %s", config.stem, message)
@@ -184,9 +270,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--settings", default=str(SETTINGS_PATH), help="system_settings.json 路径",
     )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="引擎只更新 NAV 不调仓",
-    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="默认：规范账本不落盘；旧引擎只更新 NAV")
+    mode.add_argument("--execute", action="store_true", help="显式提交 Paper 运行，仍需通过全部安全闸门")
+    parser.add_argument("--date", type=lambda value: date.fromisoformat(value).isoformat(),
+                        help="仅规范 profile：信号日期 YYYY-MM-DD；默认上海本日，不回退旧快照")
     parser.add_argument(
         "--force", action="store_true",
         help="忽略 paper_auto_start=false（Kill Switch 仍然生效）",
@@ -208,12 +296,20 @@ def main(argv: list[str] | None = None) -> int:
     if settings is None:
         return 1
 
-    names = resolve_portfolios(settings)
+    if args.per_timeout <= 0:
+        parser.error("--per-timeout must be positive")
+    try:
+        names = resolve_portfolios(settings)
+    except ValueError as exc:
+        logger.error("无效启动设置: %s", exc)
+        return 1
+    errors = []
     if args.only:
         wanted = set(args.only)
         skipped = wanted - set(names)
         for name in sorted(skipped):
             logger.warning("--only %s 不在活跃清单里，忽略", name)
+            errors.append(name)
         names = [n for n in names if n in wanted]
 
     plan: list[Path] = []
@@ -221,30 +317,59 @@ def main(argv: list[str] | None = None) -> int:
         cfg = config_path_for(name)
         if cfg is None:
             logger.error("组合 %s 没有对应的 YAML，跳过", name)
+            errors.append(name)
             continue
         plan.append(cfg)
 
-    if args.list:
-        print(f"活跃组合 {len(plan)} 个:")
-        for cfg in plan:
-            print(f"  - {cfg.stem}  ({cfg})")
-        reason = check_gates(settings, force=args.force)
-        print(f"闸门: {'通过' if reason is None else '拒绝 — ' + reason}")
-        return 0
-
     reason = check_gates(settings, force=args.force)
-    if reason is not None:
+    if reason is not None and not args.list:
         logger.warning("未启动任何组合: %s", reason)
         return 0
 
-    if not plan:
-        logger.warning("没有可启动的组合")
-        return 0
-
-    results = [
-        launch_one(cfg, dry_run=args.dry_run, timeout=args.per_timeout)
-        for cfg in plan
-    ]
+    # Prepare the full batch before starting anything. Two profiles may not
+    # accidentally advance the same cash/position book in one batch.
+    prepared = []
+    books = set()
+    for cfg in plan:
+        try:
+            spec = prepare_launch(cfg, dry_run=not args.execute, trade_date=args.date)
+            if spec["book_path"] is not None:
+                book = Path(spec["book_path"])
+                if book in books:
+                    raise ValueError(f"multiple profiles share one Paper book: {book}")
+                books.add(book)
+            prepared.append((cfg, spec))
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            logger.error("%s: %s", cfg.stem, exc)
+            errors.append(cfg.stem)
+    if args.list:
+        print(f"有效启动计划 {len(prepared)} 个:")
+        for cfg, spec in prepared:
+            print(f"  - {cfg.stem} [{spec['engine']}]: {json.dumps(spec['command'], ensure_ascii=False)}")
+        if errors:
+            print(f"无效配置: {', '.join(errors)}")
+        print(f"闸门: {'通过' if reason is None else '拒绝 — ' + reason}")
+        return 1 if errors else 0
+    if errors:
+        logger.error("启动计划无效，未启动任何组合: %s", ", ".join(errors))
+        return 1
+    results = []
+    for cfg, spec in prepared:
+        # Recheck between jobs: an operator may stop the remaining batch while
+        # a previous subprocess is still running.
+        current = load_settings(args.settings)
+        reason = check_gates(current, force=args.force) if current is not None else "settings unavailable"
+        if reason is not None:
+            logger.error("批次中止: %s", reason)
+            return 1
+        try:
+            if cfg.stem not in resolve_portfolios(current):
+                logger.error("批次中止: %s 已从活跃清单移除", cfg.stem)
+                return 1
+        except ValueError as exc:
+            logger.error("批次中止: %s", exc)
+            return 1
+        results.append(launch_one(cfg, timeout=args.per_timeout, prepared=spec))
 
     failed = [r for r in results if not r["ok"]]
     for r in results:

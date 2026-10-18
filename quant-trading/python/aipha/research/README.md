@@ -252,6 +252,43 @@ that session's attempt; fills are not silently deferred to a later price.
 The full signed market tape must retain ST, suspended and departed constituents
 for valuation and exits; the signal universe only gates new positive targets.
 
+The batch entry point `scripts/paper_launcher.py` also dispatches canonical
+books. Copy `aipha/configs/research/paper_profile.example.yaml` to a named YAML
+under `configs/paper/`, provide the research config, signed snapshot, unique
+book path and optional plan directory, and select that profile in the existing
+`system_settings.json`. This deployment file contains paths only; training,
+portfolio and cost policy stay in the single referenced research config.
+
+```powershell
+python scripts/paper_launcher.py --only research_ml --list
+python scripts/paper_launcher.py --only research_ml --force --date 2026-10-16
+python scripts/paper_launcher.py --only research_ml --force --date 2026-10-16 --execute
+```
+
+The launcher defaults to preview; only `--execute` commits. `--date` defaults
+to today's Shanghai date and is required to replay a different signal date;
+the child rejects a snapshot ending on another date. `{date}` and
+`{trade_date}` expand to ISO and compact dates in snapshot/explicit plan paths.
+`plan_dir` selects only `YYYY-MM-DD.json`; no file means valuation/pending
+fills only. A missing directory or explicitly named plan is an error.
+The launcher never trains models, searches older runs or imports legacy
+positions. Kill Switch, `paper_trading_enabled`, `paper_auto_start`, selection
+and disabled-profile settings still gate execution. `--force` overrides only
+auto-start. Settings and Kill Switch are rechecked between jobs. The full
+batch is prepared before launch; invalid profiles, missing inputs and shared
+book paths fail the batch. `--list` prints commands without starting anything.
+No default selection or auto-start setting is enabled by installing a profile.
+
+Historical YAMLs continue through the compatibility EOD engine. Their default
+launcher mode now passes `--dry-run` (the old engine may still update NAV);
+`--execute` is required for their normal Paper rebalance. They cannot consume
+`--date` as historical replay. Existing cron invocations without `--execute`
+therefore remain previews even if auto-start is later enabled.
+The Docker Paper compose/cron environment also forwards
+`AIPHA_PIT_SNAPSHOT_KEY`; supply the same deployment key used to sign the
+snapshots. The entrypoint redacts its value in logs. Canonical books persist
+through the existing `/app/data` bind at `data/research/paper/`.
+
 SQLite transactions protect cash/position history, accepted plans and receipts
 together. The book freezes the research config and past market observations,
 requires snapshots to advance and overlap the previous close, rejects changed

@@ -1,0 +1,13 @@
+# Copy to configs/paper/research_ml.yml and explicitly select that name in
+# system_settings.json after creating the signed daily snapshots and plans.
+# The batch launcher previews by default; --execute is required to commit.
+profile_name: research_ml
+description: A-share monthly ML research targets in a continuous Paper book
+research_paper:
+  schema_version: 1
+  research_config: aipha/configs/research/a_stock_ml.yaml
+  snapshot_path: data/snapshots/csi500/{date}.parquet
+  book_path: data/research/paper/research_ml.sqlite3
+  # Existing directory of exported YYYY-MM-DD.json plans. An absent dated
+  # file means no new plan; pending fills and valuation still advance.
+  plan_dir: data/research/plans/research_ml

@@ -316,6 +316,41 @@ class TestPredict:
 # ---------------------------------------------------------------------------
 
 class TestSaveLoad:
+    @pytest.mark.parametrize("model_type", ["elasticnet", "lightgbm"])
+    def test_latest_prediction_survives_roundtrip_with_twelve_folds(self, tmp_path, model_type):
+        frame = pd.DataFrame({"symbol": ["600000.SH", "600001.SH"], "factor": [0., 1.]})
+        config = MLSelectorConfig(model_type=model_type, objective="regression", feature_cols=["factor"])
+        selector = MLStockSelector(config)
+        if model_type == "elasticnet":
+            from sklearn.dummy import DummyRegressor
+
+            selector._models = [DummyRegressor(strategy="constant", constant=float(i)).fit(
+                frame[["factor"]].to_numpy(), [float(i)] * len(frame),
+            ) for i in range(12)]
+        else:
+            lgb = pytest.importorskip("lightgbm")
+            selector._models = [lgb.train(
+                {"objective": "regression", "verbosity": -1, "num_threads": 1, "min_data_in_leaf": 1},
+                lgb.Dataset(frame[["factor"]], label=[float(i)] * len(frame)), num_boost_round=1,
+            ) for i in range(12)]
+        expected = selector.predict(frame)
+        selector.save(tmp_path)
+        restored = MLStockSelector()
+        restored.load(tmp_path)
+        assert restored.n_folds == 12
+        np.testing.assert_allclose(expected, [11., 11.])
+        np.testing.assert_allclose(restored.predict(frame), expected)
+
+    def test_fold_order_ignores_auxiliary_files_and_rejects_ambiguous_indices(self, tmp_path):
+        from aipha.models.ml_stock_selector import _ordered_fold_files
+
+        for name in ("fold_9.pkl", "fold_10.pkl", "fold_11.pkl", "fold_10_fcols.pkl", "fold_10_dl_meta.pkl"):
+            (tmp_path / name).touch()
+        assert [path.name for path in _ordered_fold_files(tmp_path, ".pkl")] == ["fold_9.pkl", "fold_10.pkl", "fold_11.pkl"]
+        (tmp_path / "fold_09.pkl").touch()
+        with pytest.raises(ValueError, match="duplicate model fold"):
+            _ordered_fold_files(tmp_path, ".pkl")
+
     @pytest.mark.parametrize("model_type", [
         "double_ensemble", "xgboost", "gru", "tra", "master", "gat", "hist",
     ])

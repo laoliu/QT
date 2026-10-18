@@ -35,6 +35,22 @@ from aipha.market.trading_calendar_constants import TRADING_DAYS_PER_YEAR
 logger = logging.getLogger(__name__)
 
 
+def _ordered_fold_files(path: Path, suffix: str) -> list[Path]:
+    """Read saved folds in numeric training order, excluding auxiliary files."""
+    indexed: dict[int, Path] = {}
+    for artifact in path.glob(f"fold_*{suffix}"):
+        if suffix == ".pkl" and artifact.stem.endswith(("_fcols", "_dl_meta", "_gru_meta")):
+            continue
+        raw_index = artifact.stem.removeprefix("fold_")
+        if not raw_index.isdecimal():
+            raise ValueError(f"invalid model fold artifact name: {artifact.name}")
+        index = int(raw_index)
+        if index in indexed:
+            raise ValueError(f"duplicate model fold index {index}")
+        indexed[index] = artifact
+    return [indexed[index] for index in sorted(indexed)]
+
+
 class _ElasticNetWrapper:
     """ElasticNet + StandardScaler 包装器，统一 predict 接口。"""
 
@@ -1427,17 +1443,12 @@ class MLStockSelector:
         self._models.clear()
         mtype = self._config.model_type
         if mtype in ("double_ensemble", "elasticnet"):
-            fold_files = sorted(path.glob("fold_*.pkl"))
-            # 排除 fcols 辅助文件
-            fold_files = [
-                f for f in fold_files
-                if "_fcols" not in f.stem and f.stem != "meta"
-            ]
+            fold_files = _ordered_fold_files(path, ".pkl")
             for fp in fold_files:
                 self._models.append(joblib.load(fp))
         elif mtype == "xgboost":
             import xgboost as xgb
-            fold_files = sorted(path.glob("fold_*.json"))
+            fold_files = _ordered_fold_files(path, ".json")
             for fp in fold_files:
                 booster = xgb.Booster(model_file=str(fp))
                 fcols_fp = fp.with_name(
@@ -1451,7 +1462,7 @@ class MLStockSelector:
             import torch
             from aipha.models.gru_ranker import GRUNetwork, _GRUWrapper
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            fold_files = sorted(path.glob("fold_*.pt"))
+            fold_files = _ordered_fold_files(path, ".pt")
             for fp in fold_files:
                 meta_fp = fp.with_name(fp.stem + "_gru_meta.pkl")
                 gru_meta = joblib.load(meta_fp)
@@ -1465,7 +1476,7 @@ class MLStockSelector:
                 self._models.append(wrapper)
         else:
             import lightgbm as lgb
-            fold_files = sorted(path.glob("fold_*.txt"))
+            fold_files = _ordered_fold_files(path, ".txt")
             for fp in fold_files:
                 self._models.append(lgb.Booster(model_file=str(fp)))
         logger.info("Loaded %d fold models from %s", len(self._models), path)

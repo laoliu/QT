@@ -91,6 +91,8 @@ def test_kill_switch_and_before_close_never_fetch_data(deployment):
         pytest.fail("must not fetch or load a model")
     response = ops.operate_day(deployment, now=datetime.fromisoformat("2024-01-30T15:01:00+08:00"), provider_factory=no_provider)
     assert response["status"] == "before_daily_window"
+    import json
+    assert json.loads((deployment["output_root"] / "progress.json").read_text())["phase"] == "before_daily_window"
     (deployment["output_root"] / "STOP").touch()
     with pytest.raises(ValueError, match="kill switch"):
         ops.operate_day(deployment, execute=True, now=now(DAYS[0]), provider_factory=no_provider)
@@ -155,3 +157,24 @@ def test_deployment_rejects_live_and_changed_manifest(tmp_path):
     (model / "model_manifest.json").write_text('{"changed": true}')
     with pytest.raises(ValueError, match="manifest changed"):
         ops.load_deployment(path)
+
+
+@pytest.mark.parametrize("finish", ["2024-01-31T00:01:00+08:00", "2024-01-30T17:59:00+08:00",
+                                    "2024-01-30T18:04:59+08:00"])
+def test_expired_close_or_backwards_clock_never_commits(deployment, finish):
+    ticks = iter([now(DAYS[0]), datetime.fromisoformat(finish)])
+    with pytest.raises(ValueError, match="expired or clock moved backwards"):
+        ops.operate_day(deployment, execute=True, clock=lambda: next(ticks), provider_factory=provider)
+    assert not (deployment["output_root"] / "paper.sqlite3").exists()
+
+
+def test_delayed_same_day_commit_and_terminal_skip_state(deployment):
+    import json
+    ticks = iter([now(DAYS[0]), datetime.fromisoformat(DAYS[0] + "T20:00:00+08:00")])
+    result = ops.operate_day(deployment, execute=True, clock=lambda: next(ticks), provider_factory=provider)
+    assert result["status"] == "committed"
+    assert json.loads((deployment["output_root"] / "progress.json").read_text())["phase"] == "complete"
+    response = ops.operate_day(deployment, now=now("2024-01-29"), provider_factory=lambda **k: pytest.fail("no fetch"))
+    assert response["status"] == "not_started" and response["operational"] is False
+    assert json.loads((deployment["output_root"] / "progress.json").read_text())["phase"] == "not_started"
+    assert json.loads((deployment["output_root"] / "latest.json").read_text())["status"] == "not_started"

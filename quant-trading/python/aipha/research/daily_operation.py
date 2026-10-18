@@ -114,9 +114,13 @@ def prepare_snapshot(deployment, policy, day, provider):
     return snapshot
 
 
-def operate_day(deployment, *, execute=False, now=None, preflight_date=None, provider_factory=None):
+def operate_day(deployment, *, execute=False, now=None, preflight_date=None, provider_factory=None, clock=None):
     """Historical preflight never commits; only today's close is operational."""
-    now = now or datetime.now(timezone.utc)
+    if now is not None and clock is not None:
+        raise ValueError("provide a fixed fixture time or a clock, not both")
+    if clock is None:
+        clock = (lambda: now) if now is not None else (lambda: datetime.now(timezone.utc))
+    now = clock()
     if now.tzinfo is None:
         raise ValueError("operation clock must have a timezone")
     local = now.astimezone(SHANGHAI)
@@ -131,14 +135,21 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
             _json(root / "progress.json", {"phase": phase, "date": str(day), "pid": os.getpid(),
                                           "observed_at": datetime.now(timezone.utc).isoformat()})
 
+        def skipped(status, **fields):
+            result = {"status": status, "date": str(day), "operational": False,
+                      "broker_contacted": False, **fields}
+            _json(root / "latest.json", result)
+            progress(status)
+            return result
+
         progress("checking_calendar")
         from aipha.utils.paths import KILL_SWITCH_PATH
         if KILL_SWITCH_PATH.exists() or (deployment["output_root"] / "STOP").exists():
             raise ValueError("Paper kill switch is active")
         if preflight_date is None and day < deployment["start_date"]:
-            return {"status": "not_started", "date": str(day), "start_date": str(deployment["start_date"])}
+            return skipped("not_started", start_date=str(deployment["start_date"]))
         if preflight_date is None and local.time() < time(18):
-            return {"status": "before_daily_window", "date": str(day)}
+            return skipped("before_daily_window")
         month_end = (pd.Timestamp(day) + pd.offsets.MonthEnd(0)).strftime("%Y%m%d")
         if provider_factory is None:
             from .daily_inputs import OperatingEquityProvider
@@ -146,7 +157,7 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
         provider = provider_factory(cache_dir=str(deployment["cache_dir"]), archive_dir=str(root / "raw_archive"), calendar_end=month_end)
         sessions = provider.calendar.loc[provider.calendar.is_open.eq(1), "cal_date"].dt.date.tolist()
         if day not in sessions:
-            return {"status": "market_closed", "date": str(day)}
+            return skipped("market_closed")
         book = root / "paper.sqlite3"
         if book.exists():
             previous = read_paper_book_evidence(book)["receipts"][-1]["trade_date"]
@@ -209,6 +220,13 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
             plan.write(plan_path)
         if KILL_SWITCH_PATH.exists() or (deployment["output_root"] / "STOP").exists():
             raise ValueError("Paper kill switch was activated during preparation")
+        if execute:
+            commit_time = clock()
+            if commit_time.tzinfo is None:
+                raise ValueError("operation clock must have a timezone")
+            commit_local = commit_time.astimezone(SHANGHAI)
+            if commit_local.date() != day or commit_local.time() < time(18) or commit_time < now:
+                raise ValueError("operating close expired or clock moved backwards; no historical commit")
         progress("committing_book" if execute else "previewing_book")
         receipt = advance_paper_book(book, panel, policy, plan=plan, commit=execute)
         result = {"status": "committed" if execute else "preview", "date": str(day), "operational": bool(execute),

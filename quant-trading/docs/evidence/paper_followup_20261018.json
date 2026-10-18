@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-18T13:59:09.009854+00:00",
+  "real_operating_days": 0,
+  "required_days": 5,
+  "start_date": "2026-10-19",
+  "incremental_regression": {
+    "scope": [
+      "test_daily_operation.py",
+      "test_daily_inputs.py",
+      "test_daily_supervisor.py"
+    ],
+    "passed": 21,
+    "exit_code": 0,
+    "logical_cpus": [
+      16,
+      17,
+      18,
+      19
+    ]
+  },
+  "scheduler_result": {
+    "started_at": "2026-10-18T13:57:11.4900839+00:00",
+    "finished_at": "2026-10-18T13:57:12.2986782+00:00",
+    "exit_code": 0,
+    "log_path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\run-20261018T135711490Z.log",
+    "cpu_affinity": "16,17,18,19",
+    "broker_contacted": false
+  },
+  "progress": {
+    "phase": "not_started",
+    "date": "2026-10-18",
+    "pid": 4300,
+    "observed_at": "2026-10-18T13:57:12.237695+00:00"
+  },
+  "latest": {
+    "status": "not_started",
+    "date": "2026-10-18",
+    "operational": false,
+    "broker_contacted": false,
+    "start_date": "2026-10-19"
+  },
+  "firmware_evidence": {
+    "source": "https://www.msi.cn/api/v1/product/support/panel?product=PRO-Z790-P-WIFI&type=bios",
+    "product": "PRO Z790-P WIFI",
+    "latest_non_beta": {
+      "download_version": "7E06vAK",
+      "download_release": "2026-08-28"
+    },
+    "microcode_12f_release": {
+      "download_version": "7E06vAH",
+      "download_release": "2025-06-25"
+    },
+    "registry_cpu0": {
+      "logical_cpu": 0,
+      "registry_kind": "Binary",
+      "raw_hex": "13-01-00-00",
+      "revision_uint32_le": "0x113"
+    },
+    "direct_msr_read": false,
+    "firmware_applied": false,
+    "silicon_degradation_proven": false
+  },
+  "evidence_files": [
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\official_sources\\msi_board_support_cn.html",
+      "sha256": "7e3e3e2309bff2bc0766c55a11296589e1dada01cc642c075f4224d3ffba9b0e"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\official_sources\\msi_support_api.js",
+      "sha256": "a21b299ceecabda9a5b59a2bd388d285e22bf23ec0644a83b35d8558c8878530"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\official_sources\\msi_bios_releases.json",
+      "sha256": "f3298cf4d1a9bea5f9c74b83e66244d7ddcdf2128dfb66307953bc9ea2c65254"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\official_sources\\installed_microcode.json",
+      "sha256": "80d6f62fc72424bca747d405b45ae3cb167ddd956bfa3cce7cb29097f4aed223"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\operations_clock_tests.log",
+      "sha256": "4b9d0c9026dca63ff154a62b0398313857b91ad5106f0698841d280b9fda907d"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\progress.json",
+      "sha256": "7671fd5c0dc70bb725fe6a6671ba4af5c75fa9ea24619f2117f18e4bc7f7376b"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\latest.json",
+      "sha256": "f906908675dd87e198caa329d0f634b7570bc08f9396da919c280dab1afa0908"
+    },
+    {
+      "path": "G:\\qtdata\\research\\operations\\csi500\\scheduler\\latest_process_result.json",
+      "sha256": "76ebe8e9e370dcb1306f57bdf00e158a0620e0080854d5003e2d7cbbb8f09a78"
+    }
+  ]
+}

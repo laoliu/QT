@@ -10,6 +10,8 @@ Windows 任务 `QT-Research-Paper-CSI500` 每天 18:30、19:30、20:30 启动。
 
 任务使用当前用户的 Interactive、Limited 身份，**电脑必须开机且该用户已登录**，锁屏可以运行，注销后不能运行。S4U 注册曾被 Windows 拒绝访问，改为用户级 Interactive 后注册和手动触发成功；并未获得无人登录运行的保证。没有重启或修改原交易服务。
 
+未到首日、未到窗口和非交易日均写入明确的终止状态与 `latest.json`，不会把正常跳过留在“检查日历”阶段。提交前再次读取时钟；若准备过程跨到下一自然日，或时钟倒退，则拒绝提交，避免产生前一日补记。CLI 始终读取真实时钟；可注入时钟只用于离线测试，不计运营天数。
+
 本机科学计算临时只使用逻辑 CPU 16、17、18、19，亲和性仅作用于新 Paper 进程；原因和限制见 [原生崩溃诊断](NATIVE_CRASH_DIAGNOSIS.md)。固定环境为 `G:/qtdata/research/validation-env-py313/Scripts/python.exe`。这不是硬件修复，也不是其他机器通用的 CPU 编号。
 
 每天刷新 TuShare 历史资料与当前日有界 PIT 财务查询，复用原始月缓存；日期迭代严格使用完整 SSE 日历，不回退到工作日或其他行情源。覆盖原始缓存前按文件哈希归档。财务冲突仍按指标隔离为缺失；仅复用已审阅且原值/证据匹配的公司事件校正，新增矛盾拒绝处理。
@@ -40,6 +42,8 @@ Get-ScheduledTaskInfo -TaskName 'QT-Research-Paper-CSI500'
 2026-10-18 调度实测：退出码 0，返回 `not_started`，下次运行定于 2026-10-19 18:30，正式账本尚不存在，符合首日隔离。当前代码重新读取签名的真实 2026-10-16 输入，校验模型、推理并 Paper 预演退出 0，覆盖 494 只股票；非月末目标数为 0，未创建账本。结果在独立 `code_validation/preflight/`，旧预演产物保留。
 
 本轮全部 `tests/research`：**356 passed、5 skipped、2 warnings**，固定科学栈、仅 E 核、退出码 0。涵盖三日 fixture 月末到下次开盘成交、同日幂等、漏跑拒绝、准备中 kill switch、预测变更拒绝、部署模型哈希、严格日历、原始缓存归档、ST 历史分页，以及 PowerShell 捕获普通/原生退出码。5 项跳过为既有 Windows 符号链接权限和可选依赖测试。首次执行因系统默认 pytest 临时目录拒绝访问而在 fixture 阶段失败，改用独立 G 盘测试临时目录后执行通过；未修改系统目录权限。日志为 `G:/qtdata/research/native_diagnostics/operations_final_regression_v2.log`，不代表全仓库回归。
+
+后续时钟/跳过状态修正：只重跑受影响的三个 `test_daily_*` 文件，**21 passed**，包括跨午夜、收盘窗口前和同日倒拨均不能提交，以及正常同日晚到的调用可以提交。Windows 任务再次实际触发退出 0，进度已明确为 `not_started`。此增量结果与上述完整研究回归分别记录，不把新增代码计作已经再次跑完全部 356 项。
 
 通过 `aipha.research.paper_monitor.inspect_paper_book(..., required_days=5)` 只读重放并核对同日盘后提交、连续交易日、NAV 和新鲜度；回放/补记不计。默认新鲜度为 24 小时，长休市需要显式解释监控阈值，不能伪造新回执。
 

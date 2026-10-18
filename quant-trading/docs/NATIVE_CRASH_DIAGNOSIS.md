@@ -24,6 +24,23 @@
 
 官方 Python 3.13.11 可执行文件 Authenticode 为 Valid / Python Software Foundation。首次缺少项目路径的解释器实验只产生收集错误，未计入上表。调试器改变时序后也曾连续通过，不能当修复。
 
+## 官方固件信息核对
+
+2026-10-18 读取该型号的[微星中国支持页](https://www.msi.cn/Motherboard/PRO-Z790-P-WIFI/support)及其页面实际调用的[BIOS 列表接口](https://www.msi.cn/api/v1/product/support/panel?product=PRO-Z790-P-WIFI&type=bios)，返回产品标题严格为 `PRO Z790-P WIFI`：
+
+| 官网条目 | 发布日期 | 官方说明中相关内容 |
+| --- | --- | --- |
+| 7E06vA5 | 2023-03-24 | CPU Microcode 更新；与本机 A.50 同版本分支，本机 SMBIOS 日期早一天 |
+| 7E06vAF | 2024-11-05 | CPU Microcode 0x12B |
+| 7E06vAH | 2025-06-25 | Intel uCode 0x12F |
+| 7E06vAK | 2026-08-28 | 本次接口中最新的非 Beta 条目；内存兼容性、ME 16.1.42.2872 |
+
+只读取网页和版本元数据，没有下载或应用 BIOS/ME 固件。没有将 AK 说明中未写出的具体微码版本猜成 0x12F。全局站返回 403，而中国站动态页面及其真实接口可读；Intel 旧新闻/社区地址重定向到通用列表，没有获得相应正文，未把这些页面作为病因结论的依据。
+
+另以只读 .NET 注册表接口保存 Windows 易失 `HARDWARE/DESCRIPTION/System/CentralProcessor/*/Update Revision`。CPU0 为四字节 `13-01-00-00`，按小端解码为 `0x113`；其余记录保留原始字节，不强行把不同长度的编码统一解释。这是 Windows 启动后的硬件注册信息，未加载驱动直接读取 MSR。它与旧 BIOS 和缺少后续更新的判断相符，不证明某个缺失微码就是全部崩溃的唯一原因，也不证明硬件已经劣化。
+
+原始官网响应、页面组件/API 路径和注册表快照保存在 `G:/qtdata/research/native_diagnostics/official_sources`，可核对 [后续证据摘要](evidence/paper_followup_20261018.json)。主机维护时应依据当时官网、准确型号和厂商步骤选择版本，不能将这次网页快照当永久的最新版本。
+
 以上跨解释器/依赖失败、故障地址变化和 WHEA CPU 错误共同支持平台不稳定的优先诊断。具体是固件/微码、供电/超频设置、CPU 劣化还是其他硬件条件，单靠这些日志不能区分；也不能完全排除另有软件缺陷。没有把 NumPy/Python 某版本当作已证实根因，没有修改全局依赖或用忽略异常掩盖故障。
 
 ## 当前处理与边界

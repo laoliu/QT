@@ -86,3 +86,45 @@ def test_receiver_polling_bridge_rejects_raw_qmt_orders():
     finally:
         del bridge.passorder
 
+
+def test_connect_binds_requested_account_to_actual_queries(monkeypatch):
+    monkeypatch.setattr(bridge, "TRADING_ACCOUNT_ID", "")
+    monkeypatch.setattr(bridge, "_trading_connected", False)
+    monkeypatch.setattr(bridge, "_qmt_context", FakeContext())
+    calls = []
+
+    def query(account_id, account_type, kind):
+        calls.append((account_id, kind))
+        return [{}] if kind == "ACCOUNT" else []
+
+    monkeypatch.setattr(bridge, "get_trade_detail_data", query, raising=False)
+    connected = bridge._trading_connect({"account_id": "account-1"})
+    assert connected["ok"] is True
+    assert bridge._trading_query_account({})["data"]["account_id"] == "account-1"
+    assert bridge._trading_query_positions({})["ok"] is True
+    assert bridge._trading_query_orders({})["ok"] is True
+    assert calls == [("account-1", "ACCOUNT"), ("account-1", "POSITION"), ("account-1", "ORDER")]
+
+
+def test_connect_cannot_switch_configured_or_connected_account(monkeypatch):
+    monkeypatch.setattr(bridge, "TRADING_ACCOUNT_ID", "account-1")
+    for connected in (False, True):
+        monkeypatch.setattr(bridge, "_trading_connected", connected)
+        result = bridge._trading_connect({"account_id": "account-2"})
+        assert result["ok"] is False
+        assert "does not match" in result["error"]
+        assert bridge.TRADING_ACCOUNT_ID == "account-1"
+
+
+def test_connect_requires_real_query_function_even_if_passorder_exists(monkeypatch):
+    monkeypatch.setattr(bridge, "TRADING_ACCOUNT_ID", "")
+    monkeypatch.setattr(bridge, "_trading_connected", False)
+    monkeypatch.setattr(bridge, "_qmt_context", FakeContext())
+    monkeypatch.setattr(bridge, "passorder", lambda *args: None, raising=False)
+    monkeypatch.delattr(bridge, "get_trade_detail_data", raising=False)
+    result = bridge._trading_connect({"account_id": "account-1"})
+    assert result["ok"] is False
+    assert "get_trade_detail_data" in result["error"]
+    assert bridge._trading_connected is False
+    assert bridge.TRADING_ACCOUNT_ID == ""
+

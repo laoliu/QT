@@ -369,24 +369,28 @@ def _safe_attr(obj, names, default=None):
 
 def _trading_connect(params):
     """Connect to QMT for trading via strategy mode (passorder/get_trade_detail_data)."""
-    global _trading_connected
-
-    if _trading_connected:
-        return {"ok": True, "data": {"status": "already_connected",
-                "account_id": TRADING_ACCOUNT_ID, "mode": "strategy"}}
+    global _trading_connected, TRADING_ACCOUNT_ID
 
     account_id = params.get("account_id", "") or TRADING_ACCOUNT_ID
     if not account_id or account_id == "xxxx":
         return {"ok": False, "error": "account_id not configured (set TRADING_ACCOUNT_ID env)"}
+
+    if TRADING_ACCOUNT_ID and TRADING_ACCOUNT_ID != "xxxx" and account_id != TRADING_ACCOUNT_ID:
+        return {"ok": False, "error": "account_id does not match the configured QMT account"}
+
+    if _trading_connected:
+        return {"ok": True, "data": {"status": "already_connected",
+                "account_id": TRADING_ACCOUNT_ID, "mode": "strategy"}}
 
     if _qmt_context is None:
         return {"ok": False, "error": "ContextInfo not available (not running as QMT strategy?)"}
 
     po_fn = globals().get("passorder")
     gtdd_fn = globals().get("get_trade_detail_data")
-    if not po_fn and not gtdd_fn:
-        return {"ok": False, "error": "passorder/get_trade_detail_data not in strategy namespace"}
+    if not gtdd_fn:
+        return {"ok": False, "error": "get_trade_detail_data not in strategy namespace"}
 
+    TRADING_ACCOUNT_ID = account_id
     _trading_connected = True
     _log("trading: connected via strategy mode (passorder=%s, gtdd=%s, account=%s)"
          % (po_fn is not None, gtdd_fn is not None, account_id))

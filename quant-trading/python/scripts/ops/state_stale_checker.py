@@ -55,6 +55,7 @@ def check_state_stale(
     state_dir: str | Path = DEFAULT_STATE_DIR,
     threshold_hours: float = DEFAULT_THRESHOLD_HOURS,
     now: datetime | None = None,
+    book_dir: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """逐个组合检查状态文件是否陈旧。
 
@@ -70,14 +71,17 @@ def check_state_stale(
         「没什么可检查」，与「检查了且有问题」区分开。
     """
     root = Path(state_dir)
-    if not root.is_dir():
-        logger.info("状态目录不存在，跳过: %s", root)
-        return []
-
     ref = now or datetime.now()
     results: list[dict[str, Any]] = []
-    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+    for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
         results.append(_check_one(d, threshold_hours, ref))
+    if book_dir is not None:
+        from aipha.research.paper_monitor import inspect_paper_books
+
+        for row in inspect_paper_books(book_dir, threshold_hours=threshold_hours, now=now):
+            results.append({key: row[key] for key in (
+                "portfolio_id", "source", "status", "state_file", "age_hours", "threshold_hours", "mtime", "message",
+            )} | {"stale": row["status"] != "ok"})
     return results
 
 
@@ -167,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         "--threshold-hours", type=float, default=DEFAULT_THRESHOLD_HOURS,
         help=f"允许落后的小时数（默认 {DEFAULT_THRESHOLD_HOURS:.0f}）",
     )
+    parser.add_argument("--book-dir", default=str(DATA_DIR / "research/paper"), help="规范 Paper SQLite 目录或单个账本")
     parser.add_argument(
         "--notify", action="store_true", help="有陈旧时发送飞书告警",
     )
@@ -174,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     results = check_state_stale(
-        state_dir=args.state_dir, threshold_hours=args.threshold_hours,
+        state_dir=args.state_dir, threshold_hours=args.threshold_hours, book_dir=args.book_dir,
     )
 
     if args.json:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import asdict
+from datetime import datetime, timezone
 import hashlib
 import json
 import math
@@ -31,6 +32,10 @@ def _dump(value) -> str:
 
 def _hash(value) -> str:
     return hashlib.sha256(_dump(value).encode("utf-8")).hexdigest()
+
+
+def _commit_time() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @contextmanager
@@ -188,8 +193,8 @@ def upgrade_paper_book_calendar(
         memory.close()
 
 
-def replay_paper_book(path: str | Path, *, allow_unverified_calendar: bool = False) -> dict:
-    """Recompute the persisted book and verify its latest receipt digest."""
+def read_paper_book_evidence(path: str | Path, *, allow_unverified_calendar: bool = False) -> dict:
+    """Read replay and committed receipts from one consistent read-only view."""
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -209,9 +214,22 @@ def replay_paper_book(path: str | Path, *, allow_unverified_calendar: bool = Fal
         else:
             count = _verify_receipt_calendar(connection, payload)
             result["calendar_verification"] = {"available": True, "sessions": count}
-        return result
+        daily = {row["trade_date"]: row for row in result["daily_returns"]}
+        receipts = []
+        for day, encoded in connection.execute("SELECT day,payload FROM receipts ORDER BY day"):
+            row = json.loads(encoded)
+            if (row.get("trade_date") != day or day not in daily
+                    or row.get("nav") != daily[day]["nav"] or row.get("cash") != daily[day]["cash"]):
+                raise ValueError("Paper receipt NAV/cash/date does not match the replay")
+            receipts.append(row)
+        return {"replay": result, "receipts": receipts}
     finally:
         connection.close()
+
+
+def replay_paper_book(path: str | Path, *, allow_unverified_calendar: bool = False) -> dict:
+    """Recompute the persisted book and verify its latest receipt digest."""
+    return read_paper_book_evidence(path, allow_unverified_calendar=allow_unverified_calendar)["replay"]
 
 
 def advance_paper_book(
@@ -337,6 +355,7 @@ def advance_paper_book(
         last = result["daily_returns"][-1]
         receipt = {
             "schema_version": 1, "mode": "paper", "trade_date": day,
+            "committed_at": _commit_time() if commit else None,
             "book_start": book_start,
             "data_snapshot_id": metadata["data_snapshot_id"], "model_config_hash": config.model_config_hash(),
             "calendar_metadata": metadata,

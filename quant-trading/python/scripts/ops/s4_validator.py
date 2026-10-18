@@ -85,6 +85,8 @@ class S4ValidationResult:
     detail: str = ""
     invalid_days: list[dict[str, Any]] = field(default_factory=list)
     gaps: list[dict[str, Any]] = field(default_factory=list)
+    source: str = "legacy_nav_history"
+    stale: bool | None = None
 
     @property
     def status(self) -> str:
@@ -104,6 +106,8 @@ class S4ValidationResult:
             "detail": self.detail,
             "invalid_days": self.invalid_days,
             "gaps": self.gaps,
+            "source": self.source,
+            "stale": self.stale,
         }
 
 
@@ -272,6 +276,9 @@ def check_all_portfolios(
     portfolio_filter: str | None = None,
     max_daily_change: float = DEFAULT_MAX_DAILY_CHANGE,
     max_gap_days: int = DEFAULT_MAX_GAP_DAYS,
+    book_dir: str | Path | None = None,
+    now: datetime | None = None,
+    threshold_hours: float = 24,
 ) -> list[S4ValidationResult]:
     """扫描状态目录，逐个组合做 S4 验证。
 
@@ -280,12 +287,8 @@ def check_all_portfolios(
     S4 看板上凭空消失。
     """
     root = Path(state_dir)
-    if not root.is_dir():
-        logger.info("状态目录不存在: %s", root)
-        return []
-
     results: list[S4ValidationResult] = []
-    for d in sorted(p for p in root.iterdir() if p.is_dir()):
+    for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
         if portfolio_filter and d.name != portfolio_filter:
             continue
         results.append(validate_s4(
@@ -295,6 +298,18 @@ def check_all_portfolios(
             max_daily_change=max_daily_change,
             max_gap_days=max_gap_days,
         ))
+    if book_dir is not None:
+        from aipha.research.paper_monitor import inspect_paper_books
+
+        for row in inspect_paper_books(book_dir, required_days=required_days, now=now,
+                                       threshold_hours=threshold_hours, max_daily_change=max_daily_change):
+            if portfolio_filter and portfolio_filter not in {row["portfolio_id"], Path(row["state_file"]).stem}:
+                continue
+            results.append(S4ValidationResult(
+                **{key: row[key] for key in ("portfolio_id", "total_valid_days", "consecutive_valid_days", "longest_streak",
+                                             "first_valid_date", "last_valid_date", "required_days", "passed", "invalid_days",
+                                             "gaps", "source", "stale")}, detail=row["message"],
+            ))
     return results
 
 
@@ -415,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
         "--max-gap-days", type=int, default=DEFAULT_MAX_GAP_DAYS,
         help=f"允许的最大断档自然日（默认 {DEFAULT_MAX_GAP_DAYS}）",
     )
+    parser.add_argument("--book-dir", default=str(DATA_DIR / "research/paper"), help="规范 Paper SQLite 目录或单个账本")
+    parser.add_argument("--threshold-hours", type=float, default=24, help="规范账本最近一次提交允许落后的小时数")
     parser.add_argument(
         "--notify", action="store_true", help="把摘要推送到飞书",
     )
@@ -427,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
         portfolio_filter=args.portfolio,
         max_daily_change=args.max_daily_change,
         max_gap_days=args.max_gap_days,
+        book_dir=args.book_dir,
+        threshold_hours=args.threshold_hours,
     )
 
     if args.json:

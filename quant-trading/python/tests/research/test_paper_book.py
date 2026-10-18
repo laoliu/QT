@@ -108,7 +108,8 @@ def test_preview_never_creates_or_changes_book(tmp_path, policy):
     preview = advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan())
     assert not book.parent.exists()
     actual = advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
-    assert actual == preview
+    assert preview["committed_at"] is None and actual["committed_at"]
+    assert {k: v for k, v in actual.items() if k != "committed_at"} == {k: v for k, v in preview.items() if k != "committed_at"}
     before = book.read_bytes()
     advance_paper_book(book, _snapshot("2024-02-01"), policy)
     assert book.read_bytes() == before

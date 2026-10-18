@@ -144,6 +144,7 @@ def run_nav_check(
     paper_state_dir: str | Path | None = None,
     threshold: float = DEFAULT_NAV_THRESHOLD,
     notify: bool = False,
+    book_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """各策略 NAV 日间跳变检查。
 
@@ -153,7 +154,7 @@ def run_nav_check(
     mod = _load_ops_module("nav_monitor")
     root = Path(paper_state_dir) if paper_state_dir else DEFAULT_PAPER_STATE_DIR
 
-    results = mod.run_nav_check(root, threshold=threshold)
+    results = mod.run_nav_check(root, threshold=threshold, book_dir=book_dir)
     failed = [r for r in results if not r.passed]
 
     if failed and notify:
@@ -178,6 +179,7 @@ def run_nav_check(
 def run_health_check(
     paper_state_dir: str | Path | None = None,
     notify: bool = False,
+    book_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """容器自身的健康体检。
 
@@ -198,6 +200,8 @@ def run_health_check(
         _check_kill_switch(),
         _check_paper_state_fresh(paper_state_dir),
     ]
+    if book_dir is not None:
+        checks.append(_check_canonical_paper_books(book_dir))
 
     failed = [c for c in checks if c["status"] == "FAIL"]
     warned = [c for c in checks if c["status"] == "WARN"]
@@ -312,6 +316,19 @@ def _check_paper_state_fresh(
     return _check("paper_state", "OK", detail, stale_trading_days=stale)
 
 
+def _check_canonical_paper_books(book_dir: str | Path, *, now: datetime | None = None) -> dict[str, Any]:
+    from aipha.research.paper_monitor import inspect_paper_books
+
+    rows = inspect_paper_books(book_dir, now=now)
+    if not rows:
+        return _check("canonical_paper", "SKIP", f"无规范 Paper 账本: {book_dir}")
+    invalid = any(row["status"] == "invalid" for row in rows)
+    stale = any(row["stale"] for row in rows)
+    return _check("canonical_paper", "FAIL" if invalid else "WARN" if stale else "OK",
+                  "; ".join(row["message"] for row in rows),
+                  books=[{key: row[key] for key in ("portfolio_id", "status", "age_hours", "latest_trade_date")} for row in rows])
+
+
 def _stale_trading_days(latest: date, today: date | None = None) -> int:
     """``latest`` 之后已经过去几个交易日。
 
@@ -391,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--paper-state", default=None, help="模拟盘状态目录",
     )
+    parser.add_argument("--book-dir", default=str(DATA_DIR / "research/paper"), help="规范 Paper SQLite 目录或单个账本")
     parser.add_argument(
         "--nav-threshold", type=float, default=DEFAULT_NAV_THRESHOLD,
         help="NAV 日间偏差阈值（默认 0.05）",
@@ -425,11 +443,13 @@ def main(argv: list[str] | None = None) -> int:
                     paper_state_dir=args.paper_state,
                     threshold=args.nav_threshold,
                     notify=args.notify,
+                    book_dir=args.book_dir,
                 ))
             elif task == "health":
                 results.append(run_health_check(
                     paper_state_dir=args.paper_state,
                     notify=args.notify,
+                    book_dir=args.book_dir,
                 ))
         except Exception as exc:  # noqa: BLE001 - cron 入口兜底
             logger.exception("任务 %s 异常", task)

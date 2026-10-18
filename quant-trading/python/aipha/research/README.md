@@ -293,11 +293,45 @@ never overwritten. A book that skipped a session or used different prices
 fails upgrade and needs explicit accounting reconciliation. Subsequent daily
 calls must select the new `--book-path`; no scheduler is redirected implicitly.
 
+Canonical receipts record `committed_at` in UTC only after a commit is
+requested; new-close previews contain no committed timestamp and identical retries
+retain the original one. `read_paper_book_evidence` reads the verified replay
+and receipts from one SQLite read transaction, checking each receipt's saved
+NAV, cash and date against the replay. Monitoring never rewrites the book.
+
+The existing ops commands now include `data/research/paper/*.sqlite3` by
+default, or accept `--book-dir` for a separate directory or a single book:
+
+```powershell
+python scripts/ops/state_stale_checker.py --book-dir data/research/paper --json
+python scripts/ops/nav_monitor.py --book-dir data/research/paper --json
+python scripts/ops/s4_validator.py --book-dir data/research/paper --required 60 --json
+python scripts/ops/daily_ops.py --task health --book-dir data/research/paper --json
+```
+
+Canonical entries use `research/<book stem>` IDs to distinguish them from
+legacy JSON portfolios. NAV checks compare replayed close values; S4 counts
+only persisted receipts committed on their signal date after 15:00 Shanghai
+time, using exchange sessions for continuity. A skipped daily commit resets
+the streak even when a later snapshot fills in that day's market bars.
+Historical backfills, before-close/future timestamps and old receipts without
+timestamps do not count. A copied/touched database does not refresh the
+last committed timestamp. Corrupt books and missing verification keys report
+failures rather than disappearing from the check. Freshness uses elapsed
+hours (`--threshold-hours`, default 24); explicitly extend the threshold for
+long exchange closures. A stale book cannot pass canonical S4.
+
+These are local accounting and commit-time observations. They do not attest
+independent wall-clock authenticity, market-data delivery, broker fills or
+real-market continuous operation. Replaying historical snapshots in one
+session cannot supply 60 daily operational observations. Calendar upgrades
+preserve original timestamps and never invent missing ones.
+
 Old `data/paper_state/v2_ml/state.json` files are preserved separately. Only
 `--legacy-compat --model-dir ...` uses the historical model-scoring/close-price
 accounting and its `nav_history.jsonl` monitoring outputs. The canonical book
 does not silently import those positions or overwrite the legacy monitor feed;
-use its receipts or read-only replay to inspect canonical NAV.
+the ops readers inspect its SQLite evidence directly.
 
 Legacy model folders without `model_manifest.json`, and schema v1 manifests,
 are rejected. Retrain with the canonical pipeline or explicitly migrate a

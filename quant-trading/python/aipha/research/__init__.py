@@ -39,7 +39,7 @@ from .execution_plan import (
     validate_execution_risk,
 )
 from .migration import migrate_legacy_model
-from .paper_book import advance_paper_book, replay_paper_book, upgrade_paper_book_calendar
+from .paper_book import advance_paper_book, replay_paper_book, read_paper_book_evidence, upgrade_paper_book_calendar
 from .snapshots import (
     SnapshotSpec,
     TushareSnapshot,
@@ -85,6 +85,7 @@ __all__ = [
     "migrate_legacy_model",
     "advance_paper_book",
     "replay_paper_book",
+    "read_paper_book_evidence",
     "upgrade_paper_book_calendar",
     "validate_feature_frame",
     "validate_market_frame",

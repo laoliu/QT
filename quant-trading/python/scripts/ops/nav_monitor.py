@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -157,6 +158,7 @@ def check_nav_deviation(
 def run_nav_check(
     paper_state_dir: str | Path = DEFAULT_PAPER_STATE_DIR,
     threshold: float = DEFAULT_THRESHOLD,
+    book_dir: str | Path | None = None,
 ) -> list[NavCheckResult]:
     """遍历模拟盘状态目录，对每个策略做一次 NAV 偏差检查。
 
@@ -164,13 +166,10 @@ def run_nav_check(
     「没什么可检查」，与「检查了且有问题」区分开。
     """
     root = Path(paper_state_dir)
-    if not root.is_dir():
-        logger.info("模拟盘状态目录不存在，跳过: %s", root)
-        return []
-
     # 既支持指向父目录（每个子目录一个策略），也支持直接指向策略目录
-    candidates: list[Path] = [root]
-    candidates.extend(sorted(p for p in root.iterdir() if p.is_dir()))
+    candidates: list[Path] = [root] if root.is_dir() else []
+    if root.is_dir():
+        candidates.extend(sorted(p for p in root.iterdir() if p.is_dir()))
 
     results: list[NavCheckResult] = []
     seen: set[str] = set()
@@ -200,7 +199,21 @@ def run_nav_check(
         else:
             logger.warning("%s: %s", name, res.message)
         results.append(res)
+    if book_dir is not None:
+        from aipha.research.paper_monitor import inspect_paper_books
 
+        for row in inspect_paper_books(book_dir):
+            name, history = row["portfolio_id"], row["nav_history"]
+            if not history:
+                results.append(NavCheckResult(strategy_name=name, threshold=threshold, passed=False, message=row["message"]))
+            elif len(history) < 2:
+                results.append(NavCheckResult(strategy_name=name, current_nav=history[-1]["nav"], threshold=threshold,
+                                              passed=False, message="规范账本仅有一条 NAV，尚无日间比较基准"))
+            elif any(not isinstance(item["nav"], (int, float)) or not math.isfinite(item["nav"]) or item["nav"] <= 0
+                     for item in history[-2:]):
+                results.append(NavCheckResult(strategy_name=name, threshold=threshold, passed=False, message="规范账本包含无效 NAV"))
+            else:
+                results.append(check_nav_deviation(history[-1]["nav"], history[-2]["nav"], threshold=threshold, strategy_name=name))
     return results
 
 
@@ -296,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         "--threshold", type=float, default=DEFAULT_THRESHOLD,
         help="NAV 日间偏差阈值（默认 0.05）",
     )
+    parser.add_argument("--book-dir", default=str(DATA_DIR / "research/paper"), help="规范 Paper SQLite 目录或单个账本")
     parser.add_argument(
         "--notify", action="store_true", help="有异常时发送飞书告警",
     )
@@ -304,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    results = run_nav_check(args.paper_state, threshold=args.threshold)
+    results = run_nav_check(args.paper_state, threshold=args.threshold, book_dir=args.book_dir)
 
     if args.json:
         print(json.dumps(

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Iterable
 
+import numpy as np
 import pandas as pd
 
 
@@ -148,6 +149,53 @@ def validate_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
     if out.duplicated(["trade_date", "symbol"]).any():
         raise ValueError("feature frame contains duplicate trade_date/symbol rows")
     return out.sort_values(["trade_date", "symbol"]).reset_index(drop=True)
+
+
+def price_limit_flags(
+    frame: pd.DataFrame, *, price_column: str = "open",
+) -> tuple[pd.Series, pd.Series]:
+    """Evaluate directional execution limits at the requested price time.
+
+    TuShare limit prices are unadjusted. A PIT panel keeps raw OHLC alongside
+    its adjusted feature prices, so compare in raw units rather than using a
+    close-derived flag to decide an earlier open fill. Legacy panels without
+    price bands retain their explicitly supplied eligibility flags.
+    """
+    has_bands = {"up_limit", "down_limit"} & set(frame.columns)
+    if not has_bands:
+        flags = []
+        for column in ("is_limit_up", "is_limit_down"):
+            if column not in frame:
+                flags.append(pd.Series(False, index=frame.index))
+                continue
+            values = frame[column]
+            if not values.dropna().isin([True, False]).all():
+                raise ValueError(f"{column} must contain boolean execution flags")
+            flags.append(values.fillna(True).astype(bool))
+        return flags[0], flags[1]
+    if len(has_bands) != 2:
+        raise ValueError("execution requires both up_limit and down_limit")
+    bands = frame[["up_limit", "down_limit"]].apply(pd.to_numeric, errors="coerce")
+    if (not np.isfinite(bands.to_numpy(dtype=float)).all()
+            or (bands <= 0).any().any()
+            or (bands["down_limit"] > bands["up_limit"]).any()):
+        raise ValueError("execution limit prices must be positive, finite and ordered")
+    raw_column = f"{price_column}_raw"
+    price = pd.to_numeric(frame[raw_column if raw_column in frame else price_column], errors="coerce")
+    if raw_column not in frame and "price_adjustment" in frame:
+        adjusted = frame["price_adjustment"].eq("point_in_time_factor")
+        if adjusted.any():
+            if "adj_factor" not in frame:
+                raise ValueError("adjusted execution prices require adj_factor or raw prices")
+            factors = pd.to_numeric(frame["adj_factor"], errors="coerce")
+            if not (np.isfinite(factors[adjusted]) & factors[adjusted].gt(0)).all():
+                raise ValueError("adjusted execution prices require positive finite adj_factor")
+            price = price.where(~adjusted, price / factors)
+    # Half a tick tolerates floating-point noise without treating the price
+    # one full tick inside the band as locked.
+    invalid = ~np.isfinite(price) | price.le(0)
+    return (invalid | (price >= bands["up_limit"] - 0.005),
+            invalid | (price <= bands["down_limit"] + 0.005))
 
 
 def visible_financial_snapshots(

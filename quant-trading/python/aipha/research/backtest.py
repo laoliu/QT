@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .contracts import TargetPosition, validate_market_frame
+from .contracts import TargetPosition, price_limit_flags, validate_market_frame
 from aipha.utils.metrics import compute_annualized_volatility, compute_sharpe_ratio
 
 
@@ -23,6 +23,7 @@ def run_portfolio_backtest(
     config: Any,
 ) -> dict[str, Any]:
     bars = validate_market_frame(market)
+    bars["_open_limit_up"], bars["_open_limit_down"] = price_limit_flags(bars)
     bars["trade_date"] = pd.to_datetime(bars["trade_date"])
     bars = bars.sort_values(["trade_date", "symbol"])
     date_list = sorted(bars["trade_date"].unique())
@@ -103,10 +104,10 @@ def run_portfolio_backtest(
                     if row is None or bool(row.get("is_suspended", False)):
                         skip_execution("missing_or_suspended")
                         continue
-                    if side > 0 and bool(row.get("is_limit_up", False)):
+                    if side > 0 and bool(row["_open_limit_up"]):
                         skip_execution("limit_up_buy_block")
                         continue
-                    if side < 0 and bool(row.get("is_limit_down", False)):
+                    if side < 0 and bool(row["_open_limit_down"]):
                         skip_execution("limit_down_sell_block")
                         continue
                     if side < 0 and buy_dates.get(symbol, day) >= day:
@@ -130,18 +131,30 @@ def run_portfolio_backtest(
                     stamp = notional * config.stamp_tax_rate if side < 0 else 0.0
                     fees = commission + transfer + stamp
                     if side > 0:
-                        affordable = int(max(0, cash) / (fill_price * (1 + config.commission_rate + config.transfer_fee_rate)) / 100) * 100
+                        # Both the fixed minimum and proportional commission
+                        # inequalities must hold before rounding to board lots.
+                        max_notional = max(0.0, min(
+                            (cash - config.commission_min) / (1 + config.transfer_fee_rate),
+                            cash / (1 + config.commission_rate + config.transfer_fee_rate),
+                        ))
+                        affordable = int(np.nextafter(max_notional / fill_price / 100, np.inf)) * 100
                         qty = min(qty, affordable)
                         qty = (qty // 100) * 100
+                        # Recheck the actual fee expression after floating-point
+                        # division; never allow an upward rounding to overspend.
+                        while qty > 0:
+                            notional = qty * fill_price
+                            commission = max(config.commission_min, notional * config.commission_rate)
+                            transfer = notional * config.transfer_fee_rate
+                            fees = commission + transfer
+                            if notional + fees <= cash:
+                                break
+                            qty -= 100
                         if qty <= 0:
                             skip_execution("insufficient_cash")
                             continue
-                        notional = qty * fill_price
                         slippage_cost = abs(fill_price - base_price) * qty
-                        commission = max(config.commission_min, notional * config.commission_rate)
-                        transfer = notional * config.transfer_fee_rate
                         stamp = 0.0
-                        fees = commission + transfer
                         cash -= notional + fees
                         holdings[symbol] = holdings.get(symbol, 0) + qty
                         buy_dates[symbol] = day

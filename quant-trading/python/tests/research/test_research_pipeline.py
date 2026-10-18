@@ -175,6 +175,7 @@ def test_training_labels_use_complete_tape_before_signal_universe_filter(monkeyp
     frame.loc[selected & frame["trade_date"].isin(dates[1:3]), "is_st"] = True
     frame["open_raw"] = 999.0
     frame["up_limit"] = 1000.0
+    frame["down_limit"] = 0.01
     observed = {}
 
     def capture(selector, labelled):

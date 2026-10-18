@@ -387,8 +387,9 @@ class MLStockSelector:
         td_per_month = 20
         train_len = cfg.train_years * td_per_year
         test_len = cfg.predict_months * td_per_month
-        # R39-FIX: purge 必须 >= forward_days + 5 以避免标签泄漏
-        purge = max(cfg.purge_days, cfg.forward_days + 5)
+        # Include the delayed entry as well as the holding horizon. A long
+        # label_skip_days must never let the final training label reach OOS.
+        purge = max(cfg.purge_days, cfg.forward_days + 5, cfg.forward_days + cfg.label_skip_days)
 
         splits: list[tuple[list[Any], list[Any]]] = []
         start = 0

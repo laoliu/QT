@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .contracts import TargetPosition, validate_market_frame
+from .contracts import TargetPosition, price_limit_flags, validate_market_frame
 from .execution_plan import build_execution_plan
 from aipha.utils.metrics import compute_annualized_volatility
 
@@ -88,9 +88,10 @@ def build_forward_labels(
 ) -> pd.DataFrame:
     """Create forward labels aligned to next-session-open execution.
 
-    The entry is ``entry_column`` on the first eligible session (T+skip_days);
-    the exit is ``price_column`` at that session's close for a one-day horizon,
-    or the close of the horizon-th interval after that entry.  For the
+    The entry is ``entry_column`` at T+skip_days on the panel's shared trading
+    calendar; the exit is ``price_column`` horizon_days trading intervals
+    after entry. Missing or untradeable entry/exit bars invalidate the label
+    rather than moving the holding period to a later symbol observation. For the
     canonical after-close signal, ``skip_days=1`` therefore measures
     next-open to the close after 20 trading intervals, matching the model
     selector's purge horizon.
@@ -104,10 +105,31 @@ def build_forward_labels(
     out = frame.copy()
     out["trade_date"] = pd.to_datetime(out["trade_date"], errors="raise")
     out = out.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
-    grouped = out.groupby("symbol", sort=False)
-    base = grouped[entry_column].shift(-skip_days)
-    future = grouped[price_column].shift(-(skip_days + horizon_days))
-    out["fwd_return"] = future / base - 1.0
+    if out.duplicated(["trade_date", "symbol"]).any():
+        raise ValueError("label frame contains duplicate trade_date/symbol rows")
+    calendar = pd.DatetimeIndex(out["trade_date"].unique()).sort_values()
+    day_numbers = calendar.get_indexer(out["trade_date"])
+    entry_blocked, _ = price_limit_flags(out, price_column=entry_column)
+    _, exit_blocked = price_limit_flags(out, price_column=price_column)
+    suspended = out.get("is_suspended", pd.Series(False, index=out.index)).fillna(True).astype(bool)
+    prices = pd.DataFrame({
+        "entry": pd.to_numeric(out[entry_column], errors="coerce").where(~(entry_blocked | suspended)),
+        "exit": pd.to_numeric(out[price_column], errors="coerce").where(~(exit_blocked | suspended)),
+    })
+    prices.index = pd.MultiIndex.from_frame(out[["trade_date", "symbol"]])
+
+    def at_offset(column: str, offset: int) -> np.ndarray:
+        indices = day_numbers + offset
+        target_dates = np.full(len(out), np.datetime64("NaT"), dtype="datetime64[ns]")
+        valid = indices < len(calendar)
+        target_dates[valid] = calendar.to_numpy()[indices[valid]]
+        keys = pd.MultiIndex.from_arrays([target_dates, out["symbol"]])
+        return prices[column].reindex(keys).to_numpy(dtype=float)
+
+    base = at_offset("entry", skip_days)
+    future = at_offset("exit", skip_days + horizon_days)
+    valid = np.isfinite(base) & (base > 0) & np.isfinite(future) & (future > 0)
+    out["fwd_return"] = np.divide(future, base, out=np.full(len(out), np.nan), where=valid) - 1.0
     out = out.dropna(subset=["fwd_return"]).copy()
     out["fwd_return_rank"] = out.groupby("trade_date")["fwd_return"].rank(
         method="average", pct=True,

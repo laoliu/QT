@@ -60,10 +60,21 @@ configurable fees/slippage, daily turnover, T+1, suspension, and
 limit-up/limit-down execution blocks. It is a research/paper accounting engine;
 it does not connect to a broker or submit orders.
 
-Forward-return labels use the next eligible session's open as entry and the
-close after the configured holding horizon as exit. The canonical signal is
+Forward-return labels use the panel's shared trading calendar (the union of
+market dates), with entry at D+skip_days open and exit at
+D+skip_days+horizon_days close. Missing or suspended entry/exit bars and
+directionally blocked limit prices invalidate the label; they never move its
+holding period to a later observation of that symbol. The canonical signal is
 formed after the close, so `label.skip_days` must be at least one; this keeps
 the training target aligned with the backtest's next-open execution.
+
+When price bands are present, replay eligibility compares raw opening prices
+against the day's unadjusted limits, independently of the later closing
+limit flags. Legacy local panels without bands retain their supplied flags.
+Buy sizing includes minimum commission and rechecks total fees before cash is
+debited. Replay still uses adjusted prices for board-lot sizing and valuation;
+corporate-action cash/share accounting requires a separate implementation
+before treating these quantities as a live account reconciliation.
 
 The canonical TuShare snapshot maps Shenwan L1 membership using the historical
 `in_date`/`out_date` interval; it does not reuse today's industry mapping for

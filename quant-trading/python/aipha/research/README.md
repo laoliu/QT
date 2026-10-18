@@ -476,6 +476,12 @@ Historical callers must set `allow_experimental_models=True` at construction
 and again on `load(...)`; a flag persisted inside an old model cannot authorize
 loading it into a new runtime. The canonical manifest loader accepts only
 LightGBM/ElasticNet and checks the stored model type against its manifest.
+GRU/GAT/TRA/MASTER/HIST/DoubleEnsemble and multi-model ensemble implementations
+now live under `aipha.experiments.models`, whose package imports no optional
+dependencies. Old `aipha.models.<module>` names remain module aliases so
+historical pickle class qualifiers and explicit callers can still resolve.
+These aliases do not add experimental types to canonical model discovery or
+authorize loading them without the selector's explicit compatibility flag.
 
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
 read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.

@@ -480,7 +480,7 @@ class MLStockSelector:
         # Pre-build feature store for temporal models (shared across all folds)
         _gru_store = None
         if cfg.model_type in ("gru", "tra", "master", "hist"):
-            from aipha.models.gru_ranker import build_feature_store
+            from aipha.experiments.models.gru_ranker import build_feature_store
             logger.info("Building temporal feature store (once) for %s...", cfg.model_type)
             _gru_store = build_feature_store(df, feature_cols)
             logger.info("Feature store: %d symbols", len(_gru_store[0]))
@@ -808,7 +808,7 @@ class MLStockSelector:
         fold_idx: int,
     ) -> Any:
         """训练单折 DoubleEnsemble 模型。"""
-        from aipha.models.double_ensemble import (
+        from aipha.experiments.models.double_ensemble import (
             DEnsembleConfig,
             DoubleEnsembleModel,
         )
@@ -951,7 +951,7 @@ class MLStockSelector:
         _gru_store: tuple | None = None,
     ) -> Any:
         """训练单折 GRU 时序模型。"""
-        from aipha.models.gru_ranker import GRUConfig, train_gru_one_fold
+        from aipha.experiments.models.gru_ranker import GRUConfig, train_gru_one_fold
 
         cfg = self._config
         gru_cfg = GRUConfig(
@@ -990,7 +990,7 @@ class MLStockSelector:
         _gru_store: tuple | None = None,
     ) -> Any:
         """训练单折 TRA 时序路由模型。"""
-        from aipha.models.tra_model import TRAConfig, train_tra_one_fold
+        from aipha.experiments.models.tra_model import TRAConfig, train_tra_one_fold
 
         cfg = self._config
         tra_cfg = TRAConfig(
@@ -1025,7 +1025,7 @@ class MLStockSelector:
         _gru_store: tuple | None = None,
     ) -> Any:
         """训练单折 MASTER 模型。"""
-        from aipha.models.master_model import MASTERConfig, train_master_one_fold
+        from aipha.experiments.models.master_model import MASTERConfig, train_master_one_fold
 
         cfg = self._config
         master_cfg = MASTERConfig(
@@ -1064,7 +1064,7 @@ class MLStockSelector:
         _gru_store: tuple | None = None,
     ) -> Any:
         """训练单折 HIST 概念图谱模型。"""
-        from aipha.models.hist_model import HISTConfig, train_hist_one_fold
+        from aipha.experiments.models.hist_model import HISTConfig, train_hist_one_fold
 
         cfg = self._config
         hist_cfg = HISTConfig(
@@ -1106,7 +1106,7 @@ class MLStockSelector:
         fold_idx: int,
     ) -> Any:
         """训练单折 GAT 图注意力模型。"""
-        from aipha.models.gat_ranker import GATFactorRanker, GATRankerConfig
+        from aipha.experiments.models.gat_ranker import GATFactorRanker, GATRankerConfig
 
         cfg = self._config
         gat_cfg = GATRankerConfig(
@@ -1465,7 +1465,7 @@ class MLStockSelector:
                 )
         elif mtype == "gru":
             import torch
-            from aipha.models.gru_ranker import GRUNetwork, _GRUWrapper
+            from aipha.experiments.models.gru_ranker import GRUNetwork, _GRUWrapper
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             fold_files = _ordered_fold_files(path, ".pt")
             for fp in fold_files:

@@ -12,6 +12,9 @@ ML 模型模块 —— 特征工程、预测。
 注意：trainer 模块已在 W4.2 阶段清理（零消费者，纯 prototype 死代码）。
 新的低频 A 股研究使用 ``aipha.research.ResearchPipeline``，由它统一调用
 LightGBM/ElasticNet 训练及版本校验；其他模型仅供显式实验和历史回放。
+GRU、GAT、TRA、MASTER、HIST 和 Ensemble 的实现位于
+``aipha.experiments.models``；旧子模块仅保留导入及 pickle 名称兼容别名，
+本包不会主动导入这些实验实现或其可选依赖。
 """
 
 # ---------- feature_eng ----------

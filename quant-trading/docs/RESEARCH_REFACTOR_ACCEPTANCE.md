@@ -7,7 +7,7 @@
 | 原方案 | 当前代码与证据 | 尚未完成或证据边界 |
 | --- | --- | --- |
 | 1. 唯一研究核心与数据契约 | `python/aipha/research/pipeline.py` 编排快照、标签、Walk-Forward、OOS、组合回测、报告和目标计划；`contracts.py` 定义统一记录。复用 `data`、`universe`、`features`、`models`、`validation`、`execution`。 | 实际编排和报告实现集中于 `research`，并非原方案示意目录的逐文件搬迁；旧兼容模块保留。 |
-| 2. ML 入口收敛 | `src/tools/ml-ranking.ts`、`python/aipha/engines/aipha_ml_engine.py` 使用规范入口，默认只公开 LightGBM LambdaRank 和 ElasticNet；旧训练脚本、模型和策略要求显式兼容开关。`test_ml_screener_compatibility.py`、`test_research_completion.py` 验证边界。 | GRU/GAT/Ensemble 等文件仍在原目录，以显式开关隔离，尚未物理迁入独立实验目录；不能据此宣称旧模块已全部删除或迁移。 |
+| 2. ML 入口收敛 | `src/tools/ml-ranking.ts`、`python/aipha/engines/aipha_ml_engine.py` 使用规范入口，默认只公开 LightGBM LambdaRank 和 ElasticNet；旧训练脚本、模型和策略要求显式兼容开关。7 个实验模型实现已迁入 `aipha/experiments/models`，旧路径只保留模块别名供历史导入及 pickle 解析。`test_experimental_model_boundary.py` 使用独立进程禁止实验/可选依赖导入，检查默认注册与模型列表，并验证旧路径保存的 DoubleEnsemble 预测不变。 | 模块目录迁移不等于存量任务或模型产物已完成规范迁移；实验模型仍不被规范 manifest loader 接受。缺少可选 Torch/PyG 依赖时，对应模型运行兼容测试跳过，不能声称已经实测。 |
 | 3. TuShare PIT 与防前视 | `data/tushare_pit_provider.py` 采用实际/声明公告日较晚值，保留修订；`research/snapshots.py` 生成历史成分、ST、上市交易日、当日复权、财务特征和签名日历。`test_financial_revisions.py`、`test_market_calendar.py`、`test_listing_sessions.py` 验证时点和完整性。 | 本地签名证明产物在签名后未被篡改，不证明上游供应商提供了全部历史修订；真实 TuShare 数据覆盖率仍需部署验证。 |
 | 4. 标签与月度调仓 | 默认研究 YAML 为日频、月度、收盘信号、次日开盘、三年训练、一月预测、20 日标签和 purge。`test_execution_timing.py`、`test_research_pipeline.py` 验证交易日边界、无效标签和训练/测试隔离。 | 集成 fixture 缩短训练窗口以控制测试时间，不替代真实三年窗口研究。 |
 | 5. 唯一组合回测 | `research/backtest.py` 处理原始价格、手数、现金、T+1、涨跌停、停牌、换手、费用、滑点、基准与公司事件；组合构建约束单票和行业。`research/style.py` 将配置的风格 z-score 预算用于目标权重、导出、CSCV 和 Paper 计划复核。相关证据见 `test_style_constraints.py`、`test_portfolio_cscv.py`、`test_corporate_action_accounting.py`、`test_execution_timing.py`、`test_research_pipeline.py`。 | 风格预算默认未开启，约束目标组合；受执行限制及价格变化影响的实际持仓不保证始终满足预算，尚无 broker 实盘侧持续风格风控。缺失行业数据时明确报告不可用；不推断历史行业。完整持有期红利税、配股、零碎送股仍未实现。 |
@@ -37,6 +37,8 @@
 
 2026-10-18 运行 `python scripts/audit_ml_migration.py`：`configs/paper` 下共 36 份配置，16 份 `not_applicable`，20 份 `legacy_compat`，0 份 `canonical`。这是配置库存统计，不表示 20 个任务当前都在运行，也不表示它们的旧模型文件都存在。
 
+进一步核对这些配置引用的 9 个不同模型目录，当前 Python 项目路径下全部不存在；ML 组件均未声明规范快照路径。因此这些配置暂时没有可供实际迁移/推理核对的输入。不能生成空模型目录、附加新 manifest 或只删除兼容标志来宣称迁移完成。
+
 真实迁移应依次进行：选择需保留的旧任务，定位原始 DB/模型，核对可信训练与特征证据，必要时通过规范 TuShare 链路重训，配置独立的新 Paper 账本，验证实际推理与计划，再运行只读迁移审计。只有移除兼容依赖且满足快照/模型契约的任务才能通过 `--strict`；不能只删 `legacy_ml_compat` 标志。
 
 当前进程没有配置生产 TuShare token 或快照签名密钥，无法据此运行真实数据训练。密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
@@ -50,7 +52,7 @@ QMT 只读实机证据及其边界见 [QMT_ACCEPTANCE.md](QMT_ACCEPTANCE.md)。�
 在 `quant-trading/python` 运行：
 
 ```powershell
-python -m pytest tests/research tests/runner tests/ops tests/data/test_pit_financial.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/models/test_ml_stock_selector.py tests/models/test_lgbm_ranker.py tests/models/test_feature_groups.py tests/models/test_wf_stats.py tests/backtest/test_db_migration.py tests/backtest/test_migrate_sqlite_cli.py tests/scripts/test_ops.py tests/scripts/test_research_retrain.py tests/scripts/test_audit_ml_migration.py tests/scripts/test_paper_launcher.py tests/execution/test_qmt_bridge_contract.py tests/execution/test_paper_gateway.py -q --basetemp=.pytest-tmp-goal --tb=short
+python -m pytest tests/research tests/runner tests/ops tests/data/test_pit_financial.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/models/test_ml_stock_selector.py tests/models/test_lgbm_ranker.py tests/models/test_feature_groups.py tests/models/test_wf_stats.py tests/models/test_gru_ranker.py tests/models/test_gat_ranker.py tests/models/test_double_ensemble.py tests/models/test_ensemble.py tests/backtest/test_db_migration.py tests/backtest/test_migrate_sqlite_cli.py tests/scripts/test_ops.py tests/scripts/test_research_retrain.py tests/scripts/test_audit_ml_migration.py tests/scripts/test_paper_launcher.py tests/execution/test_qmt_bridge_contract.py tests/execution/test_paper_gateway.py -q --basetemp=.pytest-tmp-goal --tb=short
 python scripts/audit_ml_migration.py
 ```
 
@@ -61,6 +63,6 @@ npm.cmd run typecheck
 npm.cmd exec -- vitest run src/http/ml-research-api.test.ts src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts src/services/order-manager.test.ts src/services/order-manager-paper.integration.test.ts
 ```
 
-本次以上检查结果（包含风格预算实现）：Python **1049 passed、2 skipped**；TypeScript 类型检查通过，6 个测试文件、**140 passed**。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
+本次 Python 检查结果（包含风格预算及实验目录迁移）：**1073 passed、8 skipped**。其中新增旧模型独立进程读取检查随后定向通过。TypeScript 未在纯 Python 目录迁移后重复运行，最近一次类型检查及 6 个文件的 **140 项测试**通过，相关 TypeScript 文件没有本轮变更。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
 
-Linux 原生独占发布和 Docker cron 尚未在本机执行；Windows 无符号链接创建权限时，对应测试会跳过。测试结果不能扩展成这些平台的实际运行验收。
+Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

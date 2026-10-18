@@ -972,7 +972,7 @@ def _predict_ranks(model_dir: Path, cross: Any) -> Any:
         from aipha.models.ml_stock_selector import MLStockSelector
 
         selector = MLStockSelector()
-        selector.load(model_dir)
+        selector.load(model_dir, allow_experimental_models=True)
     _check_feature_coverage(selector, cross, model_dir)
 
     scores = selector.predict(cross)

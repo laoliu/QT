@@ -107,6 +107,9 @@ class MLSelectorConfig:
 
     # --- 模型类型 ---
     model_type: str = "lightgbm"  # "lightgbm"|"double_ensemble"|"xgboost"|"elasticnet"|"gru"|"tra"|"master"|"gat"|"hist"
+    # Experimental implementations require a deliberate legacy opt-in.
+    # The canonical research API accepts only LightGBM and ElasticNet.
+    allow_experimental_models: bool = False
 
     # --- LightGBM ---
     n_estimators: int = 300
@@ -228,6 +231,10 @@ class MLStockSelector:
 
     def __init__(self, config: MLSelectorConfig | None = None) -> None:
         self._config = config or MLSelectorConfig()
+        self._validate_model_type(
+            self._config.model_type,
+            allow_experimental=self._config.allow_experimental_models is True,
+        )
         self._models: list[Any] = []
         self._wf_results: list[dict[str, Any]] = []
         self._feature_importance: dict[str, float] = {}
@@ -238,6 +245,18 @@ class MLStockSelector:
     @property
     def config(self) -> MLSelectorConfig:
         return self._config
+
+    @staticmethod
+    def _validate_model_type(model_type: str, *, allow_experimental: bool = False) -> None:
+        canonical = {"lightgbm", "elasticnet"}
+        experimental = {"double_ensemble", "xgboost", "gru", "tra", "master", "gat", "hist"}
+        if model_type not in canonical | experimental:
+            raise ValueError(f"unknown ML model type: {model_type}")
+        if model_type in experimental and not allow_experimental:
+            raise ValueError(
+                "experimental ML model is disabled; use ml_ranking for lightgbm/linear "
+                "or explicitly set allow_experimental_models=True for a legacy backtest"
+            )
 
     @property
     def n_folds(self) -> int:
@@ -1375,13 +1394,21 @@ class MLStockSelector:
         )
         logger.info("Saved %d fold models to %s", len(self._models), path)
 
-    def load(self, path: Path) -> None:
+    def load(self, path: Path, *, allow_experimental_models: bool = False) -> None:
         """加载模型。"""
         import joblib
 
         path = Path(path)
         meta = joblib.load(path / "meta.pkl")
-        self._config = meta["config"]
+        # A saved training opt-in is data, not the caller's permission to
+        # load experiments into a new runtime. Validate before changing state.
+        loaded_config = meta["config"]
+        self._validate_model_type(
+            loaded_config.model_type,
+            allow_experimental=allow_experimental_models is True,
+        )
+        self._config = loaded_config
+        self._config.allow_experimental_models = allow_experimental_models is True
         self._wf_results = meta["wf_results"]
         self._feature_importance = meta["feature_importance"]
         self._models.clear()

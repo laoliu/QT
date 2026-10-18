@@ -659,3 +659,24 @@ def test_linear_elasticnet_baseline_is_a_real_walk_forward_model() -> None:
     assert not oos.empty
     assert selector.config.model_type == "elasticnet"
     assert summary["model_type"] == "elasticnet"
+
+
+def test_canonical_loader_rejects_experimental_manifest_before_loading(tmp_path: Path) -> None:
+    (tmp_path / "model_manifest.json").write_text(json.dumps({
+        "schema_version": 1, "model_type": "double_ensemble",
+        "feature_version": "cn_equity_v1", "feature_columns": ["a"],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="lightgbm or elasticnet only"):
+        load_verified_selector(tmp_path, expected_feature_version="cn_equity_v1")
+
+
+def test_canonical_loader_rejects_model_type_mismatch(tmp_path: Path) -> None:
+    from aipha.models.ml_stock_selector import MLSelectorConfig, MLStockSelector
+
+    MLStockSelector(MLSelectorConfig(model_type="elasticnet", feature_cols=["a"])).save(tmp_path)
+    (tmp_path / "model_manifest.json").write_text(json.dumps({
+        "schema_version": 1, "model_type": "lightgbm",
+        "feature_version": "cn_equity_v1", "feature_columns": ["a"],
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="saved model type does not match"):
+        load_verified_selector(tmp_path, expected_feature_version="cn_equity_v1")

@@ -140,7 +140,7 @@ class MultiModelEnsemble:
         )
         logger.info("Saved ensemble (%d sub-models) to %s", len(self._selectors), path)
 
-    def load(self, path: Path) -> None:
+    def load(self, path: Path, *, allow_experimental_models: bool = False) -> None:
         """加载所有子模型。"""
         import joblib
         from aipha.models.ml_stock_selector import (
@@ -156,7 +156,7 @@ class MultiModelEnsemble:
         sub_dirs = sorted(path.glob("sub_*"))
         for sd in sub_dirs:
             sel = MLStockSelector(MLSelectorConfig())
-            sel.load(sd)
+            sel.load(sd, allow_experimental_models=allow_experimental_models)
             self._selectors.append(sel)
         logger.info("Loaded ensemble (%d sub-models) from %s", len(self._selectors), path)
 

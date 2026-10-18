@@ -111,6 +111,12 @@ The historical `ml_factor` and `ml_predict` strategy classes also require
 file is configured. Their feature paths are retained for reproducible old
 backtests; the canonical `aipha-ml-ranking` strategy remains the default.
 
+The shared `MLStockSelector` also rejects experimental model types by default.
+Historical callers must set `allow_experimental_models=True` at construction
+and again on `load(...)`; a flag persisted inside an old model cannot authorize
+loading it into a new runtime. The canonical manifest loader accepts only
+LightGBM/ElasticNet and checks the stored model type against its manifest.
+
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
 read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.
 Adding `--strict` makes CI fail while any applicable ML config lacks a

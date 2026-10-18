@@ -27,6 +27,8 @@ def load_verified_selector(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != 1:
         raise ValueError("unsupported model manifest schema_version")
+    if manifest.get("model_type") not in {"lightgbm", "elasticnet"}:
+        raise ValueError("canonical model manifest supports lightgbm or elasticnet only")
     if manifest.get("feature_version") != expected_feature_version:
         raise ValueError(
             f"feature version mismatch: model={manifest.get('feature_version')!r}, "
@@ -43,6 +45,8 @@ def load_verified_selector(
         raise ValueError("model feature columns/order do not match the requested schema")
     selector = MLStockSelector()
     selector.load(path)
+    if selector.config.model_type != manifest["model_type"]:
+        raise ValueError("saved model type does not match model manifest")
     if selector.config.feature_cols != actual:
         raise ValueError("saved model metadata feature columns do not match model manifest")
     return selector

@@ -205,12 +205,16 @@ class MLFactorStrategy(EquityRotationStrategy):
             sel_valid = {f.name for f in dc_fields(MLSelectorConfig)}
             sel_kwargs: dict[str, Any] = {
                 "model_type": self._config.model_type,
+                "allow_experimental_models": self._config.legacy_ml_compat,
             }
             for k, v in self._ml_extra_kwargs.items():
                 if k in sel_valid:
                     sel_kwargs[k] = v
             selector = MLStockSelector(MLSelectorConfig(**sel_kwargs))
-            selector.load(model_dir)
+            selector.load(
+                model_dir,
+                allow_experimental_models=self._config.legacy_ml_compat,
+            )
             self._selector = selector
             self._model_ready = True
             logger.info(

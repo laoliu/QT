@@ -10,7 +10,8 @@ ML 模型模块 —— 特征工程、预测。
   - ``EnsemblePredictor`` / ``OnlinePredictor`` / ``CrossSectionalPredictor``: experimental，需从具体模块显式导入
 
 注意：trainer 模块已在 W4.2 阶段清理（零消费者，纯 prototype 死代码）。
-若未来需要模型训练能力，应基于 Qlib ModelCreator 或 sklearn Pipeline 重新设计。
+新的低频 A 股研究使用 ``aipha.research.ResearchPipeline``，由它统一调用
+LightGBM/ElasticNet 训练及版本校验；其他模型仅供显式实验和历史回放。
 """
 
 # ---------- feature_eng ----------

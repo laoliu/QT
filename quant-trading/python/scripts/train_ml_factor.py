@@ -1233,6 +1233,7 @@ def main() -> None:
 
     model_cfg = MLSelectorConfig(
         model_type=args.model,
+        allow_experimental_models=bool(args.legacy_model),
         objective=args.objective,
         n_rank_bins=args.n_rank_bins,
         truncate_quantile=args.truncate_quantile,

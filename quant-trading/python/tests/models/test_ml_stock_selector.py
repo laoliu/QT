@@ -316,6 +316,35 @@ class TestPredict:
 # ---------------------------------------------------------------------------
 
 class TestSaveLoad:
+    @pytest.mark.parametrize("model_type", [
+        "double_ensemble", "xgboost", "gru", "tra", "master", "gat", "hist",
+    ])
+    def test_experimental_selector_requires_explicit_opt_in(self, model_type):
+        with pytest.raises(ValueError, match="experimental ML model is disabled"):
+            MLStockSelector(MLSelectorConfig(model_type=model_type))
+        selector = MLStockSelector(MLSelectorConfig(
+            model_type=model_type, allow_experimental_models=True,
+        ))
+        assert selector.config.model_type == model_type
+
+    def test_unknown_model_does_not_fall_back_to_lightgbm(self):
+        with pytest.raises(ValueError, match="unknown ML model type"):
+            MLStockSelector(MLSelectorConfig(
+                model_type="typo", allow_experimental_models=True,
+            ))
+
+    def test_saved_experimental_opt_in_does_not_authorize_loading(self, tmp_path):
+        selector = MLStockSelector(MLSelectorConfig(
+            model_type="double_ensemble", allow_experimental_models=True,
+        ))
+        selector.save(tmp_path)
+        restored = MLStockSelector()
+        with pytest.raises(ValueError, match="experimental ML model is disabled"):
+            restored.load(tmp_path)
+        assert restored.config.model_type == "lightgbm"
+        restored.load(tmp_path, allow_experimental_models=True)
+        assert restored.config.model_type == "double_ensemble"
+
     def test_save_and_load(self, featured_df: pd.DataFrame, tmp_path):
         cfg = MLSelectorConfig(
             train_years=1,

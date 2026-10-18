@@ -480,7 +480,7 @@ def ensemble_predict(
             from aipha.models.ensemble import EnsembleConfig, MultiModelEnsemble
 
             ens = MultiModelEnsemble(EnsembleConfig())
-            ens.load(p)
+            ens.load(p, allow_experimental_models=True)
             scores = ens.predict(df)
         else:
             from aipha.models.ml_stock_selector import (
@@ -489,7 +489,7 @@ def ensemble_predict(
             )
 
             sel = MLStockSelector(MLSelectorConfig())
-            sel.load(p)
+            sel.load(p, allow_experimental_models=True)
             scores = sel.predict(df)
         preds.append(pd.Series(np.asarray(scores), index=df.index, dtype=float))
         logger.info("模型 %s 打分完成: %d 条", p.name, len(preds[-1]))

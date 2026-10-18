@@ -218,6 +218,7 @@ def research_config_from_mapping(raw: dict[str, Any]) -> ResearchConfig:
             else float(portfolio.get("max_industry_weight", 0.20))
         ),
         max_daily_turnover=float(portfolio.get("max_daily_turnover", 0.30)),
+        max_style_exposure=portfolio.get("max_style_exposure", {}),
         model_type=model_aliases[configured_model],
         objective=model.get("objective", "regression" if configured_model == "linear" else "lambdarank"),
         initial_capital=float(portfolio.get("initial_capital", 1_000_000)),

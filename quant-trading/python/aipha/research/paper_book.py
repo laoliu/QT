@@ -109,9 +109,12 @@ def _verify_receipt_calendar(connection, receipt: dict) -> int:
     return len(sessions)
 
 
-def _market_records(bars: pd.DataFrame) -> dict[tuple[str, str], dict]:
+def _market_records(bars: pd.DataFrame, style_limits=()) -> dict[tuple[str, str], dict]:
     columns = [column for column in (*MARKET_COLUMNS, "price_adjustment", "up_limit", "down_limit",
                                      "open_raw", "high_raw", "low_raw", "close_raw") if column in bars]
+    if style_limits:
+        columns.extend(column for column in ("is_index_member", "is_st", "listing_days", "listing_days_basis",
+                                             *(name for name, _ in style_limits)) if column in bars and column not in columns)
     tape = bars[columns].astype(object).where(pd.notna(bars[columns]), None)
     return {(str(record["trade_date"]), record["symbol"]): record for record in tape.to_dict("records")}
 
@@ -149,7 +152,7 @@ def upgrade_paper_book_calendar(
             raise ValueError("Paper book replay does not match its committed receipt")
         if str(pd.Timestamp(metadata["end_date"]).date()) != receipt_row[0]:
             raise ValueError("calendar upgrade snapshot must end at the last committed close")
-        records = _market_records(validate_market_frame(snapshot))
+        records = _market_records(validate_market_frame(snapshot), config.max_style_exposure)
         stored = {(day, symbol): json.loads(payload) for day, symbol, payload in
                   memory.execute("SELECT day,symbol,payload FROM market ORDER BY day,symbol")}
         book_start = min(day for day, _ in stored)
@@ -289,16 +292,20 @@ def advance_paper_book(
                 weights[industry] = weights.get(industry, 0.) + target.target_weight
             if any(weight > config.max_industry_weight + 1e-12 for weight in weights.values()):
                 raise ValueError("Paper plan exceeds the configured industry weight limit")
+        if config.max_style_exposure:
+            from .style import validate_target_styles
+
+            validate_target_styles(plan.targets, eligible, config.max_style_exposure)
     request_hash = _hash({"snapshot": metadata["snapshot_content_sha256"], "source_signature": metadata["source_signature"],
                           "config": config.model_config_hash(),
                           "plan": plan.to_dict() if plan is not None else None})
     by_day = {}
-    for (record_day, symbol), record in _market_records(bars).items():
+    for (record_day, symbol), record in _market_records(bars, config.max_style_exposure).items():
         by_day.setdefault(record_day, {})[symbol] = _dump(record)
 
     with _connection(Path(path), commit) as connection:
         frozen = connection.execute("SELECT value FROM settings WHERE key='config'").fetchone()
-        if frozen is not None and _dump(asdict(config)) != frozen[0]:
+        if frozen is not None and _dump(asdict(config)) != _dump(asdict(ResearchConfig(**json.loads(frozen[0])))):
             raise ValueError("Paper research config differs from this book; use a separate book or explicit migration")
         previous = connection.execute("SELECT day,request_hash,payload FROM receipts ORDER BY day DESC LIMIT 1").fetchone()
         if previous is not None:

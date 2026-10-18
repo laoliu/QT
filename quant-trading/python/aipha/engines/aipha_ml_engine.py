@@ -77,6 +77,26 @@ def _read_parquet(path: str | None):
     return frame
 
 
+def _load_style_reference(config: dict, cfg, predictions):
+    if not cfg.max_style_exposure:
+        return None
+    if not config.get("featurePath"):
+        raise ValueError("max_style_exposure requires featurePath to the complete signed PIT snapshot")
+    from aipha.research.pipeline import _load_snapshot_metadata
+    from aipha.universe.historical import filter_historical_universe
+    from aipha.universe.indices import validate_snapshot_universe
+
+    reference = _read_parquet(config["featurePath"])
+    metadata = _load_snapshot_metadata(reference)
+    validate_snapshot_universe(metadata, cfg.universe)
+    if metadata["provider"] != cfg.data_provider or metadata["feature_version"] != cfg.feature_version:
+        raise ValueError("style reference provider/feature_version differs from research config")
+    parent = predictions.attrs.get("snapshot_metadata", {})
+    if parent.get("data_snapshot_id") != metadata["data_snapshot_id"]:
+        raise ValueError("style reference and predictions must have the same data_snapshot_id")
+    return filter_historical_universe(reference, min_listing_days=cfg.min_listing_days)
+
+
 def run(config: dict) -> dict:
     action = config.get("action", "list_models")
     try:
@@ -206,6 +226,8 @@ def run(config: dict) -> dict:
                 top_k=cfg.top_k,
                 max_position_weight=cfg.max_position_weight,
                 max_industry_weight=cfg.max_industry_weight,
+                max_style_exposure=cfg.max_style_exposure,
+                style_reference=_load_style_reference(config, cfg, frame),
             )
             metrics = _evaluate_predictions(normalized, targets, cfg)
             return {"ok": True, "data": {"metrics": metrics, "rows": int(len(normalized))}}
@@ -225,6 +247,8 @@ def run(config: dict) -> dict:
                 top_k=int(config.get("topN", cfg.top_k)),
                 max_position_weight=cfg.max_position_weight,
                 max_industry_weight=cfg.max_industry_weight,
+                max_style_exposure=cfg.max_style_exposure,
+                style_reference=_load_style_reference(config, cfg, source),
                 run_id=run_id,
                 model_id=model_id,
             )

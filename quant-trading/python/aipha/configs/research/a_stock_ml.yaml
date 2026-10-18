@@ -43,6 +43,9 @@ portfolio:
   top_k: 30
   max_position_weight: 0.05
   max_industry_weight: 0.20
+  # Absolute NAV-weighted z-score budgets on the signal-date eligible universe.
+  # Opt in with e.g. {log_market_cap: 0.30, momentum_20: 0.50}.
+  max_style_exposure: {}
   max_daily_turnover: 0.30
   initial_capital: 1000000
 

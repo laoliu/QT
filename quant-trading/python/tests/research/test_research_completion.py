@@ -358,7 +358,7 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
             return pd.DataFrame({
                 "ts_code": market["ts_code"],
                 "trade_date": market["trade_date"],
-                "circ_mv": 1_000_000.0,
+                "circ_mv": market["ts_code"].map({symbol: (idx + 1) * 1_000_000. for idx, symbol in enumerate(symbols)}),
             })
 
         def load_stock_basic(self, **kwargs):
@@ -432,6 +432,7 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
         train_years=1, test_months=1, forward_days=5,
         label_skip_days=1, purge_days=10, top_k=3,
         max_position_weight=0.25, n_estimators=3,
+        max_style_exposure={"log_market_cap": .15},
     )
     result = ResearchPipeline(cfg).run_tushare(
         EquityFixture(), tmp_path / "runs",
@@ -480,6 +481,11 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     assert report["walk_forward"]["feature_selection"]["by_group"]["quality"] == [
         "factor_revenue_yoy", "factor_roe",
     ]
+    style_report = report["target_style_constraints"]
+    assert style_report["basis"] == "signal_date_eligible_universe_population_zscore"
+    assert style_report["limits"] == {"log_market_cap": .15}
+    assert style_report["by_rebalance"]
+    assert all(abs(row["weighted_zscores"]["log_market_cap"]) <= .15 + 1e-8 for row in style_report["by_rebalance"])
     events = json.loads((artifact / "corporate_actions.json").read_text(encoding="utf-8"))
     assert any(event["event"] == "cash_paid" for event in events)
 

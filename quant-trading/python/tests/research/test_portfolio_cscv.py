@@ -9,6 +9,7 @@ import pytest
 from aipha.research.backtest import run_portfolio_backtest
 from aipha.research.overfitting import portfolio_selection_cscv
 from aipha.research.pipeline import ResearchConfig, _evaluate_predictions, build_target_positions
+from aipha.research.style import validate_target_styles
 
 
 def _inputs(n_days=45, n_symbols=10):
@@ -66,6 +67,24 @@ def test_labels_cannot_change_the_candidate_grid_or_realized_matrix(selection) -
     pd.testing.assert_frame_equal(matrix, other_matrix)
     assert other["pbo"] == analysis["pbo"]
     assert other["candidates"] == analysis["candidates"]
+
+
+def test_cscv_candidates_share_the_style_budgets_and_reference_universe():
+    market, predictions, config = _inputs()
+    market = market.assign(log_market_cap=np.tile(np.arange(10, dtype=float), 45),
+                           is_index_member=True, is_st=False, listing_days=400,
+                           listing_days_basis="exchange_open_sessions")
+    config = replace(config, max_style_exposure={"log_market_cap": .1})
+    matrix, analysis = portfolio_selection_cscv(market, predictions, config)
+    assert not matrix.empty
+    for candidate in analysis["candidates"]:
+        policy = replace(config, top_k=candidate["top_k"])
+        targets = build_target_positions(predictions, top_k=policy.top_k, max_position_weight=policy.max_position_weight,
+                                         max_style_exposure=policy.max_style_exposure, style_reference=market)
+        diagnostics = validate_target_styles(targets, market, policy.max_style_exposure)
+        assert all(abs(row["weighted_zscores"]["log_market_cap"]) <= .1 + 1e-8 for row in diagnostics)
+        replay = run_portfolio_backtest(market, predictions, targets, policy)
+        assert matrix[candidate["id"]].to_numpy() == pytest.approx([row["daily_return"] for row in replay["daily_returns"]][1:])
 
 
 def test_thin_universe_does_not_silently_drop_large_candidates() -> None:

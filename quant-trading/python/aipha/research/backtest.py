@@ -23,6 +23,12 @@ def run_portfolio_backtest(
     targets: list[TargetPosition],
     config: Any,
 ) -> dict[str, Any]:
+    if getattr(config, "max_style_exposure", ()):
+        from .style import validate_target_styles
+        from aipha.universe.historical import filter_historical_universe
+
+        validate_target_styles(targets, filter_historical_universe(market, min_listing_days=config.min_listing_days),
+                               config.max_style_exposure)
     bars = validate_market_frame(market)
     bars["_open_limit_up"], bars["_open_limit_down"] = price_limit_flags(bars)
     ledger = CorporateActionLedger(bars)

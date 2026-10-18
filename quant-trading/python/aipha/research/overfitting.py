@@ -25,6 +25,7 @@ def portfolio_selection_cscv(
     """
     from .pipeline import _top_k_candidate_grid, build_target_positions
     from aipha.reporting.pbo import PBOAnalyzer, PBOConfig
+    from aipha.universe.historical import filter_historical_universe
 
     grid = _top_k_candidate_grid(config.top_k)
     candidate_ids = [f"top_k_{k}" for k in grid]
@@ -72,6 +73,9 @@ def portfolio_selection_cscv(
                 scores, top_k=candidate,
                 max_position_weight=config.max_position_weight,
                 max_industry_weight=config.max_industry_weight,
+                max_style_exposure=config.max_style_exposure,
+                style_reference=(filter_historical_universe(market, min_listing_days=config.min_listing_days)
+                                 if config.max_style_exposure else None),
             )
             daily = run_portfolio_backtest(market, scores, targets, candidate_config)["daily_returns"]
         frame = pd.DataFrame(daily)

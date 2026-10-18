@@ -10,7 +10,7 @@
 | 2. ML 入口收敛 | `src/tools/ml-ranking.ts`、`python/aipha/engines/aipha_ml_engine.py` 使用规范入口，默认只公开 LightGBM LambdaRank 和 ElasticNet；旧训练脚本、模型和策略要求显式兼容开关。`test_ml_screener_compatibility.py`、`test_research_completion.py` 验证边界。 | GRU/GAT/Ensemble 等文件仍在原目录，以显式开关隔离，尚未物理迁入独立实验目录；不能据此宣称旧模块已全部删除或迁移。 |
 | 3. TuShare PIT 与防前视 | `data/tushare_pit_provider.py` 采用实际/声明公告日较晚值，保留修订；`research/snapshots.py` 生成历史成分、ST、上市交易日、当日复权、财务特征和签名日历。`test_financial_revisions.py`、`test_market_calendar.py`、`test_listing_sessions.py` 验证时点和完整性。 | 本地签名证明产物在签名后未被篡改，不证明上游供应商提供了全部历史修订；真实 TuShare 数据覆盖率仍需部署验证。 |
 | 4. 标签与月度调仓 | 默认研究 YAML 为日频、月度、收盘信号、次日开盘、三年训练、一月预测、20 日标签和 purge。`test_execution_timing.py`、`test_research_pipeline.py` 验证交易日边界、无效标签和训练/测试隔离。 | 集成 fixture 缩短训练窗口以控制测试时间，不替代真实三年窗口研究。 |
-| 5. 唯一组合回测 | `research/backtest.py` 处理原始价格、手数、现金、T+1、涨跌停、停牌、换手、费用、滑点、基准与公司事件；组合构建约束单票和行业。相关证据见 `test_corporate_action_accounting.py`、`test_execution_timing.py`、`test_research_pipeline.py`。 | **风格暴露目前是报告诊断，尚未成为组合构建的硬约束。** 缺失行业数据时明确报告不可用；不推断历史行业。完整持有期红利税、配股、零碎送股仍未实现。 |
+| 5. 唯一组合回测 | `research/backtest.py` 处理原始价格、手数、现金、T+1、涨跌停、停牌、换手、费用、滑点、基准与公司事件；组合构建约束单票和行业。`research/style.py` 将配置的风格 z-score 预算用于目标权重、导出、CSCV 和 Paper 计划复核。相关证据见 `test_style_constraints.py`、`test_portfolio_cscv.py`、`test_corporate_action_accounting.py`、`test_execution_timing.py`、`test_research_pipeline.py`。 | 风格预算默认未开启，约束目标组合；受执行限制及价格变化影响的实际持仓不保证始终满足预算，尚无 broker 实盘侧持续风格风控。缺失行业数据时明确报告不可用；不推断历史行业。完整持有期红利税、配股、零碎送股仍未实现。 |
 | 6. 不可变模型与研究报告 | `research/artifacts.py` 校验 schema、特征顺序/版本/策略和模型字节；pipeline 写入输入快照、每折模型、OOS、收益、交易、报告和计划。`test_end_to_end_oos_run_writes_reproducible_artifacts` 重新加载模型并重算 CSCV 结果。 | CSCV/PBO 只度量已记录的固定 Top-K 候选组合选择，不覆盖未记录的模型/因子搜索；样本不足或不可识别的统计量返回不可用。 |
 | 7. 执行隔离与迁移工具 | `research/execution_plan.py`、`paper_book.py`、QMT plan adapter 和 Node 安全配置限制执行模式、风险及来源；原始 QMT 单订单入口被拒绝。SQLite、模型、配置和 Paper 日历均有显式迁移工具。 | 工具通过 fixture 不等于存量文件已迁移。20 份历史 ML Paper 配置仍是 legacy；实际旧研究 DB/模型尚未逐项迁移核对。原文件不自动覆盖或删除。 |
 | 8. 统一配置和入口 | `python/aipha/configs/research/a_stock_ml.yaml` 是研究策略配置；规范 Paper profile 只引用它并配置部署路径。历史 YAML 通过显式兼容入口保留。`test_config_identity.py`、`test_paper_launcher.py` 检查配置传递、默认预演及路径。 | 示例 profile 没有被自动加入启动清单；不能把安装示例当成任务部署完成。 |
@@ -26,6 +26,7 @@
 - 更正旧报告不会覆盖已可见的新报告，未来公告不会进入历史特征。
 - 利润表等待 `max(ann_date, f_ann_date)` 才可见，修订也等待实际公布日。
 - 真正训练的 LightGBM manifest 包含质量因子，原始财务字段/公告键不被默认选为模型输入；报告给出确切缺失率和因子分组。
+- 采用非恒定市值特征和显式风格预算，逐月验证报告中的目标风格暴露，导出的计划继续通过 Paper 的独立复核。
 - 签名输入快照、OOS、组合回测、现金分红事件、报告和按日 Paper 计划实际生成。
 - 同一计划可以进入规范 SQLite Paper 账本；默认预演不创建账本，信号收盘只接受计划，下一交易日按原始开盘价成交并保留 plan/run/model/signal 标识。
 - 重新打开账本可以只读重算成交，数据库字节保持不变。
@@ -60,6 +61,6 @@ npm.cmd run typecheck
 npm.cmd exec -- vitest run src/http/ml-research-api.test.ts src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts src/services/order-manager.test.ts src/services/order-manager-paper.integration.test.ts
 ```
 
-本次以上检查结果：Python **1025 passed、2 skipped**；TypeScript 类型检查通过，6 个测试文件、**140 passed**。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
+本次以上检查结果（包含风格预算实现）：Python **1049 passed、2 skipped**；TypeScript 类型检查通过，6 个测试文件、**140 passed**。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行；Windows 无符号链接创建权限时，对应测试会跳过。测试结果不能扩展成这些平台的实际运行验收。

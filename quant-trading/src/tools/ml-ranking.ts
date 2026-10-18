@@ -58,7 +58,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
         },
         featurePath: {
           type: "string",
-          description: "本地 Parquet 特征快照路径（predict）",
+          description: "本地 Parquet 特征快照路径（predict）；启用风格约束时 evaluate/export 必须提供完整签名 PIT 快照",
         },
         predictionsPath: {
           type: "string",

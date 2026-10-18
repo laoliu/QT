@@ -220,6 +220,51 @@ past dates. The portfolio policy applies `portfolio.max_industry_weight`
 walks the ranked list and skips names that would exceed the cap; when a local
 fixture or external snapshot has no dated industry field, the cap is not
 inferred and the report marks industry exposure as unavailable.
+
+Optional `portfolio.max_style_exposure` budgets constrain target weights:
+
+```yaml
+portfolio:
+  max_style_exposure:
+    log_market_cap: 0.30
+    momentum_20: 0.50
+```
+
+Each named factor must be in the canonical feature catalog (including explicitly
+registered custom factors). On each monthly signal date, its population mean
+and standard deviation are computed over **all eligible historical-universe
+rows** of the frozen snapshot. The budget bounds the absolute sum of target
+weight times that cross-sectional z-score. Cash contributes zero; a constant
+factor has zero z-score. This uses no later dates, labels or current constituents.
+Missing, non-finite or absent configured factors fail; the policy never silently
+disappears when a scorer supplies only its Top-K predictions.
+
+The ranked shortlist and existing stock/industry caps are retained. A linear
+program first maximizes invested capital within those per-name weight bounds
+and style budgets, then prefers higher ranks among equally invested solutions.
+It may reduce weights and retain cash rather than renormalizing them into a
+violation. An all-cash result retains explicit zero-weight targets so the
+rebalance can exit old positions. It does not search stocks outside the ranked
+shortlist. An empty mapping leaves the previous equal-weight policy unchanged.
+
+Training, direct portfolio replay, bridge export/evaluation and every CSCV
+candidate use these same budgets. With a nonempty mapping, bridge
+`evaluate`/`export` also require `featurePath` pointing to the complete signed
+PIT reference with the same snapshot ID as the OOS file; a truncated ranking
+cannot serve as the standardization universe. Reports write
+`target_style_constraints` with the limits, z-score basis, invested weight and
+actual target exposure for every rebalance.
+
+Canonical daily Paper independently checks each accepted plan against its
+signed signal snapshot and freezes the style factor values and universe flags
+alongside market observations for replay. Changing that history is rejected.
+These are **target** budgets: trading blocks, turnover/lot restrictions and
+subsequent price moves can make actual holdings differ. They do not guarantee
+continuous realized exposure limits or broker-side live enforcement. Enabling
+or changing a budget requires a separate Paper book; existing books with no
+style policy remain readable and appendable, with their default config hashes
+unchanged.
+
 Execution plan schema v2 binds `plan_id` to the complete normalized plan,
 including mode, weights, reasons and risk flags; older schema v1 plans are
 rejected and must be re-exported from their source run. `PaperGateway.submit_target_plan`

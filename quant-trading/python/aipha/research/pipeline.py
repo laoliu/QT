@@ -41,6 +41,7 @@ class ResearchConfig:
     top_k: int = 30
     max_position_weight: float = 0.05
     max_industry_weight: float | None = 0.20
+    max_style_exposure: tuple[tuple[str, float], ...] = ()
     max_daily_turnover: float = 0.30
     model_type: str = "lightgbm"
     objective: str = "lambdarank"
@@ -60,11 +61,17 @@ class ResearchConfig:
         from aipha.universe.historical import validate_listing_threshold
         from aipha.universe.indices import normalize_universe
         from aipha.features.schema import normalize_feature_groups, normalize_column_groups
+        from .style import normalize_style_limits
 
         validate_listing_threshold(self.min_listing_days)
         object.__setattr__(self, "universe", normalize_universe(self.universe))
         object.__setattr__(self, "feature_groups", normalize_feature_groups(self.feature_groups))
         object.__setattr__(self, "feature_column_groups", normalize_column_groups(self.feature_column_groups))
+        object.__setattr__(self, "max_style_exposure", normalize_style_limits(self.max_style_exposure))
+        from aipha.features.schema import feature_catalog
+
+        if set(dict(self.max_style_exposure)) - set(feature_catalog(self.feature_column_groups)):
+            raise ValueError("max_style_exposure requires registered causal feature columns")
         if self.data_provider != "tushare_pit":
             raise ValueError("canonical historical research requires data_provider=tushare_pit")
         if self.model_type not in {"lightgbm", "elasticnet"}:
@@ -87,7 +94,10 @@ class ResearchConfig:
             raise ValueError("max_daily_turnover must be in (0, 2]")
 
     def model_config_hash(self) -> str:
-        payload = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False, default=list)
+        config = asdict(self)
+        if not self.max_style_exposure:
+            config.pop("max_style_exposure")  # Preserve existing default run/book identities.
+        payload = json.dumps(config, sort_keys=True, ensure_ascii=False, default=list)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -158,10 +168,12 @@ def build_target_positions(
     max_position_weight: float = 0.05,
     max_industry_weight: float | None = None,
     industry_column: str = "industry",
+    max_style_exposure=(),
+    style_reference: pd.DataFrame | None = None,
     run_id: str = "",
     model_id: str = "",
 ) -> list[TargetPosition]:
-    """Turn one or more prediction dates into capped equal-weight targets."""
+    """Build ranked capped targets, optionally reweighted within style budgets."""
     required = {"trade_date", "symbol", "score"}
     missing = required - set(predictions.columns)
     if missing:
@@ -173,6 +185,12 @@ def build_target_positions(
     period = pd.to_datetime(normalized["trade_date"].astype(str)).dt.to_period("M")
     last_dates = normalized.assign(_period=period).groupby("_period")["trade_date"].max()
     normalized = normalized[normalized["trade_date"].isin(set(last_dates))]
+    from .style import normalize_style_limits, style_zscores, constrain_style_weights
+
+    style_limits = normalize_style_limits(max_style_exposure)
+    if style_limits and style_reference is None:
+        raise ValueError("max_style_exposure requires a complete historical-universe style_reference")
+    styles = style_zscores(style_reference, style_limits, normalized.trade_date) if style_limits else None
     rows: list[TargetPosition] = []
     for raw_date, group in normalized.groupby("trade_date", sort=True):
         ranked = group.dropna(subset=["score"]).sort_values(
@@ -193,11 +211,15 @@ def build_target_positions(
             selected.append(row)
             if cap_enabled:
                 industry_weights[industry] = industry_weights.get(industry, 0.0) + weight
-        for rank, row in enumerate(selected, start=1):
+        weights = np.full(len(selected), weight)
+        if style_limits and selected:
+            cross = styles.loc[styles.trade_date.eq(raw_date)]
+            weights = constrain_style_weights([str(row.symbol) for row in selected], weight, cross, style_limits)
+        for rank, (row, target_weight) in enumerate(zip(selected, weights), start=1):
             rows.append(TargetPosition(
                 rebalance_date=pd.Timestamp(raw_date).date(),
                 symbol=str(row.symbol),
-                target_weight=float(weight),
+                target_weight=float(target_weight),
                 reason=f"ml_rank_{rank}",
                 run_id=run_id,
                 model_id=model_id,
@@ -403,6 +425,8 @@ class ResearchPipeline:
             top_k=self.config.top_k,
             max_position_weight=self.config.max_position_weight,
             max_industry_weight=self.config.max_industry_weight,
+            max_style_exposure=self.config.max_style_exposure,
+            style_reference=_filter_historical_universe(source, min_listing_days=self.config.min_listing_days),
             run_id=self.run_id,
             model_id=self.run_id,
         )
@@ -572,6 +596,18 @@ class ResearchPipeline:
                 "targetPositions": [position.to_wire() for position in targets],
             },
         }
+        if self.config.max_style_exposure:
+            from .style import validate_target_styles
+
+            report["target_style_constraints"] = {
+                "basis": "signal_date_eligible_universe_population_zscore",
+                "scope": "target_weights_not_realized_holdings", "cash_exposure": 0.,
+                "limits": dict(self.config.max_style_exposure),
+                "by_rebalance": validate_target_styles(
+                    targets, _filter_historical_universe(source, min_listing_days=self.config.min_listing_days),
+                    self.config.max_style_exposure,
+                ),
+            }
         report = json_safe_metrics(report)
         (run_root / "report.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2, default=str, allow_nan=False), encoding="utf-8",

@@ -1,0 +1,82 @@
+{
+  "observed_at": "2026-10-18T22:01:00.7343405+08:00",
+  "python_crash_count": 25,
+  "processor_event_count": 6,
+  "within_1_second": 1,
+  "within_60_seconds": 3,
+  "scope": "All named python.exe Application Error 1000 events and WHEA 19 processor events since 2026-10-18 00:00 Shanghai, at observation time; WER event logging is not exhaustive of all process exits",
+  "nearby_crashes": [
+    {
+      "time": "2026-10-18T21:34:32.8878292+08:00",
+      "app_path": "G:\\qtdata\\research\\diagnostic-python31311\\python.exe",
+      "module": "_multiarray_umath.cp313-win_amd64.pyd",
+      "exception_code": "c0000005",
+      "offset": "0000000000111eda",
+      "pid": "0x3cd4",
+      "nearest_processor_event": {
+        "time": "2026-10-18T21:34:07.6941443+08:00",
+        "apic_id": "16",
+        "mca_bank": "0",
+        "mci_stat": "0x8000004000040005",
+        "error_type": "12"
+      },
+      "delta_seconds": -25.194
+    },
+    {
+      "time": "2026-10-18T21:34:13.5617049+08:00",
+      "app_path": "G:\\qtdata\\research\\diagnostic-python31311\\python.exe",
+      "module": "_multiarray_umath.cp313-win_amd64.pyd",
+      "exception_code": "c0000005",
+      "offset": "00000000000b9990",
+      "pid": "0x25e4",
+      "nearest_processor_event": {
+        "time": "2026-10-18T21:34:07.6941443+08:00",
+        "apic_id": "16",
+        "mca_bank": "0",
+        "mci_stat": "0x8000004000040005",
+        "error_type": "12"
+      },
+      "delta_seconds": -5.868
+    },
+    {
+      "time": "2026-10-18T21:34:06.8149994+08:00",
+      "app_path": "D:\\Tools\\pyenv-win\\versions\\3.13.4\\python.exe",
+      "module": "_multiarray_umath.cp313-win_amd64.pyd",
+      "exception_code": "c0000005",
+      "offset": "0000000000173bc3",
+      "pid": "0x2d14",
+      "nearest_processor_event": {
+        "time": "2026-10-18T21:34:07.6941443+08:00",
+        "apic_id": "16",
+        "mca_bank": "0",
+        "mci_stat": "0x8000004000040005",
+        "error_type": "12"
+      },
+      "delta_seconds": 0.879
+    }
+  ],
+  "debugger_match": {
+    "event_pid": 11540,
+    "captured_pid": 11540,
+    "matching_pid": true,
+    "exception_code": "0xc0000005",
+    "rip": "0x7ffdb5523bc3"
+  },
+  "causality_proven": false,
+  "hardware_error_confirmed": true,
+  "new_stress_test_run": false,
+  "sources": [
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\crash_whea_correlation.json",
+      "sha256": "512b3d5ecbd31ccceef36217c1274a3cfd742393f3cd98bae1fa051e93a735e8"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\crash_whea_today.json",
+      "sha256": "74c901c3bbcc184fdb9a335f72ef044c4b866cdeffa3750d4ba34286e9e8c7de"
+    },
+    {
+      "path": "G:\\qtdata\\research\\native_diagnostics\\hash_stress_global_v2\\exception.json",
+      "sha256": "8bdba029a8087fd0a363bbf4f4a91a45a7da960cc55511a93ba28d198efb6ace"
+    }
+  ]
+}

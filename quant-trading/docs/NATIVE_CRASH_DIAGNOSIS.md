@@ -10,6 +10,10 @@
 
 外部 Windows Debug API 调试器采集到二次机会 `0xc0000005`，故障点分别落在 Python DLL、NumPy；NumPy 一次故障位于 `ret`，寄存器/栈地址异常，采集的执行页是可执行只读映像，代码与磁盘内容相符。最小组合压力脚本是 DataFrame 内容哈希加 NumPy `vstack/mean`，未做模型训练；纯 NumPy 压力循环没有复现。研究进程模块清单未加载 XtQuant。另有历史 XtQuant MSVCP140.dll 故障记录，不能据此归因本次研究崩溃。
 
+22:01 重新读取当日完整的命名 Python Application Error 1000 与 WHEA 19 处理器事件，得到 25 次 Python 错误、6 次处理器校验错误；此前的十条应用日志截取并不完整。21:34:06.815 的全局 NumPy 崩溃与 21:34:07.694 的 APIC16/MCABank0 WHEA 相差 **0.879 秒**。其 PID `0x2d14` 即十进制 11540，与 `hash_stress_global_v2/exception.json` 捕获到 `ret`/异常栈的 PID 一致。21:34:13.562、21:34:32.888 的 Python 3.13.11 对照进程又出现 NumPy 访问冲突。这不是仅凭两个任意时间段的故障类别相似作出的判断。
+
+25 次错误中，距最近 WHEA 一秒内为 1 次、一分钟内为 3 次；其余没有这种近时关联。事件写入可能滞后且日志不涵盖调试器截获的全部退出，不能据此计算真实故障概率，或把近时关联当成逐条因果证明。所有六条 WHEA 均为 MCA bank0、ErrorType12，APIC16/17、24/25 涉及相邻 SMT 线程；没有通过再压测故障 P 核去验证。原始完整查询与带哈希摘要见 [时间关联证据](evidence/native_correlation_20261018.json)。
+
 ## 对照实验
 
 | 条件 | 结果 | 能说明什么 |

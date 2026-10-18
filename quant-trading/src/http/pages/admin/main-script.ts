@@ -240,19 +240,30 @@ function doWarmup(){
     }).join('');toast('✅ 预热完成');loadData();
   });
 }
+function localDataPayload(r){
+  if(!r||r.status==='error'||r.ok===false)throw new Error(r&&(r.message||r.error)||'离线数据检查失败');
+  var d=r.data||r;
+  if(d.status==='error'||d.ok===false)throw new Error(d.message||d.error||'离线数据检查失败');
+  if(!Number.isInteger(d.cached_months)||d.cached_months<0||!Array.isArray(d.stale_months))throw new Error('离线数据状态格式不完整，请检查服务版本');
+  return d;
+}
 function checkLocalData(){
   toast('🔍 检查离线数据…');
   var el=document.getElementById('local-data-result');
-  api('/quant/admin/api/local-data/check').then(function(r){
-    if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'检查失败')+'</span>';return}
-    var d=r.data||r;
+  return api('/quant/admin/api/local-data/check').then(function(r){
+    var d=localDataPayload(r);
     var html='<div>📂 缓存月份: <b>'+d.cached_months+'</b>  最新月: <b>'+(d.latest_month||'无')+'</b></div>';
     if(d.stale_months&&d.stale_months.length){
       html+='<div style="color:var(--orange)">⏳ 需更新: <b>'+d.stale_months.length+'</b> 个月</div>';
       d.stale_months.forEach(function(m){html+='<div style="font-size:11px;margin-left:12px">'+esc(m.month)+' — '+esc(m.reason)+(m.latest_date?' (最新: '+m.latest_date+')':'')+'</div>'});
-    }else{html+='<div style="color:var(--green)">✅ '+esc(d.message||'全部最新')+'</div>'}
+    }else if(d.cached_months===0){html+='<div style="color:var(--orange)">尚无月度缓存，请先同步数据</div>'}
+    else{html+='<div style="color:var(--green)">✅ '+esc(d.message||'缓存检查通过')+'</div>'}
+    if(d.cache_dir)html+='<div style="font-size:11px;word-break:break-all">缓存目录: '+esc(d.cache_dir)+'</div>';
     el.innerHTML=html;
     document.getElementById('local-data-status').innerHTML='💾 '+d.cached_months+' 月, 最新: '+(d.latest_month||'-');
+  }).catch(function(err){
+    el.innerHTML='<span style="color:var(--red)">❌ '+esc(err.message||String(err))+'</span>';
+    document.getElementById('local-data-status').textContent='💾 检查失败';
   });
 }
 function syncLocalData(){

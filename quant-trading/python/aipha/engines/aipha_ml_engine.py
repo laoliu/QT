@@ -28,6 +28,17 @@ def _resolve_runtime_path(value: str | os.PathLike[str] | None, *default: str) -
     return resolve_path(value, *default)
 
 
+def _tushare_cache_dir(value: str | None) -> Path:
+    """Use the shared data-panel cache unless this run selects another root."""
+    if value is not None and not isinstance(value, str):
+        raise ValueError("cacheDir must be a directory path string")
+    if value and value.strip():
+        return _resolve_runtime_path(Path(value.strip()).expanduser()).resolve()
+    from aipha.config import get_cache_dir
+
+    return (get_cache_dir() / "equity_tushare").resolve()
+
+
 def _load_config(path: str | None) -> Any:
     from aipha.research.config import load_research_config
 
@@ -131,7 +142,7 @@ def run(config: dict) -> dict:
                     raise ValueError("startDate and endDate are required for train_tushare")
                 equity_provider = get_equity_provider(
                     token=config.get("tushareToken"),
-                    cache_dir=str(config.get("cacheDir", "data/cache/equity_tushare")),
+                    cache_dir=str(_tushare_cache_dir(config.get("cacheDir"))),
                 )
                 result = pipeline.run_tushare(
                     equity_provider,

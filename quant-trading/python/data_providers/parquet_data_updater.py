@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -167,11 +168,16 @@ def _trading_days_in_month(year: int, month: int) -> list[str]:
 
 def _latest_cached_month(cache_dir: Path) -> str | None:
     """Find the latest YYYYMM with a daily_*.parquet file."""
-    files = sorted(cache_dir.glob("daily_*.parquet"))
-    files = [f for f in files if not f.stem.startswith("daily_basic")]
+    files = _daily_month_files(cache_dir)
     if not files:
         return None
     return files[-1].stem.replace("daily_", "")
+
+
+def _daily_month_files(cache_dir: Path) -> list[Path]:
+    # Per-day snapshots and daily_basic files are separate cache formats.
+    return sorted(p for p in cache_dir.glob("daily_*.parquet")
+                  if p.is_file() and re.fullmatch(r"daily_\d{4}(?:0[1-9]|1[0-2])", p.stem))
 
 
 def _yesterday_yyyymmdd() -> str:
@@ -504,15 +510,18 @@ def do_check(cfg: dict) -> dict:
     data_dir = cfg.get("data_dir", "") or os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
     cache_dir = Path(data_dir) / "cache" / "equity_tushare"
 
-    if not cache_dir.exists():
-        return {"ok": False, "error": f"Cache dir not found: {cache_dir}"}
+    paths = {"data_dir": str(Path(data_dir).resolve()), "cache_dir": str(cache_dir.resolve())}
+    if not cache_dir.is_dir():
+        return {"ok": False, **paths, "error": f"Cache dir not found: {cache_dir}"}
 
-    latest = _latest_cached_month(cache_dir)
+    daily_files = _daily_month_files(cache_dir)
+    latest = daily_files[-1].stem.removeprefix("daily_") if daily_files else None
     now_ym = datetime.now().strftime("%Y%m")
 
     if not latest:
         return {
             "ok": True,
+            **paths,
             "cached_months": 0,
             "latest_month": None,
             "stale_months": [],
@@ -521,7 +530,8 @@ def do_check(cfg: dict) -> dict:
 
     # Check for gaps and stale current month
     stale = []
-    for ym in _iter_months(latest, now_ym):
+    first = daily_files[0].stem.removeprefix("daily_")
+    for ym in _iter_months(first, now_ym):
         daily_path = cache_dir / f"daily_{ym}.parquet"
         adj_path = cache_dir / f"adj_factor_{ym}.parquet"
 
@@ -531,28 +541,36 @@ def do_check(cfg: dict) -> dict:
         if not adj_path.exists():
             stale.append({"month": ym, "reason": "missing_adj_factor"})
 
-        # Current month: check if yesterday's data exists
+        # This legacy-cache freshness check uses weekdays, not an exchange
+        # calendar. It is not certification of canonical research readiness.
         if ym == now_ym:
-            yesterday = _yesterday_yyyymmdd()
-            df = _safe_read_parquet(daily_path)
-            if df is not None and not df.empty:
-                max_date = str(df["trade_date"].max())
-                if max_date < yesterday:
-                    stale.append({
-                        "month": ym,
-                        "reason": "stale",
-                        "latest_date": max_date,
-                        "expected": yesterday,
-                    })
-
-    daily_files = sorted(cache_dir.glob("daily_*.parquet"))
-    daily_files = [f for f in daily_files if not f.stem.startswith("daily_basic")]
+            expected = datetime.now() - timedelta(days=1)
+            while expected.weekday() >= 5:
+                expected -= timedelta(days=1)
+            try:
+                import pandas as pd
+                # The sync reader removes corrupt caches. A check must be
+                # read-only even for malformed files, so do not reuse it.
+                df = pd.read_parquet(daily_path, columns=["trade_date"])
+                dates = pd.to_datetime(df["trade_date"].astype(str).str.slice(0, 10).str.replace("-", "", regex=False),
+                                       format="%Y%m%d", errors="raise")
+                if dates.empty or dates.isna().any():
+                    raise ValueError("daily cache has empty or invalid trade dates")
+                max_date = dates.max().strftime("%Y%m%d")
+                if max_date < expected.strftime("%Y%m%d"):
+                    stale.append({"month": ym, "reason": "stale", "latest_date": max_date,
+                                  "expected": expected.strftime("%Y%m%d")})
+            except Exception as exc:
+                stale.append({"month": ym, "reason": "unreadable_daily",
+                              "error": f"{type(exc).__name__}: {exc}"})
 
     return {
         "ok": True,
+        **paths,
         "cached_months": len(daily_files),
         "latest_month": latest,
         "stale_months": stale,
+        "freshness_basis": "previous_weekday_not_exchange_calendar",
         "message": f"{len(stale)} month(s) need updating" if stale else "All up to date",
     }
 
@@ -591,7 +609,10 @@ def do_sync(cfg: dict) -> dict:
     else:
         latest = _latest_cached_month(cache_dir)
         if latest:
-            start_ym = latest  # re-sync latest month + newer
+            # A newer daily file does not imply older adjustment partitions
+            # exist. Repair the gaps reported by Check, not just the tail.
+            pending = do_check(cfg).get("stale_months", [])
+            start_ym = min([latest, *(item["month"] for item in pending)])
         else:
             start_ym = "201201"  # full historical sync
 
@@ -625,9 +646,12 @@ def do_sync(cfg: dict) -> dict:
     elapsed = round(time.time() - t0, 1)
     daily_synced = sum(1 for r in results["daily"] if r.get("status") == "synced")
     adj_synced = sum(1 for r in results["adj_factor"] if r.get("status") == "synced")
+    failures = [r for r in [results["stock_basic"], *results["daily"], *results["adj_factor"]]
+                if r and r.get("status") in {"error", "failed"}]
 
     return {
-        "ok": True,
+        "ok": not failures,
+        **({"error": f"{len(failures)} cache update(s) failed; inspect details and retry"} if failures else {}),
         "elapsed_seconds": elapsed,
         "daily_months_synced": daily_synced,
         "adj_factor_months_synced": adj_synced,
@@ -638,7 +662,10 @@ def do_sync(cfg: dict) -> dict:
 
 def do_health(cfg: dict) -> dict:
     """Report data directory health stats."""
-    from local_parquet_provider import check_data_dir
+    if __package__:
+        from .local_parquet_provider import check_data_dir
+    else:
+        from local_parquet_provider import check_data_dir
 
     data_dir = cfg.get("data_dir", "") or os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
     return check_data_dir(data_dir)
@@ -654,7 +681,7 @@ def main():
     try:
         if action == "check":
             data = do_check(cfg)
-            print(json.dumps({"ok": True, "data": data}))
+            print(json.dumps(data))
         elif action == "sync":
             data = do_sync(cfg)
             print(json.dumps(data))

@@ -1,0 +1,37 @@
+# 数据面板缓存核对
+
+核对日期：2026-10-18。下述统计来自文件系统、Parquet 元数据与只读 SQLite 查询，不依赖页面的成功提示。既有缓存没有被重写、删除或补签。
+
+## 实际数据位置
+
+| 位置 | 实际内容 |
+| --- | --- |
+| `C:\Users\Admin\.quant-trading\extensions\quant-trading\cache\stock_data.db` | 131 个 A 股品种、12,335 条日线，日期合计覆盖 2025-03-03 至 2026-10-16；`stock_fundamentals` 为 0 行。各股票不保证有相同日期覆盖。 |
+| `G:\qtdata\cache\equity_tushare` | 23,715 个 Parquet 文件；178 个严格按 `daily_YYYYMM.parquet` 命名的日线分区，从 201201 至 202610；202610 分区最新日期为 2026-10-16。 |
+| 同一 TuShare 缓存目录 | 5,906 个旧版财务指标文件，以及利润表、资产负债表、现金流量表文件各 5,717 个；存在指数历史成分文件、股票列表和名称变更文件。这里只核对数量与部分 schema，未证明全部文件的完整性。 |
+| `G:\qtdata\calendars\cn_stock_v1.json` | 8,797 个日期，声明来源为 `sina_via_akshare`。可用于原有缓存流程，但不冒充规范研究要求的 TuShare SSE `trade_cal`。 |
+
+此前仅在项目目录查找，遗漏了 G 盘及用户目录；因此“没有历史行情数据”不成立。原始缓存与已签名研究快照、模型产物、研究结果数据库是不同的资产，不能彼此替代。
+
+## 已核实的缺口
+
+- `adj_factor_202606.parquet` 至 `adj_factor_202610.parquet` 五个月的复权因子分区不存在，日线最新不代表配套数据齐全。
+- 2026 年的 `daily_basic` 当前只发现 1—4 月文件，新的研究日期范围还需补齐市值及估值数据。
+- 旧财务文件不是 `*_pit_v2_*` 格式；抽样的三张财报缺少 `f_ann_date`，不能直接包装成修订完整的新 PIT 输入。
+- 此 TuShare 缓存目录没有规范格式的 `trade_cal`、`stk_limit`、`research_dividend`、`sw_industry_history` 或签名 `.metadata.json` 文件。其他目录的非同源资料不能静默顶替。
+- CSI500 历史成分缓存存在，但所选研究区间的时点完整性仍需按规范适配器校验。
+- 仓库应用配置含 TuShare token 字段；使用它经统一网关发起一次有界 `trade_cal` 查询，返回 token 相关错误。仅检查进程环境变量不足以判断是否配置过凭据；字段存在也不代表凭据当前可用。
+- 尚未定位到那 9 个旧任务引用的模型目录或已签名规范快照。G 盘的行情与旧财务缓存不会自动满足模型迁移所需的训练、特征和版本证据。
+
+## 本次修复
+
+- 离线状态接口直接返回检查结果；失败不再被外层 `ok=true` 包装成成功。
+- 页面兼容旧包装与新结果，检查两层失败标记并验证统计字段；空目录、失败或不完整响应不会显示 `undefined` 或“全部最新”。页面显示实际缓存目录。
+- 月度检查排除单日快照和 `daily_basic` 文件，从最早已有月份检查历史缺口；读取损坏文件只报告问题，不删除文件。
+- 周末按上一工作日粗查新鲜度，并通过 `freshness_basis` 披露这不是交易所日历验收；节假日可能保守地报告待更新。
+- “补全”从最早已报告缺口开始，部分下载失败返回失败结果。没有实际执行全量同步或切换交易模式。
+- `train_tushare` 未显式传 `cacheDir` 时复用统一缓存解析：`DATA_CACHE_DIR/equity_tushare`、`QTDATA_DIR/cache/equity_tushare`、存在的 `G:/qtdata/cache/equity_tushare`，最后才回退项目内缓存。显式相对路径锚定 Python 项目根目录，避免因启动目录不同读取空库。
+
+缓存检查只能说明上述文件和粗略更新状态；规范研究仍须经 TuShare PIT 适配器、历史股票池、交易日历和签名快照构建流程，不能给旧目录简单添加 sidecar 后宣称迁移完成。
+
+验收：`tests/data/test_parquet_data_updater.py` 与 `tests/scripts/test_research_cache_paths.py` 共 18 项定向测试通过；研究及相关回归 1114 项通过、8 项跳过。TypeScript 类型检查及 8 个相关文件的 152 项测试通过。未执行实际全量同步、训练或实盘下单。

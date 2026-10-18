@@ -514,6 +514,15 @@ missing/empty directories. It does not certify successful model inference
 or actual daily operation. An explicit legacy marker is inventory evidence
 only and cannot pass this migration gate.
 
+`train_tushare` resolves its default raw cache with `aipha.config.get_cache_dir()`
+and appends `equity_tushare`, sharing `DATA_CACHE_DIR`, `QTDATA_DIR` and the
+existing `G:/qtdata/cache` fallback with the data panel. Explicit `cacheDir`
+overrides remain supported; relative paths are anchored to the Python project
+root. Reusing a raw cache does not attest old financial records or replace
+the required calendar, historical universe and signed snapshot checks. The
+current local inventory and missing inputs are documented in
+`docs/DATA_CACHE_ACCEPTANCE.md` in the application directory.
+
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
 read-only comparison, `--conflicts` to export keyed row conflicts, or

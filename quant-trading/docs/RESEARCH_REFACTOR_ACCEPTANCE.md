@@ -45,7 +45,9 @@
 
 路径相对 Python 项目根目录解析；快照模板必须传 `--trade-date`，固定路径默认使用已验证的快照结束日，快照必须恰好结束于审计日。新版 profile 声明即纳入审计，畸形或嵌套声明不能被归为 `not_applicable`。`test_audit_paper_profile.py` 覆盖这些边界，并检查审计前后文件字节不变、不启动进程、不读取模型。
 
-当前进程没有配置生产 TuShare token 或快照签名密钥，无法据此运行真实数据训练。密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
+进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存另有 131 个品种。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口，详见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。规范 `train_tushare` 的默认缓存已接到统一路径解析，避免再次仅查项目内空目录。
+
+当前进程没有 TuShare token 或快照签名密钥，但应用配置中有 token 字段；本次只读查询返回 token 相关错误。因此尚未证实在线补齐可用，也没有可直接用于训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
 
 仓库 `config.json` 和本机 `config.local.json` 的交易字段在本次核对时均为 paper/broker paper、确认开启、执行计划必需、自动启动关闭。本机覆盖文件未纳入 Git；该结论是本机时点检查，其他部署必须检查各自覆盖配置。
 
@@ -56,7 +58,7 @@ QMT 只读实机证据及其边界见 [QMT_ACCEPTANCE.md](QMT_ACCEPTANCE.md)。�
 在 `quant-trading/python` 运行：
 
 ```powershell
-python -m pytest tests/research tests/runner tests/ops tests/data/test_pit_financial.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/models/test_ml_stock_selector.py tests/models/test_lgbm_ranker.py tests/models/test_feature_groups.py tests/models/test_wf_stats.py tests/models/test_gru_ranker.py tests/models/test_gat_ranker.py tests/models/test_double_ensemble.py tests/models/test_ensemble.py tests/backtest/test_db_migration.py tests/backtest/test_migrate_sqlite_cli.py tests/scripts/test_ops.py tests/scripts/test_research_retrain.py tests/scripts/test_audit_ml_migration.py tests/scripts/test_audit_paper_profile.py tests/scripts/test_paper_launcher.py tests/execution/test_qmt_bridge_contract.py tests/execution/test_paper_gateway.py -q --basetemp=.pytest-tmp-goal --tb=short
+python -m pytest tests/research tests/runner tests/ops tests/data/test_pit_financial.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/data/test_parquet_data_updater.py tests/models/test_ml_stock_selector.py tests/models/test_lgbm_ranker.py tests/models/test_feature_groups.py tests/models/test_wf_stats.py tests/models/test_gru_ranker.py tests/models/test_gat_ranker.py tests/models/test_double_ensemble.py tests/models/test_ensemble.py tests/backtest/test_db_migration.py tests/backtest/test_migrate_sqlite_cli.py tests/scripts/test_ops.py tests/scripts/test_research_retrain.py tests/scripts/test_research_cache_paths.py tests/scripts/test_audit_ml_migration.py tests/scripts/test_audit_paper_profile.py tests/scripts/test_paper_launcher.py tests/execution/test_qmt_bridge_contract.py tests/execution/test_paper_gateway.py -q --basetemp=.pytest-tmp-goal --tb=short
 python scripts/audit_ml_migration.py
 ```
 
@@ -64,9 +66,9 @@ python scripts/audit_ml_migration.py
 
 ```powershell
 npm.cmd run typecheck
-npm.cmd exec -- vitest run src/http/ml-research-api.test.ts src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts src/services/order-manager.test.ts src/services/order-manager-paper.integration.test.ts
+npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admin-routes.test.ts src/http/ml-research-api.test.ts src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts src/services/order-manager.test.ts src/services/order-manager-paper.integration.test.ts
 ```
 
-本次 Python 检查结果（包含风格预算、实验目录迁移及新版 Paper profile 审计）：**1096 passed、8 skipped、44 warnings**。迁移审计和启动器另经 **77 项定向测试**通过。TypeScript 未在本轮纯 Python 变更后重复运行，最近一次类型检查及 6 个文件的 **140 项测试**通过，相关 TypeScript 文件没有本轮变更。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
+本次 Python 检查结果（包含风格预算、实验目录迁移、新版 Paper profile 审计、缓存缺口检查及共享路径）：**1114 passed、8 skipped、44 warnings**。缓存及路径 **18 项定向测试**通过。TypeScript 类型检查通过，以上 8 个文件的 **152 项测试**通过；页面脚本测试验证失败响应、旧包装、空缓存及网络错误不会显示假成功。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

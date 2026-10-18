@@ -4,6 +4,7 @@
  * Pure data — no runtime logic. Imported by `strategy-registry.ts`.
  */
 import type { StrategyDefinition } from "../types.js";
+import { additionalLegacyPorts } from "./strategies/legacy-ports.js";
 
 // ── Built-in (TypeScript) Strategies ─────────────────────────────
 
@@ -940,7 +941,7 @@ const builtinTsStrategies: StrategyDefinition[] = [
     ],
   },
   {
-    id: "supertrend",
+    id: "supertrend-ts",
     name: "超级趋势 (Supertrend)",
     description:
       "Supertrend策略：基于ATR动态计算支撑/阻力线。" +
@@ -4353,6 +4354,14 @@ const vnpyStrategies: StrategyDefinition[] = [
 export { optionStrategies };
 
 const strategyDefinitions = [
+  ...additionalLegacyPorts.map(port => {
+    const source = backtraderStrategies.find(definition => definition.id === port.legacyId)!;
+    const names: Record<string, string> = port.names;
+    return { ...source, id: port.canonicalId, name: `${source.name}（保留 Python 规则）`,
+      version: "1.0.0", engine: "builtin" as const, entryFile: "",
+      parameters: source.parameters.map(parameter => ({ ...parameter, name: names[parameter.name] ?? parameter.name })),
+    };
+  }),
   ...([
     { id: "ema-cross-long-only", name: "EMA 双均线（仅做多）", description: "保留旧 EMA 策略的指数均线金叉开多、死叉平多规则。",
       parameters: [
@@ -4383,7 +4392,8 @@ const strategyDefinitions = [
     markets: ["cn_stock", "us_stock", "hk_stock"] as StrategyDefinition["markets"],
   })),
   ...builtinTsStrategies,
-  ...backtraderStrategies,
+  ...backtraderStrategies.map(definition => additionalLegacyPorts.some(port => port.legacyId === definition.id)
+    ? { ...definition, version: "2.0.0" } : definition),
   ...ctaStrategies,
   ...vnpyStrategies,
 ];

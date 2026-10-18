@@ -108,37 +108,15 @@ import {
 import type { BuiltinStrategy } from "./builtin-engine.js";
 
 type StrategyFactory = (params?: Record<string, unknown>) => BuiltinStrategy;
-import { longOnlyEmaCross, longOnlyDonchian, longOnlyKdj, bollingerSqueezeReversion } from "./strategies/legacy-compatible.js";
+import { longOnlyEmaCross, longOnlyDonchian, longOnlyKdj, bollingerSqueezeReversion,
+  legacyRuleStrategy } from "./strategies/legacy-compatible.js";
+import { additionalLegacyPorts } from "./strategies/legacy-ports.js";
 
-/** Fallback: vnpy strategy → builtin equivalent (used when vnpy is not installed). */
-const vnpyBuiltinFallback: Record<
+/** Explicit parameter adapters for retained legacy IDs on the builtin runtime. */
+const legacyBuiltinRoutes: Record<
   string,
   { id: string; mapParams: (p: Record<string, unknown>) => Record<string, unknown> }
 > = {
-  "vnpy-turtle": {
-    id: "turtle-breakout",
-    mapParams: (p) => ({ entryPeriod: p.entry_window ?? 20, exitPeriod: p.exit_window ?? 10 }),
-  },
-  "vnpy-double-ma": {
-    id: "dual-ma-crossover",
-    mapParams: (p) => ({ fastPeriod: p.fast_window ?? 10, slowPeriod: p.slow_window ?? 30 }),
-  },
-
-};
-
-/** Fallback: backtrader strategy → builtin equivalent (used when backtrader is not installed). */
-const backtraderBuiltinFallback: Record<
-  string,
-  { id: string; mapParams: (p: Record<string, unknown>) => Record<string, unknown> }
-> = {
-  "macd": {
-    id: "macd-trend",
-    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 12, slowPeriod: p.slow_period ?? 26, signalPeriod: p.signal_period ?? 9 }),
-  },
-  "rsi": {
-    id: "rsi-reversal",
-    mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 30, overbought: p.overbought ?? 70 }),
-  },
   "kdj": {
     id: "kdj-long-only",
     mapParams: (p) => ({
@@ -149,120 +127,20 @@ const backtraderBuiltinFallback: Record<
       oversold: p.oversold ?? 20,
     }),
   },
-  "turtle": {
-    id: "turtle-breakout",
-    mapParams: (p) => ({ entryPeriod: p.entry_period ?? 20, exitPeriod: p.exit_period ?? 10 }),
-  },
 
   "bollinger": {
     id: "bollinger-squeeze-reversion",
     mapParams: (p) => ({ period: p.period ?? 20, devfactor: p.devfactor ?? 2.0, squeezePct: p.squeeze_pct ?? 50 }),
   },
 
-  // ── CTA趋势策略 (Python) ──
   "ema-cross": {
     id: "ema-cross-long-only",
     mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
   },
-  "adx-trend": {
-    id: "dmi-adx",
-    mapParams: (p) => ({ period: p.period ?? 14, adxThreshold: p.adx_threshold ?? 25 }),
-  },
-  "parabolic-sar": {
-    id: "parabolic-sar",
-    mapParams: (p) => ({ afStart: p.af_start ?? 0.02, afStep: p.af_step ?? 0.02, afMax: p.af_max ?? 0.2 }),
-  },
-  "ichimoku": {
-    id: "ichimoku",
-    mapParams: (p) => ({ tenkanPeriod: p.tenkan_period ?? 9, kijunPeriod: p.kijun_period ?? 26, senkouBPeriod: p.senkou_period ?? 52 }),
-  },
-  "supertrend": {
-    id: "supertrend",
-    mapParams: (p) => ({ atrPeriod: p.atr_period ?? 10, multiplier: p.multiplier ?? 3.0 }),
-  },
-  "dema-cross": {
-    id: "dema-crossover",
-    mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
-  },
 
-  "aroon": {
-    id: "aroon-trend",
-    mapParams: (p) => ({ period: p.period ?? 25 }),
-  },
-
-  "trix": {
-    id: "trix-momentum",
-    mapParams: (p) => ({ period: p.period ?? 15, signalPeriod: p.signal_period ?? 9 }),
-  },
-
-  "dmi": {
-    id: "dmi-adx",
-    mapParams: (p) => ({ period: p.period ?? 14 }),
-  },
-  // ── CTA通道策略 (Python) ──
-  "keltner-channel": {
-    id: "keltner-channel",
-    mapParams: (p) => ({ emaPeriod: p.ema_period ?? 20, atrPeriod: p.atr_period ?? 20, atrMultiplier: p.atr_mult ?? 2.0 }),
-  },
   "donchian-breakout": {
     id: "donchian-long-only",
     mapParams: (p) => ({ upperPeriod: p.upper_period ?? 20, lowerPeriod: p.lower_period ?? 10 }),
-  },
-
-  "envelope": {
-    id: "ma-envelope",
-    mapParams: (p) => ({ period: p.ma_period ?? 20, percent: p.pct ?? 3.0 }),
-  },
-  "price-channel-breakout": {
-    id: "range-breakout",
-    mapParams: (p) => ({ rangePeriod: p.breakout_period ?? 20 }),
-  },
-  // ── CTA指标策略 (Python) ──
-
-  "williams-r": {
-    id: "williams-r",
-    mapParams: (p) => ({ period: p.period ?? 14, overbought: p.overbought ?? -20, oversold: p.oversold ?? -80 }),
-  },
-  "obv": {
-    id: "obv-trend",
-    mapParams: (p) => ({ maPeriod: p.obv_ma_period ?? 20 }),
-  },
-  "mfi": {
-    id: "mfi-oscillator",
-    mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 20, overbought: p.overbought ?? 80 }),
-  },
-
-  "roc": {
-    id: "roc-momentum",
-    mapParams: (p) => ({ period: p.period ?? 12 }),
-  },
-
-  "adaptive-ma": {
-    id: "kama-trend",
-    mapParams: (p) => ({ period: p.period ?? 10, fastPeriod: p.fast_period ?? 2, slowPeriod: p.slow_period ?? 30 }),
-  },
-  // ── CTA形态策略 (Python) ──
-
-  // ── 组合策略 (Python) ──
-
-  // ── 高阶组合策略 (Python) ──
-
-  "multi-tf-ma": {
-    id: "triple-ma-crossover",
-    mapParams: (p) => ({ shortPeriod: p.short_period ?? 5, midPeriod: p.medium_period ?? 20, longPeriod: p.long_period ?? 60 }),
-  },
-
-  "dual-thrust": {
-    id: "dual-thrust",
-    mapParams: (p) => ({ lookback: p.lookback ?? 4, k1: p.k1 ?? 0.5, k2: p.k2 ?? 0.5 }),
-  },
-  "r-breaker": {
-    id: "r-breaker",
-    mapParams: () => ({}),
-  },
-  "pivot-point": {
-    id: "pivot-point",
-    mapParams: () => ({}),
   },
 };
 
@@ -703,7 +581,7 @@ const strategyMap = new Map<string, StrategyFactory>([
   ],
   ["elder-ray", (p) => elderRayStrategy((p?.emaPeriod as number) ?? 13)],
   [
-    "supertrend",
+    "supertrend-ts",
     (p) =>
       supertrendStrategy((p?.atrPeriod as number) ?? 10, (p?.multiplier as number) ?? 3.0),
   ],
@@ -906,12 +784,18 @@ const strategyMap = new Map<string, StrategyFactory>([
   ],
 ]);
 
-// ── Register vnpy/backtrader strategy aliases → builtin equivalents ───
-// So composed strategies can reference vnpy-*/backtrader IDs as sub-strategies.
-for (const [id, fb] of [
-  ...Object.entries(vnpyBuiltinFallback),
-  ...Object.entries(backtraderBuiltinFallback),
-]) {
+// Preserve each retained Python rule set rather than substituting a similar CTA.
+for (const port of additionalLegacyPorts) {
+  const names: Record<string, string> = port.names;
+  legacyBuiltinRoutes[port.legacyId] = {
+    id: port.canonicalId,
+    mapParams: p => Object.fromEntries(Object.entries(p).map(([key, value]) => [names[key] ?? key, value])),
+  };
+  strategyMap.set(port.canonicalId, p => legacyRuleStrategy(port.legacyId, p));
+}
+
+// Compositions resolve the same legacy IDs and parameter adapters as backtests.
+for (const [id, fb] of Object.entries(legacyBuiltinRoutes)) {
   if (!strategyMap.has(id)) {
     const builtinId = fb.id;
     const mapParams = fb.mapParams;
@@ -956,6 +840,11 @@ const legacyMigrationById = new Map(
     .filter((entry) => entry.migration)
     .map((entry) => [entry.id, entry.migration!]),
 );
+
+// A retired entry must also be unavailable to dynamic/composed strategy factories.
+for (const [id, migration] of legacyMigrationById) {
+  if (migration.status === "retired") strategyMap.delete(id);
+}
 
 function legacyMigration(id: string) {
   return legacyMigrationById.get(id);
@@ -1118,6 +1007,7 @@ export async function listUnifiedStrategies(config: QuantTradingConfig): Promise
 }
 
 export function getStrategy(id: string): StrategyDefinition | undefined {
+  if (legacyMigration(id)?.status === "retired") return undefined;
   const definition = (
     builtinStrategies.find((s) => s.id === id) ??
     (id === aiphaResearchDefinition.id ? aiphaResearchDefinition : undefined) ??
@@ -1228,7 +1118,7 @@ async function runBacktestInner(
         `策略 "${request.strategyId}" 已迁移到 builtin；请移除 engine=${request.engine}，旧引擎入口已关闭。`,
       );
     }
-    const fallback = backtraderBuiltinFallback[request.strategyId] ?? vnpyBuiltinFallback[request.strategyId];
+    const fallback = legacyBuiltinRoutes[request.strategyId];
     const canonicalId = migration.canonicalId ?? fallback?.id;
     if (!canonicalId) {
       throw new Error(`策略 "${request.strategyId}" 的迁移记录缺少 canonicalId`);
@@ -1261,45 +1151,10 @@ async function runBacktestInner(
   }
 
   if (engine === "backtrader" || strategy?.engine === "backtrader") {
-    const fallback = backtraderBuiltinFallback[request.strategyId];
-    try {
-      return await runBacktraderBacktest(request, config);
-    } catch (err: unknown) {
-      if (!fallback) throw err;
-      // backtrader unavailable — fallback to builtin equivalent
-      const mappedParams = fallback.mapParams(request.parameters ?? {});
-      const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
-      if (request.symbols.length > 1) {
-        return runPortfolioBacktest(
-          () => resolveBuiltinStrategy(fallback.id, mappedParams),
-          request,
-          config,
-          sharedProvider,
-        );
-      }
-      return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
-    }
+    return runBacktraderBacktest(request, config);
   }
-
   if (engine === "vnpy" || strategy?.engine === "vnpy") {
-    const fallback = vnpyBuiltinFallback[request.strategyId];
-    try {
-      return await runVnpyBacktest(request, config);
-    } catch (err: unknown) {
-      if (!fallback) throw err;
-      // vnpy unavailable or failed — fallback to builtin equivalent
-      const mappedParams = fallback.mapParams(request.parameters ?? {});
-      const builtinStrategy = resolveBuiltinStrategy(fallback.id, mappedParams);
-      if (request.symbols.length > 1) {
-        return runPortfolioBacktest(
-          () => resolveBuiltinStrategy(fallback.id, mappedParams),
-          request,
-          config,
-          sharedProvider,
-        );
-      }
-      return runBuiltinBacktest(builtinStrategy, request, config, sharedProvider);
-    }
+    return runVnpyBacktest(request, config);
   }
 
   // Builtin engine
@@ -1317,6 +1172,8 @@ async function runBacktestInner(
 }
 
 export function resolveBuiltinStrategy(strategyId: string, params?: Record<string, unknown>) {
+  const migration = legacyMigration(strategyId);
+  if (migration?.status === "retired") throw new Error(`策略 "${strategyId}" 已正式退役。${migration.note}`);
   const factory = strategyMap.get(strategyId);
   if (!factory) {
     const known = [...strategyMap.keys()].join(", ");

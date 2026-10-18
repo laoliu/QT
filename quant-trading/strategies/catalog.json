@@ -356,10 +356,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "supertrend",
+        "canonicalId": "supertrend-python-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves the original Python band reset conditions and direction flips; the distinct native variant is supertrend-ts. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "hull-ma-crossover",
@@ -494,10 +495,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "macd-trend",
+        "canonicalId": "macd-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves SMA-seeded EMA/MACD signal crosses and long-only positions. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "rsi",
@@ -520,10 +522,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "rsi-reversal",
+        "canonicalId": "rsi-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves RSI threshold entry/exit without shorts or reversal orders. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "kdj",
@@ -547,7 +550,8 @@
         "canonicalId": "kdj-long-only",
         "sourceEngine": "backtrader",
         "note": "Preserves SMA-smoothed K/D, J extremes, long-only positions and the 50 percent cash entry hint. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
-      }
+      },
+      "version": "2.0.0"
     },
     {
       "id": "turtle",
@@ -569,10 +573,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "turtle-breakout",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Retired: the original requires ATR risk sizing, 2-ATR stops and pyramiding; turtle-breakout has different sizing and position semantics and is not an equivalent replacement. Source retained for reference."
       }
     },
     {
@@ -727,7 +730,8 @@
         "canonicalId": "bollinger-squeeze-reversion",
         "sourceEngine": "backtrader",
         "note": "Preserves population standard deviation, rolling bandwidth squeeze filtering and middle-band exits. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
-      }
+      },
+      "version": "2.0.0"
     },
     {
       "id": "dragon_master",
@@ -854,7 +858,8 @@
         "canonicalId": "ema-cross-long-only",
         "sourceEngine": "backtrader",
         "note": "Preserves SMA-seeded EMA crosses and long-only entry/exit; no SMA substitution or short reversal. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
-      }
+      },
+      "version": "2.0.0"
     },
     {
       "id": "adx-trend",
@@ -873,10 +878,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "dmi-adx",
+        "canonicalId": "adx-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves Wilder DI crosses, ADX entry filter and weakening-trend exit. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "parabolic-sar",
@@ -892,7 +898,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/parabolic_sar_strategy.py",
+          "note": "The retained Python implementation uses Backtrader SAR initialization and long-only positions. It is retired; native SAR is maintained independently with different position semantics."
+        }
+      ]
     },
     {
       "id": "ichimoku",
@@ -908,7 +921,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/ichimoku_strategy.py",
+          "note": "The retained Python implementation requires a TK cross above the cloud and exits below the cloud or on a TK death cross. It is retired; the same-name native implementation has its own rules and warmup."
+        }
+      ]
     },
     {
       "id": "dema-cross",
@@ -927,10 +947,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "dema-crossover",
+        "canonicalId": "dema-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves double EMA warmup and crosses, including cascaded NaN warmup. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "tema-cross",
@@ -970,10 +991,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "aroon-trend",
+        "canonicalId": "aroon-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves upper/lower thresholds and threshold-cross entry/exit. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "vortex",
@@ -1034,10 +1056,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "trix-momentum",
+        "canonicalId": "trix-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves triple EMA warmup and SMA signal-line crosses. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "momentum",
@@ -1077,10 +1100,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "dmi-adx",
+        "canonicalId": "dmi-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves DI cross entry/exit without adding an ADX filter. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "keltner-channel",
@@ -1096,7 +1120,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/keltner_channel_strategy.py",
+          "note": "The retained Python implementation has a midline-cross exit in addition to channel exits. It is retired; the native channel strategy is not an equivalent alias."
+        }
+      ]
     },
     {
       "id": "donchian-breakout",
@@ -1118,7 +1149,8 @@
         "canonicalId": "donchian-long-only",
         "sourceEngine": "backtrader",
         "note": "Preserves independent upper/lower periods, prior-bar channels and long-only positions. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
-      }
+      },
+      "version": "2.0.0"
     },
     {
       "id": "atr-channel",
@@ -1158,10 +1190,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "ma-envelope",
+        "canonicalId": "envelope-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves SMA envelopes and both upper-band and midline recovery exits. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "price-channel-breakout",
@@ -1180,10 +1213,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "range-breakout",
+        "canonicalId": "price-channel-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves prior-bar channels, independent exit period and optional volume confirmation. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "stochastic",
@@ -1220,7 +1254,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/williams_r_strategy.py",
+          "note": "The retained Python implementation buys/sells on long-only oscillator thresholds. It is retired; the native CTA variant has different position semantics."
+        }
+      ]
     },
     {
       "id": "obv",
@@ -1238,10 +1279,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "obv-trend",
+        "status": "retired",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Retired: the retained source calls bt.indicators.OBV, absent in standard Backtrader 1.9.78.123; there is no executable reference establishing parity. obv-trend remains a separate strategy, not an equivalent alias."
       }
     },
     {
@@ -1261,10 +1301,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "mfi-oscillator",
+        "canonicalId": "mfi-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves the original typical-price money-flow calculation, including equal-price negative flow. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "cmf",
@@ -1325,10 +1366,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "roc-momentum",
+        "canonicalId": "roc-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves rate-of-change zero crossings and long-only entry/exit. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "vwap",
@@ -1368,10 +1410,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "kama-trend",
+        "canonicalId": "kama-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves KAMA seed, adaptive smoothing, rising-average entry and below-average exit. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "engulfing",
@@ -1621,10 +1664,11 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "triple-ma-crossover",
+        "canonicalId": "triple-ma-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
-      }
+        "note": "Preserves the three-SMA alignment transition and short/medium exit. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
+      },
+      "version": "2.0.0"
     },
     {
       "id": "volatility-breakout",
@@ -1682,7 +1726,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/dual_thrust_strategy.py",
+          "note": "The retained Python implementation is long-only and uses close-based breakout/exit decisions. It is retired in favor of the separately maintained native variant; no signal or fill equivalence is claimed."
+        }
+      ]
     },
     {
       "id": "r-breaker",
@@ -1698,7 +1749,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/r_breaker_strategy.py",
+          "note": "The retained Python implementation exposes breakout/reversal/both modes and long-only sizing. It is retired; the native strategy does not preserve that parameter contract."
+        }
+      ]
     },
     {
       "id": "pivot-point",
@@ -1714,7 +1772,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/pivot_point_strategy.py",
+          "note": "The retained Python implementation has a pivot recovery exit as well as the support exit. It is retired; the native strategy is a distinct implementation."
+        }
+      ]
     },
     {
       "id": "covered-call",
@@ -2672,7 +2737,14 @@
         "ohlcv"
       ],
       "signalFormat": "trading_signal",
-      "lifecycle": "primary"
+      "lifecycle": "primary",
+      "retiredImplementations": [
+        {
+          "engine": "backtrader",
+          "source": "python/strategies/swing_overlay_strategy.py",
+          "note": "The retained Python implementation tracks core shares, per-grid quantities and lot-level T+1 state. It is retired; the native signal engine does not reproduce those position operations."
+        }
+      ]
     },
     {
       "id": "vnpy-double-ma",
@@ -2691,10 +2763,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "dual-ma-crossover",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Retired: the retained vnpy harness does not synchronize strategy.pos after fills and uses a different ArrayManager warmup. dual-ma-crossover remains a separate strategy, not an equivalent alias."
       }
     },
     {
@@ -2758,10 +2829,9 @@
       "signalFormat": "trading_signal",
       "lifecycle": "compatibility",
       "migration": {
-        "status": "migrated_to_builtin",
-        "canonicalId": "turtle-breakout",
+        "status": "retired",
         "sourceEngine": "vnpy",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Retired: the retained vnpy harness does not synchronize strategy.pos after fills; its channel includes the current bar, preventing valid OHLC close breakouts. turtle-breakout remains separate, not an equivalent alias."
       }
     },
     {
@@ -2944,6 +3014,254 @@
       "id": "donchian-long-only",
       "engine": "builtin",
       "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "macd-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "futures",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "rsi-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock",
+        "futures",
+        "crypto"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "adx-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "dmi-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "dema-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "aroon-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "trix-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "envelope-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "price-channel-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "mfi-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "roc-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "kama-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "triple-ma-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "supertrend-python-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "supertrend-ts",
+      "engine": "builtin",
+      "source": "src/engine/strategies/extended.ts",
       "markets": [
         "cn_stock"
       ],

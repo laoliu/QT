@@ -265,6 +265,10 @@ def run_backtest(config: dict):
     subclass and drives it with market data.
     """
     strategy_id = config.get("strategyId", "vnpy-turtle")
+    from strategies.lifecycle import legacy_engine_error
+    error = legacy_engine_error(strategy_id)
+    if error:
+        return {"ok": False, "error": error}
     symbols = config.get("symbols", ["000300"])
     if isinstance(symbols, str):
         symbols = [symbols]

@@ -268,6 +268,10 @@ def get_all_strategies() -> list[dict[str, Any]]:
     for strategy_id, cls in registry.items():
         meta: StrategyMeta = cls.STRATEGY_META
         canonical = catalog.get(strategy_id, {})
+        migration = canonical.get("migration", {})
+        if migration.get("status") == "retired" or canonical.get("retiredImplementations"):
+            continue
+        migrated = migration.get("status") == "migrated_to_builtin"
         result.append({
             "id": meta.id,
             "name": meta.name,
@@ -286,14 +290,16 @@ def get_all_strategies() -> list[dict[str, Any]]:
                 for p in meta.parameters
             ],
             "markets": canonical.get("markets") or meta.markets or ["cn_stock"],
-            "version": getattr(meta, "version", "1.0.0"),
-            "engine": canonical.get("engine", "backtrader"),
+            "version": canonical.get("version", getattr(meta, "version", "1.0.0")),
+            "engine": "builtin" if migrated else canonical.get("engine", "backtrader"),
             "entryFile": canonical.get("source", getattr(cls, "__module__", "")),
             "timeframes": canonical.get("timeframes", getattr(meta, "timeframes", ["1d"])),
             "dataRequirements": canonical.get("dataRequirements", getattr(meta, "data_requirements", ["ohlcv"])),
             "signalFormat": canonical.get("signalFormat", getattr(meta, "signal_format", "trading_signal")),
             "lifecycle": canonical.get("lifecycle", getattr(meta, "lifecycle", "compatibility")),
-            "availableEngines": [canonical.get("engine", "backtrader")],
+            "availableEngines": ["builtin"] if migrated else [canonical.get("engine", "backtrader")],
+            **({"canonicalStrategyId": migration["canonicalId"],
+                "migrationStatus": migration["status"], "migrationNote": migration["note"]} if migrated else {}),
         })
     return result
 

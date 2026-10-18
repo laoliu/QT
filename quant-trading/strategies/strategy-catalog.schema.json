@@ -21,6 +21,20 @@
           "dataRequirements": { "type": "array", "items": { "enum": ["ohlcv", "fundamentals_pit", "features", "index_membership_pit", "ticks", "order_book"] } },
           "signalFormat": { "enum": ["trading_signal", "target_position", "order_intent"] },
           "lifecycle": { "enum": ["primary", "compatibility", "experimental", "live_only"] },
+          "version": { "type": "string", "minLength": 1 },
+          "retiredImplementations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["engine", "source", "note"],
+              "properties": {
+                "engine": { "enum": ["backtrader", "vnpy"] },
+                "source": { "type": "string", "minLength": 1 },
+                "note": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
           "migration": {
             "type": "object",
             "required": ["status", "sourceEngine", "note"],

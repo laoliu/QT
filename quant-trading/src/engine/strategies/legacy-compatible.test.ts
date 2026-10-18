@@ -4,15 +4,22 @@ import { describe, expect, it } from "vitest";
 import type { KlineBar } from "../../types.js";
 import { resolveBuiltinStrategy } from "../strategy-registry.js";
 import type { BuiltinStrategyContext } from "./indicators.js";
+import { additionalLegacyPorts } from "./legacy-ports.js";
+import catalog from "../../../strategies/catalog.json" with { type: "json" };
 
 type SignalRow = { index: number; direction: string; sizePct?: number };
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/legacy-signals.json", import.meta.url), "utf8")) as {
   bars: KlineBar[];
   cases: Array<{ legacyId: string; canonicalId: string; source: string; sourceSha256: string;
-    parameters: Record<string, number>; expected: SignalRow[] }>;
+    parameters: Record<string, unknown>; expected: SignalRow[] }>;
 };
 
-function canonicalParams(id: string, p: Record<string, number>) {
+function canonicalParams(id: string, p: Record<string, unknown>) {
+  const port = additionalLegacyPorts.find(port => port.legacyId === id);
+  if (port) {
+    const names: Record<string, string> = port.names;
+    return Object.fromEntries(Object.entries(p).map(([key, value]) => [names[key] ?? key, value]));
+  }
   if (id === "ema-cross") return { fastPeriod: p.fast_period, slowPeriod: p.slow_period };
   if (id === "donchian-breakout") return { upperPeriod: p.upper_period, lowerPeriod: p.lower_period };
   if (id === "kdj") return { period: p.k_period, kSmooth: p.d_period, dPeriod: p.j_smooth,
@@ -47,6 +54,16 @@ function collect(id: string, params: Record<string, unknown>, bars = fixture.bar
 }
 
 describe("retained Python strategy signal rules", () => {
+  it("covers every catalog entry declared migrated to builtin", () => {
+    const migrated = catalog.entries.filter(entry => entry.migration?.status === "migrated_to_builtin").map(entry => entry.id);
+    expect(new Set(fixture.cases.map(testCase => testCase.legacyId))).toEqual(new Set(migrated));
+    for (const id of migrated) {
+      const cases = fixture.cases.filter(testCase => testCase.legacyId === id);
+      expect(cases.some(testCase => Object.keys(testCase.parameters).length === 0)).toBe(true);
+      expect(cases.some(testCase => Object.keys(testCase.parameters).length > 0)).toBe(true);
+      expect(cases.every(testCase => testCase.expected.length > 0)).toBe(true);
+    }
+  });
   it("uses fixtures generated from the current retained Python sources", () => {
     for (const testCase of fixture.cases) {
       const source = readFileSync(new URL(`../../../../${testCase.source}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");

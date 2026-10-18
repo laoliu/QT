@@ -5,12 +5,9 @@ Backtrader engine bridge — runs backtrader strategies from Node.js.
 Input: JSON via stdin or QUANT_CONFIG env var.
 Output: JSON to stdout with backtest results.
 
-Supports 10 strategies:
-  - 3 legacy inline strategies (dual-ma-crossover, momentum-breakout, mean-reversion)
-  - 7 strategies from strategies/ library (macd, rsi, kdj, turtle, pair-trading, grid, auction)
-
-Usage:
-  echo '{"strategyId": "macd", ...}' | python -m engines.backtrader_engine --json
+Migrated strategies execute only on the canonical builtin runtime. This module
+retains the original classes for audit and user-defined Python strategies;
+shared catalog lifecycle checks reject closed legacy routes before loading data.
 
 Requirements:
   pip install backtrader akshare pandas yfinance
@@ -41,13 +38,17 @@ def get_input():
 
 def run_backtest(config):
     """Run a backtrader backtest."""
+    from strategies.lifecycle import legacy_engine_error
+    strategy_id = config.get("strategyId", "dual-ma-crossover")
+    error = legacy_engine_error(strategy_id)
+    if error:
+        return {"ok": False, "error": error}
     try:
         import backtrader as bt
         import pandas as pd
     except ImportError as e:
         return {"ok": False, "error": f"Missing dependency: {e}. Run: pip install backtrader pandas"}
 
-    strategy_id = config.get("strategyId", "dual-ma-crossover")
     run_id = str(config.get("runId") or uuid.uuid4().hex)
     symbols = config.get("symbols", ["000300"])
     start_date = config.get("startDate", "2024-01-01")
@@ -310,40 +311,9 @@ def _camel_to_snake_params(params: dict) -> dict:
 
 
 def list_strategies():
-    """Return all available strategy definitions (legacy + registry)."""
-    # Start with legacy strategies
-    strategies = [
-        {
-            "id": "dual-ma-crossover",
-            "name": "双均线交叉 (Dual MA Crossover)",
-            "description": "经典双均线策略：短期均线上穿长期均线买入，下穿卖出。",
-            "category": "trend",
-        },
-        {
-            "id": "momentum-breakout",
-            "name": "动量突破 (Momentum Breakout)",
-            "description": "N日最高价突破买入，跌破N日最低价卖出。",
-            "category": "trend",
-        },
-        {
-            "id": "mean-reversion",
-            "name": "均值回归 (Mean Reversion)",
-            "description": "布林带策略：价格触及下轨买入，触及上轨卖出。",
-            "category": "oscillator",
-        },
-    ]
-
-    # Merge in registry strategies (avoids duplicates)
-    try:
-        from strategies.base import get_all_strategies
-        registry_ids = {s["id"] for s in strategies}
-        for s in get_all_strategies():
-            if s["id"] not in registry_ids:
-                strategies.append(s)
-    except ImportError:
-        pass
-
-    return strategies
+    """Return registry metadata with shared catalog lifecycle and routing."""
+    from strategies.base import get_all_strategies
+    return get_all_strategies()
 
 
 if __name__ == "__main__":

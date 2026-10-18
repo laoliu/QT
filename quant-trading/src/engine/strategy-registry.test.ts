@@ -3,7 +3,8 @@
  */
 import { describe, expect, it } from "vitest";
 import catalog from "../../strategies/catalog.json" with { type: "json" };
-import { getStrategy, listStrategies, runBacktest } from "./strategy-registry.js";
+import { getStrategy, hasStrategyFactory, listStrategies, resolveBuiltinStrategy, runBacktest } from "./strategy-registry.js";
+import { additionalLegacyPorts } from "./strategies/legacy-ports.js";
 
 describe("strategy-registry", () => {
   describe("listStrategies", () => {
@@ -76,7 +77,7 @@ describe("strategy-registry", () => {
     it("should expose legacy IDs as builtin aliases", () => {
       const strategy = getStrategy("macd");
       expect(strategy?.engine).toBe("builtin");
-      expect(strategy?.canonicalStrategyId).toBe("macd-trend");
+      expect(strategy?.canonicalStrategyId).toBe("macd-long-only");
       expect(strategy?.migrationStatus).toBe("migrated_to_builtin");
       expect(strategy?.availableEngines).toEqual(["builtin"]);
       expect(getStrategy("sector-synergy")).toBeUndefined();
@@ -86,11 +87,33 @@ describe("strategy-registry", () => {
       for (const [legacy, canonical] of [
         ["ema-cross", "ema-cross-long-only"], ["donchian-breakout", "donchian-long-only"],
         ["kdj", "kdj-long-only"], ["bollinger", "bollinger-squeeze-reversion"],
+        ...additionalLegacyPorts.map(port => [port.legacyId, port.canonicalId]),
       ]) {
         expect(getStrategy(legacy!)?.version).toBe("2.0.0");
         expect(getStrategy(legacy!)?.canonicalStrategyId).toBe(canonical);
         expect(getStrategy(canonical!)?.engine).toBe("builtin");
       }
+    });
+
+    it("keeps the distinct native Supertrend available under an explicit ID", () => {
+      expect(getStrategy("supertrend-ts")?.engine).toBe("builtin");
+      expect(getStrategy("supertrend")?.canonicalStrategyId).toBe("supertrend-python-long-only");
+      expect(resolveBuiltinStrategy("supertrend-ts")).toBeDefined();
+    });
+
+    it.each(["dual-thrust", "ichimoku", "keltner-channel", "parabolic-sar", "pivot-point", "r-breaker", "swing-overlay", "williams-r"])("preserves native %s after retiring its same-name Python source", id => {
+      expect(getStrategy(id)?.engine).toBe("builtin");
+      expect(hasStrategyFactory(id)).toBe(true);
+      expect(resolveBuiltinStrategy(id)).toBeDefined();
+    });
+
+    it.each(["turtle", "obv", "vnpy-double-ma", "vnpy-turtle"])("blocks retired %s in all builtin entry points", async id => {
+      expect(getStrategy(id)).toBeUndefined();
+      expect(hasStrategyFactory(id)).toBe(false);
+      expect(listStrategies().some(strategy => strategy.id === id)).toBe(false);
+      expect(() => resolveBuiltinStrategy(id)).toThrow("退役");
+      await expect(runBacktest({ strategyId: id, symbols: ["600519"], startDate: "2024-01-01",
+        endDate: "2024-12-31", initialCash: 100_000 }, { dataProvider: "demo" })).rejects.toThrow("退役");
     });
   });
 

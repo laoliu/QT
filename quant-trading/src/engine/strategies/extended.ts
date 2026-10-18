@@ -326,7 +326,7 @@ export function supertrendStrategy(atrPeriod = 10, multiplier = 3.0): BuiltinStr
           direction: "buy",
           price: bar.close,
           reason: `Supertrend翻多，支撑线=${supertrend[i]!.toFixed(2)}`,
-          strategyId: "supertrend",
+          strategyId: "supertrend-ts",
         };
       }
       if (stDirection[i] === -1 && stDirection[i - 1] === 1 && ctx.position > 0) {
@@ -336,7 +336,7 @@ export function supertrendStrategy(atrPeriod = 10, multiplier = 3.0): BuiltinStr
           direction: "sell",
           price: bar.close,
           reason: `Supertrend翻空，压力线=${supertrend[i]!.toFixed(2)}`,
-          strategyId: "supertrend",
+          strategyId: "supertrend-ts",
         };
       }
       return null;

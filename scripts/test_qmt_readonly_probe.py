@@ -1,6 +1,9 @@
 """Protocol regression tests; a fake server is not real QMT acceptance evidence."""
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -136,3 +139,22 @@ def test_pending_bridge_has_one_bounded_deadline():
 def test_receiver_requires_explicit_origin(url):
     with pytest.raises(ValueError, match="HTTP"):
         probe._probe_receiver(url, "test-account", 1)
+
+
+@pytest.mark.parametrize("scenario,timeout,expected", [("empty", "3", 0), ("timeout", "0.4", 124)])
+def test_receiver_cli_runs_in_killable_worker(scenario, timeout, expected):
+    with receiver(scenario) as (url, _, _):
+        result = subprocess.run(
+            [sys.executable, str(Path(probe.__file__)), "--receiver-url", url, "--timeout", timeout],
+            env={**os.environ, "TRADING_ACCOUNT_ID": "test-account"},
+            capture_output=True, text=True, timeout=5,
+        )
+    # Depending on startup speed, the worker may report its own timeout just
+    # before the parent deadline. Both outcomes must be failures.
+    if expected == 124:
+        assert result.returncode in {1, 124}
+        assert json.loads(result.stdout)["ok"] is False
+        assert "timed out" in json.loads(result.stdout)["error"]
+    else:
+        assert result.returncode == expected, result.stderr
+        assert json.loads(result.stdout)["ok"] is True

@@ -128,3 +128,35 @@ def test_connect_requires_real_query_function_even_if_passorder_exists(monkeypat
     assert bridge._trading_connected is False
     assert bridge.TRADING_ACCOUNT_ID == ""
 
+
+def test_bridge_http_bypasses_system_proxy_for_explicit_receiver(monkeypatch):
+    import urllib.request
+    handlers = []
+    calls = []
+
+    class Response:
+        def read(self):
+            return b'{"status":"ok"}'
+
+        def close(self):
+            pass
+
+    class Opener:
+        def open(self, req, timeout):
+            calls.append((req.full_url, req.data, timeout))
+            return Response()
+
+    def build(*args):
+        handlers.extend(args)
+        return Opener()
+
+    monkeypatch.setattr(urllib.request, "build_opener", build)
+    monkeypatch.setattr(bridge, "_http_opener", None)
+    assert bridge._http_get("http://receiver:18889/pending", verbose=False) == '{"status":"ok"}'
+    assert bridge._http_post("http://receiver:18889/result/1", {"ok": True}) == '{"status":"ok"}'
+    assert len(handlers) == 1
+    assert isinstance(handlers[0], urllib.request.ProxyHandler)
+    assert handlers[0].proxies == {}
+    assert calls == [("http://receiver:18889/pending", None, 10),
+                     ("http://receiver:18889/result/1", b'{"ok": true}', 10)]
+

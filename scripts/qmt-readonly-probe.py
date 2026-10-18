@@ -168,6 +168,13 @@ def _probe_worker(
                 traceback.print_exc(file=sys.stderr)
 
 
+def _receiver_worker(receiver_url: str, account_id: str, timeout: float, result_queue) -> None:
+    try:
+        result_queue.put(_probe_receiver(receiver_url, account_id, timeout))
+    except Exception as exc:
+        result_queue.put({"ok": False, "transport": "receiver", "error": str(exc)})
+
+
 def main() -> int:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -187,19 +194,12 @@ def main() -> int:
         print(json.dumps({"ok": False, "error": "TRADING_ACCOUNT_ID is required"}, ensure_ascii=False))
         return 2
 
-    if args.receiver_url:
-        try:
-            result = _probe_receiver(args.receiver_url, account_id, args.timeout)
-        except Exception as exc:
-            result = {"ok": False, "transport": "receiver", "error": str(exc)}
-        print(json.dumps(result, ensure_ascii=False, default=str))
-        return 0 if result.get("ok") else 1
-
     context = mp.get_context("spawn")
     result_queue = context.Queue()
     worker = context.Process(
-        target=_probe_worker,
-        args=(mini_qmt_path, account_id, account_type, result_queue),
+        target=_receiver_worker if args.receiver_url else _probe_worker,
+        args=(args.receiver_url, account_id, args.timeout, result_queue) if args.receiver_url
+        else (mini_qmt_path, account_id, account_type, result_queue),
         name="qmt-readonly-probe-worker",
     )
     worker.start()
@@ -209,7 +209,8 @@ def main() -> int:
         worker.join(3)
         print(json.dumps({
             "ok": False,
-            "error": f"QMT probe timed out after {args.timeout:g}s; miniQMT RPC did not return",
+            "error": f"QMT probe timed out after {args.timeout:g}s; " +
+                     ("RECEIVER query did not complete" if args.receiver_url else "miniQMT RPC did not return"),
         }, ensure_ascii=False))
         return 124
     try:

@@ -296,6 +296,20 @@ def _parse_history_data(data, code=""):
 
 # ===================== HTTP HELPERS =====================
 
+_http_opener = None
+
+
+def _open_receiver(req, timeout):
+    """Use the explicit receiver directly, without Windows proxy discovery."""
+    global _http_opener
+    if sys.version_info[0] >= 3:
+        import urllib.request as http
+    else:
+        import urllib2 as http
+    if _http_opener is None:
+        _http_opener = http.build_opener(http.ProxyHandler({}))
+    return _http_opener.open(req, timeout=timeout)
+
 def _http_get(url, timeout=10, verbose=True):
     """Simple HTTP GET using urllib (Python 3.6 compatible)."""
     if verbose:
@@ -304,11 +318,11 @@ def _http_get(url, timeout=10, verbose=True):
         if sys.version_info[0] >= 3:
             import urllib.request
             req = urllib.request.Request(url)
-            resp = urllib.request.urlopen(req, timeout=timeout)
+            resp = _open_receiver(req, timeout)
             return resp.read().decode("utf-8")
         else:
             import urllib2
-            resp = urllib2.urlopen(url, timeout=timeout)
+            resp = _open_receiver(url, timeout)
             return resp.read().decode("utf-8")
     except Exception as e:
         if verbose:
@@ -327,7 +341,7 @@ def _http_post(url, data_dict, timeout=10):
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
-            resp = urllib.request.urlopen(req, timeout=timeout)
+            resp = _open_receiver(req, timeout)
             return resp.read().decode("utf-8")
         else:
             import urllib2
@@ -336,7 +350,7 @@ def _http_post(url, data_dict, timeout=10):
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
-            resp = urllib2.urlopen(req, timeout=timeout)
+            resp = _open_receiver(req, timeout)
             return resp.read().decode("utf-8")
     except Exception as e:
         _log("HTTP POST %s failed: %s" % (url, e))

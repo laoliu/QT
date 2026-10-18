@@ -108,6 +108,7 @@ import {
 import type { BuiltinStrategy } from "./builtin-engine.js";
 
 type StrategyFactory = (params?: Record<string, unknown>) => BuiltinStrategy;
+import { longOnlyEmaCross, longOnlyDonchian, longOnlyKdj, bollingerSqueezeReversion } from "./strategies/legacy-compatible.js";
 
 /** Fallback: vnpy strategy → builtin equivalent (used when vnpy is not installed). */
 const vnpyBuiltinFallback: Record<
@@ -139,7 +140,7 @@ const backtraderBuiltinFallback: Record<
     mapParams: (p) => ({ period: p.period ?? 14, oversold: p.oversold ?? 30, overbought: p.overbought ?? 70 }),
   },
   "kdj": {
-    id: "cta-kdj",
+    id: "kdj-long-only",
     mapParams: (p) => ({
       period: p.k_period ?? p.period ?? 9,
       kSmooth: p.d_period ?? 3,
@@ -154,13 +155,13 @@ const backtraderBuiltinFallback: Record<
   },
 
   "bollinger": {
-    id: "mean-reversion",
-    mapParams: (p) => ({ period: p.period ?? 20, stdDev: p.devfactor ?? 2.0 }),
+    id: "bollinger-squeeze-reversion",
+    mapParams: (p) => ({ period: p.period ?? 20, devfactor: p.devfactor ?? 2.0, squeezePct: p.squeeze_pct ?? 50 }),
   },
 
   // ── CTA趋势策略 (Python) ──
   "ema-cross": {
-    id: "dual-ma-crossover",
+    id: "ema-cross-long-only",
     mapParams: (p) => ({ fastPeriod: p.fast_period ?? 10, slowPeriod: p.slow_period ?? 30 }),
   },
   "adx-trend": {
@@ -204,8 +205,8 @@ const backtraderBuiltinFallback: Record<
     mapParams: (p) => ({ emaPeriod: p.ema_period ?? 20, atrPeriod: p.atr_period ?? 20, atrMultiplier: p.atr_mult ?? 2.0 }),
   },
   "donchian-breakout": {
-    id: "momentum-breakout",
-    mapParams: (p) => ({ lookback: p.upper_period ?? 20 }),
+    id: "donchian-long-only",
+    mapParams: (p) => ({ upperPeriod: p.upper_period ?? 20, lowerPeriod: p.lower_period ?? 10 }),
   },
 
   "envelope": {
@@ -267,6 +268,12 @@ const backtraderBuiltinFallback: Record<
 
 /** Map from strategy ID → factory function that creates the strategy with params. */
 const strategyMap = new Map<string, StrategyFactory>([
+  ["ema-cross-long-only", p => longOnlyEmaCross((p?.fastPeriod as number) ?? 10, (p?.slowPeriod as number) ?? 30)],
+  ["donchian-long-only", p => longOnlyDonchian((p?.upperPeriod as number) ?? 20, (p?.lowerPeriod as number) ?? 10)],
+  ["kdj-long-only", p => longOnlyKdj((p?.period as number) ?? 9, (p?.kSmooth as number) ?? 3,
+    (p?.dPeriod as number) ?? 3, (p?.overbought as number) ?? 80, (p?.oversold as number) ?? 20)],
+  ["bollinger-squeeze-reversion", p => bollingerSqueezeReversion((p?.period as number) ?? 20,
+    (p?.devfactor as number) ?? 2, (p?.squeezePct as number) ?? 50)],
   [
     "dual-ma-crossover",
     (p) => dualMaCrossover((p?.fastPeriod as number) ?? 10, (p?.slowPeriod as number) ?? 30),

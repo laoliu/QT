@@ -203,6 +203,8 @@ export type TradingSignal = {
   price: number;
   quantity?: number;
   reason?: string;
+  /** Percentage of available cash to deploy on entry (1-100). */
+  sizePct?: number;
   confidence?: number; // 0-1
   strategyId: string;
   modelId?: string;

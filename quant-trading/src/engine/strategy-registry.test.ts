@@ -81,6 +81,17 @@ describe("strategy-registry", () => {
       expect(strategy?.availableEngines).toEqual(["builtin"]);
       expect(getStrategy("sector-synergy")).toBeUndefined();
     });
+
+    it("versions corrected legacy signal ports separately from the old approximate aliases", () => {
+      for (const [legacy, canonical] of [
+        ["ema-cross", "ema-cross-long-only"], ["donchian-breakout", "donchian-long-only"],
+        ["kdj", "kdj-long-only"], ["bollinger", "bollinger-squeeze-reversion"],
+      ]) {
+        expect(getStrategy(legacy!)?.version).toBe("2.0.0");
+        expect(getStrategy(legacy!)?.canonicalStrategyId).toBe(canonical);
+        expect(getStrategy(canonical!)?.engine).toBe("builtin");
+      }
+    });
   });
 
   describe("runBacktest (builtin)", () => {

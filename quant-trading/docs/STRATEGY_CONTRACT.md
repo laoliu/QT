@@ -17,6 +17,17 @@ QT 允许策略继续使用 TypeScript、Backtrader、vn.py 或 AIPHA，但策�
 
 这样每个兼容策略都有明确的迁移结果，不再依赖“Python 包是否恰好安装”来决定实际执行路径。
 
+以下四个入口已按保留的 Python 源码补齐信号规则，旧 ID 的运行版本更新为 `2.0.0`，以区别此前不完整的别名映射：
+
+| 旧 ID | 统一实现 | 保留的行为 |
+| --- | --- | --- |
+| `ema-cross` | `ema-cross-long-only` | SMA 初始化的 EMA、交叉记忆、只开多和平多 |
+| `donchian-breakout` | `donchian-long-only` | 独立入场和退出周期、排除当前 K 线的通道 |
+| `kdj` | `kdj-long-only` | K/D 的 SMA 平滑、J 极值退出和半仓入场 |
+| `bollinger` | `bollinger-squeeze-reversion` | 总体标准差、带宽挤压过滤和中轨回升退出 |
+
+`python scripts/generate_legacy_signal_fixtures.py` 使用原 Backtrader 类生成默认和自定义参数的对照数据，`legacy-compatible.test.ts` 逐条核对信号方向、所在 K 线及入场现金比例，并验证历史信号不受后续数据影响。该验证隔离了成交、费用和 T+1 规则，只证明这些测试场景下的信号一致；其他迁移条目的目录登记及可运行测试仍不能单独证明算法等价。
+
 ## 结果边界
 
 回测入口会为每次运行生成 `runId`，并在 `BacktestResult.runEnvelope` 中返回：

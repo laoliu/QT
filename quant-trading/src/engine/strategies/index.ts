@@ -127,3 +127,4 @@ export {
   ctaSupertrendCta,
 } from "./cta-extended.js";
 export { swingOverlay } from "./swing-overlay.js";
+export { longOnlyEmaCross, longOnlyDonchian, longOnlyKdj, bollingerSqueezeReversion } from "./legacy-compatible.js";

@@ -1131,7 +1131,7 @@ const backtraderStrategies: StrategyDefinition[] = [
     name: "KDJ 随机指标 (KDJ Stochastic)",
     description:
       "KDJ随机指标策略：K线上穿D线且处于超卖区买入，K线下穿D线且处于超买区卖出。J值极端时加强信号。",
-    version: "1.0.0",
+    version: "2.0.0",
     engine: "backtrader",
     entryFile: "strategies/kdj_strategy.py",
     parameters: [
@@ -1572,7 +1572,7 @@ const backtraderStrategies: StrategyDefinition[] = [
     description:
       "布林带策略：价格触及下轨时买入（超卖反弹），触及上轨时卖出（超买回落）。" +
       "内置挤压检测：当布林带收窄（波动率低）时暂停开仓，避免假信号。适合震荡行情。",
-    version: "1.0.0",
+    version: "2.0.0",
     engine: "backtrader",
     entryFile: "strategies/bollinger_strategy.py",
     parameters: [
@@ -1697,7 +1697,7 @@ const backtraderStrategies: StrategyDefinition[] = [
     id: "ema-cross",
     name: "EMA均线交叉 (EMA Crossover)",
     description: "EMA双均线交叉策略：快速EMA上穿慢速EMA买入（金叉），下穿卖出（死叉）。",
-    version: "1.0.0",
+    version: "2.0.0",
     engine: "backtrader",
     entryFile: "strategies/ema_cross_strategy.py",
     parameters: [
@@ -1872,7 +1872,7 @@ const backtraderStrategies: StrategyDefinition[] = [
     id: "donchian-breakout",
     name: "唐奇安通道突破 (Donchian Breakout)",
     description: "唐奇安通道突破策略：价格突破N日最高价买入，跌破M日最低价卖出。",
-    version: "1.0.0",
+    version: "2.0.0",
     engine: "backtrader",
     entryFile: "strategies/donchian_breakout_strategy.py",
     parameters: [
@@ -4353,6 +4353,35 @@ const vnpyStrategies: StrategyDefinition[] = [
 export { optionStrategies };
 
 const strategyDefinitions = [
+  ...([
+    { id: "ema-cross-long-only", name: "EMA 双均线（仅做多）", description: "保留旧 EMA 策略的指数均线金叉开多、死叉平多规则。",
+      parameters: [
+        { name: "fastPeriod", type: "number", default: 10, description: "快速 EMA 周期", min: 3, max: 50 },
+        { name: "slowPeriod", type: "number", default: 30, description: "慢速 EMA 周期", min: 10, max: 120 },
+      ] },
+    { id: "donchian-long-only", name: "唐奇安突破（仅做多）", description: "以前期高点开多，独立的低点周期平多，不开空、不加仓。",
+      parameters: [
+        { name: "upperPeriod", type: "number", default: 20, description: "上轨突破周期", min: 5, max: 60 },
+        { name: "lowerPeriod", type: "number", default: 10, description: "下轨退出周期", min: 5, max: 30 },
+      ] },
+    { id: "kdj-long-only", name: "KDJ 随机指标（仅做多）", description: "保留 K/D 超卖金叉及 J 极值规则；J 极度超卖使用半仓。",
+      parameters: [
+        { name: "period", type: "number", default: 9, description: "RSV 周期", min: 5, max: 30 },
+        { name: "kSmooth", type: "number", default: 3, description: "K 线 SMA 平滑周期", min: 2, max: 10 },
+        { name: "dPeriod", type: "number", default: 3, description: "D 线 SMA 平滑周期", min: 2, max: 10 },
+        { name: "overbought", type: "number", default: 80, description: "超买阈值", min: 60, max: 95 },
+        { name: "oversold", type: "number", default: 20, description: "超卖阈值", min: 5, max: 40 },
+      ] },
+    { id: "bollinger-squeeze-reversion", name: "布林带挤压过滤均值回归", description: "保留总体标准差、带宽挤压过滤、上轨和中轨回升退出规则。",
+      parameters: [
+        { name: "period", type: "number", default: 20, description: "布林带周期", min: 10, max: 50 },
+        { name: "devfactor", type: "number", default: 2, description: "标准差倍数", min: 1, max: 3.5 },
+        { name: "squeezePct", type: "number", default: 50, description: "挤压阈值（中位带宽百分比）", min: 20, max: 80 },
+      ] },
+  ] satisfies Pick<StrategyDefinition, "id" | "name" | "description" | "parameters">[]).map(definition => ({
+    ...definition, version: "1.0.0", engine: "builtin" as const, entryFile: "",
+    markets: ["cn_stock", "us_stock", "hk_stock"] as StrategyDefinition["markets"],
+  })),
   ...builtinTsStrategies,
   ...backtraderStrategies,
   ...ctaStrategies,

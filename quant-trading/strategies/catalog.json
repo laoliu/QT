@@ -544,9 +544,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "cta-kdj",
+        "canonicalId": "kdj-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
+        "note": "Preserves SMA-smoothed K/D, J extremes, long-only positions and the 50 percent cash entry hint. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
       }
     },
     {
@@ -724,9 +724,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "mean-reversion",
+        "canonicalId": "bollinger-squeeze-reversion",
         "sourceEngine": "backtrader",
-        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
+        "note": "Preserves population standard deviation, rolling bandwidth squeeze filtering and middle-band exits. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
       }
     },
     {
@@ -851,9 +851,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "dual-ma-crossover",
+        "canonicalId": "ema-cross-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy engine entry is retained as an ID-compatible alias and executes through the canonical builtin strategy."
+        "note": "Preserves SMA-seeded EMA crosses and long-only entry/exit; no SMA substitution or short reversal. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
       }
     },
     {
@@ -1115,9 +1115,9 @@
       "lifecycle": "compatibility",
       "migration": {
         "status": "migrated_to_builtin",
-        "canonicalId": "momentum-breakout",
+        "canonicalId": "donchian-long-only",
         "sourceEngine": "backtrader",
-        "note": "Legacy parameters are mapped to the semantically equivalent canonical builtin strategy; the legacy engine entry is closed."
+        "note": "Preserves independent upper/lower periods, prior-bar channels and long-only positions. Signal parity is checked against retained Backtrader sources; fill and fee parity is outside this check."
       }
     },
     {
@@ -2888,6 +2888,72 @@
         "index_membership_pit"
       ],
       "signalFormat": "target_position",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "kdj-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock",
+        "us_stock",
+        "hk_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "bollinger-squeeze-reversion",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "ema-cross-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
+      "lifecycle": "primary"
+    },
+    {
+      "id": "donchian-long-only",
+      "engine": "builtin",
+      "source": "src/engine/strategies/legacy-compatible.ts",
+      "markets": [
+        "cn_stock"
+      ],
+      "timeframes": [
+        "1d"
+      ],
+      "dataRequirements": [
+        "ohlcv"
+      ],
+      "signalFormat": "trading_signal",
       "lifecycle": "primary"
     }
   ]

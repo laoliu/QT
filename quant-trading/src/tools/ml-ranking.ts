@@ -38,7 +38,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
         modelType: {
           type: "string",
           enum: ["lgbm", "linear"],
-          description: "模型类型；默认 lgbm，linear 仅作基线",
+          description: "模型类型；省略时使用研究 YAML 配置，linear 仅作基线",
         },
         modelPath: {
           type: "string",
@@ -82,7 +82,7 @@ export function createMLRankingTool(_api: QuantTradingRuntime, config: QuantTrad
         },
         startDate: { type: "string", description: "TuShare PIT 快照起始日 YYYYMMDD（train_tushare）" },
         endDate: { type: "string", description: "TuShare PIT 快照结束日 YYYYMMDD（train_tushare）" },
-        indexCode: { type: "string", description: "历史指数成分代码（默认 000905.SH）" },
+        indexCode: { type: "string", description: "历史指数成分代码；默认取研究 YAML 的 universe.base_index，显式值必须与其一致" },
         benchmarkCode: { type: "string", description: "基准指数代码（默认与 indexCode 相同）" },
         cacheDir: { type: "string", description: "TuShare 本地缓存目录（train_tushare）" },
         useCache: { type: "boolean", description: "是否使用 TuShare 缓存（train_tushare）" },

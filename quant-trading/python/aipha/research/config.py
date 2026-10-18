@@ -179,10 +179,10 @@ def load_research_config(path: str | Path) -> ResearchConfig:
     if configured_model not in model_aliases:
         raise ValueError("canonical model.type must be lightgbm_ranker or linear")
     return ResearchConfig(
-        data_provider=data["provider"],
+        data_provider=data.get("provider", "tushare_pit"),
         adjust=data.get("adjust", "point_in_time"),
         feature_version=features.get("version", "cn_equity_v1"),
-        universe=universe.get("base_index", "CSI500").lower().replace("csi", "csi"),
+        universe=universe.get("base_index", "CSI500"),
         min_listing_days=min_listing_days,
         rebalance=portfolio.get("rebalance", "monthly"),
         train_years=int(model.get("train_years", 3)),
@@ -198,7 +198,7 @@ def load_research_config(path: str | Path) -> ResearchConfig:
         ),
         max_daily_turnover=float(portfolio.get("max_daily_turnover", 0.30)),
         model_type=model_aliases[configured_model],
-        objective=model.get("objective", "lambdarank"),
+        objective=model.get("objective", "regression" if configured_model == "linear" else "lambdarank"),
         initial_capital=float(portfolio.get("initial_capital", 1_000_000)),
         n_estimators=int(model.get("n_estimators", 300)),
         commission_rate=float(cost.get("commission_rate", 8.54e-05)),

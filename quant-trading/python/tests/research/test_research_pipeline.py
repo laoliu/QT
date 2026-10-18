@@ -605,6 +605,7 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     fixture.loc[fixture.index[-1], "is_index_member"] = False
     fixture.attrs["snapshot_metadata"] = attest_snapshot_metadata(fixture, {
         "provider": "tushare_pit", "data_snapshot_id": "fixture-v1",
+        "index_code": "000905.SH",
         "feature_version": "cn_equity_v1",
         "start_date": "2022-01-03", "end_date": "2023-05-19",
     })

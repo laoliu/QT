@@ -872,16 +872,9 @@ def _load_canonical_ml_cross_section(
             f"feature version mismatch: snapshot={metadata.get('feature_version')!r}, "
             f"requested={feature_version!r}"
         )
-    expected_indices = {
-        "csi300": "000300.SH", "csi500": "000905.SH",
-        "csi1000": "000852.SH", "csi2000": "932000.CSI",
-    }
-    expected_index = expected_indices.get(str(universe).lower())
-    if expected_index and str(metadata.get("index_code", "")).upper() != expected_index:
-        raise ValueError(
-            f"universe mismatch: snapshot index={metadata.get('index_code')!r}, "
-            f"requested {universe} ({expected_index})"
-        )
+    from aipha.universe.indices import validate_snapshot_universe
+
+    validate_snapshot_universe(metadata, universe)
     panel = pd.read_parquet(path)
     required = {"trade_date", "symbol", "feature_version", "is_index_member", "is_st", "listing_days"}
     missing = required - set(panel.columns)

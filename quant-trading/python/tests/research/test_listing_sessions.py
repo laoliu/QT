@@ -122,7 +122,14 @@ def test_predict_bridge_applies_same_configured_age_before_ranking(monkeypatch):
     import aipha.research
 
     monkeypatch.setattr(engine, "_load_config", lambda _: ResearchConfig(min_listing_days=300))
-    monkeypatch.setattr(engine, "_read_parquet", lambda _: _universe())
+    from aipha.research.snapshots import attest_snapshot_metadata
+
+    frame = _universe().assign(price_adjustment="point_in_time_factor")
+    frame.attrs["snapshot_metadata"] = attest_snapshot_metadata(frame, {
+        "provider": "tushare_pit", "data_snapshot_id": "age-fixture", "feature_version": "cn_equity_v1",
+        "start_date": "2024-01-03", "end_date": "2024-01-03", "index_code": "000905.SH",
+    })
+    monkeypatch.setattr(engine, "_read_parquet", lambda _: frame)
     calls = []
     def predict(frame):
         calls.append(frame.symbol.tolist())

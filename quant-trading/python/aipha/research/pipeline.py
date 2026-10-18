@@ -57,8 +57,12 @@ class ResearchConfig:
 
     def __post_init__(self) -> None:
         from aipha.universe.historical import validate_listing_threshold
+        from aipha.universe.indices import normalize_universe
 
         validate_listing_threshold(self.min_listing_days)
+        object.__setattr__(self, "universe", normalize_universe(self.universe))
+        if self.data_provider != "tushare_pit":
+            raise ValueError("canonical historical research requires data_provider=tushare_pit")
         if self.model_type not in {"lightgbm", "elasticnet"}:
             raise ValueError("canonical research pipeline supports model_type=lightgbm or elasticnet")
         if self.adjust != "point_in_time":
@@ -220,7 +224,7 @@ class ResearchPipeline:
         *,
         start_date: str,
         end_date: str,
-        index_code: str = "000905.SH",
+        index_code: str | None = None,
         benchmark_code: str | None = None,
         pit_provider: Any | None = None,
         st_status: pd.DataFrame | None = None,
@@ -237,6 +241,12 @@ class ResearchPipeline:
         materialized from name-change intervals when omitted.
         """
         from .snapshots import SnapshotSpec, build_tushare_snapshot
+        from aipha.universe.indices import universe_index_code
+
+        configured_index = universe_index_code(self.config.universe)
+        if index_code is not None and str(index_code).strip().upper() != configured_index:
+            raise ValueError("index_code conflicts with research universe; change universe.base_index in the research config")
+        index_code = configured_index
 
         if pit_provider is None:
             from aipha.data.tushare_pit_provider import TuSharePITProvider
@@ -360,6 +370,9 @@ class ResearchPipeline:
             raise ValueError("versioned research input requires a feature_version column")
 
         metadata = _load_snapshot_metadata(features)
+        from aipha.universe.indices import validate_snapshot_universe
+
+        validate_snapshot_universe(metadata, self.config.universe)
         if metadata["provider"] != self.config.data_provider:
             raise ValueError(
                 f"snapshot provider must be {self.config.data_provider!r}; got {metadata['provider']!r}"

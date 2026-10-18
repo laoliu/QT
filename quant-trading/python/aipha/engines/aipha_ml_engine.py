@@ -34,6 +34,16 @@ def _load_config(path: str | None) -> Any:
     return load_research_config(path or DEFAULT_CONFIG)
 
 
+def _model_type(config: dict, research_config: Any) -> str:
+    override = config.get("modelType")
+    if override is None:
+        return research_config.model_type
+    aliases = {"lgbm": "lightgbm", "linear": "elasticnet"}
+    if not isinstance(override, str) or override.lower() not in aliases:
+        raise ValueError("modelType must be lgbm or linear")
+    return aliases[override.lower()]
+
+
 def _read_parquet(path: str | None):
     if not path:
         raise ValueError("dataPath is required")
@@ -77,12 +87,10 @@ def run(config: dict) -> dict:
             from aipha.research import ResearchPipeline
 
             cfg = _load_config(config.get("configPath"))
-            model_type = str(config.get("modelType", "lgbm")).lower()
-            if model_type not in {"lgbm", "linear"}:
-                raise ValueError("modelType must be lgbm or linear")
+            model_type = _model_type(config, cfg)
             from dataclasses import replace
-            cfg = replace(cfg, model_type="elasticnet" if model_type == "linear" else "lightgbm",
-                          objective="regression" if model_type == "linear" else cfg.objective)
+            cfg = replace(cfg, model_type=model_type,
+                          objective="regression" if model_type == "elasticnet" else "lambdarank")
             overrides = config.get("modelParams") or {}
             if not isinstance(overrides, dict):
                 raise ValueError("modelParams must be an object")
@@ -110,7 +118,7 @@ def run(config: dict) -> dict:
                     config.get("outputDir", "output/research/runs"),
                     start_date=start_date,
                     end_date=end_date,
-                    index_code=str(config.get("indexCode", "000905.SH")),
+                    index_code=config.get("indexCode"),
                     benchmark_code=config.get("benchmarkCode"),
                     pit_provider=TuSharePITProvider(equity_provider),
                     use_cache=bool(config.get("useCache", True)),
@@ -131,13 +139,30 @@ def run(config: dict) -> dict:
             from aipha.research import load_verified_selector
 
             cfg = _load_config(config.get("configPath"))
+            model_type = _model_type(config, cfg)
             feature_path = config.get("featurePath") or config.get("dataPath")
             frame = _read_parquet(feature_path)
             from aipha.universe.historical import filter_historical_universe
+            from aipha.universe.indices import validate_snapshot_universe
+            from aipha.research.pipeline import _load_snapshot_metadata
+            from aipha.research.contracts import validate_feature_frame
 
+            metadata = _load_snapshot_metadata(frame)
+            if metadata["provider"] != cfg.data_provider:
+                raise ValueError("prediction snapshot provider must be tushare_pit")
+            if metadata["feature_version"] != cfg.feature_version:
+                raise ValueError("prediction snapshot feature_version does not match research config")
+            validate_snapshot_universe(metadata, cfg.universe)
+            frame = validate_feature_frame(frame)
+            if not frame["feature_version"].eq(cfg.feature_version).all():
+                raise ValueError("prediction row feature_version does not match research config")
+            import pandas as pd
+
+            if (frame.trade_date.min() != pd.Timestamp(metadata["start_date"]).date()
+                    or frame.trade_date.max() != pd.Timestamp(metadata["end_date"]).date()):
+                raise ValueError("prediction snapshot date range does not match its rows")
+            frame["datetime"] = frame["trade_date"]
             frame = filter_historical_universe(frame, min_listing_days=cfg.min_listing_days)
-            if "datetime" not in frame and "trade_date" in frame:
-                frame["datetime"] = frame["trade_date"]
             model_path = config.get("modelPath")
             if not model_path:
                 raise ValueError("modelPath is required")
@@ -145,7 +170,7 @@ def run(config: dict) -> dict:
                 model_path,
                 expected_feature_version=cfg.feature_version,
                 expected_feature_columns=config.get("featureColumns"),
-                expected_model_type="elasticnet" if str(config.get("modelType", "lgbm")).lower() == "linear" else "lightgbm",
+                expected_model_type=model_type,
             )
             frame = frame.copy()
             frame["score"] = selector.predict(frame).to_numpy() if len(frame) else []

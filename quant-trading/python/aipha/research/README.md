@@ -44,6 +44,17 @@ tape. Its signed metadata records the calendar range and content hash.
 feature-missingness reporting and prediction; canonical Paper scorers accept
 the same `min_listing_days` parameter. Existing snapshots are preserved; the
 old v1 builder's age semantics cannot be silently reused for canonical runs.
+
+The research YAML controls the model and historical universe in every entry
+point. Omitting bridge `modelType` retains `model.type`; only an explicit
+`lgbm`/`linear` override changes it. `train_tushare` resolves `universe.base_index`
+to the matching TuShare code (CSI300/500/1000/2000), with the same index as its
+default benchmark. An explicit conflicting `indexCode` is rejected before
+data access. Offline runs, prediction and canonical Paper scoring reject
+snapshots with an absent or mismatched index identity. Prediction also checks
+the source signature, generator, row feature version and complete date range
+before loading a model.
+
 Financial features must already have been joined by announcement date. The
 `visible_financial_snapshots` helper provides the same announce-date cutoff for
 long-form financial snapshots. A sidecar with another provider, mismatched

@@ -29,7 +29,11 @@ def run_portfolio_backtest(
 
         validate_target_styles(targets, filter_historical_universe(market, min_listing_days=config.min_listing_days),
                                config.max_style_exposure)
-    bars = validate_market_frame(market)
+    # The caller retains authenticated provenance. Per-row accounting needs
+    # values and embedded events, not repeated deep copies of the audit attrs.
+    bars = market.copy(deep=False)
+    bars.attrs = {}
+    bars = validate_market_frame(bars)
     bars["_open_limit_up"], bars["_open_limit_down"] = price_limit_flags(bars)
     ledger = CorporateActionLedger(bars)
     bars = raw_accounting_bars(bars)

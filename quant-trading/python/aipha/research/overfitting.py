@@ -16,6 +16,7 @@ def portfolio_selection_cscv(
     config: Any,
     *,
     baseline_returns: list[dict[str, Any]] | None = None,
+    snapshot_metadata: dict[str, Any] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Replay the predeclared Top-K grid, then cross-validate daily net returns.
 
@@ -57,7 +58,9 @@ def portfolio_selection_cscv(
     eligible = scores[np.isfinite(pd.to_numeric(scores["score"], errors="coerce"))]
     dates = pd.to_datetime(eligible["trade_date"])
     from .pipeline import monthly_rebalance_dates
-    calendar_dates = monthly_rebalance_dates(market.attrs.get("snapshot_metadata", {}))
+    calendar_dates = monthly_rebalance_dates(
+        snapshot_metadata if snapshot_metadata is not None else market.attrs.get("snapshot_metadata", {}),
+    )
     signal_dates = (eligible.assign(_month=dates.dt.to_period("M")).groupby("_month")["trade_date"].max()
                     if calendar_dates is None else calendar_dates)
     counts = eligible.loc[eligible.trade_date.isin(signal_dates)].groupby("trade_date").symbol.nunique()

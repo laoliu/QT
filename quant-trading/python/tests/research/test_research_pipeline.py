@@ -177,15 +177,18 @@ def test_training_labels_use_complete_tape_before_signal_universe_filter(monkeyp
     frame["open_raw"] = 999.0
     frame["up_limit"] = 1000.0
     frame["down_limit"] = 0.01
+    frame.attrs["audit_payload"] = {"events": [{"metric_name": "roe", "action": "missing"}]}
     observed = {}
 
     def capture(selector, labelled):
+        assert labelled.attrs == {}
         observed["labelled"] = labelled
         observed["features"] = selector.config.feature_cols
         return labelled[["datetime", "symbol", "fwd_return"]].assign(pred_score=0.5)
 
     monkeypatch.setattr(MLStockSelector, "walk_forward_train", capture)
     ResearchPipeline(ResearchConfig(forward_days=1)).train_oos(frame)
+    assert frame.attrs == {"audit_payload": {"events": [{"metric_name": "roe", "action": "missing"}]}}
     labelled = observed["labelled"]
     first_signal = labelled.loc[(labelled["symbol"] == "600000.SH") & (labelled["datetime"] == dates[0])]
     assert first_signal.iloc[0]["fwd_return"] == pytest.approx(22 / 11 - 1)

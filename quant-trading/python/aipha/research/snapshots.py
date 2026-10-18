@@ -47,7 +47,8 @@ def _signature_payload(metadata: dict[str, Any]) -> bytes:
     payload = {key: metadata.get(key) for key in _SIGNED_SOURCE_FIELDS}
     # Optional extension keeps old signatures verifiable while authenticating
     # the complete quality disclosure on newly generated snapshots.
-    for field in ("financial_data_quality", "universe_history", "corporate_action_policy"):
+    for field in ("financial_data_quality", "universe_history", "corporate_action_policy",
+                  "snapshot_lineage", "corporate_action_unit_corrections"):
         if field in metadata:
             payload[field] = metadata[field]
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -113,7 +114,8 @@ def frame_content_sha256(frame: pd.DataFrame) -> str:
     materialized, while ``artifact_sha256`` below detects byte-level file
     tampering.
     """
-    normalized = frame.copy()
+    normalized = frame.copy(deep=False)
+    normalized.attrs = {}  # Provenance is signed separately, not tabular content.
     for column in normalized.columns:
         if pd.api.types.is_datetime64_any_dtype(normalized[column]):
             normalized[column] = normalized[column].dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -124,11 +126,26 @@ def frame_content_sha256(frame: pd.DataFrame) -> str:
     if sort_columns:
         normalized = normalized.sort_values(sort_columns, kind="mergesort")
     normalized = normalized.reset_index(drop=True)
-    payload = normalized.to_json(
-        orient="split", date_format="iso", double_precision=15,
-        force_ascii=False, default_handler=str,
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    options = dict(date_format="iso", double_precision=15, force_ascii=False, default_handler=str)
+    # Stream precisely the legacy orient=split byte format. Large real panels
+    # otherwise build a multi-GB native JSON buffer and another UTF-8 copy.
+    # Keeping identical bytes preserves existing snapshot signatures.
+    digest = hashlib.sha256()
+    header = normalized.iloc[:0].to_json(orient="split", **options).split(',"index":', 1)[0]
+    digest.update((header + ',"index":[').encode("utf-8"))
+    chunk_size = 2048
+    for start in range(0, len(normalized), chunk_size):
+        if start:
+            digest.update(b",")
+        digest.update(",".join(str(i) for i in range(start, min(start + chunk_size, len(normalized)))).encode("ascii"))
+    digest.update(b'],"data":[')
+    for start in range(0, len(normalized), chunk_size):
+        if start:
+            digest.update(b",")
+        payload = normalized.iloc[start:start + chunk_size].to_json(orient="values", **options)
+        digest.update(payload[1:-1].encode("utf-8"))
+    digest.update(b"]}")
+    return digest.hexdigest()
 
 
 def attest_snapshot_metadata(
@@ -237,6 +254,68 @@ class TushareSnapshot:
             self.panel, path, self.metadata, artifact_type="tushare_pit_snapshot",
         )
         return target, sidecar
+
+
+def correct_snapshot_action_units(
+    source: TushareSnapshot, corrections: list[dict], evidence: dict[str, bytes], *,
+    factor_rounding_unit: float = 0.,
+) -> TushareSnapshot:
+    """Derive a new signed snapshot from verified, explicitly reviewed terms.
+
+    No feature, raw price, financial fact or source event is overwritten in
+    the parent. The optional factor quantum declares the vendor's published
+    maximum quantum; finer decimal values use the next encoding precision.
+    This is not a fitted price tolerance.
+    """
+    from .corporate_actions import apply_action_unit_corrections, attach_corporate_actions, read_corporate_actions
+
+    metadata = source.metadata
+    if metadata.get("provider") != "tushare_pit":
+        raise ValueError("unit corrections require an authenticated TuShare PIT parent")
+    verify_snapshot_signature(metadata, required=True)
+    if frame_content_sha256(source.panel) != metadata["snapshot_content_sha256"]:
+        raise ValueError("parent snapshot content hash mismatch")
+    if not corrections or metadata.get("corporate_action_unit_corrections"):
+        raise ValueError("provide corrections once against the original source snapshot")
+    if not np.isfinite(factor_rounding_unit) or not 0 <= factor_rounding_unit <= .001:
+        raise ValueError("factor rounding unit must be between zero and 0.001")
+    panel = source.panel.copy(deep=False)
+    panel.attrs = {}
+    if factor_rounding_unit:
+        factors = pd.to_numeric(panel.adj_factor, errors="coerce").to_numpy()
+        if not (np.isfinite(factors) & (factors > factor_rounding_unit / 2)).all():
+            raise ValueError("source factors must be positive and finite")
+        quantum = np.zeros(len(panel), dtype=float)
+        for decimal_places in range(6):
+            candidate = factor_rounding_unit / 10 ** decimal_places
+            aligned = np.isclose(factors / candidate, np.round(factors / candidate), rtol=0, atol=1e-6)
+            quantum[(quantum == 0) & aligned] = candidate
+        panel["adj_factor_rounding_unit"] = quantum
+    actions, audit = apply_action_unit_corrections(
+        read_corporate_actions(panel), corrections, evidence, as_of=metadata["end_date"],
+    )
+    panel = attach_corporate_actions(panel, actions)
+    result = {k: v for k, v in metadata.items() if k not in {
+        "source_signature", "source_signature_algorithm", "artifact_sha256", "artifact_type",
+    }}
+    result["snapshot_lineage"] = {
+        "parent_data_snapshot_id": metadata["data_snapshot_id"],
+        "parent_snapshot_content_sha256": metadata["snapshot_content_sha256"],
+        "parent_artifact_sha256": metadata.get("artifact_sha256"),
+        "operation": "reviewed_issuer_action_unit_correction",
+    }
+    result["corporate_action_unit_corrections"] = audit
+    result["corporate_action_policy"] = {**metadata.get("corporate_action_policy", {}),
+        "unit_correction": "event_specific_dated_issuer_terms",
+        "reference_cash": "issuer_diluted_reference_separate_from_holder_entitlement",
+        "adj_factor_rounding_unit": factor_rounding_unit,
+        "adj_factor_rounding_rule": "coarsest_encoding_decimal_quantum_up_to_declared_maximum_otherwise_exact",
+    }
+    result = attest_snapshot_metadata(panel, result)
+    result["data_snapshot_id"] = f"{metadata['data_snapshot_id']}:unit_corrected:{result['snapshot_content_sha256'][:24]}"
+    result = sign_snapshot_metadata(result)
+    panel.attrs["snapshot_metadata"] = result
+    return TushareSnapshot(panel, result)
 
 
 def point_in_time_adjust_prices(frame: pd.DataFrame) -> pd.DataFrame:

@@ -332,7 +332,10 @@ class ResearchPipeline:
         required = {"symbol"}
         if not required.issubset(features.columns) or not ({"datetime", "trade_date"} & set(features.columns)):
             raise ValueError("features must contain a date column (datetime or trade_date) and symbol")
-        labelled = features.copy()
+        # Keep provenance on the caller's signed input. It is not model data;
+        # pandas otherwise deep-copies the full audit on every Series operation.
+        labelled = features.copy(deep=False)
+        labelled.attrs = {}
         if "datetime" not in labelled.columns:
             labelled["datetime"] = pd.to_datetime(labelled["trade_date"])
         if "fwd_return_rank" not in labelled.columns:
@@ -365,6 +368,10 @@ class ResearchPipeline:
             n_estimators=self.config.n_estimators,
         )
         selector = MLStockSelector(selector_config)
+        model_columns = ["datetime", "symbol", "fwd_return", "fwd_return_rank",
+                         "is_index_member", "is_st", "is_suspended", "listing_days", "listing_days_basis",
+                         *feature_cols]
+        labelled = labelled[[name for name in dict.fromkeys(model_columns) if name in labelled]]
         oos = selector.walk_forward_train(labelled)
         summary = json_safe_metrics(selector.get_wf_summary())
         summary.update({
@@ -389,7 +396,8 @@ class ResearchPipeline:
         It can be read from Parquet, so tests and offline research never need a
         network connection or broker account.
         """
-        source = features.copy()
+        source = features.copy(deep=False)
+        source.attrs = {}
         if "trade_date" not in source and "datetime" in source:
             source = source.rename(columns={"datetime": "trade_date"})
         source = validate_market_frame(source)
@@ -481,6 +489,7 @@ class ResearchPipeline:
 
         cscv_returns, cscv_analysis = portfolio_selection_cscv(
             source, oos, self.config, baseline_returns=backtest["daily_returns"],
+            snapshot_metadata=metadata,
         )
         cscv_method = cscv_analysis["method"] if cscv_analysis["available"] else f"unavailable_{cscv_analysis['reason']}"
         metrics.update({
@@ -588,6 +597,7 @@ class ResearchPipeline:
             "evaluation_window": backtest["evaluation_window"],
             "snapshot_metadata": metadata,
             "financial_data_quality": metadata.get("financial_data_quality", {}),
+            "corporate_action_unit_corrections": metadata.get("corporate_action_unit_corrections", []),
             "accounting": backtest["accounting"],
             "final_positions": backtest["final_positions"],
             "artifact_attestation": {
@@ -942,6 +952,8 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
     metadata = frame.attrs.get("snapshot_metadata")
     if not isinstance(metadata, dict):
         raise ValueError("frozen snapshot metadata is required (Parquet sidecar <file>.metadata.json)")
+    frame = frame.copy(deep=False)
+    frame.attrs = {}
     required = {"provider", "data_snapshot_id", "feature_version", "start_date", "end_date"}
     missing = required - set(metadata)
     if missing:

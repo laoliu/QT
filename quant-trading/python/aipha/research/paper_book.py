@@ -111,7 +111,8 @@ def _verify_receipt_calendar(connection, receipt: dict) -> int:
 
 def _market_records(bars: pd.DataFrame, style_limits=()) -> dict[tuple[str, str], dict]:
     columns = [column for column in (*MARKET_COLUMNS, "price_adjustment", "up_limit", "down_limit",
-                                     "open_raw", "high_raw", "low_raw", "close_raw") if column in bars]
+                                     "open_raw", "high_raw", "low_raw", "close_raw",
+                                     "pre_close", "adj_factor_rounding_unit") if column in bars]
     if style_limits:
         columns.extend(column for column in ("is_index_member", "is_st", "listing_days", "listing_days_basis",
                                              *(name for name, _ in style_limits)) if column in bars and column not in columns)

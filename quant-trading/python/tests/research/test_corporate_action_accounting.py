@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import replace
 
 import numpy as np
@@ -71,7 +72,10 @@ def test_raw_lots_and_costs_are_independent_of_constant_adjustment_anchor() -> N
 
 
 def test_cash_dividend_is_receivable_then_paid_without_artificial_return() -> None:
-    result = _replay(_with_action())
+    source = _with_action()
+    source.attrs["audit_payload"] = {"events": [{"metric_name": "roe", "action": "missing"}]}
+    result = _replay(source)
+    assert source.attrs == {"audit_payload": {"events": [{"metric_name": "roe", "action": "missing"}]}}
     daily = pd.DataFrame(result["daily_returns"]).set_index("trade_date")
     assert daily.loc["2024-02-02", "cash"] == 0
     assert daily.loc["2024-02-02", "dividend_receivable"] == 10000
@@ -261,3 +265,154 @@ def test_tushare_cash_only_snapshot_ignores_out_of_scope_incomplete_archives() -
     assert normalize_tushare_dividends(pd.DataFrame([old, future]), start_date="20230101", end_date="20241231") == []
     with pytest.raises(ValueError, match="requires a valid"):
         normalize_tushare_dividends(pd.DataFrame([future]), start_date="20230101", end_date="20251231")
+
+
+def _reviewed_cdr_correction():
+    before = _action(cash_per_share=10.)
+    after = replace(before, cash_per_share=1., reference_cash_per_share=.98)
+    text = b"Issuer notice: CNY 10 per underlying share; CNY 1 per CDR; diluted reference CNY 0.98."
+    digest = hashlib.sha256(text).hexdigest()
+    record = {"before": before.to_wire(), "after": after.to_wire(),
+              "notice_date": "2024-01-30", "issuer": "fixture issuer",
+              "source_unit": "underlying_share", "trading_unit": "CDR",
+              "source_url": "https://example.com/issuer-notice", "evidence_sha256": digest,
+              "evidence_excerpt": text.decode()}
+    return before, after, record, {digest: text}
+
+
+def test_reviewed_correction_only_changes_exact_event_and_requires_causal_frozen_evidence():
+    from aipha.research.corporate_actions import apply_action_unit_corrections
+
+    before, after, record, evidence = _reviewed_cdr_correction()
+    other = _action(action_id="other", symbol="600001.SH")
+    actual, audit = apply_action_unit_corrections([before, other], [record], evidence, as_of="2024-02-07")
+    assert {a.action_id: a for a in actual} == {before.action_id: after, other.action_id: other}
+    assert audit[0]["before"]["cash_per_share"] == 10.
+    assert audit[0]["after"]["cash_per_share"] == 1.
+    for change, expected in [
+        ({"notice_date": "2024-02-03"}, "notice"),
+        ({"evidence_sha256": "0" * 64}, "evidence"),
+        ({"evidence_excerpt": "invented"}, "excerpt"),
+        ({"after": replace(after, pay_date="2024-02-07").to_wire()}, "settlement"),
+    ]:
+        with pytest.raises(ValueError, match=expected):
+            apply_action_unit_corrections([before], [{**record, **change}], evidence, as_of="2024-02-07")
+    with pytest.raises(ValueError, match="match exactly"):
+        apply_action_unit_corrections([after], [record], evidence, as_of="2024-02-07")
+    with pytest.raises(ValueError, match="match exactly"):
+        apply_action_unit_corrections([before], [record, record], evidence, as_of="2024-02-07")
+    with pytest.raises(ValueError, match="notice"):
+        apply_action_unit_corrections([before], [record], evidence, as_of="2024-01-29")
+
+
+def test_differential_dividend_credits_actual_cash_and_uses_diluted_exchange_reference():
+    action = _action(cash_per_share=1., reference_cash_per_share=.98)
+    market = _with_action(action)
+    after = market.symbol.eq(action.symbol) & market.trade_date.ge(pd.Timestamp(action.ex_date))
+    market.loc[after, ["open_raw", "high_raw", "low_raw", "close_raw"]] = 9.02
+    market.loc[after, "adj_factor"] = 10. / 9.02
+    market["pre_close"] = 10.
+    market.loc[after, "pre_close"] = 9.02
+    result = _replay(market)
+    assert result["accounting"]["cash_dividends_paid"] == 10000
+    assert result["daily_returns"][-1]["nav"] == pytest.approx(100200)
+    market.loc[after, "pre_close"] = 8.
+    with pytest.raises(ValueError, match="exchange pre_close"):
+        _replay(market)
+
+
+def test_differential_bonus_preserves_actual_share_entitlement():
+    action = _action(cash_per_share=1., reference_cash_per_share=.98,
+                     bonus_per_share=.1, reference_bonus_per_share=.09, share_list_date="2024-02-07")
+    market = _market()
+    after = market.symbol.eq(action.symbol) & market.trade_date.ge(pd.Timestamp(action.ex_date))
+    reference_price = (10. - .98) / 1.09
+    market.loc[after, ["open", "high", "low", "close"]] = reference_price
+    market.loc[after, "adj_factor"] = 10. / reference_price
+    result = _replay(attach_corporate_actions(market, [action]))
+    assert result["accounting"]["bonus_shares_delivered"] == 1000
+    assert result["accounting"]["cash_dividends_paid"] == 10000
+    assert result["daily_returns"][-1]["nav"] == pytest.approx(11000 * reference_price + 10000)
+
+
+def test_declared_factor_quantization_has_bounded_error_without_masking_wrong_terms():
+    action = _action(cash_per_share=1.23852, reference_cash_per_share=1.22317)
+    market = _market()
+    stock = market.symbol.eq(action.symbol)
+    market.loc[stock, ["open", "close", "high", "low"]] = 42.60
+    market.loc[stock, "adj_factor"] = 1.033
+    after = stock & market.trade_date.ge(pd.Timestamp(action.ex_date))
+    market.loc[after, ["open", "close", "high", "low"]] = 41.38
+    market.loc[after, "adj_factor"] = 1.064
+    market = attach_corporate_actions(market, [action])
+    with pytest.raises(ValueError, match="does not reconcile"):
+        _replay(market)
+    market["adj_factor_rounding_unit"] = .001
+    assert _replay(market)["accounting"]["cash_dividends_paid"] > 0
+    wrong = attach_corporate_actions(market, [replace(action, reference_cash_per_share=.5)])
+    with pytest.raises(ValueError, match="does not reconcile"):
+        _replay(wrong)
+    market["adj_factor_rounding_unit"] = .1
+    with pytest.raises(ValueError, match="rounding_unit"):
+        _replay(market)
+
+
+def test_factor_precision_change_without_economic_event_does_not_invent_a_distribution():
+    market = _market()
+    market["adj_factor"] = 1.0332
+    market["adj_factor_rounding_unit"] = 0.
+    changed = market.trade_date.ge("2024-02-02")
+    market.loc[changed, "adj_factor"] = 1.033
+    market.loc[changed, "adj_factor_rounding_unit"] = .001
+    result = _replay(market)
+    assert result["accounting"]["cash_dividends_paid"] == 0
+    assert result["daily_returns"][-1]["nav"] == 100000
+    market.loc[changed, "adj_factor"] = 1.03
+    with pytest.raises(ValueError, match="unexplained adjustment"):
+        _replay(market)
+
+
+def test_corrected_snapshot_preserves_parent_and_authenticates_event_audit(monkeypatch, tmp_path):
+    from aipha.research.snapshots import (
+        TushareSnapshot, attest_snapshot_metadata, correct_snapshot_action_units,
+        verify_snapshot_signature, verify_attested_parquet,
+    )
+    monkeypatch.setenv("AIPHA_PIT_SNAPSHOT_KEY", "fixture-key-" * 4)
+    before, after, record, evidence = _reviewed_cdr_correction()
+    panel = attach_corporate_actions(_market(), [before])
+    panel.loc[panel.index[0], "adj_factor"] = 1.0332
+    metadata = attest_snapshot_metadata(panel, {"provider": "tushare_pit", "data_snapshot_id": "parent",
+        "feature_version": "cn_equity_v1", "start_date": "2024-01-31", "end_date": "2024-02-07"})
+    parent_hash = frame_content_sha256(panel)
+    source = TushareSnapshot(panel, metadata)
+    corrected = correct_snapshot_action_units(source, [record], evidence, factor_rounding_unit=.001)
+    assert read_corporate_actions(corrected.panel) == [after]
+    assert frame_content_sha256(source.panel) == parent_hash
+    assert source.metadata["data_snapshot_id"] == "parent"
+    assert corrected.metadata["snapshot_lineage"]["parent_snapshot_content_sha256"] == parent_hash
+    assert corrected.metadata["data_snapshot_id"] != "parent"
+    assert corrected.panel.adj_factor_rounding_unit.iloc[0] == .0001
+    assert corrected.panel.adj_factor_rounding_unit.iloc[-1] == .001
+    path = tmp_path / "corrected.parquet"
+    corrected.write(path)
+    verify_attested_parquet(path, require_source_signature=True, require_artifact_hash=True)
+    tampered = {**corrected.metadata, "corporate_action_unit_corrections": []}
+    with pytest.raises(ValueError, match="signature"):
+        verify_snapshot_signature(tampered)
+
+
+@pytest.mark.parametrize("rows", [0, 1, 2051, 4100])
+def test_streamed_snapshot_hash_matches_legacy_split_json_bytes(rows):
+    frame = pd.DataFrame({
+        "trade_date": pd.date_range("2023-01-01", periods=rows),
+        "symbol": [f"stock-{i % 3}" for i in range(rows)],
+        "unicode": ['公告,"index":[]\n' for _ in range(rows)],
+        "value": [np.nan if i % 5 == 0 else -1.23456789012345e-8 * i for i in range(rows)],
+        "flag": [i % 2 == 0 for i in range(rows)],
+    }).iloc[::-1]
+    legacy = frame.copy()
+    legacy.trade_date = legacy.trade_date.dt.strftime("%Y-%m-%dT%H:%M:%S.%f")
+    legacy = legacy.reindex(sorted(legacy.columns), axis=1).sort_values(["trade_date", "symbol"], kind="mergesort").reset_index(drop=True)
+    payload = legacy.to_json(orient="split", date_format="iso", double_precision=15,
+                             force_ascii=False, default_handler=str).encode("utf-8")
+    assert frame_content_sha256(frame) == hashlib.sha256(payload).hexdigest()

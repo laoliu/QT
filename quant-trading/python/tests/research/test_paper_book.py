@@ -116,6 +116,29 @@ def test_preview_never_creates_or_changes_book(tmp_path, policy):
     assert replay_paper_book(book)["trades"] == []
 
 
+def test_paper_replay_preserves_reviewed_cdr_reference_and_factor_precision(tmp_path, policy):
+    book = tmp_path / "cdr.sqlite3"
+    market = _market()
+    market[["open", "close"]] = 42.60
+    market["high"], market["low"] = 44., 40.
+    market["adj_factor"] = 1.033
+    market["adj_factor_rounding_unit"] = .001
+    market["pre_close"] = 42.60
+    after = market.symbol.eq("600000.SH") & market.trade_date.ge("2024-02-02")
+    market.loc[after, ["open", "close", "pre_close"]] = 41.38
+    market.loc[after, "adj_factor"] = 1.064
+    action = CorporateAction("cdr-fixture", "600000.SH", "2024-01-30", "2024-02-01", "2024-02-02",
+                             cash_per_share=1.23852, reference_cash_per_share=1.22317, pay_date="2024-02-02")
+    for day in ("2024-01-31", "2024-02-01", "2024-02-02"):
+        receipt = advance_paper_book(book, _snapshot(day, market=market, actions=[action]), policy,
+                                     plan=_plan() if day == "2024-01-31" else None, commit=True)
+    before = book.read_bytes()
+    replay = replay_paper_book(book)
+    assert book.read_bytes() == before
+    assert replay["accounting"]["cash_dividends_paid"] == pytest.approx(1100 * 1.23852)
+    assert replay["daily_returns"][-1]["nav"] == receipt["nav"]
+
+
 def test_idempotency_and_conflicting_same_day_plan(tmp_path, policy):
     book = tmp_path / "book.sqlite3"
     snapshot = _snapshot("2024-01-31")

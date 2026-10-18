@@ -613,3 +613,38 @@ is positive and the null leg has no settlement date. Unknown amounts with
 scheduled settlement still fail. Identical report-period records deduplicate;
 distinct report periods on one ex-date sum only with compatible entitlement
 and settlement dates. `corporate_action_policy` is signed in new snapshots.
+
+Issuer-confirmed CDR unit discrepancies use explicit event corrections, not a
+symbol-wide multiplier or a dividend inferred from adjustment factors. The
+`correct_research_action_units.py` CLI reads the authenticated parent, reviewed
+before/after event terms and frozen UTF-8 evidence named `<sha256>.txt`.
+It requires the source terms to match exactly, an announcement available by
+record date and snapshot end, and unchanged event/settlement identities.
+It writes a new snapshot; the CLI refuses to overwrite an existing output.
+Signed metadata includes `snapshot_lineage` and
+`corporate_action_unit_corrections`; the report discloses the latter directly.
+Announcement mirrors are identified explicitly and never replace the market
+or financial provider.
+
+`cash_per_share` remains the actual gross entitlement. Optional
+`reference_cash_per_share` and `reference_bonus_per_share` are the issuer's
+diluted terms for differential ex-price calculations, separate from actual
+cash and bonus shares credited to the holder. A separately declared
+vendor `adj_factor_rounding_unit` (maximum 0.001) bounds ratio rounding error
+using the coarsest decimal quantum that encodes each source value up to the
+declared maximum; unaligned values beyond eight decimal places remain exact.
+For held securities with an unsuspended ex-date `pre_close`, it must independently
+reconcile within one currency tick. Wrong terms, unexplained factor changes
+and missing evidence still fail. Paper persists these fields for identical
+replay. This does not implement rights subscriptions or holding-period tax.
+
+Snapshot content hashing streams the exact previous `orient=split` JSON
+format in bounded row chunks, preserving old digests and signatures. Large
+quality audits remain on authenticated inputs and in reports, rather than in
+intermediate per-row calculation tables.
+
+For the Windows/Python 3.13.4 offline regression environment, use a separate
+venv with `python/requirements-research-validation.txt`. This pins the tested
+scientific stack without replacing service dependencies. The real CSI500
+research, full saved-score reproduction and independent historical Paper
+evidence are recorded in `docs/REAL_RESEARCH_ACCEPTANCE_20261018.md`.

@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, replace
 from collections import defaultdict
 from datetime import date
 import json
+import hashlib
 import math
 
 import numpy as np
@@ -30,6 +31,10 @@ class CorporateAction:
     bonus_per_share: float = 0.0
     pay_date: date | None = None
     share_list_date: date | None = None
+    # Differential distributions use a diluted exchange reference amount,
+    # while eligible holders receive the actual cash_per_share.
+    reference_cash_per_share: float | None = None
+    reference_bonus_per_share: float | None = None
 
     def __post_init__(self) -> None:
         for name in ("announce_date", "record_date", "ex_date", "pay_date", "share_list_date"):
@@ -49,6 +54,16 @@ class CorporateAction:
             object.__setattr__(self, name, float(getattr(self, name)))
         if not all(math.isfinite(v) and v >= 0 for v in (self.cash_per_share, self.bonus_per_share)):
             raise ValueError("corporate action amounts must be finite and non-negative")
+        if self.reference_cash_per_share is not None:
+            reference = float(self.reference_cash_per_share)
+            if not math.isfinite(reference) or not 0 <= reference <= self.cash_per_share:
+                raise ValueError("reference cash must be finite and within the actual cash distribution")
+            object.__setattr__(self, "reference_cash_per_share", reference)
+        if self.reference_bonus_per_share is not None:
+            reference = float(self.reference_bonus_per_share)
+            if not math.isfinite(reference) or not 0 <= reference <= self.bonus_per_share:
+                raise ValueError("reference bonus must be finite and within the actual share distribution")
+            object.__setattr__(self, "reference_bonus_per_share", reference)
         if self.cash_per_share == self.bonus_per_share == 0:
             raise ValueError("corporate action must distribute cash or shares")
         for amount, when in ((self.cash_per_share, self.pay_date), (self.bonus_per_share, self.share_list_date)):
@@ -56,7 +71,63 @@ class CorporateAction:
                 raise ValueError("corporate action requires settlement dates on/after ex-date")
 
     def to_wire(self) -> dict:
-        return {k: v.isoformat() if isinstance(v, date) else v for k, v in asdict(self).items()}
+        return {k: v.isoformat() if isinstance(v, date) else v for k, v in asdict(self).items()
+                if k not in {"reference_cash_per_share", "reference_bonus_per_share"} or v is not None}
+
+    @property
+    def reference_cash(self) -> float:
+        return self.cash_per_share if self.reference_cash_per_share is None else self.reference_cash_per_share
+
+    @property
+    def reference_bonus(self) -> float:
+        return self.bonus_per_share if self.reference_bonus_per_share is None else self.reference_bonus_per_share
+
+
+def apply_action_unit_corrections(
+    actions: list[CorporateAction], corrections: list[dict], evidence: dict[str, bytes], *, as_of,
+) -> tuple[list[CorporateAction], list[dict]]:
+    """Apply reviewed, event-specific issuer terms, never infer from prices.
+
+    Full before/after terms and a dated issuer excerpt identify every change.
+    Persist the returned audit in signed snapshot metadata. Evidence confirms
+    the reviewed source, not an automatic interpretation of its legal wording.
+    """
+    result = {a.action_id: a for a in actions}
+    if len(result) != len(actions):
+        raise ValueError("duplicate corporate action_id")
+    seen = set()
+    audit = []
+    for record in corrections:
+        before, after = CorporateAction(**record["before"]), CorporateAction(**record["after"])
+        if before.action_id in seen or result.get(before.action_id) != before:
+            raise ValueError("unit correction must match exactly one unmodified source event")
+        seen.add(before.action_id)
+        immutable = ("action_id", "symbol", "record_date", "ex_date", "pay_date", "share_list_date")
+        if any(getattr(before, k) != getattr(after, k) for k in immutable):
+            raise ValueError("unit correction cannot change event identity or settlement dates")
+        notice_ts = pd.Timestamp(record["notice_date"])
+        if pd.isna(notice_ts):
+            raise ValueError("unit correction requires a valid notice date")
+        notice = notice_ts.date()
+        if notice > pd.Timestamp(as_of).date() or notice > before.record_date:
+            raise ValueError("unit correction notice must be available by record date and snapshot as_of")
+        if after.announce_date != max(before.announce_date, notice):
+            raise ValueError("unit correction must retain the latest applicable announcement date")
+        for name in ("source_unit", "trading_unit", "issuer", "source_url", "evidence_excerpt"):
+            if not str(record.get(name, "")).strip():
+                raise ValueError(f"unit correction requires {name}")
+        if not record["source_url"].startswith("https://"):
+            raise ValueError("unit correction requires an HTTPS issuer announcement source")
+        digest = record["evidence_sha256"]
+        content = evidence.get(digest)
+        if content is None or hashlib.sha256(content).hexdigest() != digest:
+            raise ValueError("unit correction evidence hash mismatch or missing evidence")
+        if record["evidence_excerpt"] not in content.decode("utf-8"):
+            raise ValueError("unit correction excerpt absent from frozen evidence")
+        result[before.action_id] = after
+        audit.append({**record, "before": before.to_wire(), "after": after.to_wire(),
+                      "notice_date": notice.isoformat(), "method": "reviewed_issuer_event_terms"})
+    return sorted(result.values(), key=lambda a: (a.ex_date, a.action_id)), audit
 
 
 def attach_corporate_actions(panel: pd.DataFrame, actions: list[CorporateAction]) -> pd.DataFrame:
@@ -216,7 +287,10 @@ class CorporateActionLedger:
         self.entitlements: dict[str, int] = {}
         self.pending: dict[str, tuple[CorporateAction, float, int]] = {}
         self.log: list[dict] = []
-        self.last_factor: dict[str, tuple[date, float, float]] = {}
+        self.last_factor: dict[str, tuple[date, float, float, float]] = {}
+        quantum = pd.to_numeric(panel.get("adj_factor_rounding_unit", pd.Series(0., index=panel.index)), errors="coerce")
+        if not (np.isfinite(quantum) & quantum.ge(0) & quantum.le(.001)).all():
+            raise ValueError("adj_factor_rounding_unit must be finite and between zero and 0.001")
         self.cash_distributed = 0.0
         self.shares_distributed = 0
         self.start_date = pd.Timestamp(panel.trade_date.min()).date() if not panel.empty else date.max
@@ -234,7 +308,7 @@ class CorporateActionLedger:
             if not math.isclose(shares, rounded, rel_tol=0, abs_tol=1e-8):
                 raise ValueError("fractional bonus shares require an explicit allocation/cash-in-lieu record")
             if action.symbol in last_prices:
-                price = (last_prices[action.symbol] - action.cash_per_share) / (1 + action.bonus_per_share)
+                price = (last_prices[action.symbol] - action.reference_cash) / (1 + action.reference_bonus)
                 if price <= 0:
                     raise ValueError("corporate action implies a non-positive ex-price")
                 last_prices[action.symbol] = price
@@ -267,7 +341,8 @@ class CorporateActionLedger:
     def check_factor_changes(self, day: date, frame: pd.DataFrame, holdings: dict[str, int]) -> None:
         for symbol, row in frame.iterrows():
             factor = float(row.get("adj_factor", 1.0))
-            if not math.isfinite(factor) or factor <= 0:
+            quantum = float(row.get("adj_factor_rounding_unit", 0.0))
+            if not math.isfinite(factor) or factor <= quantum / 2:
                 raise ValueError("accounting requires positive finite adj_factor")
             prior = self.last_factor.get(symbol)
             suspended = bool(row.get("is_suspended", False))
@@ -275,21 +350,29 @@ class CorporateActionLedger:
             owned = holdings.get(symbol, 0) or any(a.symbol == symbol and shares for a, _, shares in self.pending.values())
             if prior and owned:
                 events = [a for a in self.by_symbol.get(symbol, []) if prior[0] < a.ex_date <= day]
-                changed = not math.isclose(factor, prior[1], rel_tol=1e-10)
+                changed = abs(factor - prior[1]) > max(1e-10 * prior[1], (quantum + prior[3]) / 2)
                 if changed and not events:
                     raise ValueError(f"unexplained adjustment factor change for held {symbol}; corporate action history required")
                 if events:
                     expected = prior[2]
                     for action in events:
-                        expected = (expected - action.cash_per_share) / (1 + action.bonus_per_share)
-                    implied = prior[2] * prior[1] / factor
+                        expected = (expected - action.reference_cash) / (1 + action.reference_bonus)
+                    # A declared vendor quantization has a bounded ratio
+                    # error. It never changes cash entitlement or factor
+                    # values, and defaults to zero for undeclared sources.
+                    lower = prior[2] * (prior[1] - prior[3] / 2) / (factor + quantum / 2)
+                    upper = prior[2] * (prior[1] + prior[3] / 2) / (factor - quantum / 2)
                     # Allow one currency tick of ex-price rounding. Material
                     # unexplained splits/rights issues still fail closed.
-                    if not math.isclose(expected, implied, rel_tol=1e-6, abs_tol=0.011):
+                    if not lower - .011 <= expected <= upper + .011:
                         raise ValueError(f"corporate action does not reconcile adj_factor for held {symbol}")
+                    if "pre_close" in row and not suspended and len(events) == 1 and events[0].ex_date == day:
+                        reference = float(row["pre_close"])
+                        if not math.isfinite(reference) or not math.isclose(expected, reference, rel_tol=1e-6, abs_tol=.011):
+                            raise ValueError(f"corporate action does not reconcile exchange pre_close for held {symbol}")
                     if suspended:
                         reference_close = expected
-            self.last_factor[symbol] = (day, factor, reference_close)
+            self.last_factor[symbol] = (day, factor, reference_close, quantum)
 
     def after_close(self, day: date, holdings: dict[str, int]) -> None:
         for action in self.by_record_date.get(day, []):

@@ -1,0 +1,457 @@
+{
+  "schema_version": 1,
+  "verification_date": "2026-10-18",
+  "run_id": "f69fada02c684d7697ae287ae176b53f",
+  "artifact_dir": "G:/qtdata/research/runs/f69fada02c684d7697ae287ae176b53f",
+  "snapshot": {
+    "path": "G:/qtdata/research/snapshots/csi500_20230101_20261016_issuer_units_v2.parquet",
+    "data_snapshot_id": "tushare_pit:20230101:20261016:006c97dd08fbc992698ce9b7:unit_corrected:b0688f86a092f9ca253ae0a3",
+    "snapshot_content_sha256": "b0688f86a092f9ca253ae0a3d770404caad14242e54cfaf309d51113a16b9037",
+    "artifact_sha256": "18f4318e1171c3735ac49ef0c67fd9243de3a74071b01d8ca054ebb5fcc61049",
+    "start_date": "2023-01-03",
+    "end_date": "2026-10-16",
+    "rows": 730711,
+    "symbols": 814,
+    "feature_columns": 173,
+    "reviewed_event_corrections": 26
+  },
+  "financial_data_quality": {
+    "policy": "quarantine",
+    "history_request": {
+      "start_date": "20210101",
+      "end_date": "20261016"
+    },
+    "quarantined_metric_events": 5167,
+    "affected_symbols": 754,
+    "by_metric": {
+      "balance.accounts_receiv": 11,
+      "balance.cash": 11,
+      "balance.inventories": 6,
+      "balance.total_assets": 4,
+      "balance.total_cur_assets": 7,
+      "balance.total_equity": 4,
+      "balance.total_equity_inc_minority": 4,
+      "balance.total_liabilities": 6,
+      "balance.total_nca": 7,
+      "cashflow.c_fr_sale_sg": 7,
+      "cashflow.c_paid_goods_s": 8,
+      "cashflow.capex": 2,
+      "cashflow.cash_from_financing": 1,
+      "cashflow.cash_from_investing": 1,
+      "cashflow.cash_from_operations": 1,
+      "fina_indicator.ar_turn": 71,
+      "fina_indicator.assets_turn": 186,
+      "fina_indicator.assets_yoy": 700,
+      "fina_indicator.basic_eps_yoy": 78,
+      "fina_indicator.bps": 158,
+      "fina_indicator.cfps": 73,
+      "fina_indicator.current_ratio": 67,
+      "fina_indicator.debt_to_assets": 62,
+      "fina_indicator.dt_netprofit_yoy": 460,
+      "fina_indicator.eps": 338,
+      "fina_indicator.gross_margin": 41,
+      "fina_indicator.inv_turn": 302,
+      "fina_indicator.net_margin": 71,
+      "fina_indicator.netprofit_yoy": 98,
+      "fina_indicator.ocf_to_or": 58,
+      "fina_indicator.ocfps": 90,
+      "fina_indicator.op_yoy": 57,
+      "fina_indicator.or_yoy": 44,
+      "fina_indicator.profit_to_gr": 70,
+      "fina_indicator.q_roe": 753,
+      "fina_indicator.q_sales_yoy": 121,
+      "fina_indicator.quick_ratio": 66,
+      "fina_indicator.roa": 201,
+      "fina_indicator.roe": 173,
+      "fina_indicator.roe_waa": 409,
+      "fina_indicator.roic": 321,
+      "income.admin_exp": 2,
+      "income.fin_exp": 1,
+      "income.net_profit": 3,
+      "income.oper_cost": 1,
+      "income.operating_profit": 1,
+      "income.revenue": 3,
+      "income.sell_exp": 1,
+      "income.total_cogs": 6,
+      "income.total_profit": 1
+    }
+  },
+  "config": {
+    "data_provider": "tushare_pit",
+    "financial_conflict_policy": "quarantine",
+    "adjust": "point_in_time",
+    "feature_version": "cn_equity_v1",
+    "universe": "csi500",
+    "min_listing_days": 252,
+    "rebalance": "monthly",
+    "train_years": 3,
+    "test_months": 1,
+    "forward_days": 20,
+    "label_skip_days": 1,
+    "purge_days": 20,
+    "top_k": 30,
+    "max_position_weight": 0.05,
+    "max_industry_weight": 0.2,
+    "max_style_exposure": [],
+    "max_daily_turnover": 0.3,
+    "model_type": "lightgbm",
+    "objective": "lambdarank",
+    "initial_capital": 1000000.0,
+    "n_estimators": 300,
+    "commission_rate": 8.54e-05,
+    "commission_min": 5.0,
+    "stamp_tax_rate": 0.0005,
+    "transfer_fee_rate": 1e-05,
+    "slippage_bps": 15.0,
+    "feature_groups": [
+      "value",
+      "quality",
+      "momentum",
+      "volatility",
+      "liquidity",
+      "technical"
+    ],
+    "feature_column_groups": []
+  },
+  "evaluation_window": {
+    "start": "2026-02-24",
+    "end": "2026-10-16",
+    "signal_oos_start": "2026-02-24",
+    "signal_oos_end": "2026-09-09",
+    "return_observations": 157,
+    "valuation_tail_sessions": 21,
+    "initial_row_is_nav_anchor": true,
+    "annualization_sessions": 252
+  },
+  "metrics": {
+    "rank_ic": 0.04107149307239898,
+    "icir": 0.24387225264831375,
+    "top_k_mean_forward_return": -0.00552172480565727,
+    "bottom_k_mean_forward_return": -0.015753946601362066,
+    "top_bottom_spread": 0.010232221795704797,
+    "quintile_1_mean_forward_return": -0.014488595478127468,
+    "quintile_5_mean_forward_return": -0.005506067900329954,
+    "estimated_turnover_cost": 0.0030223771428571394,
+    "top_k_mean_forward_return_net_estimated_cost": -0.00854410194851441,
+    "pbo": 0.8056721056721057,
+    "pbo_method": "cscv_net_top_k_portfolios",
+    "selection_pbo": 0.8056721056721057,
+    "selection_pbo_method": "cscv_net_top_k_portfolios",
+    "portfolio_total_return": -0.1249806109123256,
+    "portfolio_annualized_return": -0.19288980903694086,
+    "portfolio_annualized_volatility": 0.1296300827372385,
+    "portfolio_sharpe": -1.5877012795749972,
+    "portfolio_max_drawdown": -0.14207506518904467,
+    "portfolio_costs": 1764.6864123250011,
+    "portfolio_total_costs": 3590.5029123250483,
+    "portfolio_turnover": 1.2183908325,
+    "execution_attempts": 603,
+    "unexecutable_rate": 0.45439469320066334,
+    "pbo_proxy": 0.42857142857142855
+  },
+  "cost_attribution": {
+    "commission": 1645.0,
+    "transfer_fee": 12.183908325000004,
+    "stamp_tax": 107.50250400000003,
+    "slippage": 1825.8165000000472,
+    "total": 3590.5029123250483
+  },
+  "pbo_analysis": {
+    "available": true,
+    "pbo": 0.8056721056721057,
+    "method": "cscv_net_top_k_portfolios",
+    "scope": "portfolio_size_selection_on_frozen_oos_scores",
+    "return_frequency": "daily",
+    "return_basis": "net_portfolio_replay",
+    "overlapping_return_intervals": false,
+    "candidate_grid_fixed_before_returns": true,
+    "candidates": [
+      {
+        "id": "top_k_15",
+        "top_k": 15
+      },
+      {
+        "id": "top_k_30",
+        "top_k": 30
+      },
+      {
+        "id": "top_k_60",
+        "top_k": 60
+      },
+      {
+        "id": "top_k_120",
+        "top_k": 120
+      }
+    ],
+    "model_config_hash": "76cd9fb8f17e99b0",
+    "n_observations": 157,
+    "minimum_rebalance_cross_section": 493,
+    "is_overfit": true,
+    "config": {
+      "num_subsamples": 16,
+      "max_combinations": 100000,
+      "performance_metric": "sharpe",
+      "random_seed": 42,
+      "overfit_threshold": 0.5,
+      "annualization_periods": 252,
+      "risk_free_rate": 0.0
+    },
+    "num_combinations_tested": 12870,
+    "num_combinations_total": 12870,
+    "exhaustive": true,
+    "run_id": "f69fada02c684d7697ae287ae176b53f",
+    "model_id": "f69fada02c684d7697ae287ae176b53f",
+    "data_snapshot_id": "tushare_pit:20230101:20261016:006c97dd08fbc992698ce9b7:unit_corrected:b0688f86a092f9ca253ae0a3",
+    "candidate_returns_content_sha256": "ed6bbb5ffe495f5b013f8a98b406b9cef010b679cc064fc92df167db2abb4201"
+  },
+  "feature_missing_rate": 0.01181463039959218,
+  "reproduction": {
+    "ok": true,
+    "run_id": "f69fada02c684d7697ae287ae176b53f",
+    "folds": [
+      {
+        "fold": 0,
+        "train_start": "2023-01-03 00:00:00",
+        "train_end": "2026-01-09 00:00:00",
+        "test_start": "2026-02-24 00:00:00",
+        "test_end": "2026-03-23 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9906,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 1,
+        "train_start": "2023-02-07 00:00:00",
+        "train_end": "2026-02-06 00:00:00",
+        "test_start": "2026-03-24 00:00:00",
+        "test_end": "2026-04-21 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9921,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 2,
+        "train_start": "2023-03-07 00:00:00",
+        "train_end": "2026-03-16 00:00:00",
+        "test_start": "2026-04-22 00:00:00",
+        "test_end": "2026-05-22 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9920,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 3,
+        "train_start": "2023-04-04 00:00:00",
+        "train_end": "2026-04-14 00:00:00",
+        "test_start": "2026-05-25 00:00:00",
+        "test_end": "2026-06-22 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9861,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 4,
+        "train_start": "2023-05-08 00:00:00",
+        "train_end": "2026-05-15 00:00:00",
+        "test_start": "2026-06-23 00:00:00",
+        "test_end": "2026-07-20 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9871,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 5,
+        "train_start": "2023-06-05 00:00:00",
+        "train_end": "2026-06-12 00:00:00",
+        "test_start": "2026-07-21 00:00:00",
+        "test_end": "2026-08-17 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 9867,
+        "max_score_error": 0.0
+      },
+      {
+        "fold": 6,
+        "train_start": "2023-07-05 00:00:00",
+        "train_end": "2026-07-13 00:00:00",
+        "test_start": "2026-08-18 00:00:00",
+        "test_end": "2026-09-09 00:00:00",
+        "train_sessions": 732,
+        "purge_sessions": 25,
+        "prediction_rows_reproduced": 8390,
+        "max_score_error": 0.0
+      }
+    ],
+    "all_oos_scores_reproduced": 67736,
+    "model_feature_count": 173,
+    "feature_groups": [
+      "liquidity",
+      "momentum",
+      "quality",
+      "technical",
+      "value",
+      "volatility"
+    ],
+    "rank_ic_reproduced": 0.04107149307239898,
+    "monthly_plans": [
+      {
+        "date": "2026-02-27",
+        "plan_id": "plan-5e32ca7426d9da3a32e3",
+        "targets": 30
+      },
+      {
+        "date": "2026-03-31",
+        "plan_id": "plan-27b528cf889abc6e364c",
+        "targets": 30
+      },
+      {
+        "date": "2026-04-30",
+        "plan_id": "plan-8c9640b42353c334670d",
+        "targets": 30
+      },
+      {
+        "date": "2026-05-29",
+        "plan_id": "plan-476ba194e5a70bf992ff",
+        "targets": 30
+      },
+      {
+        "date": "2026-06-30",
+        "plan_id": "plan-07d24ead17c64379ac61",
+        "targets": 30
+      },
+      {
+        "date": "2026-07-31",
+        "plan_id": "plan-18d3b4fb0d764764cb1d",
+        "targets": 30
+      },
+      {
+        "date": "2026-08-31",
+        "plan_id": "plan-1b3c1356b598885386d7",
+        "targets": 30
+      }
+    ],
+    "trade_provenance_verified": 329,
+    "original_snapshot_unchanged": true,
+    "report_sha256": "5c8f73021383f343ea396f260d1e43163b90484a6afef12eef8831030c045945",
+    "model_manifest_sha256": "f41ee827b38b45ff42e4966d19be4a79bb38657cddd2dfff933a519a4531a547"
+  },
+  "paper_acceptance": {
+    "ok": true,
+    "run_id": "f69fada02c684d7697ae287ae176b53f",
+    "acceptance_dir": "G:\\qtdata\\research\\acceptance\\f69fada02c684d7697ae287ae176b53f_verified_v2",
+    "inference": {
+      "rows": 988,
+      "dates": [
+        "2026-10-15",
+        "2026-10-16"
+      ],
+      "score_distinct_by_day": {
+        "2026-10-15": 494,
+        "2026-10-16": 494
+      },
+      "model_feature_count": 173,
+      "feature_policy_version": "cn_equity_feature_groups/3",
+      "non_month_end_target_count": 0,
+      "model_path": "G:\\qtdata\\research\\runs\\f69fada02c684d7697ae287ae176b53f\\model"
+    },
+    "paper": {
+      "book_path": "G:\\qtdata\\research\\acceptance\\f69fada02c684d7697ae287ae176b53f_verified_v2\\historical_paper.sqlite3",
+      "signal_date": "2026-02-27",
+      "first_fill_date": "2026-03-02",
+      "receipts": 3,
+      "first_fill_count": 25,
+      "book_sha256": "9b4cd9af405c68528026933d4b40f80eca953a3167d575a4adf27e44803b9a9a",
+      "read_only_replay_unchanged": true,
+      "last_nav": 995551.05457223,
+      "last_cash": 783030.05457223,
+      "profile_path": "G:\\qtdata\\research\\acceptance\\f69fada02c684d7697ae287ae176b53f_verified_v2\\profiles\\research_csi500.yml",
+      "audit_counts": {
+        "canonical_paper": 1
+      },
+      "continuous_live_daily_operation": false,
+      "broker_contacted": false
+    }
+  },
+  "evidence_dir": "G:\\qtdata\\cache\\equity_tushare\\migration_inputs\\20261018T090159Z",
+  "evidence_files": {
+    "real_research_reproduction.json": "efb1ee8c9cb5dc699babe6b69d251834dd63c17df7f435144a7b017281e103f5",
+    "real_paper_result.json": "5761f5eee51c7039e955d4e7ad861c4f8abd103dd24fda2fea23c694ca0174d1",
+    "issuer_event_corrections_v2.json": "5bb5726b88cfccfdfe68e31a5fe01fab0ae031c4617c7fde9b05b26aa6f2ed97",
+    "issuer_terms_v2_preflight.json": "337fa272944f2e526b03d218e01248aa1112815fb2bea6fc5b7c2a601c2a53cf",
+    "reproduce_saved_oos.py": "3d66c52bcd015f04a362c75ffd6fcc5c002715d6781bbd5b34f0f869018aa367",
+    "verify_real_paper.py": "c62973578067e3cf667897c8270e558a4f0fa3aee1a0e7722463f4e74e7ee723",
+    "regression_command.json": "f591d1fdbe90456c200804c7f8ca453696ee2c5c3b2d2911ef1e4746a6e0895d",
+    "isolated_regression_v2.log": "c8ed1760349da9e71026828d5ad9d66749268b02fc72fb5c39e1d5b53a08fd9e",
+    "research_native_debug.log": "e234f6d80b9c587a5b83ffe37a89ddda0dddf0fa7db7de28f39269a3102b017f",
+    "real_research_reproduction_isolated.json": "efb1ee8c9cb5dc699babe6b69d251834dd63c17df7f435144a7b017281e103f5"
+  },
+  "boundaries": {
+    "broker_contacted": false,
+    "continuous_daily_paper_deployed": false,
+    "live_trading_accepted": false,
+    "old_models_or_research_database_available": false,
+    "returns_before_holding_period_dividend_tax": true,
+    "strategy_ready_for_live": false
+  },
+  "regression": {
+    "cwd": "E:/work/QT/quant-trading/python",
+    "argv": [
+      "G:/qtdata/research/validation-env-py313/Scripts/python.exe",
+      "-m",
+      "pytest",
+      "tests/research",
+      "tests/runner",
+      "tests/ops",
+      "tests/data/test_pit_financial.py",
+      "tests/data/test_tushare_pit_provider.py",
+      "tests/data/test_financial_revisions.py",
+      "tests/data/test_parquet_data_updater.py",
+      "tests/data/test_tushare_equity_provider.py",
+      "tests/models/test_ml_stock_selector.py",
+      "tests/models/test_lgbm_ranker.py",
+      "tests/models/test_feature_groups.py",
+      "tests/models/test_wf_stats.py",
+      "tests/models/test_gru_ranker.py",
+      "tests/models/test_gat_ranker.py",
+      "tests/models/test_double_ensemble.py",
+      "tests/models/test_ensemble.py",
+      "tests/backtest/test_db_migration.py",
+      "tests/backtest/test_migrate_sqlite_cli.py",
+      "tests/scripts/test_ops.py",
+      "tests/scripts/test_research_retrain.py",
+      "tests/scripts/test_research_cache_paths.py",
+      "tests/scripts/test_audit_ml_migration.py",
+      "tests/scripts/test_audit_paper_profile.py",
+      "tests/scripts/test_paper_launcher.py",
+      "tests/execution/test_qmt_bridge_contract.py",
+      "tests/execution/test_paper_gateway.py",
+      "-q",
+      "--basetemp=.pytest-tmp-real-research-isolated-v2",
+      "--tb=short"
+    ],
+    "log": "isolated_regression_v2.log",
+    "exit_code": 0,
+    "passed": 1239,
+    "skipped": 8,
+    "warnings": 44,
+    "requirements": "python/requirements-research-validation.txt",
+    "requirements_sha256": "e26ec9f669616cb707486688bae0a6001c20c3ec215dc8e3450ca8078c7ea665",
+    "global_runtime_native_crash_resolved": false,
+    "isolated_runtime_passed": true
+  },
+  "cross_environment_oos_identical": true,
+  "local_safety_check": {
+    "repository_and_ignored_override": {
+      "mode": "paper",
+      "broker": "paper",
+      "confirmationRequired": true,
+      "requireExecutionPlan": true,
+      "autoStart": false
+    }
+  }
+}

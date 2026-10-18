@@ -536,6 +536,16 @@ class MLStockSelector:
                 _gru_store=_gru_store,
             )
             all_oos.append(oos_pred)
+            purge_dates = [day for day in dates if train_dates[-1] < day < test_dates[0]]
+            self._wf_results[-1].update({
+                "train_dates": [pd.Timestamp(day).date().isoformat() for day in train_dates],
+                "train_start": str(train_df["datetime"].min()),
+                "train_end": str(train_df["datetime"].max()),
+                "train_samples": len(train_df),
+                "purge_start": str(purge_dates[0]) if purge_dates else None,
+                "purge_end": str(purge_dates[-1]) if purge_dates else None,
+                "purge_sessions": len(purge_dates),
+            })
 
             # IS evaluation: predict on training data for decay measurement
             # (called after _predict_one_fold so fold_info is in _wf_results)
@@ -1320,25 +1330,27 @@ class MLStockSelector:
         if not self._wf_results:
             return {"n_folds": 0}
 
-        ics = [r.get("mean_ic", 0.0) for r in self._wf_results]
+        ics = np.asarray([r["mean_ic"] for r in self._wf_results if r.get("mean_ic") is not None], dtype=float)
+        ics = ics[np.isfinite(ics)]
 
         # IS-OOS decay analysis
         is_ics = [r.get("is_mean_ic") for r in self._wf_results]
         oos_ics = [r.get("mean_ic") for r in self._wf_results]
         decay_per_fold = []
         for is_ic, oos_ic in zip(is_ics, oos_ics):
-            if is_ic is not None and is_ic > 0 and oos_ic is not None:
+            if is_ic is not None and np.isfinite(is_ic) and is_ic > 0 and oos_ic is not None and np.isfinite(oos_ic):
                 decay_per_fold.append(
                     (is_ic - oos_ic) / is_ic
                 )
 
         summary: dict[str, Any] = {
             "n_folds": len(self._wf_results),
-            "mean_ic": float(np.nanmean(ics)),
-            "std_ic": float(np.nanstd(ics)),
+            "mean_ic": float(ics.mean()) if len(ics) else None,
+            "std_ic": float(ics.std()) if len(ics) else None,
+            "valid_ic_folds": len(ics),
             "ic_ir": (
-                float(np.nanmean(ics) / np.nanstd(ics))
-                if np.nanstd(ics) > 0 else 0.0
+                float(ics.mean() / ics.std())
+                if len(ics) and ics.std() > 0 else (0.0 if len(ics) else None)
             ),
             "folds": self._wf_results,
             "top_features": dict(
@@ -1351,7 +1363,7 @@ class MLStockSelector:
 
         # Add IS-OOS decay metrics if IS evaluation was performed
         if decay_per_fold:
-            is_valid = [x for x in is_ics if x is not None]
+            is_valid = [x for x in is_ics if x is not None and np.isfinite(x)]
             summary["is_mean_ic"] = float(np.nanmean(is_valid))
             summary["is_oos_decay_per_fold"] = decay_per_fold
             summary["is_oos_mean_decay"] = float(np.nanmean(decay_per_fold))

@@ -351,7 +351,12 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     assert plan.mode == "paper"
     assert (artifact / "input_snapshot.metadata.json").is_file()
     assert (artifact / "oos_predictions.metadata.json").is_file()
-    report = json.loads((artifact / "report.json").read_text(encoding="utf-8"))
+    report = json.loads(
+        (artifact / "report.json").read_text(encoding="utf-8"),
+        parse_constant=lambda token: pytest.fail(f"report contains non-JSON numeric literal: {token}"),
+    )
+    assert report["walk_forward"]["valid_ic_folds"] == 0
+    assert report["walk_forward"]["mean_ic"] is None
     assert report["accounting"]["price_basis"] == "raw"
     assert report["accounting"]["cash_dividends_paid"] > 0
     events = json.loads((artifact / "corporate_actions.json").read_text(encoding="utf-8"))

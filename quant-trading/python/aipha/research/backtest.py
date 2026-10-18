@@ -31,12 +31,21 @@ def run_portfolio_backtest(
     bars = bars.sort_values(["trade_date", "symbol"])
     date_list = sorted(bars["trade_date"].unique())
     by_date = {d: group.set_index("symbol") for d, group in bars.groupby("trade_date", sort=True)}
+    prediction_dates = pd.DatetimeIndex([])
+    if not predictions.empty:
+        if "trade_date" not in predictions:
+            raise ValueError("OOS predictions require trade_date for the evaluation window")
+        prediction_dates = pd.DatetimeIndex(pd.to_datetime(predictions["trade_date"], errors="raise")).normalize()
+        if prediction_dates.hasnans or not prediction_dates.isin(date_list).all():
+            raise ValueError("OOS prediction dates must be present in the market calendar")
     targets_by_date: dict[pd.Timestamp, dict[str, tuple[float, str]]] = {}
     for day, group in pd.DataFrame([asdict(t) for t in targets]).groupby("rebalance_date") if targets else []:
         targets_by_date[pd.Timestamp(day)] = {
             str(row.symbol): (float(row.target_weight), str(row.signal_id))
             for row in group.itertuples(index=False)
         }
+    if len(prediction_dates) and not set(targets_by_date).issubset(set(prediction_dates)):
+        raise ValueError("target signal dates must belong to the OOS prediction window")
 
     cash = float(config.initial_capital)
     holdings: dict[str, int] = {}
@@ -210,9 +219,14 @@ def run_portfolio_backtest(
         ledger.after_close(day.date(), holdings)
         previous_nav = nav
 
-    returns = pd.Series([x["daily_return"] for x in daily], dtype=float)
+    if len(prediction_dates):
+        start = prediction_dates.min().date().isoformat()
+        daily = [row for row in daily if row["trade_date"] >= start]
+    # The first row is the initial equity at signal-date close, before any
+    # next-open order. It anchors NAV and is not a return observation.
+    returns = pd.Series([x["daily_return"] for x in daily[1:]], dtype=float)
     navs = pd.Series([x["nav"] for x in daily], dtype=float)
-    annual_return = float((navs.iloc[-1] / config.initial_capital) ** (252 / max(1, len(navs))) - 1) if len(navs) else 0.0
+    annual_return = float((navs.iloc[-1] / config.initial_capital) ** (252 / len(returns)) - 1) if len(returns) else 0.0
     volatility = compute_annualized_volatility(returns.to_numpy(), trading_days=252)
     sharpe = compute_sharpe_ratio(
         returns.to_numpy(), risk_free_rate=0.0, trading_days=252,
@@ -225,6 +239,16 @@ def run_portfolio_backtest(
         "n_unexecutable": unexecutable,
         "corporate_actions": ledger.log,
         "final_positions": dict(holdings),
+        "evaluation_window": {
+            "start": daily[0]["trade_date"] if daily else None,
+            "end": daily[-1]["trade_date"] if daily else None,
+            "signal_oos_start": prediction_dates.min().date().isoformat() if len(prediction_dates) else None,
+            "signal_oos_end": prediction_dates.max().date().isoformat() if len(prediction_dates) else None,
+            "return_observations": len(returns),
+            "valuation_tail_sessions": sum(bool(pd.Timestamp(row["trade_date"]) > prediction_dates.max()) for row in daily) if len(prediction_dates) else 0,
+            "initial_row_is_nav_anchor": True,
+            "annualization_sessions": 252,
+        },
         "accounting": {
             "price_basis": "raw", "dividend_tax_policy": "gross_before_holding_period_tax",
             "cash_dividends_paid": ledger.cash_distributed,

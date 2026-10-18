@@ -650,10 +650,21 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     report = json.loads((artifact_dir / "report.json").read_text(encoding="utf-8"))
     assert manifest["data_snapshot_id"] == "fixture-v1"
     assert manifest["feature_version"] == "cn_equity_v1"
+    assert manifest["evaluation_window"] == report["evaluation_window"]
+    assert manifest["train_end"] == report["training_period"]["end"]
+    assert manifest["train_end"] < str(fixture.trade_date.max().date())
+    for fold in report["walk_forward"]["folds"]:
+        assert pd.Timestamp(fold["train_end"]) < pd.Timestamp(fold["purge_start"])
+        assert pd.Timestamp(fold["purge_end"]) < pd.Timestamp(fold["test_start"])
+        assert fold["purge_sessions"] >= cfg.forward_days + cfg.label_skip_days
+        assert fold["train_dates"][-1] == str(pd.Timestamp(fold["train_end"]).date())
     assert np.isfinite(report["metrics"]["rank_ic"])
     assert 0.0 <= report["metrics"]["pbo_proxy"] <= 1.0
     assert np.isfinite(report["metrics"]["portfolio_total_return"])
     assert (artifact_dir / "portfolio_returns.parquet").is_file()
+    returns = pd.read_parquet(artifact_dir / "portfolio_returns.parquet")
+    assert returns.trade_date.min() == manifest["oos_start"]
+    assert report["evaluation_window"]["return_observations"] == len(returns) - 1
     assert (artifact_dir / "trades.json").is_file()
     assert (artifact_dir / "corporate_actions.json").is_file()
     assert report["accounting"]["price_basis"] == "raw"
@@ -677,6 +688,7 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     }
     assert report["diagnostics"]["selection_pbo_candidates"]
     model_manifest = json.loads((artifact_dir / "model" / "model_manifest.json").read_text(encoding="utf-8"))
+    assert set(report["feature_missing_rates"]["columns"]) == set(model_manifest["feature_columns"])
     assert "momentum_signal" in model_manifest["feature_columns"]
     assert "is_limit_up" not in model_manifest["feature_columns"]
     assert "fwd_return" not in model_manifest["feature_columns"]

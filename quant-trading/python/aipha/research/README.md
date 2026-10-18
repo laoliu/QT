@@ -60,6 +60,23 @@ configurable fees/slippage, daily turnover, T+1, suspension, and
 limit-up/limit-down execution blocks. It is a research/paper accounting engine;
 it does not connect to a broker or submit orders.
 
+Performance observation dates start at the first OOS prediction, not at the
+beginning of the training tape. The first NAV row anchors signal-date close;
+only later close-to-close intervals enter annualization, volatility and
+Sharpe. Cash waiting for a monthly rebalance remains part of OOS performance.
+Holdings continue marking through the frozen tape's end; `evaluation_window`
+separately records the signal OOS range, actual return interval count and
+valuation sessions after the final prediction. Benchmark headline and
+relative metrics use exactly those same return intervals. Missing benchmark
+sessions mark the comparison unavailable rather than compressing the dates.
+
+Reports measure feature missingness only over the model manifest's input
+columns within the historical signal universe, with a rate per feature.
+Non-finite feature values count as missing. Fold reports retain actual train
+dates and purge boundaries; the manifest's aggregate training range is the
+union of those training windows, with the latest fold identified separately.
+Undefined statistical diagnostics are JSON `null`, never `NaN`/`Infinity`.
+
 Forward-return labels use the panel's shared trading calendar (the union of
 market dates), with entry at D+skip_days open and exit at
 D+skip_days+horizon_days close. Missing or suspended entry/exit bars and

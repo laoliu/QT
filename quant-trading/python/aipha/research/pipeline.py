@@ -19,6 +19,7 @@ import pandas as pd
 
 from .contracts import TargetPosition, price_limit_flags, validate_market_frame
 from .execution_plan import build_execution_plan
+from .evaluation import benchmark_diagnostics, feature_missing_rates, json_safe_metrics
 from aipha.utils.metrics import compute_annualized_volatility
 
 
@@ -313,7 +314,7 @@ class ResearchPipeline:
         )
         selector = MLStockSelector(selector_config)
         oos = selector.walk_forward_train(labelled)
-        summary = selector.get_wf_summary()
+        summary = json_safe_metrics(selector.get_wf_summary())
         summary.update({
             "run_id": self.run_id,
             "feature_version": self.config.feature_version,
@@ -396,6 +397,17 @@ class ResearchPipeline:
         from .backtest import run_portfolio_backtest
 
         backtest = run_portfolio_backtest(source, oos, targets, self.config)
+        feature_coverage = feature_missing_rates(_filter_historical_universe(source), selector.config.feature_cols)
+        folds = wf_summary.get("folds", [])
+        if not folds or any(not row.get("train_start") or not row.get("train_end") for row in folds):
+            raise ValueError("walk-forward training must report actual training dates for every fold")
+        training_period = {
+            "scope": "union_of_walk_forward_training_windows",
+            "start": min(pd.Timestamp(row["train_start"]).date() for row in folds).isoformat(),
+            "end": max(pd.Timestamp(row["train_end"]).date() for row in folds).isoformat(),
+            "latest_fold_start": pd.Timestamp(folds[-1]["train_start"]).date().isoformat(),
+            "latest_fold_end": pd.Timestamp(folds[-1]["train_end"]).date().isoformat(),
+        }
         metrics = _evaluate_predictions(oos, targets, self.config)
         metrics.update(backtest["metrics"])
         metrics["pbo_proxy"] = _pbo_proxy(wf_summary)
@@ -466,11 +478,15 @@ class ResearchPipeline:
             "data_snapshot_id": data_snapshot_id,
             "config": asdict(self.config),
             "walk_forward": wf_summary,
+            "training_period": training_period,
             "metrics": metrics,
             "n_oos_predictions": int(len(oos)),
             "n_target_positions": len(targets),
             "execution_plans": execution_plans,
-            "feature_missing_rate": _feature_missing_rate(source),
+            "feature_missing_rate": feature_coverage["mean"],
+            "feature_missing_rates": feature_coverage,
+            "feature_missing_rate_scope": "historical_universe_model_columns",
+            "evaluation_window": backtest["evaluation_window"],
             "snapshot_metadata": metadata,
             "accounting": backtest["accounting"],
             "final_positions": backtest["final_positions"],
@@ -506,13 +522,14 @@ class ResearchPipeline:
                 "targetPositions": [position.to_wire() for position in targets],
             },
         }
+        report = json_safe_metrics(report)
         (run_root / "report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8",
+            json.dumps(report, ensure_ascii=False, indent=2, default=str, allow_nan=False), encoding="utf-8",
         )
         self.export_manifest(
             run_root,
-            train_start=pd.Timestamp(source["trade_date"].min()).date(),
-            train_end=pd.Timestamp(source["trade_date"].max()).date(),
+            train_start=date.fromisoformat(training_period["start"]),
+            train_end=date.fromisoformat(training_period["end"]),
             oos_start=min(oos["trade_date"]),
             oos_end=max(oos["trade_date"]),
             data_snapshot_id=data_snapshot_id,
@@ -521,6 +538,8 @@ class ResearchPipeline:
                 "input_snapshot": input_metadata,
                 "oos_predictions": oos_artifact_metadata,
             },
+            evaluation_window=backtest["evaluation_window"],
+            training_period=training_period,
         )
         return {"run_id": self.run_id, "artifact_dir": str(run_root), **report}
 
@@ -535,6 +554,8 @@ class ResearchPipeline:
         data_snapshot_id: str | None = None,
         metrics: dict[str, float] | None = None,
         artifact_attestation: dict[str, Any] | None = None,
+        evaluation_window: dict[str, Any] | None = None,
+        training_period: dict[str, Any] | None = None,
     ) -> Path:
         """Write an immutable run manifest next to model/report artifacts."""
         root = Path(output_dir)
@@ -558,9 +579,11 @@ class ResearchPipeline:
             "targets": "target_positions.json",
             "execution_plans": "execution_plans/",
             "artifact_attestation": artifact_attestation or {},
+            "evaluation_window": evaluation_window or {},
+            "training_period": training_period or {},
         }
         path = root / "run_manifest.json"
-        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        path.write_text(json.dumps(json_safe_metrics(manifest), ensure_ascii=False, indent=2, default=str, allow_nan=False), encoding="utf-8")
         return path
 
 
@@ -739,66 +762,7 @@ def _build_evaluation_diagnostics(
         "exposures": {"available": False},
         "style_exposures": {"available": False},
     }
-    # A provider may add a benchmark close/return to the frozen snapshot.  We
-    # never fetch it here, which keeps the run reproducible and offline.
-    benchmark_returns: pd.Series | None = None
-    if "benchmark_return" in source.columns:
-        values = pd.to_numeric(source["benchmark_return"], errors="coerce")
-        benchmark_returns = values.groupby(pd.to_datetime(source["trade_date"])).first().dropna()
-    elif "benchmark_close" in source.columns:
-        closes = pd.to_numeric(source["benchmark_close"], errors="coerce")
-        series = closes.groupby(pd.to_datetime(source["trade_date"])).first().dropna()
-        benchmark_returns = series.pct_change().dropna()
-    if benchmark_returns is not None and not benchmark_returns.empty:
-        nav = (1.0 + benchmark_returns).cumprod()
-        benchmark_diagnostics: dict[str, Any] = {
-            "available": True,
-            "total_return": float(nav.iloc[-1] - 1.0),
-            "annualized_return": float(nav.iloc[-1] ** (252 / max(1, len(nav))) - 1.0),
-            "annualized_volatility": compute_annualized_volatility(
-                benchmark_returns.to_numpy(), trading_days=252,
-            ),
-            "max_drawdown": float((nav / nav.cummax() - 1.0).min()),
-        }
-        if portfolio_returns is not None:
-            strategy = pd.DataFrame(portfolio_returns)
-            if {"trade_date", "daily_return"}.issubset(strategy.columns):
-                strategy["trade_date"] = pd.to_datetime(strategy["trade_date"], errors="coerce")
-                strategy["daily_return"] = pd.to_numeric(strategy["daily_return"], errors="coerce")
-                strategy = strategy.dropna(subset=["trade_date", "daily_return"])
-                strategy_returns = strategy.groupby("trade_date")["daily_return"].last()
-                common_dates = strategy_returns.index.intersection(benchmark_returns.index)
-                if len(common_dates) >= 2:
-                    paired = pd.concat(
-                        [strategy_returns.loc[common_dates], benchmark_returns.loc[common_dates]],
-                        axis=1,
-                        keys=("strategy", "benchmark"),
-                    ).dropna()
-                    active_returns = paired["strategy"] - paired["benchmark"]
-                    tracking_error = compute_annualized_volatility(
-                        active_returns.to_numpy(), trading_days=252,
-                    )
-                    strategy_total = float((1.0 + paired["strategy"]).prod() - 1.0)
-                    benchmark_total = float((1.0 + paired["benchmark"]).prod() - 1.0)
-                    benchmark_diagnostics["relative"] = {
-                        "available": True,
-                        "aligned_days": int(len(paired)),
-                        "strategy_total_return": strategy_total,
-                        "benchmark_total_return": benchmark_total,
-                        "excess_return": strategy_total - benchmark_total,
-                        "tracking_error": tracking_error,
-                        "information_ratio": (
-                            float(active_returns.mean() * 252 / tracking_error)
-                            if tracking_error > 0 else 0.0
-                        ),
-                    }
-                else:
-                    benchmark_diagnostics["relative"] = {
-                        "available": False,
-                        "reason": "insufficient_aligned_strategy_and_benchmark_returns",
-                        "aligned_days": int(len(common_dates)),
-                    }
-        diagnostics["benchmark"] = benchmark_diagnostics
+    diagnostics["benchmark"] = benchmark_diagnostics(source, predictions, portfolio_returns)
 
     long_short: list[float] = []
     long_short_net: list[float] = []
@@ -970,18 +934,6 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
         if adjustment is None or not adjustment.astype(str).eq("point_in_time_factor").all():
             raise ValueError("TuShare PIT panel must use same-day point-in-time adjustment factors")
     return normalized
-
-
-def _feature_missing_rate(frame: pd.DataFrame) -> float:
-    excluded = {
-        "trade_date", "datetime", "symbol", "open", "high", "low", "close",
-        "volume", "amount", "adj_factor", "is_suspended", "is_limit_up", "is_limit_down",
-        "benchmark_close", "benchmark_return",
-        "is_index_member", "is_st", "listing_days",
-        "feature_version", "feature_set", "industry", "sector", "sw_industry",
-    }
-    cols = [c for c in frame.columns if c not in excluded and pd.api.types.is_numeric_dtype(frame[c])]
-    return float(frame[cols].isna().mean().mean()) if cols else 0.0
 
 
 def _pbo_proxy(wf_summary: dict[str, Any]) -> float:

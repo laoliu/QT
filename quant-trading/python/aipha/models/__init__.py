@@ -15,6 +15,8 @@ LightGBM/ElasticNet 训练及版本校验；其他模型仅供显式实验和历
 GRU、GAT、TRA、MASTER、HIST 和 Ensemble 的实现位于
 ``aipha.experiments.models``；旧子模块仅保留导入及 pickle 名称兼容别名，
 本包不会主动导入这些实验实现或其可选依赖。
+历史独立 ``EquityLGBMRanker`` 也已移至实验目录；旧包级名称通过惰性
+属性保留显式导入兼容，不进入默认导出，构造与加载须显式确认历史模式。
 """
 
 # ---------- feature_eng ----------
@@ -46,17 +48,20 @@ from aipha.models.ml_stock_selector import (
     MLStockSelector,
 )
 
-# ---------- lgbm_ranker (optional: requires lightgbm) ----------
-try:
-    from aipha.models.lgbm_ranker import (
-        EquityRankerConfig,
-        EquityLGBMRanker,
-        EquityRankerWFValidator,
-    )
+def __getattr__(name: str):
+    # Keep explicit historical package imports/pickle lookups readable without
+    # loading the standalone trainer during default discovery or star imports.
+    if name in {"EquityRankerConfig", "EquityLGBMRanker", "EquityRankerWFValidator"}:
+        from importlib import import_module
+        import warnings
 
-    _LGBM_RANKER_AVAILABLE = True
-except ImportError:
-    _LGBM_RANKER_AVAILABLE = False
+        warnings.warn(
+            f"aipha.models.{name} is a legacy standalone API; use "
+            "aipha.research.ResearchPipeline for canonical research",
+            DeprecationWarning, stacklevel=2,
+        )
+        return getattr(import_module("aipha.models.lgbm_ranker"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # feature_eng (used by the canonical research pipeline)
@@ -79,8 +84,4 @@ __all__ = [
     # ml_stock_selector
     "MLSelectorConfig",
     "MLStockSelector",
-    # lgbm_ranker (optional)
-    "EquityRankerConfig",
-    "EquityLGBMRanker",
-    "EquityRankerWFValidator",
 ]

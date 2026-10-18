@@ -483,6 +483,19 @@ historical pickle class qualifiers and explicit callers can still resolve.
 These aliases do not add experimental types to canonical model discovery or
 authorize loading them without the selector's explicit compatibility flag.
 
+The historical standalone `aipha.models.lgbm_ranker` implementation now lives
+in `aipha.experiments.models.legacy_lgbm_ranker`. The old submodule is an
+import/pickle alias; its three old package-level names resolve lazily with
+a deprecation warning and are excluded from `aipha.models.__all__`. Default
+research imports never load this separate trainer. Historical replay requires
+`EquityLGBMRanker(config, legacy_compat=True)` or
+`EquityRankerWFValidator(config, legacy_compat=True)`; the factory requires the
+same keyword. Loading a historical native Booster additionally requires
+`ranker.load(path, legacy_compat=True)` at that call site. Legacy config
+pickles cannot supply either authorization. The old native model format has
+no feature-version manifest and is still rejected by the canonical loader;
+do not use its calendar-day splits as proof of PIT-safe validation.
+
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
 read-only inventory of canonical components, canonical Paper profiles,
 explicitly legacy, and non-ML Paper configs.

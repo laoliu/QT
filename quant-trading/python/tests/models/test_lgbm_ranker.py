@@ -107,13 +107,13 @@ class TestEquityLGBMRanker:
         return _make_train_df(feature_cols=_FEATURE_COLS)
 
     def test_fit_sets_is_fitted(self, small_cfg: EquityRankerConfig, train_df: pd.DataFrame) -> None:  # T03
-        ranker = EquityLGBMRanker(small_cfg)
+        ranker = EquityLGBMRanker(small_cfg, legacy_compat=True)
         assert not ranker.is_fitted
         ranker.fit(train_df)
         assert ranker.is_fitted
 
     def test_predict_shape(self, small_cfg: EquityRankerConfig, train_df: pd.DataFrame) -> None:  # T04
-        ranker = EquityLGBMRanker(small_cfg)
+        ranker = EquityLGBMRanker(small_cfg, legacy_compat=True)
         ranker.fit(train_df)
         test_df = train_df.head(20)
         scores = ranker.predict(test_df)
@@ -122,12 +122,12 @@ class TestEquityLGBMRanker:
         assert np.all(np.isfinite(scores))
 
     def test_predict_before_fit_raises(self, small_cfg: EquityRankerConfig, train_df: pd.DataFrame) -> None:  # T05
-        ranker = EquityLGBMRanker(small_cfg)
+        ranker = EquityLGBMRanker(small_cfg, legacy_compat=True)
         with pytest.raises(RuntimeError, match="not fitted"):
             ranker.predict(train_df)
 
     def test_feature_importance_contains_features(self, small_cfg: EquityRankerConfig, train_df: pd.DataFrame) -> None:  # T06
-        ranker = EquityLGBMRanker(small_cfg)
+        ranker = EquityLGBMRanker(small_cfg, legacy_compat=True)
         ranker.fit(train_df)
         fi = ranker.get_feature_importance()
         assert len(fi) > 0
@@ -135,7 +135,7 @@ class TestEquityLGBMRanker:
             assert col in fi
 
     def test_feature_importance_descending(self, small_cfg: EquityRankerConfig, train_df: pd.DataFrame) -> None:  # T07
-        ranker = EquityLGBMRanker(small_cfg)
+        ranker = EquityLGBMRanker(small_cfg, legacy_compat=True)
         ranker.fit(train_df)
         fi = ranker.get_feature_importance()
         values = list(fi.values())
@@ -161,7 +161,7 @@ class TestEquityRankerWFValidator:
         """覆盖 2 年数据时应生成 >= 2 折。"""
         df = _make_train_df(n_dates=96, n_per_date=20, feature_cols=_FEATURE_COLS)
         # 覆盖 2 年
-        validator = EquityRankerWFValidator(wf_cfg)
+        validator = EquityRankerWFValidator(wf_cfg, legacy_compat=True)
         splits = validator.generate_splits(df, date_col="trade_date")
         assert len(splits) >= 1
         for sp in splits:
@@ -172,14 +172,14 @@ class TestEquityRankerWFValidator:
     def test_splits_empty_on_too_little_data(self, wf_cfg: EquityRankerConfig) -> None:  # T09
         """数据不足 train_years 时不生成切分。"""
         df = _make_train_df(n_dates=5, n_per_date=20, feature_cols=_FEATURE_COLS)
-        validator = EquityRankerWFValidator(wf_cfg)
+        validator = EquityRankerWFValidator(wf_cfg, legacy_compat=True)
         splits = validator.generate_splits(df, date_col="trade_date")
         assert splits == []
 
     def test_wf_run_stats_structure(self, wf_cfg: EquityRankerConfig) -> None:  # T10
         """WFStats 包含合法字段，通过或不通过都应有有效 n_folds。"""
         df = _make_train_df(n_dates=96, n_per_date=20, feature_cols=_FEATURE_COLS)
-        validator = EquityRankerWFValidator(wf_cfg)
+        validator = EquityRankerWFValidator(wf_cfg, legacy_compat=True)
         stats = validator.run(df, date_col="trade_date", n_max_folds=2)
         assert isinstance(stats, WFStats)
         assert stats.n_folds >= 0
@@ -222,6 +222,7 @@ class TestBuildRankingLabel:
 
 def test_make_equity_ranker_factory() -> None:  # T13
     ranker = make_equity_ranker(
+        legacy_compat=True,
         feature_cols=_FEATURE_COLS,
         train_years=2,
         test_months=3,

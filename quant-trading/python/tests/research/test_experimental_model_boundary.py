@@ -29,7 +29,7 @@ def test_default_research_registry_and_model_listing_do_not_load_experiments(tmp
 import importlib.abc
 import sys
 
-blocked = ("torch", "torch_geometric", "xgboost", "aipha.experiments.models.")
+blocked = ("torch", "torch_geometric", "xgboost", "aipha.experiments.models.", "aipha.models.lgbm_ranker")
 class NoExperimentalImports(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if any(fullname == name or fullname.startswith(name + ".") or
@@ -42,6 +42,12 @@ from aipha.models.ml_stock_selector import MLSelectorConfig, MLStockSelector
 from aipha.strategy.register_all import _reg
 from aipha.engines.aipha_ml_engine import run
 import aipha.experiments.models
+import aipha.models
+assert "EquityLGBMRanker" not in aipha.models.__all__
+assert "EquityLGBMRanker" not in vars(aipha.models)
+defaults = {}
+exec("from aipha.models import *", defaults)
+assert "EquityLGBMRanker" not in defaults
 assert run({"action": "list_models"})["data"]["models"] == ["lgbm", "linear"]
 assert ResearchPipeline(ResearchConfig()).config.model_type == "lightgbm"
 assert "ml_factor" not in _reg.list_discoverable_strategies()

@@ -7,7 +7,7 @@
 | 原方案 | 当前代码与证据 | 尚未完成或证据边界 |
 | --- | --- | --- |
 | 1. 唯一研究核心与数据契约 | `python/aipha/research/pipeline.py` 编排快照、标签、Walk-Forward、OOS、组合回测、报告和目标计划；`contracts.py` 定义统一记录。复用 `data`、`universe`、`features`、`models`、`validation`、`execution`。 | 实际编排和报告实现集中于 `research`，并非原方案示意目录的逐文件搬迁；旧兼容模块保留。 |
-| 2. ML 入口收敛 | `src/tools/ml-ranking.ts`、`python/aipha/engines/aipha_ml_engine.py` 使用规范入口，默认只公开 LightGBM LambdaRank 和 ElasticNet；旧训练脚本、模型和策略要求显式兼容开关。7 个实验模型实现已迁入 `aipha/experiments/models`，旧路径只保留模块别名供历史导入及 pickle 解析。`test_experimental_model_boundary.py` 使用独立进程禁止实验/可选依赖导入，检查默认注册与模型列表，并验证旧路径保存的 DoubleEnsemble 预测不变。 | 模块目录迁移不等于存量任务或模型产物已完成规范迁移；实验模型仍不被规范 manifest loader 接受。缺少可选 Torch/PyG 依赖时，对应模型运行兼容测试跳过，不能声称已经实测。 |
+| 2. ML 入口收敛 | `src/tools/ml-ranking.ts`、`python/aipha/engines/aipha_ml_engine.py` 使用规范入口，默认只公开 LightGBM LambdaRank 和 ElasticNet；旧训练脚本、模型和策略要求显式兼容开关。7 个实验模型及旧独立 LightGBM Ranker 实现已迁入 `aipha/experiments/models`，旧子模块保留名称别名供历史导入和 pickle 解析。独立 Ranker 不进入默认包导出，旧包级名称惰性读取并发出弃用提示；构造和原生 Booster 加载分别要求调用方显式 `legacy_compat=True`。`test_experimental_model_boundary.py` 禁止默认路径导入实验模块；`test_legacy_ranker_boundary.py` 在独立进程读取旧限定名 pickle 和原生 Booster，验证预测及源文件字节不变。 | 模块隔离不等于存量任务或模型产物已完成规范迁移；无 manifest 的历史模型仍被规范 loader 拒绝。旧 Ranker 的自然日切分和旧标签仅供显式回放，不构成规范防前视验收。缺少可选 Torch/PyG 时，对应模型兼容测试跳过。 |
 | 3. TuShare PIT 与防前视 | `data/tushare_pit_provider.py` 采用实际/声明公告日较晚值，保留修订；`research/snapshots.py` 生成历史成分、ST、上市交易日、当日复权、财务特征和签名日历。`test_financial_revisions.py`、`test_market_calendar.py`、`test_listing_sessions.py` 验证时点和完整性。 | 本地签名证明产物在签名后未被篡改，不证明上游供应商提供了全部历史修订；真实 TuShare 数据覆盖率仍需部署验证。 |
 | 4. 标签与月度调仓 | 默认研究 YAML 为日频、月度、收盘信号、次日开盘、三年训练、一月预测、20 日标签和 purge。`test_execution_timing.py`、`test_research_pipeline.py` 验证交易日边界、无效标签和训练/测试隔离。 | 集成 fixture 缩短训练窗口以控制测试时间，不替代真实三年窗口研究。 |
 | 5. 唯一组合回测 | `research/backtest.py` 处理原始价格、手数、现金、T+1、涨跌停、停牌、换手、费用、滑点、基准与公司事件；组合构建约束单票和行业。`research/style.py` 将配置的风格 z-score 预算用于目标权重、导出、CSCV 和 Paper 计划复核。相关证据见 `test_style_constraints.py`、`test_portfolio_cscv.py`、`test_corporate_action_accounting.py`、`test_execution_timing.py`、`test_research_pipeline.py`。 | 风格预算默认未开启，约束目标组合；受执行限制及价格变化影响的实际持仓不保证始终满足预算，尚无 broker 实盘侧持续风格风控。缺失行业数据时明确报告不可用；不推断历史行业。完整持有期红利税、配股、零碎送股仍未实现。 |
@@ -47,7 +47,7 @@
 
 进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存另有 131 个品种。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口，详见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。规范 `train_tushare` 的默认缓存已接到统一路径解析，避免再次仅查项目内空目录。
 
-当前进程没有 TuShare token 或快照签名密钥，但应用配置中有 token 字段；本次只读查询返回 token 相关错误。因此尚未证实在线补齐可用，也没有可直接用于训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
+普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。完整历史日历补全随后受到上游访问限制，仍无可直接训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
 
 仓库 `config.json` 和本机 `config.local.json` 的交易字段在本次核对时均为 paper/broker paper、确认开启、执行计划必需、自动启动关闭。本机覆盖文件未纳入 Git；该结论是本机时点检查，其他部署必须检查各自覆盖配置。
 
@@ -69,6 +69,6 @@ npm.cmd run typecheck
 npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admin-routes.test.ts src/http/ml-research-api.test.ts src/config-validator.test.ts src/broker/qmt-broker.test.ts src/broker/remote-qmt-broker.test.ts src/services/order-manager.test.ts src/services/order-manager-paper.integration.test.ts
 ```
 
-本次 Python 检查结果（包含风格预算、实验目录迁移、新版 Paper profile 审计、缓存缺口检查及共享路径）：**1114 passed、8 skipped、44 warnings**。缓存及路径 **18 项定向测试**通过。TypeScript 类型检查通过，以上 8 个文件的 **152 项测试**通过；页面脚本测试验证失败响应、旧包装、空缓存及网络错误不会显示假成功。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
+本次 Python 检查结果（包含独立 Ranker 隔离、旧模型跨进程回放及上述研究链路）：**1129 passed、8 skipped、44 warnings**。Ranker 及实验导入边界另经 **33 passed、4 skipped** 定向检查；缓存及路径此前 **18 项测试**通过。TypeScript 最近一次类型检查及以上 8 个文件的 **152 项测试**通过，本轮没有 TypeScript 改动；页面脚本测试验证失败响应、旧包装、空缓存及网络错误不会显示假成功。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

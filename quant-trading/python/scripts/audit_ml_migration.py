@@ -3,7 +3,9 @@
 
 Canonical means signed snapshot/policy and serialized file hashes verified;
 it does not certify fitted model internals or successful inference. No model
-pickle is deserialized. Legacy and mixed configurations cannot pass --strict.
+pickle is deserialized. canonical_paper means a deployment profile passed a
+read-only accounting preview; it does not verify its model artifacts. Legacy,
+mixed and invalid configurations cannot pass --strict.
 """
 from __future__ import annotations
 
@@ -72,6 +74,75 @@ def _looks_ml(value: Any) -> bool:
 def _resolve(value: str, root: Path) -> Path:
     path = Path(value).expanduser()
     return path if path.is_absolute() else root / path
+
+
+def _contains_paper_profile(raw: Any) -> bool:
+    if isinstance(raw, dict):
+        return "research_paper" in raw or any(_contains_paper_profile(value) for value in raw.values())
+    return isinstance(raw, list) and any(_contains_paper_profile(value) for value in raw)
+
+
+def _audit_paper_profile(raw: dict, root: Path, trade_date: str | None) -> dict:
+    result = {
+        "scope": "$.research_paper", "kind": "research_paper", "status": "unmigrated",
+        "legacy_ml_compat": False, "canonical_snapshot": [], "model_manifests": [], "legacy_references": [],
+        "inference_exercised": False, "model_provenance_verified": False,
+        "preview_succeeded": False, "committed": False,
+    }
+    try:
+        import pandas as pd
+        from aipha.research.paper_profile import resolve_paper_profile
+        from aipha.research.paper_book import advance_paper_book, read_paper_book_evidence
+        from aipha.research.execution_plan import read_execution_plan
+        from aipha.research.snapshots import verify_attested_parquet
+
+        if "research_paper" not in raw:
+            raise ValueError("research_paper must be declared at the profile root")
+        metadata = None
+        if trade_date is None:
+            profile = raw.get("research_paper")
+            value = profile.get("snapshot_path") if isinstance(profile, dict) else None
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("research_paper snapshot_path must be a nonempty string")
+            if "{" in value or "}" in value:
+                raise ValueError("snapshot path template requires --trade-date")
+            metadata = verify_attested_parquet(
+                _resolve(value.strip(), root), require_artifact_hash=True,
+                verify_content_hash=True, require_source_signature=True,
+            )
+            signal_date = date.fromisoformat(metadata["end_date"])
+        else:
+            signal_date = date.fromisoformat(trade_date)
+        profile = resolve_paper_profile(raw, project_root=root, signal_date=signal_date)
+        result.update({"canonical_snapshot": [("snapshot_path", str(profile.snapshot_path))],
+                       "research_config": str(profile.research_path), "book_path": str(profile.book_path),
+                       "book_exists": profile.book_path.is_file(),
+                       "plan_path": str(profile.plan_path) if profile.plan_path else None})
+        if metadata is None:
+            metadata = verify_attested_parquet(
+                profile.snapshot_path, require_artifact_hash=True,
+                verify_content_hash=True, require_source_signature=True,
+            )
+        if metadata["end_date"] != signal_date.isoformat():
+            raise ValueError("Paper snapshot must end on the audit trade date")
+        panel = pd.read_parquet(profile.snapshot_path)
+        panel.attrs["snapshot_metadata"] = metadata
+        plan = read_execution_plan(profile.plan_path) if profile.plan_path else None
+        if profile.book_path.is_file():
+            read_paper_book_evidence(profile.book_path)
+        # This is the runtime's in-memory preview, not execute_paper or a
+        # subprocess launch. No book, plan acceptance or order is published.
+        receipt = advance_paper_book(profile.book_path, panel, profile.policy, plan=plan, commit=False)
+        result.update({"status": "canonical_paper", "verification_level": "paper_snapshot_plan_book_preview",
+                       "preview_succeeded": True, "trade_date": signal_date.isoformat(),
+                       "data_snapshot_id": metadata["data_snapshot_id"],
+                       "model_config_hash": profile.policy.model_config_hash(),
+                       "plan_present": plan is not None, "plan_id": plan.plan_id if plan else None,
+                       "book_evidence_verified": profile.book_path.is_file(),
+                       "preview_nav": receipt["nav"], "preview_replay_hash": receipt["replay_hash"]})
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    return result
 
 
 def _audit_scope(name: str, raw: dict, root: Path, trade_date: str | None) -> dict:
@@ -163,7 +234,8 @@ def audit_config(path: Path, *, project_root: Path, trade_date: str | None = Non
             raise ValueError("config root is not a mapping")
     except (OSError, ValueError, yaml.YAMLError) as exc:
         return {"path": str(path), "status": "parse_error", "parse_error": str(exc)}
-    scopes = [_audit_scope(name, scope, project_root, trade_date) for name, scope in _scopes(raw)]
+    scopes = ([_audit_paper_profile(raw, project_root, trade_date)] if _contains_paper_profile(raw)
+              else [_audit_scope(name, scope, project_root, trade_date) for name, scope in _scopes(raw)])
     statuses = {scope["status"] for scope in scopes}
     status = (next(iter(statuses)) if len(statuses) == 1 else "mixed") if scopes else (
         "unmigrated" if _looks_ml(raw) else "not_applicable"
@@ -178,6 +250,15 @@ def audit_config(path: Path, *, project_root: Path, trade_date: str | None = Non
 def audit_tree(config_dir: Path, *, project_root: Path, trade_date: str | None = None) -> dict[str, Any]:
     rows = [audit_config(path, project_root=project_root, trade_date=trade_date)
             for path in sorted(config_dir.glob("*.y*ml")) if path.is_file()]
+    books: dict[Path, list[dict]] = {}
+    for row in rows:
+        if row["status"] == "canonical_paper":
+            books.setdefault(Path(row["scopes"][0]["book_path"]), []).append(row)
+    for path, group in books.items():
+        if len(group) > 1:
+            for row in group:
+                row["status"] = row["scopes"][0]["status"] = "unmigrated"
+                row["scopes"][0]["error"] = f"shared Paper book path across profiles: {path}"
     counts: dict[str, int] = {}
     for row in rows:
         status = row["status"]
@@ -197,8 +278,8 @@ def main(argv: list[str] | None = None) -> int:
     report = audit_tree(_resolve(str(args.config_dir), ROOT), project_root=ROOT, trade_date=args.trade_date)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     applicable = report["total"] - report["counts"].get("not_applicable", 0)
-    if args.strict and (not report["directory_exists"] or not report["total"]
-                        or report["counts"].get("canonical", 0) != applicable):
+    verified = report["counts"].get("canonical", 0) + report["counts"].get("canonical_paper", 0)
+    if args.strict and (not report["directory_exists"] or not report["total"] or verified != applicable):
         return 2
     return 0
 

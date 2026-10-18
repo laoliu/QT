@@ -151,18 +151,6 @@ def check_gates(settings: dict[str, Any], force: bool = False) -> str | None:
     return None
 
 
-def _profile_path(value: Any, *, signal_date: date | None = None) -> Path:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError("profile paths must be nonempty strings")
-    text = value.strip()
-    if signal_date is not None:
-        text = text.replace("{date}", signal_date.isoformat()).replace("{trade_date}", signal_date.strftime("%Y%m%d"))
-    if "{" in text or "}" in text:
-        raise ValueError("only snapshot/plan paths support {date} and {trade_date} templates")
-    path = Path(text).expanduser()
-    return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
-
-
 def prepare_launch(config: Path, *, dry_run: bool = True, trade_date: str | None = None) -> dict[str, Any]:
     """Resolve one deployment without reading models, writing books or sending orders."""
     raw = yaml.safe_load(config.read_text(encoding="utf-8"))
@@ -177,49 +165,18 @@ def prepare_launch(config: Path, *, dry_run: bool = True, trade_date: str | None
         if dry_run:
             cmd.append("--dry-run")
         return {"command": cmd, "engine": "legacy_eod", "book_path": None}
-    if set(raw) - {"research_paper", "profile_name", "description"}:
-        raise ValueError("research_paper profile cannot mix legacy engine/strategy settings")
-    profile = raw["research_paper"]
-    known = {"schema_version", "research_config", "snapshot_path", "book_path", "plan_path", "plan_dir"}
-    if not isinstance(profile, dict) or set(profile) - known:
-        raise ValueError("invalid research_paper profile fields")
-    if type(profile.get("schema_version")) is not int or profile["schema_version"] != 1:
-        raise ValueError("research_paper schema_version=1 required")
-    if "plan_path" in profile and "plan_dir" in profile:
-        raise ValueError("declare plan_path or plan_dir, not both")
-    signal_date = date.fromisoformat(trade_date) if trade_date else datetime.now(ZoneInfo("Asia/Shanghai")).date()
-    research = _profile_path(profile.get("research_config"))
-    snapshot = _profile_path(profile.get("snapshot_path"), signal_date=signal_date)
-    book = _profile_path(profile.get("book_path"))
-    if not research.is_file() or not snapshot.is_file():
-        raise FileNotFoundError(f"research config and signed snapshot must exist: {research}, {snapshot}")
-    if snapshot.suffix.lower() != ".parquet" or book.suffix.lower() != ".sqlite3":
-        raise ValueError("research_paper requires a Parquet snapshot and a .sqlite3 book")
-    from aipha.research.config import load_research_config
+    from aipha.research.paper_profile import resolve_paper_profile
 
-    load_research_config(research)  # Enforces TuShare PIT, monthly, paper policy.
+    signal_date = date.fromisoformat(trade_date) if trade_date else datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    profile = resolve_paper_profile(raw, project_root=PROJECT_ROOT, signal_date=signal_date)
     cmd = [sys.executable, str(_PROJECT_ROOT / "scripts/ops/v2_ml_paper_daily.py"),
-           "--research-config", str(research), "--panel", str(snapshot),
-           "--book-path", str(book), "--date", signal_date.isoformat(), "--json"]
-    plan = None
-    if "plan_path" in profile:
-        plan = _profile_path(profile["plan_path"], signal_date=signal_date)
-        if not plan.is_file():
-            raise FileNotFoundError(f"explicit Paper plan not found: {plan}")
-    elif "plan_dir" in profile:
-        directory = _profile_path(profile["plan_dir"])
-        if not directory.is_dir():
-            raise FileNotFoundError(f"Paper plan directory not found: {directory}")
-        dated = directory / f"{signal_date.isoformat()}.json"
-        if (dated.exists() or dated.is_symlink()) and not dated.is_file():
-            raise ValueError(f"dated Paper plan is not a file: {dated}")
-        if dated.is_file():
-            plan = dated
-    if plan is not None:
-        cmd.extend(["--plan-path", str(plan)])
+           "--research-config", str(profile.research_path), "--panel", str(profile.snapshot_path),
+           "--book-path", str(profile.book_path), "--date", signal_date.isoformat(), "--json"]
+    if profile.plan_path is not None:
+        cmd.extend(["--plan-path", str(profile.plan_path)])
     if not dry_run:
         cmd.append("--execute")
-    return {"command": cmd, "engine": "research_paper", "book_path": str(book)}
+    return {"command": cmd, "engine": "research_paper", "book_path": str(profile.book_path)}
 
 
 def launch_one(

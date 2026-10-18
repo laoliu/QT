@@ -484,7 +484,8 @@ These aliases do not add experimental types to canonical model discovery or
 authorize loading them without the selector's explicit compatibility flag.
 
 Use `python scripts/audit_ml_migration.py --config-dir configs/paper` for a
-read-only inventory of canonical, explicitly legacy, and non-ML Paper configs.
+read-only inventory of canonical components, canonical Paper profiles,
+explicitly legacy, and non-ML Paper configs.
 Each ML component must declare its own snapshot, universe and model paths;
 one component cannot supply another's provenance or compatibility flag.
 Canonical status requires an actual signed current-version snapshot, its
@@ -494,9 +495,24 @@ numeric feature columns. The audit does not unpickle models or run inference:
 describe this boundary. Inference and fitted fold checks still run at model
 load time. Snapshot templates require `--trade-date YYYY-MM-DD`; fixed paths
 default to their signed end date. Missing signing keys fail verification.
-Adding `--strict` makes CI fail for legacy, mixed, unmigrated or malformed
-configs, and for missing/empty directories. An explicit legacy marker is
-inventory evidence only and cannot pass this migration gate.
+Deployment profiles use the launcher's shared `research_paper` parser; paths
+are anchored to the Python project root. A `canonical_paper` result verifies
+the signed snapshot and policy, any same-day plan, existing book replay and
+all receipts, then performs the runtime accounting preview in memory. It
+does not create or update a book, start a process, or deserialize a model.
+`verification_level=paper_snapshot_plan_book_preview`,
+`model_provenance_verified=false`, `inference_exercised=false` and
+`committed=false` distinguish this from model-component verification.
+Profiles sharing a normalized book path fail batch auditing. Template paths
+require an explicit audit date; fixed paths default to the verified snapshot
+end date. The snapshot must end on that date. An absent dated plan is valid
+for valuation; a new cash-only book preview does not prove model migration.
+
+Adding `--strict` accepts these two distinct verified consumer contracts and
+makes CI fail for legacy, mixed, unmigrated or malformed configs, and for
+missing/empty directories. It does not certify successful model inference
+or actual daily operation. An explicit legacy marker is inventory evidence
+only and cannot pass this migration gate.
 
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a

@@ -17,6 +17,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -24,14 +26,14 @@ if str(ROOT) not in sys.path:
 from aipha.research.config import migrate_legacy_ml_config_file  # noqa: E402
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         output, warnings = migrate_legacy_ml_config_file(args.source, args.destination)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, yaml.YAMLError) as exc:
         print(f"migration_failed={type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     print(f"written={output}")

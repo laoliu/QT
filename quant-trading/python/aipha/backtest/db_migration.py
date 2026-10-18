@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import sqlite3
 import tempfile
@@ -202,17 +203,22 @@ def migrate_database(source: Path, destination: Path, *, timeout: float = 10) ->
     fence commits, rerun this function; source data remains readable and intact.
     An existing destination is never overwritten or merged.
     """
-    source, destination = Path(source).resolve(), Path(destination).resolve()
+    if not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("SQLite migration timeout must be finite and nonnegative")
+    source = Path(source).resolve()
+    requested = Path(destination).expanduser()
+    destination = requested.parent.resolve() / requested.name
     if not source.is_file():
         raise FileNotFoundError(source)
-    if destination.exists() or source == destination:
+    if destination.exists() or destination.is_symlink() or source == destination:
         raise FileExistsError(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".backtest-migrate-", suffix=".db", dir=destination.parent)
     os.close(fd)
     temporary = Path(temporary)
-    lock = sqlite3.connect(source, timeout=timeout)
+    lock = None
     try:
+        lock = sqlite3.connect(source, timeout=timeout)
         # Hold the writer reservation throughout snapshot, verification and fencing.
         # Use a separate reader: backing up the connection holding this transaction
         # itself would wait for its own transaction to end.
@@ -250,7 +256,8 @@ def migrate_database(source: Path, destination: Path, *, timeout: float = 10) ->
         return {"source": str(source), "destination": str(destination),
                 "sha256": expected, "table_rows": counts, "legacy_writes_blocked": True}
     finally:
-        lock.close()
+        if lock is not None:
+            lock.close()
         temporary.unlink(missing_ok=True)
         for suffix in ("-wal", "-shm", "-journal"):
             Path(str(temporary) + suffix).unlink(missing_ok=True)

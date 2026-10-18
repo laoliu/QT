@@ -6,19 +6,47 @@ operator supplied feature version and column order and refuses to guess them.
 from __future__ import annotations
 
 import json
+import errno
+import os
 import shutil
+import sys
 import tempfile
 import time
 from pathlib import Path
 
 
+def _rename_linux_exclusive(staged: Path, destination: Path) -> None:
+    """Publish with Linux RENAME_NOREPLACE; never fall back to clobbering rename."""
+    import ctypes
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(libc, "renameat2", None)
+    if rename is None:
+        raise OSError(errno.ENOTSUP, "atomic exclusive model publication requires renameat2", str(destination))
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    # AT_FDCWD=-100; RENAME_NOREPLACE=1. Both paths are on the same filesystem.
+    if rename(-100, os.fsencode(staged), -100, os.fsencode(destination), 1) != 0:
+        code = ctypes.get_errno() or errno.EIO
+        raise OSError(code, os.strerror(code), str(destination))
+
+
+def _rename_exclusive(staged: Path, destination: Path) -> None:
+    if os.name == "nt":
+        staged.rename(destination)  # Windows rename refuses an existing target.
+    elif sys.platform.startswith("linux"):
+        _rename_linux_exclusive(staged, destination)
+    else:
+        raise OSError(errno.ENOTSUP, "exclusive model publication is supported on Windows and Linux", str(destination))
+
+
 def _publish_model(staged: Path, destination: Path) -> None:
     """Retry transient Windows sharing locks without copying a partial model."""
     for attempt in range(5):
-        if destination.exists():
+        if destination.exists() or destination.is_symlink():
             raise FileExistsError(destination)
         try:
-            staged.rename(destination)
+            _rename_exclusive(staged, destination)
             return
         except PermissionError as exc:
             if getattr(exc, "winerror", None) not in {5, 32, 33} or attempt == 4:
@@ -51,10 +79,13 @@ def migrate_legacy_model(
     if not acknowledge_legacy:
         raise ValueError("legacy migration requires acknowledge_legacy=True")
     source_path = Path(source).resolve()
-    destination_path = Path(destination).resolve()
+    # Resolve parent aliases, but retain the final directory entry so a dangling
+    # symlink is rejected rather than followed to a new publication target.
+    requested = Path(destination).expanduser()
+    destination_path = requested.parent.resolve() / requested.name
     if not source_path.is_dir() or not (source_path / "meta.pkl").is_file():
         raise FileNotFoundError(f"legacy selector meta.pkl missing: {source_path}")
-    if destination_path.exists():
+    if destination_path.exists() or destination_path.is_symlink():
         raise FileExistsError(destination_path)
     if not feature_version or not feature_columns or not all(feature_columns):
         raise ValueError("feature_version and feature_columns are required")

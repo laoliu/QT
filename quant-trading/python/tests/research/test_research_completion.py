@@ -286,6 +286,18 @@ def test_config_migration_does_not_replace_racing_writer(tmp_path, monkeypatch):
     assert not list(tmp_path.glob(".research-config-*"))
 
 
+def test_config_migration_cli_reports_bad_yaml_without_publishing(tmp_path, capsys):
+    from scripts.migrate_research_config import main
+
+    source = tmp_path / "invalid.yaml"
+    source.write_text("ml_model: [", encoding="utf-8")
+    destination = tmp_path / "canonical.yaml"
+    assert main([str(source), str(destination)]) == 2
+    assert "migration_failed=" in capsys.readouterr().err
+    assert source.read_text(encoding="utf-8") == "ml_model: ["
+    assert not destination.exists()
+
+
 def test_legacy_ml_engine_only_forwards_canonical_actions() -> None:
     from engines.aipha_ml_engine import run
 

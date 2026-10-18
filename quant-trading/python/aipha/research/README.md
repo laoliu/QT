@@ -383,6 +383,16 @@ for historical training data by itself. For example:
 python scripts/migrate_legacy_model.py OLD NEW --feature-version cn_equity_v1 --feature-columns momentum_20 volatility_20 --model-type lightgbm --data-snapshot-id VERIFIED_SNAPSHOT --universe CSI500 --min-listing-days 252 --feature-groups momentum volatility --model-id ATTESTED_MODEL --model-config-hash VERIFIED_CONFIG_HASH --acknowledge-legacy
 ```
 
+The model CLI bootstraps its import path, so it can also be invoked by absolute
+script path from another working directory. Add `--json` for a structured
+success/error report; operational failures return exit code 2. Migration
+validates the copied selector before publication and keeps the source files.
+Windows uses exclusive directory rename; Linux requires `renameat2` with
+`RENAME_NOREPLACE`. Unsupported kernels/filesystems fail without falling back
+to a rename that can overwrite another publisher. Existing destinations,
+including dangling symbolic links, are rejected. Operator attestation does
+not reconstruct unknown training provenance; retrain when it cannot be proved.
+
 QMT consumption is available
 through the versioned execution-plan adapter and requires an explicit live
 gate. The generic HTTP and polling bridge `place_order` methods are disabled:
@@ -440,6 +450,11 @@ read-only comparison, `--conflicts` to export keyed row conflicts, or
 `--migrate OLD.db NEW.db` to publish a verified copy. Migration retains the
 old file and fences its future writes; an existing destination is never
 overwritten.
+SQLite operational failures also return JSON and exit code 2. Invalid timeouts
+and existing/dangling destination entries fail before fencing the source;
+staging files are removed when opening the source fails. If publication fails
+after fencing, the old history remains readable but its writes are blocked;
+retry the same migration paths rather than resuming writes to forked history.
 
 The same canonical bridge is available over the authenticated Node HTTP API
 at `POST /quant/api/research/ml-ranking` (and `GET` for `list_models`).

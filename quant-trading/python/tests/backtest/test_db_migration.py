@@ -147,3 +147,48 @@ def test_export_conflicts_is_read_only_and_includes_records(tmp_path):
         assert old.execute("SELECT payload FROM runs").fetchone() == (b"source",)
     finally:
         old.close()
+
+
+def test_dangling_destination_is_rejected_without_creating_its_target(tmp_path):
+    source, old = _source(tmp_path)
+    destination, target = tmp_path / "link.db", tmp_path / "missing.db"
+    try:
+        try:
+            destination.symlink_to(target)
+        except OSError:
+            pytest.skip("symbolic-link creation unavailable on this host")
+        with pytest.raises(FileExistsError):
+            migrate_database(source, destination)
+        assert destination.is_symlink() and not target.exists()
+        old.execute("INSERT INTO runs VALUES (2, NULL)")
+        old.commit()  # Rejected destinations must not fence the source.
+    finally:
+        old.close()
+
+
+@pytest.mark.parametrize("timeout", [-1, float("nan"), float("inf")])
+def test_invalid_timeout_leaves_no_files_or_fences(tmp_path, timeout):
+    source, old = _source(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="finite and nonnegative"):
+            migrate_database(source, tmp_path / "new/history.db", timeout=timeout)
+        assert not (tmp_path / "new").exists()
+        old.execute("INSERT INTO runs VALUES (2, NULL)")
+        old.commit()
+    finally:
+        old.close()
+
+
+def test_connection_failure_removes_staging_file(tmp_path, monkeypatch):
+    import aipha.backtest.db_migration as migration
+
+    source, old = _source(tmp_path)
+    old.close()
+    before = source.read_bytes()
+    def unavailable(*a, **k):
+        raise sqlite3.OperationalError("connection unavailable")
+    monkeypatch.setattr(migration.sqlite3, "connect", unavailable)
+    with pytest.raises(sqlite3.OperationalError, match="connection unavailable"):
+        migrate_database(source, tmp_path / "new.db")
+    assert not list(tmp_path.glob(".backtest-migrate-*"))
+    assert source.read_bytes() == before

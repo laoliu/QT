@@ -40,12 +40,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=10.0, help="SQLite lock timeout in seconds")
     args = parser.parse_args(argv)
 
-    if args.audit:
-        result = audit_databases(args.source, args.destination)
-    elif args.conflicts:
-        result = {"conflicts": export_conflicts(args.source, args.destination)}
-    else:
-        result = migrate_database(args.source, args.destination, timeout=args.timeout)
+    try:
+        if args.audit:
+            result = audit_databases(args.source, args.destination)
+        elif args.conflicts:
+            result = {"conflicts": export_conflicts(args.source, args.destination)}
+        else:
+            result = migrate_database(args.source, args.destination, timeout=args.timeout)
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": {"type": type(exc).__name__, "message": str(exc)}}, ensure_ascii=False))
+        return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0
 

@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import json
+import errno
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -231,12 +235,13 @@ def test_canonical_paper_passes_its_policy_to_model_loader(fitted_model, monkeyp
 
 @pytest.mark.parametrize("persistent", [False, True])
 def test_migration_publication_handles_windows_sharing_lock(tmp_path, monkeypatch, persistent):
+    import aipha.research.migration as migration
     from aipha.research.migration import _publish_model
 
     staged, destination = tmp_path / "staged", tmp_path / "published"
     staged.mkdir()
     (staged / "artifact").write_bytes(b"preserved")
-    rename = Path.rename
+    rename = migration._rename_exclusive
     attempts = []
     def locked_rename(path, target):
         attempts.append(path)
@@ -245,7 +250,7 @@ def test_migration_publication_handles_windows_sharing_lock(tmp_path, monkeypatc
             error.winerror = 5
             raise error
         return rename(path, target)
-    monkeypatch.setattr(Path, "rename", locked_rename)
+    monkeypatch.setattr(migration, "_rename_exclusive", locked_rename)
     monkeypatch.setattr("aipha.research.migration.time.sleep", lambda _: None)
     if persistent:
         with pytest.raises(PermissionError):
@@ -258,3 +263,117 @@ def test_migration_publication_handles_windows_sharing_lock(tmp_path, monkeypatc
         assert len(attempts) == 2
         assert not staged.exists()
         assert (destination / "artifact").read_bytes() == b"preserved"
+
+
+def test_racing_empty_destination_is_never_replaced(tmp_path, monkeypatch):
+    import aipha.research.migration as migration
+
+    staged, destination = tmp_path / "staged", tmp_path / "published"
+    staged.mkdir()
+    (staged / "artifact").write_bytes(b"staged model")
+    rename = migration._rename_exclusive
+    def race(path, target):
+        target.mkdir()  # Another publisher wins after the preliminary check.
+        return rename(path, target)
+    monkeypatch.setattr(migration, "_rename_exclusive", race)
+    with pytest.raises(FileExistsError):
+        migration._publish_model(staged, destination)
+    assert list(destination.iterdir()) == []
+    assert (staged / "artifact").read_bytes() == b"staged model"
+
+
+@pytest.mark.parametrize("code", [errno.EEXIST, errno.ENOSYS, errno.EINVAL])
+def test_linux_exclusive_rename_failure_never_falls_back_to_clobbering(tmp_path, monkeypatch, code):
+    import ctypes
+    from types import SimpleNamespace
+    from aipha.research.migration import _rename_linux_exclusive
+
+    calls = []
+    class Kernel:
+        def __call__(self, *args):
+            calls.append(args)
+            ctypes.set_errno(code)
+            return -1
+    kernel = Kernel()
+    monkeypatch.setattr(ctypes, "CDLL", lambda *a, **k: SimpleNamespace(renameat2=kernel))
+    monkeypatch.setattr(Path, "rename", lambda *a, **k: pytest.fail("unsafe rename fallback"))
+    staged, destination = tmp_path / "staged", tmp_path / "destination"
+    staged.mkdir()
+    with pytest.raises(OSError) as exc:
+        _rename_linux_exclusive(staged, destination)
+    assert exc.value.errno == code
+    assert calls == [(-100, os.fsencode(staged), -100, os.fsencode(destination), 1)]
+    assert staged.is_dir() and not destination.exists()
+
+
+def test_missing_linux_renameat2_fails_closed(tmp_path, monkeypatch):
+    import ctypes
+    from types import SimpleNamespace
+    from aipha.research.migration import _rename_linux_exclusive
+
+    monkeypatch.setattr(ctypes, "CDLL", lambda *a, **k: SimpleNamespace())
+    with pytest.raises(OSError) as exc:
+        _rename_linux_exclusive(tmp_path / "staged", tmp_path / "destination")
+    assert exc.value.errno == errno.ENOTSUP
+
+
+def test_model_migration_rejects_dangling_destination_without_following_it(fitted_model, tmp_path):
+    destination, outside = tmp_path / "destination", tmp_path / "missing-target"
+    try:
+        destination.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symbolic-link creation unavailable on this host")
+    with pytest.raises(FileExistsError):
+        migrate_legacy_model(
+            fitted_model, destination, feature_version="cn_equity_v1", feature_columns=["momentum_20", "momentum_5"],
+            model_type="elasticnet", data_snapshot_id="attested-snapshot", acknowledge_legacy=True,
+            universe="CSI500", min_listing_days=252, feature_groups=["momentum"],
+            model_id="attested-model", model_config_hash="attested-config",
+        )
+    assert destination.is_symlink() and not outside.exists()
+
+
+def _model_cli_args(source, destination):
+    return [str(source), str(destination), "--feature-version", "cn_equity_v1",
+            "--feature-columns", "momentum_20", "momentum_5", "--model-type", "elasticnet",
+            "--data-snapshot-id", "attested-snapshot", "--universe", "CSI500",
+            "--min-listing-days", "252", "--feature-groups", "momentum",
+            "--model-id", "attested-model", "--model-config-hash", "attested-config", "--json"]
+
+
+def test_model_cli_from_other_cwd_migrates_real_selector_and_preserves_predictions(fitted_model, tmp_path):
+    (fitted_model / "model_manifest.json").unlink()
+    before = {file.name: file.read_bytes() for file in fitted_model.iterdir()}
+    output = tmp_path / "migrated"
+    command = [sys.executable, str(Path(__file__).resolve().parents[2] / "scripts/migrate_legacy_model.py"),
+               *_model_cli_args(fitted_model, output), "--acknowledge-legacy"]
+    result = subprocess.run(command, cwd=tmp_path, env={**os.environ, "PYTHONPATH": ""},
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"ok": True, "destination": str(output)}
+    assert before == {file.name: file.read_bytes() for file in fitted_model.iterdir()}
+    from aipha.models.ml_stock_selector import MLStockSelector
+
+    original = MLStockSelector()
+    original.load(fitted_model)
+    migrated = load_verified_selector(output, expected_feature_version="cn_equity_v1")
+    cross = pd.DataFrame({"momentum_20": [.1, .2], "momentum_5": [.3, .4]})
+    np.testing.assert_allclose(original.predict(cross), migrated.predict(cross))
+    repeat = subprocess.run(command, cwd=tmp_path, env={**os.environ, "PYTHONPATH": ""},
+                            capture_output=True, text=True, timeout=30)
+    assert repeat.returncode == 2 and json.loads(repeat.stdout)["error"]["type"] == "FileExistsError"
+
+
+@pytest.mark.parametrize("bad_json", [False, True])
+def test_model_cli_errors_are_structured_and_do_not_publish(fitted_model, tmp_path, capsys, bad_json):
+    from scripts.migrate_legacy_model import main
+
+    output = tmp_path / "not-published"
+    args = _model_cli_args(fitted_model, output)
+    if bad_json:
+        args.extend(["--column-groups-json", "{", "--acknowledge-legacy"])
+    assert main(args) == 2
+    report = json.loads(capsys.readouterr().out)
+    assert not report["ok"]
+    assert report["error"]["type"] == ("JSONDecodeError" if bad_json else "ValueError")
+    assert not output.exists()

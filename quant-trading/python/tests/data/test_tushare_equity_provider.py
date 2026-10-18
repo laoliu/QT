@@ -42,6 +42,120 @@ def provider(tmp_path):
 # ── _retry_call ───────────────────────────────────────────
 
 
+class TestHistoricalListingDates:
+    @staticmethod
+    def market():
+        return pd.DataFrame({"ts_code": ["600000.SH", "300114.SZ", "300114.SZ"],
+                             "trade_date": ["20231229", "20231228", "20231229"]})
+
+    def test_renamed_symbol_uses_dated_source_and_keeps_original_cache(self, provider):
+        original = pd.DataFrame({"ts_code": ["600000.SH"], "list_date": ["19991110"]})
+        stock_path = provider.cache_dir / "stock_basic.parquet"
+        original.to_parquet(stock_path, index=False)
+        before = stock_path.read_bytes()
+        provider.api.bak_basic.return_value = pd.DataFrame({
+            "ts_code": ["300114.SZ"], "trade_date": ["20231229"], "list_date": ["20100827"],
+        })
+        result = provider.load_historical_listing_dates(self.market()).set_index("ts_code")
+        assert result.loc["300114.SZ", "list_date"] == "20100827"
+        assert result.loc["300114.SZ", "list_date_source"] == "tushare.bak_basic"
+        assert result.loc["300114.SZ", "list_date_observation_date"] == "20231229"
+        assert result.loc["600000.SH", "list_date_source"] == "tushare.stock_basic"
+        assert stock_path.read_bytes() == before
+        provider.api.bak_basic.assert_called_once_with(
+            ts_code="300114.SZ", trade_date="20231229", fields="ts_code,trade_date,list_date",
+        )
+        provider.api.bak_basic.reset_mock()
+        cached = provider.load_historical_listing_dates(self.market()).set_index("ts_code")
+        pd.testing.assert_frame_equal(result, cached)
+        provider.api.bak_basic.assert_not_called()
+
+    @pytest.mark.parametrize("change", ["empty", "wrong_symbol", "wrong_day", "duplicate", "invalid_date", "too_late"])
+    def test_unproven_listing_is_rejected_without_creating_cache(self, provider, change):
+        pd.DataFrame({"ts_code": ["600000.SH"], "list_date": ["19991110"]}).to_parquet(
+            provider.cache_dir / "stock_basic.parquet", index=False,
+        )
+        row = {"ts_code": "300114.SZ", "trade_date": "20231229", "list_date": "20100827"}
+        if change == "wrong_symbol": row["ts_code"] = "302132.SZ"
+        if change == "wrong_day": row["trade_date"] = "20240101"
+        if change == "invalid_date": row["list_date"] = "not-a-date"
+        if change == "too_late": row["list_date"] = "20231229"
+        records = [] if change == "empty" else [row] * (2 if change == "duplicate" else 1)
+        provider.api.bak_basic.return_value = pd.DataFrame(records)
+        with pytest.raises(ValueError, match="historical listing"):
+            provider.load_historical_listing_dates(self.market())
+        assert not list(provider.cache_dir.glob("listing_bak_basic_*.parquet"))
+
+    def test_null_date_for_known_symbol_is_filled_from_historical_record(self, provider):
+        pd.DataFrame({"ts_code": ["600000.SH", "300114.SZ"], "list_date": ["19991110", None]}).to_parquet(
+            provider.cache_dir / "stock_basic.parquet", index=False,
+        )
+        provider.api.bak_basic.return_value = pd.DataFrame({
+            "ts_code": ["300114.SZ"], "trade_date": ["20231229"], "list_date": ["20100827"],
+        })
+        result = provider.load_historical_listing_dates(self.market())
+        assert not result.ts_code.duplicated().any()
+        assert result.list_date.notna().all()
+
+
+class TestMonthlyIndexHistory:
+    @staticmethod
+    def history():
+        return pd.DataFrame([
+            {"index_code": "000905.SH", "con_code": f"{600000 + symbol:06}.SH", "trade_date": day, "weight": .2}
+            for day in ["20231229", "20240131"] for symbol in range(500)
+        ])
+
+    def test_actual_dates_seed_and_cache_are_preserved(self, provider):
+        provider.api.index_weight.return_value = self.history()
+        result = provider.load_index_membership_history("000905.SH", "20240102", "20240202")
+        assert list(result) == ["20231229", "20240131"]
+        provider.api.index_weight.assert_called_once_with(
+            index_code="000905.SH", start_date="20231201", end_date="20240202", limit=5000, offset=0,
+        )
+        provider.api.index_weight.reset_mock()
+        assert provider.load_index_membership_history("000905.SH", "20240102", "20240202") == result
+        provider.api.index_weight.assert_not_called()
+
+    @pytest.mark.parametrize("bad", ["no_seed", "missing_month", "duplicate", "wrong_index", "future", "weights", "missing_member", "empty"])
+    def test_incomplete_membership_never_becomes_a_cache(self, provider, bad):
+        rows = self.history()
+        if bad == "no_seed": rows = rows.loc[rows.trade_date.eq("20240131")]
+        if bad == "missing_month": rows = rows.loc[rows.trade_date.eq("20231229")]
+        if bad == "duplicate": rows = pd.concat([rows, rows.iloc[:1]])
+        if bad == "wrong_index": rows["index_code"] = "000300.SH"
+        if bad == "future": rows.loc[rows.trade_date.eq("20240131"), "trade_date"] = "20240229"
+        if bad == "weights": rows["weight"] = 10.
+        if bad == "missing_member": rows = rows.iloc[1:]
+        if bad == "empty": rows = rows.head(0)
+        provider.api.index_weight.return_value = rows
+        with pytest.raises(ValueError, match="historical index"):
+            provider.load_index_membership_history("000905.SH", "20240102", "20240202")
+        assert not list(provider.cache_dir.glob("index_weights_v1_*.parquet"))
+
+    def test_pagination_keeps_all_history(self, provider):
+        rows = pd.DataFrame([
+            {"index_code": "000905.SH", "con_code": f"{symbol:06}.SH", "trade_date": day.strftime("%Y%m%d"), "weight": .2}
+            for day in pd.date_range("2022-12-01", "2023-11-01", freq="BME") for symbol in range(500)
+        ])
+        provider.api.index_weight.side_effect = [rows.iloc[:5000], rows.iloc[5000:]]
+        with patch.object(provider._gateway._limiter, "acquire"):
+            result = provider.load_index_membership_history("000905.SH", "20230102", "20231102")
+        assert len(result) == 11
+        assert provider.api.index_weight.call_args_list[1].kwargs["offset"] == 5000
+
+
+@pytest.mark.parametrize("endpoint", ["fina_indicator", "income", "balancesheet", "cashflow"])
+def test_schema_complete_empty_financial_cache_stays_offline(provider, endpoint):
+    columns = ["ts_code", "ann_date", "end_date", "f_ann_date", "report_type", "or_yoy", "roic",
+               "ocf_to_or", "assets_turn", "netprofit_yoy", "c_pay_acq_const_fiolta"]
+    path = provider.cache_dir / f"{endpoint}_pit_v2_600000_SH_20210101_20261016.parquet"
+    pd.DataFrame(columns=columns).to_parquet(path, index=False)
+    result = getattr(provider, f"load_{endpoint}")("600000.SH", start_date="20210101", end_date="20261016")
+    assert result.empty
+    getattr(provider.api, endpoint).assert_not_called()
+
+
 class TestRetryCall:
     def test_success_first_try(self, provider):
         fn = MagicMock(return_value=pd.DataFrame({"a": [1]}))

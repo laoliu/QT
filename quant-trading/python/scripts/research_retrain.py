@@ -74,12 +74,16 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # pragma: no cover - CLI presentation
         print(f"canonical retraining failed: {exc}", file=sys.stderr)
         return 1
+    artifact_dir = result.get("artifact_dir", result.get("run_dir"))
+    plan_paths = result.get("execution_plan_paths", [])
+    if not plan_paths and artifact_dir:
+        plan_paths = [str(Path(artifact_dir) / path) for path in result.get("execution_plans", [])]
     print(json.dumps({
         "ok": True,
         "runId": result.get("runId"),
-        "runDir": result.get("run_dir"),
-        "reportPath": result.get("report_path"),
-        "executionPlanPaths": result.get("execution_plan_paths", []),
+        "runDir": artifact_dir,
+        "reportPath": result.get("report_path") or (str(Path(artifact_dir) / "report.json") if artifact_dir else None),
+        "executionPlanPaths": plan_paths,
     }, ensure_ascii=False, indent=2, default=str))
     return 0
 

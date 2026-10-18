@@ -4,6 +4,9 @@
 # fall back during backtests.
 data:
   provider: tushare_pit
+  # Conflicting values with identical report/publication dates become null
+  # metric events; the signed snapshot and report disclose every quarantine.
+  financial_conflict_policy: quarantine
   snapshot_dir: data/snapshots
   frequency: 1d
   # The research snapshot stores raw prices plus a factor known on each

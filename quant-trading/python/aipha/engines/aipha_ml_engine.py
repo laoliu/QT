@@ -151,7 +151,7 @@ def run(config: dict) -> dict:
                     end_date=end_date,
                     index_code=config.get("indexCode"),
                     benchmark_code=config.get("benchmarkCode"),
-                    pit_provider=TuSharePITProvider(equity_provider),
+                    pit_provider=TuSharePITProvider(equity_provider, conflict_policy=cfg.financial_conflict_policy),
                     use_cache=bool(config.get("useCache", True)),
                 )
             else:
@@ -224,7 +224,7 @@ def run(config: dict) -> dict:
             result = result[columns]
             return {"ok": True, "data": {"rankings": result.to_dict("records"), "totalSymbols": int(len(frame)), "topN": top_n}}
         if action == "evaluate":
-            from aipha.research.pipeline import _evaluate_predictions
+            from aipha.research.pipeline import _evaluate_predictions, monthly_rebalance_dates
 
             path = config.get("predictionsPath") or config.get("dataPath")
             frame = _read_parquet(path)
@@ -239,11 +239,13 @@ def run(config: dict) -> dict:
                 max_industry_weight=cfg.max_industry_weight,
                 max_style_exposure=cfg.max_style_exposure,
                 style_reference=_load_style_reference(config, cfg, frame),
+                rebalance_dates=monthly_rebalance_dates(frame.attrs.get("snapshot_metadata", {})),
             )
             metrics = _evaluate_predictions(normalized, targets, cfg)
             return {"ok": True, "data": {"metrics": metrics, "rows": int(len(normalized))}}
         if action == "export":
             from aipha.research import build_target_positions
+            from aipha.research.pipeline import monthly_rebalance_dates
             from aipha.research.execution_plan import build_execution_plan
 
             cfg = _load_config(config.get("configPath"))
@@ -262,6 +264,7 @@ def run(config: dict) -> dict:
                 style_reference=_load_style_reference(config, cfg, source),
                 run_id=run_id,
                 model_id=model_id,
+                rebalance_dates=monthly_rebalance_dates(source.attrs.get("snapshot_metadata", {})),
             )
             output = _resolve_runtime_path(
                 config.get("outputPath"), "output", "research", "target_positions.json",

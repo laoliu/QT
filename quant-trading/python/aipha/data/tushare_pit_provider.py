@@ -30,6 +30,8 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date
+from dataclasses import replace
+from copy import deepcopy
 from decimal import Decimal
 from typing import Any
 
@@ -110,16 +112,44 @@ def _source_report_date(end_date: str) -> ReportDate:
     return _end_date_to_report_date(end_date)
 
 
-def _validate_records(records):
+def _validate_records(records, *, conflict_policy="raise", audit=None, dataset=""):
     """Refuse conflicting versions without a distinct availability date."""
+    if conflict_policy not in {"raise", "quarantine"}:
+        raise ValueError("financial conflict_policy must be raise or quarantine")
     unique = {}
     for record in records:
         if record.announce_date < record.report_date.to_date():
             raise ValueError("financial announcement cannot precede report period end")
         key = (record.report_date.to_date(), record.announce_date)
+        if conflict_policy == "quarantine":
+            unique.setdefault(key, []).append(record)
+            continue
         if key in unique and record != unique[key]:
             raise ValueError("conflicting financial revisions share the same report and announcement date")
         unique[key] = record
+    if conflict_policy == "quarantine":
+        resolved = {}
+        for key, group in sorted(unique.items()):
+            field = "indicators" if isinstance(group[0], FinancialIndicator) else "data"
+            observations = [getattr(record, field) for record in group]
+            values = {}
+            for metric in sorted(set().union(*(row.keys() for row in observations))):
+                candidates = {row.get(metric) for row in observations}
+                if len(candidates) > 1:
+                    # Keep an explicit null event at the original availability
+                    # date. Dropping it would carry a stale prior value forward.
+                    values[metric] = None
+                    if audit is not None:
+                        audit.append({
+                            "dataset": dataset, "symbol": group[0].symbol,
+                            "report_date": key[0].isoformat(), "announce_date": key[1].isoformat(),
+                            "metric_name": metric, "action": "missing",
+                            "source_values": sorted("null" if value is None else str(value) for value in candidates),
+                        })
+                else:
+                    values[metric] = next(iter(candidates))
+            resolved[key] = replace(group[0], **{field: values})
+        unique = resolved
     return sorted(unique.values(), key=lambda record: (record.announce_date, record.report_date.to_date()))
 
 
@@ -133,12 +163,45 @@ class TuSharePITProvider(PITFinancialProvider):
         equity_provider: TuShareEquityProvider 实例（用于调 API + 缓存）
     """
 
-    def __init__(self, equity_provider: Any) -> None:
+    def __init__(
+        self, equity_provider: Any, *, conflict_policy: str = "raise",
+        history_start: str | None = None, history_end: str | None = None,
+    ) -> None:
+        if conflict_policy not in {"raise", "quarantine"}:
+            raise ValueError("financial conflict_policy must be raise or quarantine")
         self._provider = equity_provider
+        self.conflict_policy = conflict_policy
+        self._history_kwargs = {}
+        for key, value in (("start_date", history_start), ("end_date", history_end)):
+            if value is not None:
+                try:
+                    if not isinstance(value, str) or len(value) != 8 or not value.isascii() or not value.isdigit():
+                        raise ValueError("expected YYYYMMDD")
+                    date.fromisoformat(f"{value[:4]}-{value[4:6]}-{value[6:]}")
+                except ValueError as exc:
+                    raise ValueError(f"invalid financial history {key}") from exc
+                self._history_kwargs[key] = value
+        if history_start and history_end and history_start > history_end:
+            raise ValueError("financial history start_date must not exceed end_date")
+        self._financial_conflicts: list[dict[str, Any]] = []
         # 内存缓存：{ts_code: [FinancialIndicator, ...]} 已按 ann_date 排序
         self._indicator_cache: dict[str, list[FinancialIndicator]] = {}
         # 内存缓存：{(ts_code, statement_type): [FinancialStatement, ...]}
         self._statement_cache: dict[tuple[str, str], list[FinancialStatement]] = {}
+
+    def get_data_quality_report(self, *, end_date: date | None = None) -> dict[str, Any]:
+        """Disclose quarantined metrics without exposing future events."""
+        events = [deepcopy(event) for event in self._financial_conflicts
+                  if end_date is None or date.fromisoformat(event["announce_date"]) <= end_date]
+        events.sort(key=lambda row: (row["symbol"], row["announce_date"], row["report_date"], row["dataset"], row["metric_name"]))
+        counts: dict[str, int] = {}
+        for event in events:
+            metric = f"{event['dataset']}.{event['metric_name']}"
+            counts[metric] = counts.get(metric, 0) + 1
+        return {"policy": self.conflict_policy, "history_request": dict(self._history_kwargs),
+                "quarantined_metric_events": len(events),
+                "affected_symbols": len({event["symbol"] for event in events}),
+                "by_metric": dict(sorted(counts.items())), "events": events}
 
     # ------------------------------------------------------------------
     # PITFinancialProvider 接口实现
@@ -349,7 +412,7 @@ class TuSharePITProvider(PITFinancialProvider):
 
     def _load_indicators(self, symbol: str) -> None:
         """从 TuShareEquityProvider 加载 fina_indicator 并缓存"""
-        df = self._provider.load_fina_indicator(symbol)
+        df = self._provider.load_fina_indicator(symbol, **self._history_kwargs)
         if df is None or df.empty:
             self._indicator_cache[symbol] = []
             return
@@ -394,7 +457,10 @@ class TuSharePITProvider(PITFinancialProvider):
             ))
 
         # 按 ann_date 排序
-        self._indicator_cache[symbol] = _validate_records(indicators)
+        self._indicator_cache[symbol] = _validate_records(
+            indicators, conflict_policy=self.conflict_policy,
+            audit=self._financial_conflicts, dataset="fina_indicator",
+        )
 
     def _load_statements(self, symbol: str, statement_type: str) -> None:
         """加载报表数据并转为 FinancialStatement"""
@@ -410,7 +476,7 @@ class TuSharePITProvider(PITFinancialProvider):
             self._statement_cache[(symbol, statement_type)] = []
             return
 
-        df = loader(symbol)
+        df = loader(symbol, **self._history_kwargs)
         if df is None or df.empty:
             self._statement_cache[(symbol, statement_type)] = []
             return
@@ -451,7 +517,10 @@ class TuSharePITProvider(PITFinancialProvider):
                 data=stmt_data,
             ))
 
-        self._statement_cache[(symbol, statement_type)] = _validate_records(statements)
+        self._statement_cache[(symbol, statement_type)] = _validate_records(
+            statements, conflict_policy=self.conflict_policy,
+            audit=self._financial_conflicts, dataset=statement_type,
+        )
 
 
 # ---------------------------------------------------------------------------

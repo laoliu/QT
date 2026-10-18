@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import numpy as np
 from dotenv import load_dotenv
 
 from aipha.data.cache_utils import (
@@ -303,6 +304,60 @@ class TuShareEquityProvider:
         self._atomic_write_parquet(df, cache_path)
         logger.info(f"stock_basic 已缓存: {len(df)} 只股票")
         return df
+
+    def load_historical_listing_dates(
+        self, market: pd.DataFrame, *, use_cache: bool = True,
+    ) -> pd.DataFrame:
+        """Resolve legacy ticker listings from dated TuShare backup records.
+
+        Renamed tickers can disappear even from stock_basic's L/D/P union.
+        Keep their market rows and query bak_basic at an observed market date;
+        never borrow the listing date of a replacement ticker or infer it from
+        the first cached bar. Backup records remain separate from stock_basic.
+        """
+        if not {"ts_code", "trade_date"} <= set(market):
+            raise ValueError("historical listings require ts_code and trade_date")
+        stock = self.load_stock_basic(use_cache=use_cache).copy()
+        if not {"ts_code", "list_date"} <= set(stock) or stock.ts_code.duplicated().any():
+            raise ValueError("stock_basic must contain unique listing identities")
+        stock["list_date_source"] = "tushare.stock_basic"
+        stock["list_date_observation_date"] = None
+        observations = market[["ts_code", "trade_date"]].copy()
+        observations["trade_date"] = pd.to_datetime(observations.trade_date.astype(str), errors="raise")
+        if observations.isna().any().any():
+            raise ValueError("historical listing observations cannot be missing")
+        listings = stock.set_index("ts_code").list_date
+        missing = sorted(symbol for symbol in observations.ts_code.unique()
+                         if symbol not in listings or pd.isna(listings.loc[symbol]))
+        additions = []
+        for symbol in missing:
+            observed = observations.loc[observations.ts_code.eq(symbol), "trade_date"].max()
+            day = observed.strftime("%Y%m%d")
+            path = self.cache_dir / f"listing_bak_basic_{symbol.replace('.', '_')}_{day}.parquet"
+            row = self._safe_read_parquet(path) if use_cache and path.exists() else None
+            fetched = row is None
+            if fetched:
+                row = self._retry_call(
+                    self.api.bak_basic, ts_code=symbol, trade_date=day,
+                    fields="ts_code,trade_date,list_date",
+                )
+            if (row is None or len(row) != 1 or not {"ts_code", "trade_date", "list_date"} <= set(row)
+                    or not row.ts_code.eq(symbol).all()
+                    or not row.trade_date.astype(str).eq(day).all()):
+                raise ValueError(f"TuShare historical listing unavailable or invalid for {symbol} on {day}")
+            listed = pd.to_datetime(row.list_date.astype(str), format="%Y%m%d", errors="coerce")
+            first_bar = observations.loc[observations.ts_code.eq(symbol), "trade_date"].min()
+            if listed.isna().any() or (listed > first_bar).any():
+                raise ValueError(f"TuShare historical listing date is invalid for {symbol}")
+            if fetched:
+                self._atomic_write_parquet(row, path)
+            additions.append({"ts_code": symbol, "list_date": listed.iloc[0].strftime("%Y%m%d"),
+                              "list_date_source": "tushare.bak_basic",
+                              "list_date_observation_date": day})
+        if additions:
+            stock = stock.loc[~stock.ts_code.isin(missing)]
+            stock = pd.concat([stock, pd.DataFrame(additions)], ignore_index=True)
+        return stock
 
     # ------------------------------------------------------------------
     # TuShare exchange calendar — no weekday fallback for historical research
@@ -654,6 +709,63 @@ class TuShareEquityProvider:
             f"总共 {merged['con_code'].nunique()} 只唯一股票"
         )
         return result
+
+    def load_index_membership_history(
+        self, index_code: str, start_date: str, end_date: str, *, use_cache: bool = True,
+    ) -> dict[str, list[str]]:
+        """Read actual dated index weights, including a pre-window seed.
+
+        The canonical path uses these observations rather than assigning
+        semiannual weights to an invented month-end date. Missing completed
+        months are errors; current or future membership never fills the past.
+        """
+        start, end = pd.Timestamp(start_date), pd.Timestamp(end_date)
+        if start > end:
+            raise ValueError("index membership start_date exceeds end_date")
+        seed = (start.to_period("M") - 1).start_time.strftime("%Y%m%d")
+        end_key = end.strftime("%Y%m%d")
+        path = self.cache_dir / f"index_weights_v1_{index_code.replace('.', '_')}_{seed}_{end_key}.parquet"
+        frame = self._safe_read_parquet(path) if use_cache and path.exists() else None
+        fetched = frame is None
+        if fetched:
+            parts, offset = [], 0
+            while True:
+                page = self._retry_call(
+                    self.api.index_weight, index_code=index_code, start_date=seed,
+                    end_date=end_key, limit=5000, offset=offset,
+                )
+                if page is not None and not page.empty:
+                    parts.append(page)
+                if page is None or len(page) < 5000:
+                    break
+                offset += len(page)
+                if offset > 1_000_000:
+                    raise ValueError("index membership pagination did not terminate")
+            frame = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+        required = {"index_code", "con_code", "trade_date", "weight"}
+        if frame.empty or not required <= set(frame):
+            raise ValueError("historical index weights are unavailable or incomplete")
+        frame = frame.copy()
+        dates = pd.to_datetime(frame.trade_date.astype(str), format="%Y%m%d", errors="raise")
+        weights = pd.to_numeric(frame.weight, errors="raise")
+        if (frame[list(required)].isna().any().any() or not frame.index_code.eq(index_code).all()
+                or frame.duplicated(["trade_date", "con_code"]).any()
+                or (weights <= 0).any() or not np.isfinite(weights).all()
+                or (dates < pd.Timestamp(seed)).any() or (dates > end).any()):
+            raise ValueError("invalid or duplicate historical index weights")
+        totals = weights.groupby(dates).sum()
+        expected_size = {"000300.SH": 300, "000905.SH": 500, "000852.SH": 1000, "932000.CSI": 2000}.get(index_code)
+        if expected_size is not None and not frame.groupby(dates).size().eq(expected_size).all():
+            raise ValueError("historical index weights have incomplete constituent counts")
+        if not totals.between(99., 101.).all():
+            raise ValueError("historical index weights do not form complete portfolios")
+        completed = set(pd.period_range(pd.Timestamp(seed), end.to_period("M").start_time - pd.Timedelta(days=1), freq="M"))
+        if completed - set(dates.dt.to_period("M")) or not (dates <= start).any():
+            raise ValueError("historical index weights are missing completed months or the pre-window seed")
+        frame["trade_date"] = dates.dt.strftime("%Y%m%d")
+        if fetched:
+            self._atomic_write_parquet(frame, path)
+        return {str(day): group.con_code.astype(str).tolist() for day, group in frame.groupby("trade_date", sort=True)}
 
     def load_index_bars_range(
         self,
@@ -1185,9 +1297,10 @@ class TuShareEquityProvider:
 
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
-            if cached is not None and not cached.empty:
+            if cached is not None:
                 # Check if cache has TS-1 expanded fields
-                if _TS1_REQUIRED_COLS.issubset(cached.columns):
+                if (_TS1_REQUIRED_COLS.issubset(cached.columns)
+                        and (not cached.empty or {"ts_code", "ann_date", "end_date"} <= set(cached))):
                     return cached
                 logger.info(
                     "fina_indicator cache outdated for %s (missing TS-1 fields), re-fetching",
@@ -1255,7 +1368,7 @@ class TuShareEquityProvider:
 
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
-            if cached is not None and not cached.empty:
+            if cached is not None and (not cached.empty or {"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"} <= set(cached)):
                 _validate_pit_statement_rows(cached)
                 return cached
 
@@ -1312,7 +1425,7 @@ class TuShareEquityProvider:
 
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
-            if cached is not None and not cached.empty:
+            if cached is not None and (not cached.empty or {"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"} <= set(cached)):
                 _validate_pit_statement_rows(cached)
                 return cached
 
@@ -1372,8 +1485,9 @@ class TuShareEquityProvider:
         _TS1_CF_REQUIRED = {"c_pay_acq_const_fiolta"}
         if use_cache and cache_path.exists():
             cached = self._safe_read_parquet(cache_path)
-            if cached is not None and not cached.empty:
-                if _TS1_CF_REQUIRED.issubset(cached.columns):
+            if cached is not None:
+                if (_TS1_CF_REQUIRED.issubset(cached.columns)
+                        and (not cached.empty or {"ts_code", "ann_date", "f_ann_date", "end_date", "report_type"} <= set(cached))):
                     _validate_pit_statement_rows(cached)
                     return cached
                 logger.info(

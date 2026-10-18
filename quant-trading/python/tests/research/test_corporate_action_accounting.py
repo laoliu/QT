@@ -221,3 +221,43 @@ def test_tushare_dividend_mapping_preserves_dates_and_ignores_proposals() -> Non
     assert action.share_list_date.isoformat() == "2024-02-07"
     with pytest.raises(ValueError, match="settlement"):
         normalize_tushare_dividends(history.drop(columns="pay_date"))
+
+
+def test_tushare_null_distribution_requires_an_absent_settlement_leg() -> None:
+    row = {"ts_code": "600000.SH", "end_date": "20231231", "ann_date": "20240130",
+           "div_proc": "实施", "record_date": "20240201", "ex_date": "20240202",
+           "pay_date": None, "div_listdate": "20240207", "cash_div_tax": np.nan, "stk_div": 0.3}
+    action, = normalize_tushare_dividends(pd.DataFrame([row]))
+    assert action.cash_per_share == 0 and action.bonus_per_share == 0.3
+    with pytest.raises(ValueError, match="unknown.*amount"):
+        normalize_tushare_dividends(pd.DataFrame([{**row, "pay_date": "20240206"}]))
+    with pytest.raises(ValueError, match="unknown.*amount"):
+        normalize_tushare_dividends(pd.DataFrame([{**row, "stk_div": np.nan}]))
+    cash, = normalize_tushare_dividends(pd.DataFrame([
+        {**row, "cash_div_tax": 1., "stk_div": np.nan, "pay_date": "20240206", "div_listdate": None},
+    ]))
+    assert cash.cash_per_share == 1 and cash.bonus_per_share == 0
+
+
+def test_tushare_same_day_distinct_periods_sum_without_double_counting_duplicates() -> None:
+    row = {"ts_code": "600000.SH", "end_date": "20231231", "ann_date": "20240501",
+           "div_proc": "实施", "record_date": "20240601", "ex_date": "20240602",
+           "pay_date": "20240606", "div_listdate": None, "cash_div_tax": .3, "stk_div": 0.}
+    quarterly = {**row, "end_date": "20240331", "ann_date": "20240502", "cash_div_tax": .6}
+    action, = normalize_tushare_dividends(pd.DataFrame([row, row, quarterly]))
+    assert action.cash_per_share == pytest.approx(.9)
+    assert action.announce_date.isoformat() == "2024-05-02"
+    with pytest.raises(ValueError, match="conflicting.*terms"):
+        normalize_tushare_dividends(pd.DataFrame([row, {**row, "cash_div_tax": .4}]))
+    with pytest.raises(ValueError, match="incompatible.*settlement"):
+        normalize_tushare_dividends(pd.DataFrame([row, {**quarterly, "pay_date": "20240607"}]))
+
+
+def test_tushare_cash_only_snapshot_ignores_out_of_scope_incomplete_archives() -> None:
+    old = {"ts_code": "600000.SH", "end_date": "19931231", "ann_date": "19940401",
+           "div_proc": "实施", "record_date": None, "ex_date": None,
+           "pay_date": None, "div_listdate": None, "cash_div_tax": 1., "stk_div": 0.}
+    future = {**old, "ann_date": "20250101"}
+    assert normalize_tushare_dividends(pd.DataFrame([old, future]), start_date="20230101", end_date="20241231") == []
+    with pytest.raises(ValueError, match="requires a valid"):
+        normalize_tushare_dividends(pd.DataFrame([future]), start_date="20230101", end_date="20251231")

@@ -6,7 +6,7 @@ input even when the symbol has no bar on its ex-date.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from collections import defaultdict
 from datetime import date
 import json
@@ -105,32 +105,83 @@ def read_corporate_actions(panel: pd.DataFrame) -> list[CorporateAction]:
     return sorted(actions, key=lambda a: (a.ex_date, a.action_id))
 
 
-def normalize_tushare_dividends(history: pd.DataFrame) -> list[CorporateAction]:
-    """Normalize implemented TuShare dividends, preserving settlement dates."""
+def normalize_tushare_dividends(
+    history: pd.DataFrame, *, start_date=None, end_date=None,
+) -> list[CorporateAction]:
+    """Normalize implemented terms within an initially cash-only run's scope.
+
+    TuShare represents an absent distribution leg as null. It is absent only
+    when the other leg is positive and this leg has no settlement date;
+    a missing amount with a scheduled settlement remains an error.
+    """
     if history.empty:
         return []
     required = {"ts_code", "end_date", "ann_date", "div_proc", "record_date", "ex_date", "cash_div_tax", "stk_div"}
     if required - set(history):
         raise ValueError(f"TuShare dividend history missing fields: {sorted(required - set(history))}")
-    actions = []
+    actions = {}
     for row in history.to_dict("records"):
         if row["div_proc"] != "实施":
-            continue
-        cash, bonus = float(row["cash_div_tax"]), float(row["stk_div"])
-        if cash == bonus == 0:
             continue
         def optional_date(name):
             value = row.get(name)
             return None if value is None or pd.isna(value) or value == "" else pd.Timestamp(value).date()
         announced = optional_date("imp_ann_date") or optional_date("ann_date")
-        actions.append(CorporateAction(
+        ex_date = optional_date("ex_date")
+        known_dates = [value for value in (
+            announced, optional_date("record_date"), ex_date,
+            optional_date("pay_date"), optional_date("div_listdate"),
+        ) if value is not None]
+        if ((start_date is not None and (
+                (ex_date is not None and ex_date < pd.Timestamp(start_date).date())
+                or (known_dates and max(known_dates) < pd.Timestamp(start_date).date())))
+                or (end_date is not None and announced is not None and announced > pd.Timestamp(end_date).date())):
+            continue
+        cash, bonus = row["cash_div_tax"], row["stk_div"]
+        if pd.isna(cash) and pd.notna(bonus) and float(bonus) > 0 and optional_date("pay_date") is None:
+            cash = 0.
+        if pd.isna(bonus) and pd.notna(cash) and float(cash) > 0 and optional_date("div_listdate") is None:
+            bonus = 0.
+        if pd.isna(cash) or pd.isna(bonus):
+            raise ValueError(f"unknown TuShare dividend amount for {row['ts_code']} on {row['ex_date']}")
+        cash, bonus = float(cash), float(bonus)
+        if cash == bonus == 0:
+            continue
+        action = CorporateAction(
             action_id=f"tushare:{row['ts_code']}:{row['end_date']}:{row['ex_date']}",
             symbol=str(row["ts_code"]), announce_date=announced,
-            record_date=optional_date("record_date"), ex_date=optional_date("ex_date"),
+            record_date=optional_date("record_date"), ex_date=ex_date,
             cash_per_share=cash, bonus_per_share=bonus,
             pay_date=optional_date("pay_date"), share_list_date=optional_date("div_listdate"),
+        )
+        key = (action.symbol, str(row["end_date"]), action.ex_date)
+        if key in actions and actions[key] != action:
+            raise ValueError(f"conflicting TuShare dividend terms for {action.symbol} on {action.ex_date}")
+        actions[key] = action
+    by_effective = defaultdict(list)
+    for action in actions.values():
+        by_effective[(action.symbol, action.ex_date)].append(action)
+    combined = []
+    for (symbol, ex_date), group in sorted(by_effective.items()):
+        if len(group) == 1:
+            combined.append(group[0])
+            continue
+        # Distinct report periods may distribute on the same effective date.
+        # Sum independent legs only when their entitlement/settlement agrees;
+        # duplicates within a report period were checked above, not summed.
+        records = {action.record_date for action in group}
+        payments = {action.pay_date for action in group if action.cash_per_share > 0}
+        listings = {action.share_list_date for action in group if action.bonus_per_share > 0}
+        if len(records) != 1 or len(payments) > 1 or len(listings) > 1:
+            raise ValueError(f"incompatible TuShare dividend settlement for {symbol} on {ex_date}")
+        combined.append(replace(
+            group[0], action_id="tushare:combined:" + "|".join(sorted(a.action_id for a in group)),
+            announce_date=max(a.announce_date for a in group),
+            cash_per_share=sum(a.cash_per_share for a in group),
+            bonus_per_share=sum(a.bonus_per_share for a in group),
+            pay_date=next(iter(payments), None), share_list_date=next(iter(listings), None),
         ))
-    return actions
+    return combined
 
 
 def raw_accounting_bars(panel: pd.DataFrame) -> pd.DataFrame:

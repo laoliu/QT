@@ -28,6 +28,7 @@ class ResearchConfig:
     """Default research policy for A-share low-frequency strategies."""
 
     data_provider: str = "tushare_pit"
+    financial_conflict_policy: str = "raise"
     adjust: str = "point_in_time"
     feature_version: str = "cn_equity_v1"
     universe: str = "csi500"
@@ -74,6 +75,8 @@ class ResearchConfig:
             raise ValueError("max_style_exposure requires registered causal feature columns")
         if self.data_provider != "tushare_pit":
             raise ValueError("canonical historical research requires data_provider=tushare_pit")
+        if self.financial_conflict_policy not in {"raise", "quarantine"}:
+            raise ValueError("financial_conflict_policy must be raise or quarantine")
         if self.model_type not in {"lightgbm", "elasticnet"}:
             raise ValueError("canonical research pipeline supports model_type=lightgbm or elasticnet")
         if self.adjust != "point_in_time":
@@ -95,6 +98,8 @@ class ResearchConfig:
 
     def model_config_hash(self) -> str:
         config = asdict(self)
+        if self.financial_conflict_policy == "raise":
+            config.pop("financial_conflict_policy")  # Preserve strict legacy run identities.
         if not self.max_style_exposure:
             config.pop("max_style_exposure")  # Preserve existing default run/book identities.
         payload = json.dumps(config, sort_keys=True, ensure_ascii=False, default=list)
@@ -161,6 +166,22 @@ def build_forward_labels(
     return out
 
 
+def monthly_rebalance_dates(metadata: dict[str, Any]) -> list[date] | None:
+    """Return observed month-end sessions only for calendar-complete months.
+
+    A label cutoff or a partially observed current month must never invent a
+    month-end at the last prediction date. Legacy standalone callers without
+    calendar metadata retain their explicit compatibility behavior.
+    """
+    calendar = metadata.get("listing_calendar")
+    if not isinstance(calendar, dict):
+        return None
+    sessions = pd.Series(pd.to_datetime(calendar["open_sessions"], errors="raise"))
+    months = sessions.dt.to_period("M")
+    complete = months.dt.end_time.dt.normalize().le(pd.Timestamp(calendar["end_date"]))
+    return sessions[complete].groupby(months[complete]).max().dt.date.tolist()
+
+
 def build_target_positions(
     predictions: pd.DataFrame,
     *,
@@ -172,6 +193,7 @@ def build_target_positions(
     style_reference: pd.DataFrame | None = None,
     run_id: str = "",
     model_id: str = "",
+    rebalance_dates: list[date] | None = None,
 ) -> list[TargetPosition]:
     """Build ranked capped targets, optionally reweighted within style budgets."""
     required = {"trade_date", "symbol", "score"}
@@ -184,7 +206,8 @@ def build_target_positions(
     normalized["trade_date"] = pd.to_datetime(normalized["trade_date"]).dt.date
     period = pd.to_datetime(normalized["trade_date"].astype(str)).dt.to_period("M")
     last_dates = normalized.assign(_period=period).groupby("_period")["trade_date"].max()
-    normalized = normalized[normalized["trade_date"].isin(set(last_dates))]
+    signal_dates = set(last_dates) if rebalance_dates is None else set(rebalance_dates)
+    normalized = normalized[normalized["trade_date"].isin(signal_dates)]
     from .style import normalize_style_limits, style_zscores, constrain_style_weights
 
     style_limits = normalize_style_limits(max_style_exposure)
@@ -277,7 +300,7 @@ class ResearchPipeline:
         if pit_provider is None:
             from aipha.data.tushare_pit_provider import TuSharePITProvider
 
-            pit_provider = TuSharePITProvider(equity_provider)
+            pit_provider = TuSharePITProvider(equity_provider, conflict_policy=self.config.financial_conflict_policy)
 
         spec = SnapshotSpec(
             start_date=start_date,
@@ -286,6 +309,7 @@ class ResearchPipeline:
             benchmark_code=benchmark_code or index_code,
             feature_version=self.config.feature_version,
             adjust=self.config.adjust,
+            financial_conflict_policy=self.config.financial_conflict_policy,
         )
         snapshot = build_tushare_snapshot(
             equity_provider,
@@ -399,6 +423,9 @@ class ResearchPipeline:
         if data_snapshot_id is not None and data_snapshot_id != metadata["data_snapshot_id"]:
             raise ValueError("data_snapshot_id does not match frozen snapshot metadata")
         data_snapshot_id = metadata["data_snapshot_id"]
+        if (self.config.financial_conflict_policy == "raise"
+                and metadata.get("financial_data_quality", {}).get("policy") == "quarantine"):
+            raise ValueError("quarantined financial snapshot requires financial_conflict_policy=quarantine")
 
         oos, wf_summary, selector = self.train_oos(source)
         if oos.empty:
@@ -429,6 +456,7 @@ class ResearchPipeline:
             style_reference=_filter_historical_universe(source, min_listing_days=self.config.min_listing_days),
             run_id=self.run_id,
             model_id=self.run_id,
+            rebalance_dates=monthly_rebalance_dates(metadata),
         )
         from .backtest import run_portfolio_backtest
 
@@ -490,6 +518,7 @@ class ResearchPipeline:
             "provider": "aipha_research",
             "data_snapshot_id": data_snapshot_id,
             "feature_version": self.config.feature_version,
+            "listing_calendar": metadata.get("listing_calendar"),
             "start_date": str(oos["trade_date"].min()),
             "end_date": str(oos["trade_date"].max()),
             "parent_snapshot_content_sha256": metadata.get("snapshot_content_sha256", ""),
@@ -558,6 +587,7 @@ class ResearchPipeline:
             "feature_missing_rate_scope": "historical_universe_model_columns",
             "evaluation_window": backtest["evaluation_window"],
             "snapshot_metadata": metadata,
+            "financial_data_quality": metadata.get("financial_data_quality", {}),
             "accounting": backtest["accounting"],
             "final_positions": backtest["final_positions"],
             "artifact_attestation": {

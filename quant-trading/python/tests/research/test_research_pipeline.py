@@ -408,13 +408,18 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
         def load_trade_calendar(self, start_date, end_date, **kwargs):
             days = pd.date_range(start_date, end_date)
             return pd.DataFrame({"cal_date": days, "is_open": days.dayofweek < 5})
-        def load_daily_bars_range(self, *args, **kwargs): return market.copy()
+        def load_daily_bars_range(self, *args, **kwargs):
+            return pd.concat([market, market.iloc[:2].assign(ts_code="999999.SZ")], ignore_index=True)
         def load_daily_basic_range(self, *args, **kwargs): return pd.DataFrame()
         def load_stock_basic(self, **kwargs):
             return pd.DataFrame({"ts_code": symbols, "list_date": ["20200101"] * 2})
+        def load_historical_listing_dates(self, observed_market, **kwargs):
+            pd.testing.assert_frame_equal(observed_market, market)
+            return self.load_stock_basic(**kwargs).assign(list_date_source="tushare.stock_basic")
         def load_adj_factor_bulk(self, *args, **kwargs):
             return pd.DataFrame([{"ts_code": s, "trade_date": d, "adj_factor": 1.0} for d in dates for s in symbols])
-        def load_index_members_snapshots(self, *args, **kwargs): return {"20240101": symbols}
+        def load_index_membership_history(self, *args, **kwargs): return {"20240101": symbols}
+        def load_index_members_snapshots(self, *args, **kwargs): pytest.fail("used semiannual compatibility snapshots")
         def load_index_bars_range(self, *args, **kwargs):
             return pd.DataFrame({"trade_date": dates, "close": [100.0, 101.0]})
         def load_limit_prices_range(self, *args, **kwargs):
@@ -446,6 +451,9 @@ def test_tushare_pipeline_entry_builds_snapshot_before_training(tmp_path: Path, 
     assert {"momentum_5", "volatility_20", "feature_version"} <= set(observed["frame"].columns)
     assert "benchmark_close" in observed["frame"]
     assert observed["frame"]["is_index_member"].all()
+    assert observed["frame"].list_date_source.eq("tushare.stock_basic").all()
+    assert set(observed["frame"].symbol) == set(symbols)
+    assert observed["frame"].attrs["snapshot_metadata"]["universe_history"]["historical_candidates"] == 2
     from aipha.research.corporate_actions import read_corporate_actions
     action, = read_corporate_actions(observed["frame"])
     assert action.pay_date.isoformat() == "2024-01-05"
@@ -645,6 +653,18 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
     assert (artifact_dir / "target_positions.json").is_file()
     plan_paths = result["execution_plans"]
     assert plan_paths
+    # Re-exporting persisted OOS predictions must preserve the source calendar:
+    # neither the label cutoff nor a partial month can become a signal date.
+    from aipha.engines.aipha_ml_engine import run as canonical_run
+    exported = canonical_run({
+        "action": "export", "predictionsPath": str(artifact_dir / "oos_predictions.parquet"),
+        "runId": result["run_id"], "modelId": result["run_id"],
+        "outputPath": str(tmp_path / "reexport.json"),
+    })
+    assert exported["ok"], exported
+    assert {Path(path).name for path in exported["data"]["executionPlanPaths"]} == {
+        Path(path).name for path in plan_paths
+    }
     plan = read_execution_plan(artifact_dir / plan_paths[0])
     assert plan.mode == "paper"
     assert plan.run_id == result["run_id"]

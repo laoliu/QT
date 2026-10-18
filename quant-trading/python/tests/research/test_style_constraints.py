@@ -142,8 +142,10 @@ def test_yaml_and_hash_bind_style_policy_but_preserve_old_default_hash(tmp_path)
     assert ResearchConfig(max_style_exposure=[]).max_style_exposure == ()
     legacy = asdict(default)
     legacy.pop("max_style_exposure")
+    legacy.pop("financial_conflict_policy")
     expected = hashlib.sha256(json.dumps(legacy, sort_keys=True, ensure_ascii=False, default=list).encode()).hexdigest()[:16]
     assert default.model_config_hash() == expected
+    assert replace(default, financial_conflict_policy="quarantine").model_config_hash() != expected
     assert _policy().model_config_hash() != replace(_policy(), max_style_exposure={}).model_config_hash()
 
 

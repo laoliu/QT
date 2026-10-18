@@ -63,3 +63,26 @@ def test_finite_but_overflowing_factor_is_rejected_before_features(monkeypatch):
     monkeypatch.setattr(snapshots, "build_cn_equity_features", lambda _: pytest.fail("computed overflowing features"))
     with pytest.raises(ValueError, match="adjusted.*finite"):
         snapshots.assemble_tushare_snapshot(market, **kwargs)
+
+
+def test_listing_source_survives_feature_materialization():
+    market, kwargs = _inputs()
+    kwargs["stock_basic"] = kwargs["stock_basic"].assign(
+        list_date_source="tushare.bak_basic", list_date_observation_date="20240103",
+    )
+    result = snapshots.assemble_tushare_snapshot(market, **kwargs).panel
+    assert result.list_date_source.eq("tushare.bak_basic").all()
+    assert result.list_date_observation_date.eq("20240103").all()
+
+
+def test_provider_financial_aliases_preserve_quarantine_nulls():
+    source = pd.DataFrame({"trade_date": ["20240102", "20240103"], "symbol": "600000.SH",
+                           "close": 10., "volume": 100., "amount": 1000.,
+                           "gross_margin": [None, 20.], "or_yoy": [3., None]})
+    before = source.copy(deep=True)
+    result = snapshots.build_cn_equity_features(source)
+    assert pd.isna(result.factor_grossprofit_margin.iloc[0])
+    assert result.factor_grossprofit_margin.iloc[1] == 20.
+    assert result.factor_revenue_yoy.iloc[0] == 3.
+    assert pd.isna(result.factor_revenue_yoy.iloc[1])
+    pd.testing.assert_frame_equal(source, before)

@@ -45,9 +45,9 @@
 
 路径相对 Python 项目根目录解析；快照模板必须传 `--trade-date`，固定路径默认使用已验证的快照结束日，快照必须恰好结束于审计日。新版 profile 声明即纳入审计，畸形或嵌套声明不能被归为 `not_applicable`。`test_audit_paper_profile.py` 覆盖这些边界，并检查审计前后文件字节不变、不启动进程、不读取模型。
 
-进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存也有实际数据，其动态统计及各表口径见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口。规范 `train_tushare` 的默认缓存已接到统一路径解析，Provider 工厂按缓存根分别复用实例，避免仅查项目内空目录或长驻进程沿用其他配置的目录。
+进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存也有实际数据，其动态统计及各表口径见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务在首次盘点时有缺口，随后已使用新账户完成本轮研究区间的补齐，以下旧账户限额段落仅保留历史证据。规范 `train_tushare` 的默认缓存已接到统一路径解析，Provider 工厂按缓存根分别复用实例，避免仅查项目内空目录或长驻进程沿用其他配置的目录。
 
-普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。经过额度窗口后，已用单次范围请求取得并校验 1990-12-19 至 2026-10-16 的 13,086 个日历日，导入共享原始缓存，Provider 离线读取验证通过。退市资料请求则受到每天 5 次限额限制；其他缺失配套输入仍需补齐，目前没有可直接训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
+首次盘点时普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。经过额度窗口后，已用单次范围请求取得并校验 1990-12-19 至 2026-10-16 的 13,086 个日历日，导入共享原始缓存，Provider 离线读取验证通过。退市资料请求当时受到旧账户每天 5 次限额限制；新账户已验证并补齐输入，不再受该阻塞。本次真实快照使用 ignored `.env` 中独立生成的本机签名密钥；没有使用 fixture 密钥，也没有将密钥写入报告或提交。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
 
 仓库 `config.json` 和本机 `config.local.json` 的交易字段在本次核对时均为 paper/broker paper、确认开启、执行计划必需、自动启动关闭。本机覆盖文件未纳入 Git；该结论是本机时点检查，其他部署必须检查各自覆盖配置。
 
@@ -78,3 +78,5 @@ npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admi
 日历加载改为单次范围请求，并复用更大范围缓存及旧年度分区后，运行 `python -m pytest tests/data/test_tushare_equity_provider.py tests/research/test_market_calendar.py tests/research/test_listing_sessions.py tests/research/test_research_completion.py tests/research/test_research_pipeline.py tests/scripts/test_research_cache_paths.py -q --basetemp=.pytest-tmp-calendar-range --tb=short`：**144 passed、2 warnings**。覆盖缓存重叠冲突拒绝、不完整响应拒绝和 PIT 到 Paper fixture；另已用实际 TuShare 全历史日历验证 Provider 的纯离线读取。TypeScript 最新核验为类型检查通过、上述 8 个文件 **156 项测试通过**；本轮没有 TypeScript 改动。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。
+
+2026-10-18 新账户数据接入、财务按指标隔离、历史上市资料、月度成分、矢量化 PIT 特征、实际月末和分红规范化完成后，按上列 Python 命令加上 `tests/data/test_tushare_equity_provider.py`，使用 `--basetemp=.pytest-tmp-real-equity-final`：**1228 passed、8 skipped、44 warnings**。定向分红/PIT/训练到 Paper 回归另为 **101 passed、2 warnings**。新增端到端断言确认从落盘 OOS 文件再次导出的调仓日期与原研究计划一致，不因标签截止而提前调仓。CLI 的产物目录、报告与计划路径展示已按规范管线实际返回字段修正。本轮自有改动不涉及 TypeScript；随后仍复核当前工作区的 TypeScript 类型检查与上列 8 个文件，均通过，**156 项测试通过**。

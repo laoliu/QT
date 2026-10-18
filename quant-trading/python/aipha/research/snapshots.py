@@ -45,6 +45,11 @@ def _snapshot_signing_key(key: str | bytes | None = None) -> bytes | None:
 
 def _signature_payload(metadata: dict[str, Any]) -> bytes:
     payload = {key: metadata.get(key) for key in _SIGNED_SOURCE_FIELDS}
+    # Optional extension keeps old signatures verifiable while authenticating
+    # the complete quality disclosure on newly generated snapshots.
+    for field in ("financial_data_quality", "universe_history", "corporate_action_policy"):
+        if field in metadata:
+            payload[field] = metadata[field]
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -219,6 +224,7 @@ class SnapshotSpec:
     benchmark_code: str = "000905.SH"
     feature_version: str = "cn_equity_v1"
     adjust: str = "point_in_time"
+    financial_conflict_policy: str = "raise"
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,7 +347,10 @@ def assemble_tushare_snapshot(
 
     out = market.copy()
     out["trade_date"] = pd.to_datetime(out["trade_date"]).dt.strftime("%Y%m%d")
-    out = out.merge(stock_basic[["ts_code", "list_date"]], on="ts_code", how="left", validate="many_to_one")
+    listing_columns = [column for column in (
+        "ts_code", "list_date", "list_date_source", "list_date_observation_date",
+    ) if column in stock_basic]
+    out = out.merge(stock_basic[listing_columns], on="ts_code", how="left", validate="many_to_one")
     from aipha.universe.historical import LISTING_DAYS_BASIS, listing_session_counts, normalize_trade_calendar
 
     out["listing_days"] = listing_session_counts(out["trade_date"], out["list_date"], trade_calendar)
@@ -408,7 +417,9 @@ def assemble_tushare_snapshot(
     if dividend_history is not None:
         from .corporate_actions import attach_corporate_actions, normalize_tushare_dividends
 
-        panel = attach_corporate_actions(panel, normalize_tushare_dividends(dividend_history))
+        panel = attach_corporate_actions(panel, normalize_tushare_dividends(
+            dividend_history, start_date=spec.start_date, end_date=spec.end_date,
+        ))
     panel["feature_version"] = spec.feature_version
     digest = hashlib.sha256(pd.util.hash_pandas_object(panel.sort_values(["trade_date", "symbol"]), index=False).values.tobytes()).hexdigest()
     metadata = {
@@ -421,6 +432,12 @@ def assemble_tushare_snapshot(
         "benchmark_code": spec.benchmark_code,
         "adjust": spec.adjust,
         "listing_calendar": calendar_metadata,
+        "corporate_action_policy": {
+            "initial_holdings": "cash_only",
+            "event_scope": "ex_date_on_or_after_start_and_announced_by_end",
+            "null_distribution_leg": "absent_only_if_other_leg_positive_and_no_settlement_date",
+            "duplicate_terms": "deduplicate_identical_report_periods_sum_distinct_periods_with_matching_settlement",
+        },
     }
     metadata = attest_snapshot_metadata(panel, metadata)
     panel.attrs["snapshot_metadata"] = metadata
@@ -434,6 +451,11 @@ def build_cn_equity_features(panel: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"feature input missing columns: {', '.join(sorted(missing))}")
     out = panel.copy()
+    # Preserve the PIT provider's public field names while mapping their
+    # canonical factor aliases. Both remain null for quarantined events.
+    for canonical, source in (("grossprofit_margin", "gross_margin"), ("revenue_yoy", "or_yoy")):
+        if canonical not in out and source in out:
+            out[canonical] = out[source]
     out["trade_date"] = pd.to_datetime(out["trade_date"], errors="raise")
     out = out.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
     grouped = out.groupby("symbol", sort=False, group_keys=False)
@@ -502,25 +524,19 @@ def join_pit_financials(panel: pd.DataFrame, snapshots: pd.DataFrame) -> pd.Data
     if result["_asof_date"].isna().any():
         raise ValueError("PIT market trade_date cannot be missing")
     result["_pit_row_id"] = np.arange(len(result))
+    # Join thin date/identity tables globally by symbol instead of copying the
+    # growing wide market frame once per symbol and metric.
+    left = result[["symbol", "_asof_date", "_pit_row_id"]].sort_values("_asof_date", kind="stable")
+    left["symbol"] = left.symbol.astype(object)
     for metric, metric_rows in facts.groupby("metric_name", sort=True):
-        events = {}
-        for symbol, history in metric_rows.groupby("symbol", sort=False):
-            # Once a newer period is visible, a late correction of an older
-            # period must not replace the current fundamental observation.
-            history = history.loc[history.report_date.eq(history.report_date.cummax())]
-            history = history.drop_duplicates("announce_date", keep="last")
-            events[symbol] = history[["announce_date", "value"]].rename(columns={"value": metric})
-        merged_parts = []
-        for symbol, rows in result.groupby("symbol", sort=False):
-            left = rows.sort_values("_asof_date")
-            right = events.get(symbol)
-            if right is None:
-                left[metric] = np.nan
-            else:
-                left = pd.merge_asof(left, right, left_on="_asof_date", right_on="announce_date", direction="backward")
-                left = left.drop(columns="announce_date")
-            merged_parts.append(left)
-        result = pd.concat(merged_parts).sort_values("_pit_row_id") if merged_parts else result.assign(**{metric: np.nan})
+        ordered = metric_rows.sort_values(["symbol", "announce_date", "report_date"], kind="stable")
+        # A late revision of an older period cannot replace a newer report.
+        newest = ordered.groupby("symbol", sort=False).report_date.cummax()
+        events = ordered.loc[ordered.report_date.eq(newest)].drop_duplicates(["symbol", "announce_date"], keep="last")
+        right = events[["symbol", "announce_date", "value"]].sort_values("announce_date", kind="stable")
+        right["symbol"] = right.symbol.astype(object)
+        merged = pd.merge_asof(left, right, by="symbol", left_on="_asof_date", right_on="announce_date", direction="backward")
+        result[metric] = merged.sort_values("_pit_row_id", kind="stable")["value"].to_numpy()
     result = result.drop(columns=["_asof_date", "_pit_row_id"])
     result.index = panel.index
     return result
@@ -589,11 +605,14 @@ def _historical_membership(
         raise ValueError("historical index snapshots are required")
     normalized = {pd.Timestamp(key).strftime("%Y%m%d"): set(values) for key, values in snapshots.items()}
     keys = sorted(normalized)
-    result: list[bool] = []
-    for raw_date, symbol in zip(trade_dates, symbols):
-        day = pd.Timestamp(raw_date).strftime("%Y%m%d")
-        prior = [key for key in keys if key <= day]
-        result.append(bool(prior and symbol in normalized[prior[-1]]))
+    days = pd.to_datetime(trade_dates, format="mixed").dt.strftime("%Y%m%d").to_numpy()
+    codes = symbols.to_numpy()
+    visible = np.searchsorted(np.asarray(keys), days, side="right") - 1
+    result = np.zeros(len(days), dtype=bool)
+    for index in np.unique(visible):
+        if index >= 0:
+            positions = np.flatnonzero(visible == index)
+            result[positions] = pd.Series(codes[positions]).isin(normalized[keys[index]]).to_numpy()
     return pd.Series(result, index=trade_dates.index, dtype=bool)
 
 
@@ -622,21 +641,25 @@ def _historical_industry(
     if (intervals["out_date"].notna() & (intervals["out_date"] < intervals["in_date"])).any():
         raise ValueError("historical industry out_date cannot precede in_date")
     by_symbol = {symbol: group for symbol, group in intervals.groupby("ts_code", sort=False)}
-    labels: list[str | None] = []
-    for raw_date, symbol in zip(trade_dates, symbols):
-        candidates = by_symbol.get(str(symbol))
-        day = pd.Timestamp(raw_date)
+    labels = np.full(len(trade_dates), None, dtype=object)
+    days = pd.to_datetime(trade_dates, format="mixed", errors="raise").astype("datetime64[ns]").to_numpy()
+    observations = pd.DataFrame({"symbol": symbols.astype(str).to_numpy()})
+    for symbol, positions in observations.groupby("symbol", sort=False).indices.items():
+        candidates = by_symbol.get(symbol)
         if candidates is None:
-            labels.append(None)
             continue
-        visible = candidates.loc[
-            (candidates["in_date"] <= day)
-            & (candidates["out_date"].isna() | (candidates["out_date"] >= day))
-        ]
-        names = visible["industry_name"].dropna().unique().tolist()
-        if len(names) > 1:
-            raise ValueError(f"ambiguous historical industry assignment for {symbol} on {day.date()}")
-        labels.append(names[0] if names else None)
+        observed = days[positions]
+        for record in candidates.itertuples(index=False):
+            active = observed >= record.in_date.to_datetime64()
+            if pd.notna(record.out_date):
+                active &= observed <= record.out_date.to_datetime64()
+            selected = positions[active]
+            previous = labels[selected]
+            conflict = pd.notna(previous) & (previous != record.industry_name)
+            if conflict.any():
+                day = pd.Timestamp(days[selected[np.flatnonzero(conflict)[0]]]).date()
+                raise ValueError(f"ambiguous historical industry assignment for {symbol} on {day}")
+            labels[selected] = record.industry_name
     return pd.Series(labels, index=trade_dates.index, dtype="string")
 
 
@@ -653,10 +676,22 @@ def build_tushare_snapshot(
     if pit_provider is None and hasattr(equity_provider, "api"):
         from aipha.data.tushare_pit_provider import TuSharePITProvider
 
-        pit_provider = TuSharePITProvider(equity_provider)
+        pit_provider = TuSharePITProvider(equity_provider, conflict_policy=spec.financial_conflict_policy)
     market = equity_provider.load_daily_bars_range(spec.start_date, spec.end_date, use_cache=use_cache)
+    membership_loader = getattr(equity_provider, "load_index_membership_history", None)
+    snapshots = None
+    if callable(membership_loader):
+        snapshots = membership_loader(spec.index_code, spec.start_date, spec.end_date, use_cache=use_cache)
+        candidates = {symbol for members in snapshots.values() for symbol in members}
+        # Retain every date for every historical candidate, including dates
+        # outside its membership. Labels and liquidation still need those bars.
+        market = market.loc[market.ts_code.isin(candidates)].copy()
+        if market.empty:
+            raise ValueError("historical index candidates have no market observations")
     basic = equity_provider.load_daily_basic_range(spec.start_date, spec.end_date, use_cache=use_cache)
-    stock = equity_provider.load_stock_basic(use_cache=use_cache)
+    listing_loader = getattr(equity_provider, "load_historical_listing_dates", None)
+    stock = (listing_loader(market, use_cache=use_cache) if callable(listing_loader)
+             else equity_provider.load_stock_basic(use_cache=use_cache))
     calendar_loader = getattr(equity_provider, "load_trade_calendar", None)
     if not callable(calendar_loader):
         raise ValueError("TuShare equity provider must implement load_trade_calendar")
@@ -695,14 +730,15 @@ def build_tushare_snapshot(
         )
     start_year = int(spec.start_date[:4])
     end_year = int(spec.end_date[:4])
-    snapshots = equity_provider.load_index_members_snapshots(spec.index_code, start_year, end_year, use_cache=use_cache)
+    if snapshots is None:
+        snapshots = equity_provider.load_index_members_snapshots(spec.index_code, start_year, end_year, use_cache=use_cache)
     industry_loader = getattr(equity_provider, "load_sw_industry_history", None)
     industry_history = industry_loader(level="L1", use_cache=use_cache) if callable(industry_loader) else None
     dividend_loader = getattr(equity_provider, "load_dividend_history", None)
     dividend_history = dividend_loader(
         sorted(market["ts_code"].dropna().astype(str).unique()), use_cache=use_cache,
     ) if callable(dividend_loader) else None
-    return assemble_tushare_snapshot(
+    result = assemble_tushare_snapshot(
         market, daily_basic=basic, stock_basic=stock,
         index_snapshots=snapshots, st_status=st_status,
         limit_prices=limit_prices, financial_snapshots=financial_snapshots,
@@ -710,6 +746,20 @@ def build_tushare_snapshot(
         dividend_history=dividend_history,
         trade_calendar=trade_calendar,
     )
+    quality_loader = getattr(pit_provider, "get_data_quality_report", None)
+    if callable(membership_loader):
+        result.metadata["universe_history"] = {
+            "provider": "tushare", "endpoint": "index_weight", "observation_frequency": "monthly",
+            "membership_policy": "last_observed_weights_asof_trade_date",
+            "observed_dates": sorted(snapshots), "historical_candidates": len(candidates),
+            "retains_nonmember_dates_for_labels_and_liquidation": True,
+        }
+    if callable(quality_loader):
+        result.metadata["financial_data_quality"] = quality_loader(end_date=pd.Timestamp(spec.end_date).date())
+    if callable(quality_loader) or callable(membership_loader):
+        result.metadata.update(attest_snapshot_metadata(result.panel, result.metadata))
+        result.panel.attrs["snapshot_metadata"] = result.metadata
+    return result
 
 
 def historical_st_status_from_provider(
@@ -729,7 +779,7 @@ def historical_st_status_from_provider(
     missing = required - set(market.columns)
     if missing:
         raise ValueError(f"market missing columns for historical ST status: {', '.join(sorted(missing))}")
-    rows: list[dict[str, Any]] = []
+    parts: list[pd.DataFrame] = []
     for symbol, group in market.groupby("ts_code", sort=False):
         history = equity_provider.load_namechange(ts_code=str(symbol), use_cache=use_cache)
         if history is None:
@@ -742,27 +792,21 @@ def historical_st_status_from_provider(
                     "TuShare namechange history is not PIT-complete; missing "
                     + ", ".join(sorted(missing_history))
                 )
-        for raw_date in pd.to_datetime(group["trade_date"]).dt.date:
-            is_st = False
-            if not history.empty:
-                day = pd.Timestamp(raw_date).date()
-                for record in history.itertuples(index=False):
-                    name = str(getattr(record, "name", "")).upper()
-                    announced = getattr(record, "ann_date", pd.NaT)
-                    start = getattr(record, "start_date", pd.NaT)
-                    end = getattr(record, "end_date", pd.NaT)
-                    if "ST" not in name and "退市" not in name:
-                        continue
-                    # A historical effective interval alone does not prove
-                    # that the status was public at the time.  Exclude the
-                    # record until TuShare's announcement date is visible.
-                    if pd.isna(announced) or day < pd.Timestamp(announced).date():
-                        continue
-                    if pd.notna(start) and day < pd.Timestamp(start).date():
-                        continue
-                    if pd.notna(end) and day > pd.Timestamp(end).date():
-                        continue
-                    is_st = True
-                    break
-            rows.append({"ts_code": str(symbol), "trade_date": raw_date, "is_st": is_st})
-    return pd.DataFrame(rows, columns=["ts_code", "trade_date", "is_st"])
+        days = pd.to_datetime(group["trade_date"]).astype("datetime64[ns]")
+        observed = days.to_numpy()
+        flags = np.zeros(len(group), dtype=bool)
+        for record in history.itertuples(index=False):
+            name = str(getattr(record, "name", "")).upper()
+            announced = getattr(record, "ann_date", pd.NaT)
+            start = getattr(record, "start_date", pd.NaT)
+            end = getattr(record, "end_date", pd.NaT)
+            if ("ST" not in name and "退市" not in name) or pd.isna(announced):
+                continue
+            active = observed >= pd.Timestamp(announced).to_datetime64()
+            if pd.notna(start):
+                active &= observed >= pd.Timestamp(start).to_datetime64()
+            if pd.notna(end):
+                active &= observed <= pd.Timestamp(end).to_datetime64()
+            flags |= active
+        parts.append(pd.DataFrame({"ts_code": str(symbol), "trade_date": days.dt.date.to_numpy(), "is_st": flags}))
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["ts_code", "trade_date", "is_st"])

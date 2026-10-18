@@ -56,7 +56,10 @@ def portfolio_selection_cscv(
         scores = scores.merge(classifications, on=["trade_date", "symbol"], how="left", validate="one_to_one")
     eligible = scores[np.isfinite(pd.to_numeric(scores["score"], errors="coerce"))]
     dates = pd.to_datetime(eligible["trade_date"])
-    signal_dates = eligible.assign(_month=dates.dt.to_period("M")).groupby("_month")["trade_date"].max()
+    from .pipeline import monthly_rebalance_dates
+    calendar_dates = monthly_rebalance_dates(market.attrs.get("snapshot_metadata", {}))
+    signal_dates = (eligible.assign(_month=dates.dt.to_period("M")).groupby("_month")["trade_date"].max()
+                    if calendar_dates is None else calendar_dates)
     counts = eligible.loc[eligible.trade_date.isin(signal_dates)].groupby("trade_date").symbol.nunique()
     analysis["minimum_rebalance_cross_section"] = int(counts.min()) if len(counts) else 0
     if not len(counts) or counts.min() < max(grid):
@@ -76,6 +79,7 @@ def portfolio_selection_cscv(
                 max_style_exposure=config.max_style_exposure,
                 style_reference=(filter_historical_universe(market, min_listing_days=config.min_listing_days)
                                  if config.max_style_exposure else None),
+                rebalance_dates=calendar_dates,
             )
             daily = run_portfolio_backtest(market, scores, targets, candidate_config)["daily_returns"]
         frame = pd.DataFrame(daily)

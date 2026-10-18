@@ -200,6 +200,7 @@ def research_config_from_mapping(raw: dict[str, Any]) -> ResearchConfig:
     if configured_model not in model_aliases:
         raise ValueError("canonical model.type must be lightgbm_ranker or linear")
     return ResearchConfig(
+        financial_conflict_policy=data.get("financial_conflict_policy", "raise"),
         data_provider=data.get("provider", "tushare_pit"),
         adjust=data.get("adjust", "point_in_time"),
         feature_version=features.get("version", "cn_equity_v1"),

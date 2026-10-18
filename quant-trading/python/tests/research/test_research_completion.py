@@ -319,7 +319,8 @@ def test_legacy_ml_strategies_are_hidden_from_new_discovery_surface() -> None:
     assert "ml_factor_ensemble" not in discoverable
 
 
-def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
+@pytest.mark.parametrize("financial_policy", ["raise", "quarantine"])
+def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path, financial_policy: str) -> None:
     """Real PIT normalization and ML, then next-open Paper; all inputs local."""
     from aipha.research.corporate_actions import attach_corporate_actions, read_corporate_actions
     from aipha.research.paper_book import advance_paper_book, replay_paper_book
@@ -401,7 +402,7 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
             offset = symbols.index(symbol)
             # Unsorted source rows include a revision, a newer report, a late
             # correction of the old report and an announcement beyond the tape.
-            return pd.DataFrame([
+            frame = pd.DataFrame([
                 {"ts_code": symbol, "end_date": period, "ann_date": day.strftime("%Y%m%d"),
                  "roe": roe + offset, "revenue_yoy": growth + offset}
                 for period, day, roe, growth in [
@@ -412,6 +413,9 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
                     ("20221231", dates[-1] + pd.offsets.BDay(20), 99., 99.),
                 ]
             ])
+            if financial_policy == "quarantine" and symbol == symbols[0]:
+                frame = pd.concat([frame, frame.iloc[:1].assign(roe=16.)], ignore_index=True)
+            return frame
 
         def load_income(self, symbol: str):
             # Statements must wait for actual publication, including revisions.
@@ -429,6 +433,7 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
             return pd.DataFrame()
 
     cfg = ResearchConfig(
+        financial_conflict_policy=financial_policy,
         train_years=1, test_months=1, forward_days=5,
         label_skip_days=1, purge_days=10, top_k=3,
         max_position_weight=0.25, n_estimators=3,
@@ -445,6 +450,10 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
         source_path, require_artifact_hash=True, verify_content_hash=True, require_source_signature=True,
     )
     source = pd.read_parquet(source_path)
+    quality = metadata["financial_data_quality"]
+    assert quality == result["financial_data_quality"]
+    assert quality["policy"] == financial_policy
+    assert quality["quarantined_metric_events"] == (1 if financial_policy == "quarantine" else 0)
     observed_dates = pd.to_datetime(source.trade_date)
     for offset, symbol in enumerate(symbols):
         financials = source.loc[source.symbol.eq(symbol)].copy()
@@ -453,7 +462,10 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
         for start, end, roe, growth in [(40, 99, 10., 20.), (100, 169, 15., 25.), (170, 299, 20., 30.)]:
             rows = financials.loc[dates[start]:dates[end]]
             assert len(rows) == end - start + 1
-            assert rows.factor_roe.eq(roe + offset).all()
+            if financial_policy == "quarantine" and offset == 0 and start == 100:
+                assert rows.factor_roe.isna().all()
+            else:
+                assert rows.factor_roe.eq(roe + offset).all()
             assert rows.factor_revenue_yoy.eq(growth + offset).all()
         # The declared ann_date is earlier than the real statement release.
         assert financials.loc[:dates[49], "revenue"].isna().all()
@@ -477,7 +489,8 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     assert report["walk_forward"]["mean_ic"] is None
     assert report["accounting"]["price_basis"] == "raw"
     assert report["accounting"]["cash_dividends_paid"] > 0
-    assert report["feature_missing_rates"]["by_feature"]["factor_roe"] == pytest.approx(40 / len(dates))
+    missing_roe = 40 * len(symbols) + (70 if financial_policy == "quarantine" else 0)
+    assert report["feature_missing_rates"]["by_feature"]["factor_roe"] == pytest.approx(missing_roe / (len(dates) * len(symbols)))
     assert report["walk_forward"]["feature_selection"]["by_group"]["quality"] == [
         "factor_revenue_yoy", "factor_roe",
     ]

@@ -580,3 +580,36 @@ Scoring and Top-K selection take place in the canonical model/export path.
 Omission uses `aipha/configs/research/a_stock_ml.yaml`. The canonical daily CLI
 rejects model, Top-K and feature-version overrides; regenerate the source
 model/plan through the research pipeline when changing those policies.
+
+The canonical YAML explicitly selects `data.financial_conflict_policy: quarantine`.
+For the same symbol, report period and available announcement date, only
+conflicting metrics become null events. The null event remains at that date
+so an older value cannot leak forward. Other fields and stocks are retained;
+distinct announcement dates still represent separate revisions. Direct PIT
+adapters and omitted configuration fields default to `raise`. The signed
+snapshot and report expose counts, affected symbols, metrics and source values
+under `financial_data_quality`; events beyond the snapshot end are excluded.
+Optional quality/universe metadata are signed without invalidating older
+sidecars that did not contain those fields.
+
+Historical membership now uses paginated `index_weight` observations with a
+pre-window seed and complete completed-month portfolios. The snapshot records
+`last_observed_weights_asof_trade_date`: monthly observations carried forward
+are not a complete archive of midmonth constituent changes. Features retain
+all dates for the historical candidate union, including nonmember dates needed
+for labels and exits. Missing legacy listing identities use independently
+cached, dated `bak_basic` records without rewriting current `stock_basic`.
+
+Signals use the last exchange session of a calendar-complete month. The OOS
+artifact carries its source calendar so bridge evaluate/export uses the same
+dates; a label cutoff or incomplete latest month never invents an earlier
+rebalance. Standalone helpers without calendar metadata retain their legacy
+compatibility behavior. Feature policy version `/3` includes the real provider's
+gross-margin and revenue-growth aliases; older model policies require retraining.
+
+Corporate-action normalization excludes pre-window cash-only entitlements and
+future announcements. A null distribution leg is absent only if the other leg
+is positive and the null leg has no settlement date. Unknown amounts with
+scheduled settlement still fail. Identical report-period records deduplicate;
+distinct report periods on one ex-date sum only with compatible entitlement
+and settlement dates. `corporate_action_policy` is signed in new snapshots.

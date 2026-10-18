@@ -9,7 +9,7 @@ import pandas as pd
 
 # A policy revision also invalidates models fitted with older PIT feature
 # semantics, even when the public feature-set name and columns are unchanged.
-FEATURE_POLICY_VERSION = "cn_equity_feature_groups/2"
+FEATURE_POLICY_VERSION = "cn_equity_feature_groups/3"
 FEATURE_GROUPS = ("value", "quality", "momentum", "volatility", "liquidity", "technical")
 _RESERVED = {
     "datetime", "trade_date", "symbol", "open", "high", "low", "close", "volume", "amount",

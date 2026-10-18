@@ -90,7 +90,7 @@ class FinancialStatement:
     report_date: ReportDate
     announce_date: date  # 关键：实际公告日期
     statement_type: str  # income / balance / cashflow
-    data: dict[str, Decimal] = field(default_factory=dict)
+    data: dict[str, Decimal | None] = field(default_factory=dict)
 
     def get(self, field_name: str, default: Decimal | None = None) -> Decimal | None:
         """获取字段值"""
@@ -104,7 +104,7 @@ class FinancialIndicator:
     symbol: str
     report_date: ReportDate
     announce_date: date
-    indicators: dict[str, Decimal] = field(default_factory=dict)
+    indicators: dict[str, Decimal | None] = field(default_factory=dict)
 
 
 def latest_available_financial(records, query_date: date):

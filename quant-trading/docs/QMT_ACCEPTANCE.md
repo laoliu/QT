@@ -33,6 +33,8 @@ python scripts/qmt-readonly-probe.py --receiver-url http://127.0.0.1:18889 --tim
 
 记录省略了资金账号标识。实际探测同时校验连接结果和账户返回的账号与配置一致。后续健康检查返回 `bridge_connected=true`，最后轮询距检查时间约 0.6 秒。
 
+09:29:27–09:29:30，另经 RECEIVER `/request`、`/result/<id>` 请求 `000300.SH` 的 5 根日线。QMT 日志确认 `ContextInfo.get_market_data` 返回 DataFrame 并推送 5 根 K 线；日期为 2026-10-12 至 2026-10-16，最后收盘为 4170.613，OHLCV 均有效。该次 `download_history_data` 报连接警告，随后从 QMT 已有行情数据成功读取，因此只能证明本地已有行情的传输，不能证明在线历史下载或实时行情刷新。
+
 ## 回放与验收范围
 
 `order-manager-paper.integration.test.ts` 使用 PaperBroker 完成订单与交易的持久化、重建 broker/manager、查询历史记录；`qmt-broker.test.ts` 使用 QMT 响应替身验证 broker 与 OrderManager 的历史合并及重启回放。`order-manager.test.ts` 检查模式分文件与统一 provenance 保存，`remote-qmt-broker.test.ts` 检查查询时保留本地订单标识及来源。

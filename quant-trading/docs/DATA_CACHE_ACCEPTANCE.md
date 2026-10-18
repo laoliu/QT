@@ -6,12 +6,14 @@
 
 | 位置 | 实际内容 |
 | --- | --- |
-| `C:\Users\Admin\.quant-trading\extensions\quant-trading\cache\stock_data.db` | 131 个 A 股品种、12,335 条日线，日期合计覆盖 2025-03-03 至 2026-10-16；`stock_fundamentals` 为 0 行。各股票不保证有相同日期覆盖。 |
+| `C:\Users\Admin\.quant-trading\extensions\quant-trading\cache\stock_data.db` | 本轮复核 `kline_data` 为 130 个 A 股品种、12,239 条日线，日期合计覆盖 2025-03-03 至 2026-10-16；`stock_list` 为 114 行，`stock_fundamentals` 为 0 行。各股票不保证有相同日期覆盖。 |
 | `G:\qtdata\cache\equity_tushare` | 23,715 个 Parquet 文件；178 个严格按 `daily_YYYYMM.parquet` 命名的日线分区，从 201201 至 202610；202610 分区最新日期为 2026-10-16。 |
 | 同一 TuShare 缓存目录 | 5,906 个旧版财务指标文件，以及利润表、资产负债表、现金流量表文件各 5,717 个；存在指数历史成分文件、股票列表和名称变更文件。这里只核对数量与部分 schema，未证明全部文件的完整性。 |
 | `G:\qtdata\calendars\cn_stock_v1.json` | 8,797 个日期，声明来源为 `sina_via_akshare`。可用于原有缓存流程，但不冒充规范研究要求的 TuShare SSE `trade_cal`。 |
 
 此前仅在项目目录查找，遗漏了 G 盘及用户目录；因此“没有历史行情数据”不成立。原始缓存与已签名研究快照、模型产物、研究结果数据库是不同的资产，不能彼此替代。
+
+用户界面的 131 个品种，以及此前只读核对的 12,335 条日线，是较早的时点值；本轮重新查询得到上表统计。界面统计、股票列表和行情表的口径也不同，不能据此推断所有股票具备完整历史。本轮未写入、迁移或删除该数据库。
 
 ## 已核实的缺口
 
@@ -31,7 +33,10 @@
 - 周末按上一工作日粗查新鲜度，并通过 `freshness_basis` 披露这不是交易所日历验收；节假日可能保守地报告待更新。
 - “补全”从最早已报告缺口开始，部分下载失败返回失败结果。没有实际执行全量同步或切换交易模式。
 - `train_tushare` 未显式传 `cacheDir` 时复用统一缓存解析：`DATA_CACHE_DIR/equity_tushare`、`QTDATA_DIR/cache/equity_tushare`、存在的 `G:/qtdata/cache/equity_tushare`，最后才回退项目内缓存。显式相对路径锚定 Python 项目根目录，避免因启动目录不同读取空库。
+- `get_equity_provider` 改为按规范化缓存根复用实例；不同目录保持独立，等价路径共享实例，并发首次调用只构造一次。修复长驻进程中后续研究配置被首次调用的目录覆盖的问题。凭据仍服从既有共享网关生命周期，不通过切换缓存目录切换账户。
 
 缓存检查只能说明上述文件和粗略更新状态；规范研究仍须经 TuShare PIT 适配器、历史股票池、交易日历和签名快照构建流程，不能给旧目录简单添加 sidecar 后宣称迁移完成。
 
 验收：`tests/data/test_parquet_data_updater.py` 与 `tests/scripts/test_research_cache_paths.py` 共 18 项定向测试通过；研究及相关回归 1114 项通过、8 项跳过。TypeScript 类型检查及 8 个相关文件的 152 项测试通过。未执行实际全量同步、训练或实盘下单。
+
+Provider 目录隔离修复后，路径、更新器、PIT 财务及研究全链路的选定回归为 **127 passed、2 warnings**。新增测试实际读取两个不同目录的 Parquet，确认无串库、等价路径复用、切换工作目录不改变相对路径含义、并发构造唯一，且原缓存字节不变；测试不访问在线数据。

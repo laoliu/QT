@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import threading
 import time
 from datetime import date, datetime
 from pathlib import Path
@@ -43,26 +44,31 @@ from aipha.data.cache_utils import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 模块级单例 — 所有消费方通过 get_equity_provider() 获取共享实例
+# 同一缓存根共享实例；不同研究配置不得被首次调用的缓存目录覆盖。
 # ---------------------------------------------------------------------------
-_equity_provider_instance: Optional["TuShareEquityProvider"] = None
+_equity_providers: dict[str, "TuShareEquityProvider"] = {}
+_equity_providers_lock = threading.Lock()
 
 
 def get_equity_provider(
     token: Optional[str] = None,
     cache_dir: str = "data/cache/equity_tushare",
 ) -> "TuShareEquityProvider":
-    """获取 TuShareEquityProvider 全局单例。
+    """按规范化的缓存根获取共享 TuShareEquityProvider。
 
-    所有 paper/live/preheat 消费方应通过此函数获取 Provider，
-    确保共享同一份 Parquet 缓存，避免重复 API 调用。
+    相对路径锚定 Python 项目根；切换目录不会修改已有调用方的实例。
+    Provider 共用 TuShare 网关及其凭据生命周期，不用于切换账户。
     """
-    global _equity_provider_instance
-    if _equity_provider_instance is None:
-        _equity_provider_instance = TuShareEquityProvider(
-            token=token, cache_dir=cache_dir,
-        )
-    return _equity_provider_instance
+    from aipha.utils.paths import resolve_path
+
+    root = resolve_path(Path(cache_dir).expanduser()).resolve()
+    key = os.path.normcase(str(root))
+    with _equity_providers_lock:
+        if key not in _equity_providers:
+            _equity_providers[key] = TuShareEquityProvider(
+                token=token, cache_dir=str(root),
+            )
+        return _equity_providers[key]
 
 
 def _validate_pit_statement_rows(frame: pd.DataFrame) -> None:

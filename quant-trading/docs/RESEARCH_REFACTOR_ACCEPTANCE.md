@@ -45,7 +45,7 @@
 
 路径相对 Python 项目根目录解析；快照模板必须传 `--trade-date`，固定路径默认使用已验证的快照结束日，快照必须恰好结束于审计日。新版 profile 声明即纳入审计，畸形或嵌套声明不能被归为 `not_applicable`。`test_audit_paper_profile.py` 覆盖这些边界，并检查审计前后文件字节不变、不启动进程、不读取模型。
 
-进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存另有 131 个品种。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口，详见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。规范 `train_tushare` 的默认缓存已接到统一路径解析，避免再次仅查项目内空目录。
+进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存也有实际数据，其动态统计及各表口径见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口。规范 `train_tushare` 的默认缓存已接到统一路径解析，Provider 工厂按缓存根分别复用实例，避免仅查项目内空目录或长驻进程沿用其他配置的目录。
 
 普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。完整历史日历补全随后受到上游访问限制，仍无可直接训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
 
@@ -70,5 +70,7 @@ npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admi
 ```
 
 本次 Python 检查结果（包含独立 Ranker 隔离、旧模型跨进程回放及上述研究链路）：**1129 passed、8 skipped、44 warnings**。Ranker 及实验导入边界另经 **33 passed、4 skipped** 定向检查；缓存及路径此前 **18 项测试**通过。TypeScript 最近一次类型检查及以上 8 个文件的 **152 项测试**通过，本轮没有 TypeScript 改动；页面脚本测试验证失败响应、旧包装、空缓存及网络错误不会显示假成功。这是上述选定范围的回归结果，并非全仓库所有测试或上线验收。
+
+后续 Provider 目录隔离修复定向运行 `tests/scripts/test_research_cache_paths.py`、`tests/data/test_parquet_data_updater.py`、`tests/data/test_tushare_pit_provider.py`、`tests/data/test_financial_revisions.py`、`tests/research/test_research_completion.py`、`tests/research/test_research_pipeline.py`：**127 passed、2 warnings**。覆盖真实本地 Parquet 的目录隔离及并发复用，PIT、LightGBM、OOS、报告与 Paper fixture 链路继续通过；未重复运行全部 Python 或 TypeScript 检查。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

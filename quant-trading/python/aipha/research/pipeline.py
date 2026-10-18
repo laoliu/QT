@@ -903,7 +903,7 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
         from .snapshots import SNAPSHOT_GENERATOR_VERSION, SNAPSHOT_SCHEMA_VERSION
 
         if metadata.get("generator_version") != SNAPSHOT_GENERATOR_VERSION:
-            raise ValueError("tushare_pit snapshot was not produced by the canonical snapshot builder")
+            raise ValueError("tushare_pit snapshot was not produced by the current canonical snapshot builder; rebuild legacy snapshots")
         if metadata.get("snapshot_schema_version") != SNAPSHOT_SCHEMA_VERSION:
             raise ValueError("unsupported TuShare PIT snapshot schema version")
         if "feature_version" not in frame:
@@ -914,6 +914,9 @@ def _load_snapshot_metadata(frame: pd.DataFrame) -> dict[str, Any]:
         adjustment = frame.get("price_adjustment")
         if adjustment is None or not adjustment.astype(str).eq("point_in_time_factor").all():
             raise ValueError("TuShare PIT panel must use same-day point-in-time adjustment factors")
+        from .snapshots import validate_market_calendar
+
+        validate_market_calendar(frame, normalized)
     return normalized
 
 

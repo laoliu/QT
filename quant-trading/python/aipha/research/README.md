@@ -39,7 +39,12 @@ snapshots using natural days or an undeclared basis must be rebuilt. The v2
 TuShare builder requests a complete SSE `trade_cal` history from the earliest
 issuer listing through the snapshot end, retaining closed dates to detect
 coverage gaps. It never estimates age from weekdays or the truncated market
-tape. Its signed metadata records the calendar range and content hash.
+tape. Its signed metadata records the calendar range, content hash and explicit
+`listing_calendar.open_sessions`. The v4 builder checks that market dates
+cover every open session in the **requested** range, including its edges.
+Canonical training, prediction and runtime Paper readers check the same
+signed session list; whole-market missing days fail before labeling or fitting.
+Individual missing symbol bars still invalidate their own labels/orders.
 `universe.min_listing_days` (integer, at least 252) applies to training,
 feature-missingness reporting and prediction; canonical Paper scorers accept
 the same `min_listing_days` parameter. Existing snapshots are preserved; the
@@ -91,7 +96,7 @@ Financial features must already have been joined by announcement date. The
 long-form financial snapshots. A sidecar with another provider, mismatched
 feature version, or mismatched date range is rejected.
 
-The v3 snapshot generator uses the conservative availability date
+The v4 snapshot generator retains the v3 conservative availability date
 `max(ann_date, f_ann_date)` for statements when an actual publication date is
 present; a null actual date retains the declared `ann_date`. Invalid actual
 dates fail instead of being treated as earlier availability. Statement inputs
@@ -113,7 +118,9 @@ ranges, preserving old caches unchanged. Statement API responses must include
 retained and rejected as ambiguous. Missing historical revisions cannot be
 reconstructed or assigned a new availability date from download time. These
 checks do not establish that TuShare supplied every historical version.
-Snapshots from generator v1/v2 must be rebuilt; their files are not deleted.
+Snapshots from generator v1/v2/v3 must be rebuilt; their files are not deleted.
+Adding an inferred weekday list or relabeling an old sidecar does not prove
+the original market tape covered the exchange calendar.
 The feature policy is also advanced to v2 so a model fitted under the older
 financial timing policy cannot silently score the corrected features.
 Models trained with those earlier timing errors require retraining; attaching
@@ -174,7 +181,8 @@ scores; it does not estimate unrecorded model/factor search. The standalone
 prediction-only `evaluate` action requires a portfolio replay for formal PBO.
 
 Forward-return labels use the panel's shared trading calendar (the union of
-market dates), with entry at D+skip_days open and exit at
+market dates, verified against signed source open sessions on canonical
+inputs), with entry at D+skip_days open and exit at
 D+skip_days+horizon_days close. Missing or suspended entry/exit bars and
 directionally blocked limit prices invalidate the label; they never move its
 holding period to a later observation of that symbol. The canonical signal is
@@ -237,7 +245,7 @@ python scripts/ops/v2_ml_paper_daily.py --book-path data/research/paper/v2_ml.sq
 The first command previews on an in-memory database copy and creates no book.
 Only `--execute` commits an observed close. A new book opens in cash at that
 close; it does not invent historical positions from the training tape.
-An optional same-close paper plan is queued for the next observed session's
+An optional same-close paper plan is queued for the next exchange session's
 open. Each month accepts at most one plan. Calls without a plan still execute
 an earlier pending plan and mark existing positions. Trading blocks consume
 that session's attempt; fills are not silently deferred to a later price.
@@ -249,19 +257,41 @@ together. The book freezes the research config and past market observations,
 requires snapshots to advance and overlap the previous close, rejects changed
 corporate event terms or events arriving after a committed record close, and
 returns the prior receipt for an identical same-day request. Conflicting
-same-day requests fail. Snapshot sessions are observed market dates; the
-current sidecar's calendar hash alone cannot independently prove that an
-upstream snapshot omitted no intervening open session.
+same-day requests fail. A whole-market missing session cannot shift a queued
+fill to a later day's open: the new snapshot and the full accumulated book
+must match its signed exchange session list. Rolling snapshots must retain
+calendar coverage through the book's opening date; historical calendar
+revisions that insert/remove committed sessions require reconciliation.
 
 Daily accounting replays the accumulated tape and target plans with the same
 portfolio engine used in research, including raw-price lot sizing, turnover,
 trading restrictions, costs and supported corporate events. Receipts include
 NAV, cash, final holdings, new fills, cost/block diagnostics and a replay hash;
 fills carry plan/run/model/signal provenance. Read-only `--replay` recomputes
-the ledger and verifies its latest receipt. This replay trades storage and
+the ledger, verifies its latest receipt and checks the saved source-signed
+calendar. It requires the deployment's snapshot-verification key. This replay trades storage and
 CPU for one accounting implementation; it is intended for low-frequency
 books. Offline continuity fixtures do not establish real-market daily
 operation or account reconciliation.
+
+Books created before the signed-session requirement remain untouched. To
+inspect one under its old accounting assumptions, use `--replay
+--allow-unverified-calendar`; the response marks calendar verification
+unavailable. This flag permits no append or trading. To upgrade a book, first
+rebuild a canonical snapshot covering its complete frozen history and ending
+at its last committed close, then preview and explicitly publish a new copy:
+
+```powershell
+python scripts/migrate_paper_calendar.py old.sqlite3 new.sqlite3 --snapshot rebuilt.parquet
+python scripts/migrate_paper_calendar.py old.sqlite3 new.sqlite3 --snapshot rebuilt.parquet --execute
+```
+
+The upgrade verifies the old replay hash, market identities/prices, corporate
+events and every open session. It changes only calendar/source evidence in
+the copied latest receipt; the old file and existing destination files are
+never overwritten. A book that skipped a session or used different prices
+fails upgrade and needs explicit accounting reconciliation. Subsequent daily
+calls must select the new `--book-path`; no scheduler is redirected implicitly.
 
 Old `data/paper_state/v2_ml/state.json` files are preserved separately. Only
 `--legacy-compat --model-dir ...` uses the historical model-scoring/close-price

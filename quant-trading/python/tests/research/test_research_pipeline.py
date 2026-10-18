@@ -608,6 +608,9 @@ def test_end_to_end_oos_run_writes_reproducible_artifacts(tmp_path: Path) -> Non
         "index_code": "000905.SH",
         "feature_version": "cn_equity_v1",
         "start_date": "2022-01-03", "end_date": "2023-05-19",
+        "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                             "start_date": "2022-01-03", "end_date": "2023-05-19",
+                             "open_sessions": pd.bdate_range("2022-01-03", "2023-05-19").strftime("%Y-%m-%d").tolist()},
     })
     result = pipeline.run(fixture, tmp_path / "runs", data_snapshot_id="fixture-v1")
     artifact_dir = Path(result["artifact_dir"])

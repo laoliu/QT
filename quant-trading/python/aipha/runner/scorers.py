@@ -880,6 +880,10 @@ def _load_canonical_ml_cross_section(
 
     validate_snapshot_universe(metadata, universe)
     panel = pd.read_parquet(path)
+    from aipha.research.pipeline import _load_snapshot_metadata
+
+    panel.attrs["snapshot_metadata"] = metadata
+    _load_snapshot_metadata(panel)
     required = {"trade_date", "symbol", "feature_version", "is_index_member", "is_st", "listing_days"}
     missing = required - set(panel.columns)
     if missing:

@@ -173,6 +173,8 @@ def test_load_feature_panel_requires_attested_pit_snapshot(tmp_path):
             "provider": "tushare_pit", "feature_version": "cn_equity_v1",
             "data_snapshot_id": "fixture", "start_date": "2026-03-02",
             "end_date": "2026-03-02", "index_code": "000905.SH",
+            "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                                 "start_date": "2026-03-02", "end_date": "2026-03-02", "open_sessions": ["2026-03-02"]},
         },
     )
     loaded = _load_feature_panel(path, feature_version="cn_equity_v1")

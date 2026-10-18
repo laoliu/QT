@@ -19,7 +19,9 @@ def _frame(*, universe="csi1000", version="cn_equity_v1", provider="tushare_pit"
         "feature_version": version, "price_adjustment": "point_in_time_factor", "factor": 1.0,
     })
     metadata = {"provider": provider, "data_snapshot_id": "identity-fixture", "feature_version": version,
-                "start_date": "2024-01-03", "end_date": "2024-01-03", "index_code": universe_index_code(universe)}
+                "start_date": "2024-01-03", "end_date": "2024-01-03", "index_code": universe_index_code(universe),
+                "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                                     "start_date": "2024-01-02", "end_date": "2024-01-03", "open_sessions": ["2024-01-03"]}}
     metadata.update(metadata_overrides)
     frame.attrs["snapshot_metadata"] = attest_snapshot_metadata(frame, metadata)
     return frame

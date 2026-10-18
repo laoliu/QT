@@ -796,6 +796,8 @@ class TestMLScorer:
                 "provider": "tushare_pit", "feature_version": "cn_equity_v1",
                 "data_snapshot_id": "fixture", "start_date": "2025-01-06",
                 "end_date": "2025-01-06", "index_code": "000905.SH",
+                "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                                     "start_date": "2025-01-06", "end_date": "2025-01-06", "open_sessions": ["2025-01-06"]},
             },
         )
         result = scorers._load_canonical_ml_cross_section(
@@ -811,6 +813,8 @@ class TestMLScorer:
             "provider": "tushare_pit", "feature_version": "cn_equity_v1",
             "data_snapshot_id": "legacy-age", "start_date": "2025-01-06",
             "end_date": "2025-01-06", "index_code": "000905.SH",
+            "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                                 "start_date": "2025-01-06", "end_date": "2025-01-06", "open_sessions": ["2025-01-06"]},
         })
         with pytest.raises(ValueError, match="rebuild legacy snapshots"):
             scorers._load_canonical_ml_cross_section(

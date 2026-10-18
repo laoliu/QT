@@ -8,6 +8,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from copy import deepcopy
 
 import pandas as pd
 import pytest
@@ -17,7 +18,7 @@ from aipha.research.backtest import run_portfolio_backtest
 from aipha.research.contracts import TargetPosition
 from aipha.research.corporate_actions import CorporateAction, attach_corporate_actions
 from aipha.research.execution_plan import build_execution_plan, validate_execution_risk
-from aipha.research.paper_book import advance_paper_book, replay_paper_book
+from aipha.research.paper_book import advance_paper_book, replay_paper_book, upgrade_paper_book_calendar
 from aipha.research.pipeline import ResearchConfig
 from aipha.research.snapshots import attest_snapshot_metadata, point_in_time_adjust_prices, write_attested_parquet
 
@@ -49,6 +50,9 @@ def _attest(frame):
         "data_snapshot_id": "paper-fixture:" + str(pd.to_datetime(frame.trade_date).max().date()),
         "start_date": str(pd.to_datetime(frame.trade_date).min().date()),
         "end_date": str(pd.to_datetime(frame.trade_date).max().date()), "index_code": "000905.SH",
+        "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                             "start_date": "2024-01-30", "end_date": "2024-02-05",
+                             "open_sessions": ["2024-01-30", "2024-01-31", "2024-02-01", "2024-02-02", "2024-02-05"]},
     })
     return frame
 
@@ -310,6 +314,128 @@ def test_unsigned_or_modified_snapshot_fails_before_creating_book(tmp_path, poli
     with pytest.raises(ValueError, match="does not match"):
         advance_paper_book(book, frame, policy, commit=True)
     assert not book.exists()
+
+
+def test_missing_next_session_cannot_fill_at_a_later_open(tmp_path, policy):
+    book = tmp_path / "book.sqlite3"
+    advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
+    frame = _snapshot("2024-02-02")
+    frame = _attest(frame.loc[frame.trade_date.ne(pd.Timestamp("2024-02-01"))])
+    before = book.read_bytes()
+    with pytest.raises(ValueError, match="missing=.*2024-02-01"):
+        advance_paper_book(book, frame, policy, commit=True)
+    assert book.read_bytes() == before
+    assert replay_paper_book(book)["trades"] == []
+
+
+def test_rolling_snapshot_cannot_revise_an_older_calendar_session(tmp_path, policy):
+    book = tmp_path / "book.sqlite3"
+    advance_paper_book(book, _snapshot("2024-01-30"), policy, commit=True)
+    advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
+    frame = _snapshot("2024-02-01", start="2024-01-31")
+    metadata = deepcopy(frame.attrs["snapshot_metadata"])
+    metadata["listing_calendar"]["open_sessions"].remove("2024-01-30")
+    frame.attrs["snapshot_metadata"] = attest_snapshot_metadata(frame, metadata)
+    before = book.read_bytes()
+    with pytest.raises(ValueError, match="unexpected=.*2024-01-30"):
+        advance_paper_book(book, frame, policy, commit=True)
+    assert book.read_bytes() == before
+
+
+def test_old_book_remains_explicitly_readable_but_cannot_append_without_calendar(tmp_path, policy):
+    book = tmp_path / "book.sqlite3"
+    advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
+    with sqlite3.connect(book) as conn:
+        payload = json.loads(conn.execute("SELECT payload FROM receipts").fetchone()[0])
+        del payload["calendar_metadata"]
+        conn.execute("UPDATE receipts SET payload=?", (json.dumps(payload),))
+    before = book.read_bytes()
+    with pytest.raises(ValueError, match="no verified session calendar"):
+        replay_paper_book(book)
+    replay = replay_paper_book(book, allow_unverified_calendar=True)
+    assert replay["calendar_verification"]["available"] is False
+    with pytest.raises(ValueError, match="reconcile explicitly"):
+        advance_paper_book(book, _snapshot("2024-02-01"), policy, commit=True)
+    assert book.read_bytes() == before
+
+
+@pytest.mark.parametrize("change", ["provider", "sessions"])
+def test_replay_rejects_calendar_tampering_even_with_legacy_opt_in(tmp_path, policy, change):
+    book = tmp_path / "book.sqlite3"
+    advance_paper_book(book, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
+    with sqlite3.connect(book) as conn:
+        payload = json.loads(conn.execute("SELECT payload FROM receipts").fetchone()[0])
+        if change == "provider":
+            payload["calendar_metadata"]["provider"] = "akshare"
+        else:
+            payload["calendar_metadata"]["listing_calendar"]["open_sessions"].remove("2024-01-31")
+        conn.execute("UPDATE receipts SET payload=?", (json.dumps(payload),))
+    for allow in (False, True):
+        with pytest.raises(ValueError, match="provider=tushare_pit|signature"):
+            replay_paper_book(book, allow_unverified_calendar=allow)
+
+
+def test_calendar_upgrade_previews_and_publishes_verified_copy_without_changing_source(tmp_path, policy, capsys):
+    source, destination = tmp_path / "old.sqlite3", tmp_path / "new" / "book.sqlite3"
+    snapshot = _snapshot("2024-02-01")
+    advance_paper_book(source, _snapshot("2024-01-31"), policy, plan=_plan(), commit=True)
+    advance_paper_book(source, snapshot, policy, commit=True)
+    with sqlite3.connect(source) as conn:
+        for day, encoded in conn.execute("SELECT day,payload FROM receipts").fetchall():
+            receipt = json.loads(encoded)
+            del receipt["calendar_metadata"]
+            conn.execute("UPDATE receipts SET payload=? WHERE day=?", (json.dumps(receipt), day))
+    before = source.read_bytes()
+    result = upgrade_paper_book_calendar(source, destination, snapshot)
+    assert not result["committed"] and not destination.parent.exists()
+    assert source.read_bytes() == before
+    from scripts.migrate_paper_calendar import main
+
+    panel = tmp_path / "rebuilt.parquet"
+    write_attested_parquet(snapshot, panel, snapshot.attrs["snapshot_metadata"])
+    assert main([str(source), str(destination), "--snapshot", str(panel)]) == 0
+    assert json.loads(capsys.readouterr().out)["committed"] is False
+    assert not destination.parent.exists() and source.read_bytes() == before
+    result = upgrade_paper_book_calendar(source, destination, snapshot, commit=True)
+    assert result["committed"] and result["sessions"] == 2
+    assert source.read_bytes() == before
+    assert replay_paper_book(destination)["calendar_verification"] == {"available": True, "sessions": 2}
+    # Same-close retry after migration is still idempotent under its new
+    # attestation. Later closes continue from the copied cash/positions.
+    receipt = advance_paper_book(destination, snapshot, policy, commit=True)
+    assert receipt["positions"] == {"600000.SH": 5000}
+    assert "calendar_upgrade" in receipt
+    advance_paper_book(destination, _snapshot("2024-02-02"), policy, commit=True)
+    with pytest.raises(FileExistsError):
+        upgrade_paper_book_calendar(source, destination, snapshot, commit=True)
+
+
+@pytest.mark.parametrize("change", ["price", "end_date", "missing_session"])
+def test_calendar_upgrade_cannot_rewrite_frozen_accounting(tmp_path, policy, change):
+    import aipha.research.paper_book as module
+
+    source, destination = tmp_path / "old.sqlite3", tmp_path / "new.sqlite3"
+    advance_paper_book(source, _snapshot("2024-01-30"), policy, plan=_plan("2024-01-30"), commit=True)
+    advance_paper_book(source, _snapshot("2024-02-01"), policy, commit=True)
+    snapshot = _snapshot("2024-02-01")
+    if change == "price":
+        snapshot.loc[snapshot.trade_date.eq(pd.Timestamp("2024-01-31")), "close"] += 1
+        snapshot = _attest(snapshot)
+    elif change == "end_date":
+        snapshot = _snapshot("2024-02-02")
+    with sqlite3.connect(source) as conn:
+        if change == "missing_session":
+            # Model an old book that filled at Feb 1 open because Jan 31
+            # had been omitted. A migration must not bless that accounting.
+            conn.execute("DELETE FROM market WHERE day='2024-01-31'")
+        receipt = json.loads(conn.execute("SELECT payload FROM receipts ORDER BY day DESC LIMIT 1").fetchone()[0])
+        del receipt["calendar_metadata"]
+        receipt["replay_hash"] = module._hash(module._replay(conn, policy))
+        conn.execute("UPDATE receipts SET payload=? WHERE day='2024-02-01'", (json.dumps(receipt),))
+    before = source.read_bytes()
+    with pytest.raises(ValueError, match="cannot change frozen|must end|cannot insert or remove"):
+        upgrade_paper_book_calendar(source, destination, snapshot, commit=True)
+    assert not destination.exists() and source.read_bytes() == before
 
 
 def test_replay_survives_fresh_process_hash_order(tmp_path, policy):

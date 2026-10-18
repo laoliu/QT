@@ -128,6 +128,8 @@ def test_predict_bridge_applies_same_configured_age_before_ranking(monkeypatch):
     frame.attrs["snapshot_metadata"] = attest_snapshot_metadata(frame, {
         "provider": "tushare_pit", "data_snapshot_id": "age-fixture", "feature_version": "cn_equity_v1",
         "start_date": "2024-01-03", "end_date": "2024-01-03", "index_code": "000905.SH",
+        "listing_calendar": {"provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+                             "start_date": "2024-01-03", "end_date": "2024-01-03", "open_sessions": ["2024-01-03"]},
     })
     monkeypatch.setattr(engine, "_read_parquet", lambda _: frame)
     calls = []

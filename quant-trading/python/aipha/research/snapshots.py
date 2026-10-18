@@ -23,7 +23,7 @@ import numpy as np
 # here rather than in a caller so that every TuShare snapshot writer uses the
 # same attestation format.
 SNAPSHOT_SCHEMA_VERSION = 1
-SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/3"
+SNAPSHOT_GENERATOR_VERSION = "aipha.research.snapshots/4"
 SNAPSHOT_SIGNING_KEY_ENV = "AIPHA_PIT_SNAPSHOT_KEY"
 _SIGNED_SOURCE_FIELDS = (
     "provider", "data_snapshot_id", "feature_version", "start_date", "end_date",
@@ -255,6 +255,48 @@ def point_in_time_adjust_prices(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def validate_market_calendar(
+    frame: pd.DataFrame, metadata: dict[str, Any], *, start_date=None, end_date=None,
+) -> list[str]:
+    """Match market dates to explicit source calendar sessions, never weekdays.
+
+    The caller verifies the metadata signature before trusting its calendar.
+    Explicit bounds support replaying a book that opens inside the source
+    calendar's longer history. Symbol-specific missing bars remain the
+    responsibility of label/execution eligibility.
+    """
+    calendar = metadata.get("listing_calendar")
+    if not isinstance(calendar, dict) or not isinstance(calendar.get("open_sessions"), list):
+        raise ValueError("snapshot requires explicit open_sessions from trade_cal; rebuild legacy snapshots")
+    if (calendar.get("provider"), calendar.get("endpoint"), calendar.get("exchange")) != ("tushare", "trade_cal", "SSE"):
+        raise ValueError("snapshot calendar must come from TuShare SSE trade_cal")
+    def iso_day(value):
+        if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+            raise ValueError("calendar dates must use YYYY-MM-DD")
+        return value
+    try:
+        first, last = iso_day(calendar["start_date"]), iso_day(calendar["end_date"])
+        sessions = [iso_day(value) for value in calendar["open_sessions"]]
+        start = iso_day(str(start_date if start_date is not None else metadata["start_date"]))
+        end = iso_day(str(end_date if end_date is not None else metadata["end_date"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("invalid snapshot calendar dates or range") from exc
+    if first > start or end > last or start > end:
+        raise ValueError("snapshot calendar does not cover the required market range")
+    if not sessions or sessions != sorted(set(sessions)) or sessions[0] < first or sessions[-1] > last:
+        raise ValueError("snapshot open_sessions must be sorted, unique and within calendar coverage")
+    expected = [day for day in sessions if start <= day <= end]
+    dates = pd.to_datetime(frame["trade_date"].astype(str), errors="raise")
+    if dates.isna().any() or not dates.eq(dates.dt.normalize()).all():
+        raise ValueError("market calendar requires valid daily observation dates")
+    actual = sorted(set(dates.dt.strftime("%Y-%m-%d")))
+    if not expected or actual != expected:
+        missing = sorted(set(expected) - set(actual))
+        unexpected = sorted(set(actual) - set(expected))
+        raise ValueError(f"market dates do not match trade_cal open_sessions: missing={missing[:5]}, unexpected={unexpected[:5]}")
+    return expected
+
+
 def assemble_tushare_snapshot(
     market: pd.DataFrame,
     *,
@@ -300,9 +342,23 @@ def assemble_tushare_snapshot(
     out["listing_days"] = listing_session_counts(out["trade_date"], out["list_date"], trade_calendar)
     out["listing_days_basis"] = LISTING_DAYS_BASIS
     listing_calendar = normalize_trade_calendar(
-        trade_calendar, pd.to_datetime(out["list_date"].astype(str)).min(),
-        pd.to_datetime(out["trade_date"].astype(str)).max(),
+        trade_calendar, min(pd.to_datetime(out["list_date"].astype(str)).min(), pd.Timestamp(spec.start_date)),
+        pd.Timestamp(spec.end_date),
     )[["cal_date", "is_open"]]
+    calendar_metadata = {
+        "provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
+        "start_date": listing_calendar.cal_date.min().date().isoformat(),
+        "end_date": listing_calendar.cal_date.max().date().isoformat(),
+        "content_sha256": frame_content_sha256(listing_calendar),
+        "listing_days_basis": LISTING_DAYS_BASIS,
+        "count_includes_listing_session": True,
+        "open_sessions": listing_calendar.loc[listing_calendar.is_open.eq(1), "cal_date"].dt.strftime("%Y-%m-%d").tolist(),
+    }
+    # Validate the requested boundaries too: a missing first/last session
+    # must not shrink the declared range and escape gap detection.
+    validate_market_calendar(out, {"listing_calendar": calendar_metadata,
+                                   "start_date": pd.Timestamp(spec.start_date).date().isoformat(),
+                                   "end_date": pd.Timestamp(spec.end_date).date().isoformat()})
     status = st_status[["trade_date", "ts_code", "is_st"]].copy()
     status["trade_date"] = pd.to_datetime(status["trade_date"]).dt.strftime("%Y%m%d")
     out = out.merge(status, on=["trade_date", "ts_code"], how="left", validate="one_to_one")
@@ -362,14 +418,7 @@ def assemble_tushare_snapshot(
         "index_code": spec.index_code,
         "benchmark_code": spec.benchmark_code,
         "adjust": spec.adjust,
-        "listing_calendar": {
-            "provider": "tushare", "endpoint": "trade_cal", "exchange": "SSE",
-            "start_date": listing_calendar.cal_date.min().date().isoformat(),
-            "end_date": listing_calendar.cal_date.max().date().isoformat(),
-            "content_sha256": frame_content_sha256(listing_calendar),
-            "listing_days_basis": LISTING_DAYS_BASIS,
-            "count_includes_listing_session": True,
-        },
+        "listing_calendar": calendar_metadata,
     }
     metadata = attest_snapshot_metadata(panel, metadata)
     panel.attrs["snapshot_metadata"] = metadata

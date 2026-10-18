@@ -573,6 +573,10 @@ def _load_feature_panel(
         else pd.read_csv(panel_path)
     )
     if not allow_legacy:
+        from aipha.research.pipeline import _load_snapshot_metadata
+
+        panel.attrs["snapshot_metadata"] = metadata
+        _load_snapshot_metadata(panel)
         required = {"trade_date", "symbol", "feature_version", "is_index_member", "is_st", "listing_days"}
         missing = required - set(panel.columns)
         if missing:
@@ -615,6 +619,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan-path", help="本次信号收盘的 Paper 执行计划；省略时只推进既有计划和估值")
     parser.add_argument("--book-path", help="独立 SQLite 账本路径；默认 data/research/paper/v2_ml.sqlite3")
     parser.add_argument("--replay", action="store_true", help="只读重放已提交的规范账本并核验摘要")
+    parser.add_argument("--allow-unverified-calendar", action="store_true", help="仅只读回放：允许查看缺少交易日历证据的旧账本，并标记未验证")
     parser.add_argument(
         "--add-fundamentals", action="store_true",
         help="仅兼容模式：面板里只有原始 daily_basic 列时补旧基本面因子",
@@ -647,8 +652,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.replay:
                 if args.panel or args.plan_path or args.execute or args.date:
                     raise ValueError("--replay 为只读操作，不能同时传入快照、计划、日期或 --execute")
-                result = replay_paper_book(book)
+                result = replay_paper_book(book, allow_unverified_calendar=args.allow_unverified_calendar)
             else:
+                if args.allow_unverified_calendar:
+                    raise ValueError("--allow-unverified-calendar 仅适用于只读 --replay")
                 if not args.panel:
                     raise ValueError("必须传入 --panel，或使用 --replay 只读重算")
                 policy = load_research_config(args.research_config or (
@@ -669,7 +676,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("规范 Paper 记账失败: %s", exc)
             return 2
 
-    if args.plan_path or args.book_path or args.replay:
+    if args.plan_path or args.book_path or args.replay or args.allow_unverified_calendar:
         logger.error("--plan-path/--book-path/--replay 不适用于旧兼容模式")
         return 2
     if not args.panel or not args.model_dir:

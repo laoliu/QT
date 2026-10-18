@@ -320,7 +320,11 @@ def test_legacy_ml_strategies_are_hidden_from_new_discovery_surface() -> None:
 
 
 def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
-    """Exercise the complete offline TuShare-shaped research contract."""
+    """Real PIT normalization and ML, then next-open Paper; all inputs local."""
+    from aipha.research.corporate_actions import attach_corporate_actions, read_corporate_actions
+    from aipha.research.paper_book import advance_paper_book, replay_paper_book
+    from aipha.research.snapshots import attest_snapshot_metadata
+
     pytest.importorskip("lightgbm")
     dates = pd.bdate_range("2022-01-03", periods=300)
     symbols = [f"60000{i}.SH" for i in range(6)]
@@ -393,9 +397,36 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
         def load_namechange(self, ts_code: str, **kwargs):
             return pd.DataFrame()
 
-    class PitFixture:
-        def get_indicator_history(self, symbol: str):
-            return []
+        def load_fina_indicator(self, symbol: str):
+            offset = symbols.index(symbol)
+            # Unsorted source rows include a revision, a newer report, a late
+            # correction of the old report and an announcement beyond the tape.
+            return pd.DataFrame([
+                {"ts_code": symbol, "end_date": period, "ann_date": day.strftime("%Y%m%d"),
+                 "roe": roe + offset, "revenue_yoy": growth + offset}
+                for period, day, roe, growth in [
+                    ("20211231", dates[100], 15., 25.),
+                    ("20220630", dates[170], 20., 30.),
+                    ("20211231", dates[40], 10., 20.),
+                    ("20211231", dates[200], 90., 95.),
+                    ("20221231", dates[-1] + pd.offsets.BDay(20), 99., 99.),
+                ]
+            ])
+
+        def load_income(self, symbol: str):
+            # Statements must wait for actual publication, including revisions.
+            return pd.DataFrame([
+                {"ts_code": symbol, "end_date": "20211231", "report_type": kind,
+                 "ann_date": dates[ann].strftime("%Y%m%d"),
+                 "f_ann_date": dates[actual].strftime("%Y%m%d"), "revenue": revenue}
+                for ann, actual, kind, revenue in [(45, 50, 1, 100.), (100, 105, 4, 120.)]
+            ])
+
+        def load_balancesheet(self, symbol: str):
+            return pd.DataFrame()
+
+        def load_cashflow(self, symbol: str):
+            return pd.DataFrame()
 
     cfg = ResearchConfig(
         train_years=1, test_months=1, forward_days=5,
@@ -405,9 +436,33 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     result = ResearchPipeline(cfg).run_tushare(
         EquityFixture(), tmp_path / "runs",
         start_date="20220103", end_date=dates[-1].strftime("%Y%m%d"),
-        pit_provider=PitFixture(), use_cache=False,
+        use_cache=False,
     )
     artifact = Path(result["artifact_dir"])
+    source_path = artifact / "input_snapshot.parquet"
+    metadata = verify_attested_parquet(
+        source_path, require_artifact_hash=True, verify_content_hash=True, require_source_signature=True,
+    )
+    source = pd.read_parquet(source_path)
+    observed_dates = pd.to_datetime(source.trade_date)
+    for offset, symbol in enumerate(symbols):
+        financials = source.loc[source.symbol.eq(symbol)].copy()
+        financials.index = pd.to_datetime(financials.trade_date)
+        assert financials.loc[:dates[39], "factor_roe"].isna().all()
+        for start, end, roe, growth in [(40, 99, 10., 20.), (100, 169, 15., 25.), (170, 299, 20., 30.)]:
+            rows = financials.loc[dates[start]:dates[end]]
+            assert len(rows) == end - start + 1
+            assert rows.factor_roe.eq(roe + offset).all()
+            assert rows.factor_revenue_yoy.eq(growth + offset).all()
+        # The declared ann_date is earlier than the real statement release.
+        assert financials.loc[:dates[49], "revenue"].isna().all()
+        assert financials.loc[dates[50]:dates[104], "revenue"].eq(100.).all()
+        assert financials.loc[dates[105]:, "revenue"].eq(120.).all()
+
+    model_manifest = json.loads((artifact / "model" / "model_manifest.json").read_text(encoding="utf-8"))
+    assert model_manifest["data_snapshot_id"] == result["data_snapshot_id"] == metadata["data_snapshot_id"]
+    assert {"factor_roe", "factor_revenue_yoy"} <= set(model_manifest["feature_columns"])
+    assert not {"roe", "revenue", "announce_date", "report_date"} & set(model_manifest["feature_columns"])
     plan_path = artifact / result["execution_plans"][0]
     plan = read_execution_plan(plan_path)
     assert plan.mode == "paper"
@@ -421,5 +476,47 @@ def test_tushare_fixture_runs_to_paper_plan(tmp_path: Path) -> None:
     assert report["walk_forward"]["mean_ic"] is None
     assert report["accounting"]["price_basis"] == "raw"
     assert report["accounting"]["cash_dividends_paid"] > 0
+    assert report["feature_missing_rates"]["by_feature"]["factor_roe"] == pytest.approx(40 / len(dates))
+    assert report["walk_forward"]["feature_selection"]["by_group"]["quality"] == [
+        "factor_revenue_yoy", "factor_roe",
+    ]
     events = json.loads((artifact / "corporate_actions.json").read_text(encoding="utf-8"))
     assert any(event["event"] == "cash_paid" for event in events)
+
+    actions = read_corporate_actions(source)
+
+    def at_close(day):
+        panel = source.loc[observed_dates.le(day)].copy()
+        # Rolling snapshots may only contain already announced event terms.
+        panel = attach_corporate_actions(panel, [event for event in actions if event.announce_date <= day.date()])
+        panel.attrs["snapshot_metadata"] = attest_snapshot_metadata(panel, {
+            "provider": metadata["provider"], "feature_version": metadata["feature_version"],
+            "data_snapshot_id": f"offline-paper:{result['run_id']}:{day.date()}",
+            "index_code": metadata["index_code"], "listing_calendar": metadata["listing_calendar"],
+            "start_date": metadata["start_date"], "end_date": day.date().isoformat(),
+        })
+        return panel
+
+    signal_day = pd.Timestamp(plan.rebalance_date)
+    next_day = dates[dates.get_loc(signal_day) + 1]
+    book = tmp_path / "paper.sqlite3"
+    preview = advance_paper_book(book, at_close(signal_day), cfg, plan=plan)
+    assert not book.exists() and preview["new_trades"] == []
+    accepted = advance_paper_book(book, at_close(signal_day), cfg, plan=plan, commit=True)
+    assert accepted["positions"] == {} and accepted["cash"] == cfg.initial_capital
+    executed = advance_paper_book(book, at_close(next_day), cfg, commit=True)
+    assert executed["new_trades"]
+    targets = {target.symbol: target for target in plan.targets}
+    for trade in executed["new_trades"]:
+        assert trade["signal_date"] == signal_day.date().isoformat()
+        assert trade["trade_date"] == next_day.date().isoformat()
+        assert trade["execution_plan_id"] == plan.plan_id
+        assert trade["run_id"] == result["run_id"]
+        assert trade["model_id"] == model_manifest["model_id"]
+        assert trade["signal_id"] == targets[trade["symbol"]].signal_id
+        raw_open = source.loc[observed_dates.eq(next_day) & source.symbol.eq(trade["symbol"]), "open_raw"].iloc[0]
+        assert trade["base_price"] == pytest.approx(raw_open)
+    before = book.read_bytes()
+    replay = replay_paper_book(book)
+    assert replay["trades"] == executed["new_trades"]
+    assert book.read_bytes() == before

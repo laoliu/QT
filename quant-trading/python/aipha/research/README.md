@@ -1,5 +1,8 @@
 # Canonical A-share research pipeline
 
+For the dated requirement-by-requirement implementation, migration and offline
+acceptance status, see [the refactor acceptance record](../../../docs/RESEARCH_REFACTOR_ACCEPTANCE.md).
+
 `ResearchPipeline` is the single low-frequency research entry point. It accepts
 a frozen market/feature panel, applies the row-wise historical universe filter,
 creates forward labels, trains the configured walk-forward model, replays the

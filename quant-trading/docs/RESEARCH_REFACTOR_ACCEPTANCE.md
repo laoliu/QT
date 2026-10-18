@@ -73,4 +73,6 @@ npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admi
 
 后续 Provider 目录隔离修复定向运行 `tests/scripts/test_research_cache_paths.py`、`tests/data/test_parquet_data_updater.py`、`tests/data/test_tushare_pit_provider.py`、`tests/data/test_financial_revisions.py`、`tests/research/test_research_completion.py`、`tests/research/test_research_pipeline.py`：**127 passed、2 warnings**。覆盖真实本地 Parquet 的目录隔离及并发复用，PIT、LightGBM、OOS、报告与 Paper fixture 链路继续通过；未重复运行全部 Python 或 TypeScript 检查。
 
+快照复权契约随后收紧：整列缺失不再默认填 `1`，逐行拒绝无效/无穷因子及价格溢出。新增 `test_adjustment_contract.py` 验证拒绝发生在特征生成前，合法拆股因子消除价格跳变并保留原始成交价格。执行 `python -m pytest tests/research tests/data/test_tushare_equity_provider.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/scripts/test_research_cache_paths.py -q --basetemp=.pytest-tmp-adjustment-contract --tb=short`：**433 passed、5 skipped、2 warnings**。这是全部研究测试和所列 Provider/PIT/路径测试，未扩展为真实数据训练或线上迁移结论。
+
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

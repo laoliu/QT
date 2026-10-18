@@ -246,11 +246,16 @@ def point_in_time_adjust_prices(frame: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"market frame missing adjustment columns: {', '.join(sorted(missing))}")
     out = frame.copy()
     factor = pd.to_numeric(out["adj_factor"], errors="coerce")
-    if factor.isna().any() or (factor <= 0).any():
-        raise ValueError("adj_factor must be positive and non-missing")
+    if factor.isna().any() or not np.isfinite(factor.to_numpy(dtype=float)).all() or (factor <= 0).any():
+        raise ValueError("adj_factor must be positive, finite and non-missing")
+    out["adj_factor"] = factor
     for column in ("open", "high", "low", "close"):
         out[f"{column}_raw"] = pd.to_numeric(out[column], errors="raise")
-        out[column] = out[column].astype(float) * factor
+        with np.errstate(over="ignore", invalid="ignore"):
+            adjusted = out[f"{column}_raw"].astype(float) * factor
+        if not np.isfinite(adjusted.to_numpy(dtype=float)).all():
+            raise ValueError(f"point-in-time adjusted {column} must be finite")
+        out[column] = adjusted
     out["price_adjustment"] = "point_in_time_factor"
     return out
 
@@ -317,7 +322,7 @@ def assemble_tushare_snapshot(
     metadata and cannot prove historical ST status. Its rows must contain
     ``trade_date``, ``ts_code`` and ``is_st``.
     """
-    required_market = {"ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"}
+    required_market = {"ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount", "adj_factor"}
     missing = required_market - set(market.columns)
     if missing:
         raise ValueError(f"TuShare market data missing columns: {', '.join(sorted(missing))}")
@@ -387,9 +392,6 @@ def assemble_tushare_snapshot(
     out["is_index_member"] = _historical_membership(out["trade_date"], out["ts_code"], index_snapshots)
     if industry_history is not None and not industry_history.empty:
         out["industry"] = _historical_industry(out["trade_date"], out["ts_code"], industry_history)
-    out["adj_factor"] = pd.to_numeric(out.get("adj_factor", 1.0), errors="coerce")
-    if out["adj_factor"].isna().any():
-        raise ValueError("TuShare adj_factor is required for every market row")
     out = point_in_time_adjust_prices(out)
     out = out.rename(columns={"ts_code": "symbol", "vol": "volume"})
     columns = [

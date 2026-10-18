@@ -536,6 +536,11 @@ the required calendar, historical universe and signed snapshot checks. The
 current local inventory and missing inputs are documented in
 `docs/DATA_CACHE_ACCEPTANCE.md` in the application directory.
 
+Snapshot assembly requires an explicit positive finite `adj_factor` on every
+market row. A missing factor column is not treated as a unit adjustment;
+invalid factors and adjusted-price overflow fail before feature generation.
+Raw execution prices remain alongside prices adjusted by the same-date factor.
+
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
 read-only comparison, `--conflicts` to export keyed row conflicts, or

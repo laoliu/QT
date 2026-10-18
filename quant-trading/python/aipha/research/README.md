@@ -541,6 +541,11 @@ market row. A missing factor column is not treated as a unit adjustment;
 invalid factors and adjusted-price overflow fail before feature generation.
 Raw execution prices remain alongside prices adjusted by the same-date factor.
 
+The SSE calendar loader requests the complete listing-age range in one call,
+validates every calendar date including closures, and reuses larger cached
+ranges or existing annual partitions. Conflicting overlapping closure flags
+fail closed. A truncated response never becomes a partial research calendar.
+
 Legacy SQLite history can be audited and migrated without replacing the old
 database. Use `python scripts/migrate_sqlite.py --audit OLD.db NEW.db` for a
 read-only comparison, `--conflicts` to export keyed row conflicts, or

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import tempfile
 import threading
 import time
@@ -308,32 +309,55 @@ class TuShareEquityProvider:
     # ------------------------------------------------------------------
 
     def load_trade_calendar(self, start_date: str, end_date: str, *, use_cache: bool = True) -> pd.DataFrame:
-        """Load SSE open/closed dates in bounded annual chunks, failing on gaps."""
+        """Load complete SSE dates in one request, reusing overlapping caches.
+
+        The endpoint can return the full listing-age history in one response.
+        Annual requests exhaust low-frequency quotas before research starts.
+        Legacy annual partitions remain readable; gaps and conflicting cached
+        closure flags never become an inferred weekday calendar.
+        """
         from aipha.universe.historical import normalize_trade_calendar
 
         start, end = pd.Timestamp(start_date), pd.Timestamp(end_date)
         if pd.isna(start) or pd.isna(end) or start > end:
             raise ValueError("invalid trade calendar range")
+        first, last = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
         chunks = []
-        for year in range(start.year, end.year + 1):
-            first = max(start, pd.Timestamp(year=year, month=1, day=1)).strftime("%Y%m%d")
-            last = min(end, pd.Timestamp(year=year, month=12, day=31)).strftime("%Y%m%d")
-            path = self.cache_dir / f"trade_cal_SSE_{first}_{last}.parquet"
-            cached = self._safe_read_parquet(path) if use_cache and path.exists() else None
-            if cached is not None:
+        if use_cache:
+            for path in sorted(self.cache_dir.glob("trade_cal_SSE_*.parquet")):
+                match = re.fullmatch(r"trade_cal_SSE_(\d{8})_(\d{8})\.parquet", path.name)
+                if match is None:
+                    continue
+                cache_first, cache_last = match.groups()
+                if cache_last < first or cache_first > last:
+                    continue
+                cached = self._safe_read_parquet(path)
+                if cached is None:
+                    continue
                 try:
-                    chunk = normalize_trade_calendar(cached, first, last)
+                    chunk = normalize_trade_calendar(cached, cache_first, cache_last)
                 except ValueError:
-                    cached = None
-            if cached is None:
-                result = self._retry_call(
-                    self.api.trade_cal, exchange="SSE", start_date=first, end_date=last,
-                    fields="exchange,cal_date,is_open",
-                )
-                chunk = normalize_trade_calendar(result, first, last)
-                self._atomic_write_parquet(chunk, path)
-            chunks.append(chunk)
-        return normalize_trade_calendar(pd.concat(chunks, ignore_index=True), start, end)
+                    continue
+                chunk = chunk.loc[chunk.cal_date.between(start, end)].copy()
+                chunk["exchange"] = "SSE"
+                chunks.append(chunk[["exchange", "cal_date", "is_open"]])
+        if chunks:
+            combined = pd.concat(chunks, ignore_index=True)
+            if combined.groupby("cal_date").is_open.nunique().gt(1).any():
+                raise ValueError("conflicting cached trade calendar is_open flags")
+            try:
+                return normalize_trade_calendar(combined.drop_duplicates("cal_date"), start, end)
+            except ValueError:
+                pass  # Partial caches cannot prove the requested coverage.
+        result = self._retry_call(
+            self.api.trade_cal, exchange="SSE", start_date=first, end_date=last,
+            fields="exchange,cal_date,is_open",
+        )
+        calendar = normalize_trade_calendar(result, start, end)
+        calendar["exchange"] = "SSE"
+        calendar = calendar[["exchange", "cal_date", "is_open"]]
+        self._atomic_write_parquet(calendar, self.cache_dir / f"trade_cal_SSE_{first}_{last}.parquet")
+        return calendar
 
     # ------------------------------------------------------------------
     # daily_basic — 每日指标（市值/PE/PB/换手率）

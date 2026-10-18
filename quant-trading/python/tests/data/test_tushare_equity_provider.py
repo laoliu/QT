@@ -120,17 +120,51 @@ class TestResearchTradeCalendar:
         return pd.DataFrame({"exchange": "SSE", "cal_date": dates.strftime("%Y%m%d"),
                              "is_open": ((dates.dayofweek < 5) & (dates != pd.Timestamp("2024-01-01"))).astype(int)})
 
-    def test_annual_download_preserves_closures_and_reuses_cache(self, provider):
+    def test_single_range_download_preserves_closures_and_reuses_cache(self, provider):
         def fetch(**kwargs):
             assert kwargs["exchange"] == "SSE" and "is_open" not in kwargs
             return self.calendar(kwargs["start_date"], kwargs["end_date"])
         provider.api.trade_cal.side_effect = fetch
         result = provider.load_trade_calendar("20231229", "20240103", use_cache=False)
-        assert provider.api.trade_cal.call_count == 2
+        assert provider.api.trade_cal.call_count == 1
         assert len(result) == 6 and result.is_open.tolist() == [1, 0, 0, 0, 1, 1]
         cached = provider.load_trade_calendar("20231229", "20240103")
         pd.testing.assert_frame_equal(result, cached)
-        assert provider.api.trade_cal.call_count == 2
+        assert provider.api.trade_cal.call_count == 1
+
+    def test_full_history_cache_serves_subset_without_another_api_call(self, provider):
+        frame = self.calendar("19901219", "20261016")
+        path = provider.cache_dir / "trade_cal_SSE_19901219_20261016.parquet"
+        frame.to_parquet(path, index=False)
+        before = path.read_bytes()
+        result = provider.load_trade_calendar("20231229", "20240103")
+        assert len(result) == 6
+        assert result.is_open.tolist() == [1, 0, 0, 0, 1, 1]
+        provider.api.trade_cal.assert_not_called()
+        assert path.read_bytes() == before
+
+    def test_legacy_annual_fragments_still_cover_the_requested_range(self, provider):
+        self.calendar("20231229", "20231231").to_parquet(
+            provider.cache_dir / "trade_cal_SSE_20231229_20231231.parquet", index=False)
+        self.calendar("20240101", "20240103").to_parquet(
+            provider.cache_dir / "trade_cal_SSE_20240101_20240103.parquet", index=False)
+        result = provider.load_trade_calendar("20231230", "20240102")
+        assert len(result) == 4 and result.is_open.tolist() == [0, 0, 0, 1]
+        provider.api.trade_cal.assert_not_called()
+
+    def test_conflicting_cached_closure_flags_fail_without_network_or_rewrite(self, provider):
+        frame = self.calendar("20240101", "20240103")
+        paths = [provider.cache_dir / "trade_cal_SSE_20240101_20240103.parquet",
+                 provider.cache_dir / "trade_cal_SSE_20240102_20240103.parquet"]
+        frame.to_parquet(paths[0], index=False)
+        changed = self.calendar("20240102", "20240103")
+        changed.loc[0, "is_open"] = 0
+        changed.to_parquet(paths[1], index=False)
+        before = [p.read_bytes() for p in paths]
+        with pytest.raises(ValueError, match="conflicting cached trade calendar"):
+            provider.load_trade_calendar("20240101", "20240103")
+        provider.api.trade_cal.assert_not_called()
+        assert [p.read_bytes() for p in paths] == before
 
     @pytest.mark.parametrize("bad", ["empty", "truncated", "missing_closed"])
     def test_calendar_does_not_cache_incomplete_endpoint_result(self, provider, bad):

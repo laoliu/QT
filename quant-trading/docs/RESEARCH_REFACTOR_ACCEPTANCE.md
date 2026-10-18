@@ -12,7 +12,7 @@
 | 4. 标签与月度调仓 | 默认研究 YAML 为日频、月度、收盘信号、次日开盘、三年训练、一月预测、20 日标签和 purge。`test_execution_timing.py`、`test_research_pipeline.py` 验证交易日边界、无效标签和训练/测试隔离。 | 集成 fixture 缩短训练窗口以控制测试时间，不替代真实三年窗口研究。 |
 | 5. 唯一组合回测 | `research/backtest.py` 处理原始价格、手数、现金、T+1、涨跌停、停牌、换手、费用、滑点、基准与公司事件；组合构建约束单票和行业。`research/style.py` 将配置的风格 z-score 预算用于目标权重、导出、CSCV 和 Paper 计划复核。相关证据见 `test_style_constraints.py`、`test_portfolio_cscv.py`、`test_corporate_action_accounting.py`、`test_execution_timing.py`、`test_research_pipeline.py`。 | 风格预算默认未开启，约束目标组合；受执行限制及价格变化影响的实际持仓不保证始终满足预算，尚无 broker 实盘侧持续风格风控。缺失行业数据时明确报告不可用；不推断历史行业。完整持有期红利税、配股、零碎送股仍未实现。 |
 | 6. 不可变模型与研究报告 | `research/artifacts.py` 校验 schema、特征顺序/版本/策略和模型字节；pipeline 写入输入快照、每折模型、OOS、收益、交易、报告和计划。`test_end_to_end_oos_run_writes_reproducible_artifacts` 重新加载模型并重算 CSCV 结果。 | CSCV/PBO 只度量已记录的固定 Top-K 候选组合选择，不覆盖未记录的模型/因子搜索；样本不足或不可识别的统计量返回不可用。 |
-| 7. 执行隔离与迁移工具 | `research/execution_plan.py`、`paper_book.py`、QMT plan adapter 和 Node 安全配置限制执行模式、风险及来源；原始 QMT 单订单入口被拒绝。SQLite、模型、配置和 Paper 日历均有显式迁移工具。 | 工具通过 fixture 不等于存量文件已迁移。20 份历史 ML Paper 配置仍是 legacy；实际旧研究 DB/模型尚未逐项迁移核对。原文件不自动覆盖或删除。 |
+| 7. 执行隔离与迁移工具 | `research/execution_plan.py`、`paper_book.py`、QMT plan adapter 和 Node 安全配置限制执行模式、风险及来源；原始 QMT 单订单入口被拒绝。SQLite、模型、配置和 Paper 日历均有显式迁移工具。 | 用户确认没有旧研究 DB/模型，实际旧产物迁移不适用；工具仍由 fixture 验证。20 份历史 ML Paper 配置保留为 legacy 库存，不能计为已迁移或已部署。后续需以规范输入重训。 |
 | 8. 统一配置和入口 | `python/aipha/configs/research/a_stock_ml.yaml` 是研究策略配置；规范 Paper profile 只引用它并配置部署路径。历史 YAML 通过显式兼容入口保留。`test_config_identity.py`、`test_paper_launcher.py` 检查配置传递、默认预演及路径。 | 示例 profile 没有被自动加入启动清单；不能把安装示例当成任务部署完成。 |
 
 ## 财务 PIT 到 Paper 的完整离线证据
@@ -39,7 +39,7 @@
 
 进一步核对这些配置引用的 9 个不同模型目录，当前 Python 项目路径下全部不存在；ML 组件均未声明规范快照路径。因此这些配置暂时没有可供实际迁移/推理核对的输入。不能生成空模型目录、附加新 manifest 或只删除兼容标志来宣称迁移完成。
 
-真实迁移应依次进行：选择需保留的旧任务，定位原始 DB/模型，核对可信训练与特征证据，必要时通过规范 TuShare 链路重训，配置独立的新 Paper 账本，验证实际推理与计划，再运行只读迁移审计。不能只删 `legacy_ml_compat` 标志。
+用户随后明确确认没有保存旧模型和研究结果数据库，因此不再等待这些路径，也不假设有需要复制的旧研究记录。本机后续路线是：补齐并验证真实 TuShare PIT 输入，使用默认 CSI500 规范配置重新训练，配置独立的新 Paper 账本，验证实际推理与计划，再运行只读部署审计。旧兼容配置继续保留，不自动复制、删除或标为规范；不能只删 `legacy_ml_compat` 标志。若未来恢复了旧产物，再使用迁移工具显式处理。
 
 审计区分两类契约：`canonical` 校验 ML 组件的签名快照、模型 manifest 与文件哈希；`canonical_paper` 使用启动器共享的 profile 解析器，校验签名快照、当日计划、已有账本全部回执和重放，再执行内存记账预演。两者均不反序列化模型或证明推理成功；后者明确返回 `model_provenance_verified=false`、`inference_exercised=false`、`committed=false`。没有当日计划的新空账本可通过现金估值预演，不能算作模型迁移完成。`--strict` 只接受上述两种已校验的消费者契约，拒绝 legacy、混合、畸形配置和共享账本路径，不代表真实逐日运行验收。
 
@@ -47,7 +47,7 @@
 
 进一步沿数据面板核对，实际原始数据位于 `G:/qtdata/cache/equity_tushare`，含 178 个月日线及大量旧财务缓存；用户目录的 SQLite 行情缓存也有实际数据，其动态统计及各表口径见 [DATA_CACHE_ACCEPTANCE.md](DATA_CACHE_ACCEPTANCE.md)。这些数据可作为补齐规范输入的基础，不能继续描述为没有历史行情。配套复权、每日指标、交易日历及新版 PIT 财务仍有缺口。规范 `train_tushare` 的默认缓存已接到统一路径解析，Provider 工厂按缓存根分别复用实例，避免仅查项目内空目录或长驻进程沿用其他配置的目录。
 
-普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。完整历史日历补全随后受到上游访问限制，仍无可直接训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
+普通终端进程没有 TuShare token 或快照签名密钥，但工作区 `.env` 中确有 token，应用启动器会加载并解析配置中的环境变量引用。使用解析后的实际凭据查询 TuShare SSE 交易日历成功；早先直接提交配置引用文本导致的 token 错误不能代表真实凭据状态。经过额度窗口后，已用单次范围请求取得并校验 1990-12-19 至 2026-10-16 的 13,086 个日历日，导入共享原始缓存，Provider 离线读取验证通过。退市资料请求则受到每天 5 次限额限制；其他缺失配套输入仍需补齐，目前没有可直接训练的已签名规范快照。签名密钥应由部署环境提供，测试密钥仅用于本地 fixture。尚无证据证明规范 Paper 已连续真实交易日运行；历史一次性回放不计作逐日运行记录。
 
 仓库 `config.json` 和本机 `config.local.json` 的交易字段在本次核对时均为 paper/broker paper、确认开启、执行计划必需、自动启动关闭。本机覆盖文件未纳入 Git；该结论是本机时点检查，其他部署必须检查各自覆盖配置。
 
@@ -74,5 +74,7 @@ npm.cmd exec -- vitest run src/http/pages/admin/local-data.test.ts src/http/admi
 后续 Provider 目录隔离修复定向运行 `tests/scripts/test_research_cache_paths.py`、`tests/data/test_parquet_data_updater.py`、`tests/data/test_tushare_pit_provider.py`、`tests/data/test_financial_revisions.py`、`tests/research/test_research_completion.py`、`tests/research/test_research_pipeline.py`：**127 passed、2 warnings**。覆盖真实本地 Parquet 的目录隔离及并发复用，PIT、LightGBM、OOS、报告与 Paper fixture 链路继续通过；未重复运行全部 Python 或 TypeScript 检查。
 
 快照复权契约随后收紧：整列缺失不再默认填 `1`，逐行拒绝无效/无穷因子及价格溢出。新增 `test_adjustment_contract.py` 验证拒绝发生在特征生成前，合法拆股因子消除价格跳变并保留原始成交价格。执行 `python -m pytest tests/research tests/data/test_tushare_equity_provider.py tests/data/test_tushare_pit_provider.py tests/data/test_financial_revisions.py tests/scripts/test_research_cache_paths.py -q --basetemp=.pytest-tmp-adjustment-contract --tb=short`：**433 passed、5 skipped、2 warnings**。这是全部研究测试和所列 Provider/PIT/路径测试，未扩展为真实数据训练或线上迁移结论。
+
+日历加载改为单次范围请求，并复用更大范围缓存及旧年度分区后，运行 `python -m pytest tests/data/test_tushare_equity_provider.py tests/research/test_market_calendar.py tests/research/test_listing_sessions.py tests/research/test_research_completion.py tests/research/test_research_pipeline.py tests/scripts/test_research_cache_paths.py -q --basetemp=.pytest-tmp-calendar-range --tb=short`：**144 passed、2 warnings**。覆盖缓存重叠冲突拒绝、不完整响应拒绝和 PIT 到 Paper fixture；另已用实际 TuShare 全历史日历验证 Provider 的纯离线读取。TypeScript 最新核验为类型检查通过、上述 8 个文件 **156 项测试通过**；本轮没有 TypeScript 改动。
 
 Linux 原生独占发布和 Docker cron 尚未在本机执行。8 项跳过包含 Windows 符号链接权限和缺少可选 Torch/PyG 的模块/参数测试；测试结果不能扩展成这些平台或可选模型的实际运行验收。

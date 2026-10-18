@@ -59,6 +59,10 @@
 
 用户自行更新 BIOS 并重启后，2026-10-18 23:13 读取到 BIOS **A.K0**、SMBIOS 构建日期 2026-08-19；官网包的发布日期为 2026-08-28，两者含义不同。Windows 记录的 CPU0 微码原始字节由 `13-01-00-00` 变为 `37-01-00-00`，按小端解码由 **0x113 升为 0x137**。仍是注册表观察，并非直接读取 MSR。用户明确只确认更新 BIOS；Intel 默认设置、XMP、降压及独立 ME 更新均未确认，不能将这些条件写成已经完成。
 
+23:41 补充只读运行时证据：`Get-CimInstance -Namespace root/Intel_ME -ClassName ME_System` 的 `FWVersion` 为 **16.1.42.2872**，与本次已缓存的主板官方 `7E06vAK` 条目所列 ME 版本一致。因此 ME **当前固件版本已确认**，不再需要仅为补齐版本信息要求用户运行独立 ME 更新器。ME WMI Provider 驱动版本 `2408.5.4.0`、ME Interface 驱动版本 `2406.5.5.0` 是另一组信息，不能误当固件版本。没有更新前 ME 固件读数，不能推断本次 BIOS 更新是否改变了 ME，也不能据此单独归因旧崩溃。WMI 状态码原样留存，不扩大解释为完整 ME 健康验收。
+
+同次 `Win32_PhysicalMemory` 报告两条 Kingston 32 GiB 内存，`Speed` 和 `ConfiguredClockSpeed` 均为 4800。这只是 SMBIOS 配置速度观察，不足以确认 XMP 关闭、Intel 默认设置已恢复或未降压；这些 BIOS 条件仍未知。本次没有修改任何固件、驱动或设置。命令来源、原始字段与官方条目哈希见 [固件运行时证据](evidence/firmware_runtime_20261018.json)。
+
 本次验证没有修改全局 Python/科学栈，也没有限制到 E 核；环境探针及真实预演进程均确认进程/系统亲和性为 `0xffffffff`。全局环境为 Python 3.13.4、NumPy 2.4.1、pandas 3.0.1、SciPy 1.17.1、LightGBM 4.6.0、scikit-learn 1.8.0、PyArrow 23.0.1。
 
 | 更新后负载 | 实测结果 |

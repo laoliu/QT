@@ -15,6 +15,7 @@ header h1{font-size:18px;font-weight:600}
 .tab-content{display:none;padding:16px 24px}
 .tab-content.active{display:block}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-bottom:16px}
+#tab-overview .cards{grid-template-columns:minmax(0,1fr)}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
 .card h3{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
@@ -59,10 +60,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .kpi .kpi-label{font-size:11px;color:var(--text-dim);margin-top:4px}
 .log-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;max-height:300px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.5}
 .log-info{color:var(--accent)}.log-warning{color:var(--yellow)}.log-critical{color:var(--red)}.log-signal{color:var(--green)}
-.event-stream-card{grid-column:1/-1}
+.event-stream-card{grid-column:1/-1;width:100%;min-width:0}
 .event-stream-status{font-size:10px;font-weight:400;color:var(--text-dim);margin-left:auto}
 .event-stream-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-2px 0 8px;color:var(--text-dim);font-size:11px}
-.event-list{background:var(--bg);border:1px solid var(--border);border-radius:6px;max-height:360px;overflow-y:auto}
+.event-list{width:100%;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:6px;max-height:360px;overflow-y:auto}
 .event-item{padding:8px 10px;border-bottom:1px solid var(--border);font-size:11px;line-height:1.45}
 .event-item:last-child{border-bottom:0}
 .event-item:hover{background:rgba(255,255,255,.025)}

@@ -131,9 +131,12 @@ class OperationsView:
 
     def named_targets(self, rows):
         """Current local names are display metadata only; never rewrite plans."""
+        return target_rows(rows, self.stock_name_map())
+
+    def stock_name_map(self):
         if self._stock_names is None:
             self._stock_names = self.section("stock_names", self.stock_names, {})
-        return target_rows(rows, self._stock_names)
+        return self._stock_names
 
     def stock_names(self):
         import pandas as pd
@@ -188,8 +191,12 @@ class OperationsView:
             dates = sorted(frame.trade_date.unique().tolist(), reverse=True)
         day = day or (dates[0] if dates else None)
         frame = frame.loc[frame.trade_date.eq(day)].sort_values(["rank", "symbol"], kind="stable")
+        rows = frame.iloc[offset:offset + limit].to_dict("records")
+        names = self.stock_name_map()
+        for row in rows:
+            row["name"] = names.get(str(row["symbol"]).strip().upper())
         return clean({"scope": scope, "date": day, "dates": dates, "total": len(frame), "offset": offset, "limit": limit,
-                      "rows": frame.iloc[offset:offset + limit].to_dict("records")}, self.secrets)
+                      "rows": rows}, self.secrets)
 
     def research(self):
         import pandas as pd

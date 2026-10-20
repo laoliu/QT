@@ -22,6 +22,8 @@ from typing import Any, Optional
 
 try:
     from xtquant import xtdata
+    # Keep SDK welcome messages out of the NDJSON response stream.
+    xtdata.enable_hello = False
     from xtquant.xttrader import XtQuantTrader, XtQuantTraderCallback
     from xtquant.xttype import StockAccount
     HAS_XTQUANT = True

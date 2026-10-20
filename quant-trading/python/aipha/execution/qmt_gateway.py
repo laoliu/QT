@@ -557,6 +557,7 @@ class QMTGateway(BrokerGateway):
         if not HAS_XTQUANT:
             return
         from xtquant import xtdata  # type: ignore[import-untyped]
+        xtdata.enable_hello = False
         tick_cb = self._callback.on_stock_data if self._callback else None
         for sym in symbols:
             if sym not in self._subscribed:

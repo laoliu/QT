@@ -65,9 +65,9 @@ interface RouteBacktestItem {
 export function createStockRecommendTool(
   _api: QuantTradingRuntime,
   config: QuantTradingConfig,
-  scanHistoryStore?: ScanHistoryStore,
+  historyStore?: ScanHistoryStore,
   getDataProvider?: () => MarketDataProvider,
-  recommendationTracker?: RecommendationTracker,
+  tracker?: RecommendationTracker,
 ) {
   return {
     name: "stock_recommend",
@@ -152,6 +152,8 @@ export function createStockRecommendTool(
       required: [],
     },
     async execute(args: Record<string, unknown>) {
+      const scanHistoryStore = args.persist_results === false ? undefined : historyStore;
+      const recommendationTracker = args.persist_results === false ? undefined : tracker;
       const count = (args.count as number) ?? 3;
       const mode = (args.mode as string) ?? "classic";
       const horizon = (args.horizon as string) ?? "all";

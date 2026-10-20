@@ -162,6 +162,7 @@ import { createCBAnalysisTool } from "./src/tools/cb-analysis.js";
 import { createStrategyValidationTool } from "./src/tools/strategy-validation.js";
 import { createEquityScreeningTool } from "./src/tools/equity-screening.js";
 import { createAiphaMonitorTool } from "./src/tools/aipha-monitor.js";
+import { createResearchOperationsTool } from "./src/tools/research-operations.js";
 import { createPortfolioRebalanceTool } from "./src/tools/portfolio-rebalance.js";
 import { createPortfolioTool } from "./src/tools/portfolio.js";
 import { createPositionSizingTool } from "./src/tools/position-sizing.js";
@@ -727,13 +728,15 @@ const quantTradingApp = {
       strategy_optimizer: createStrategyOptimizerTool(api, config, composedStrategyStore),
       strategy_composer: createStrategyComposerTool(api, config, composedStrategyStore),
       custom_strategy: createCustomStrategyTool(api, customStrategyStore),
-      position_sizing: createPositionSizingTool(api, config, async () => {
+      position_sizing: createPositionSizingTool(api, config, async (strict = false) => {
         const mgr = liveEngine.orderManager;
-        if (!mgr) return 100_000;
+        if (!mgr) { if (strict) throw new Error("账户尚未连接"); return 100_000; }
         try {
           const account = await mgr.broker.queryAccount();
+          if (strict) return account.totalAssets ?? account.cash;
           return account.totalAssets || account.cash || 100_000;
         } catch {
+          if (strict) throw new Error("账户权益查询失败");
           return 100_000;
         }
       }),
@@ -794,6 +797,7 @@ const quantTradingApp = {
       strategy_validation: createStrategyValidationTool(api, config),
       equity_screening: createEquityScreeningTool(api, config),
       aipha_monitor: createAiphaMonitorTool(api, config),
+      research_operations: createResearchOperationsTool(),
     };
 
     const toolLabels: Record<string, string> = {

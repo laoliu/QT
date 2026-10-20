@@ -85,7 +85,7 @@ export class ChatStore {
   listMessages(conversationId: string, limit = 200): ChatMessage[] {
     const rows = this.dbOrThrow.prepare(`SELECT id, conversation_id AS conversationId, role, content, status,
       created_at AS createdAt, skills_json AS skillsJson, tool_calls_json AS toolCallsJson
-      FROM chat_messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?`).all(conversationId, limit) as Array<Record<string, unknown>>;
+      FROM chat_messages WHERE conversation_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?`).all(conversationId, limit) as Array<Record<string, unknown>>;
     return rows.reverse().map((r) => ({
       id: String(r.id), conversationId: String(r.conversationId), role: r.role as ChatMessage["role"],
       content: String(r.content), status: r.status as ChatMessage["status"], createdAt: String(r.createdAt),

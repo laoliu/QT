@@ -110,7 +110,14 @@ def _get_fundamentals(symbol: str) -> dict | None:
 
 
 def _fetch_fundamentals_on_demand(symbol: str) -> dict | None:
-    """Fetch fundamentals with multi-source fallback: 东财个股 → 东财快照 → 雪球."""
+    """Prefer local snapshots before requesting remote fundamentals."""
+    try:
+        from cache.stock_cache import get_cache
+        local, _ = get_cache().get_fundamentals([symbol])
+        if symbol in local:
+            return local[symbol]
+    except Exception:
+        pass  # A local cache failure must not disable the remaining providers.
     sources = [
         ("东财个股", _fetch_via_em_individual),
         ("东财快照", _fetch_via_em_spot),

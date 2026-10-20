@@ -29,6 +29,7 @@ import traceback
 from datetime import datetime
 from typing import Any
 from urllib.request import getproxies
+from data_providers.yahoo_transport import create_session, concise_yahoo_logs, in_cooldown
 
 # ── Proxy management ──
 # Detect system proxy BEFORE clearing env vars.
@@ -125,27 +126,29 @@ def _fetch_us_quotes(symbols: list[str]) -> dict[str, dict]:
     Returns: {symbol: {price, change, changePct, volume, marketCap, name}}
     """
     results: dict[str, dict] = {}
-    _restore_proxy()
+    if in_cooldown():
+        print("[warning] [event_catalyst] Yahoo Finance cooling down; keeping previous catalyst data", file=sys.stderr)
+        return results
     try:
         import yfinance as yf
         # Batch download avoids per-ticker rate limiting from Yahoo Finance
-        df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=False)
+        with create_session() as session, concise_yahoo_logs():
+            df = yf.download(symbols, period="5d", group_by="ticker", progress=False,
+                             threads=4, timeout=5, session=session, auto_adjust=False)
         if df is None or df.empty:
+            print("[warning] [event_catalyst] Yahoo quotes unavailable (network/limit); keeping previous catalyst data", file=sys.stderr)
             return results
 
         for sym in symbols:
             try:
-                if len(symbols) == 1:
-                    hist = df
-                else:
-                    hist = df[sym] if sym in df.columns.get_level_values(0) else None
+                hist = df[sym] if getattr(df.columns, "nlevels", 1) > 1 else df
                 if hist is None or hist.empty or hist["Close"].dropna().empty:
                     continue
                 closes = hist["Close"].dropna()
-                if len(closes) < 1:
+                if len(closes) < 2:
                     continue
                 last_close = float(closes.iloc[-1])
-                prev_close = float(closes.iloc[-2]) if len(closes) >= 2 else last_close
+                prev_close = float(closes.iloc[-2])
                 change = last_close - prev_close
                 change_pct = (change / prev_close * 100) if prev_close > 0 else 0.0
                 vol = hist["Volume"].dropna()
@@ -161,12 +164,12 @@ def _fetch_us_quotes(symbols: list[str]) -> dict[str, dict]:
                 }
             except Exception as e:
                 print(f"[event_catalyst] failed to parse {sym}: {e}", file=sys.stderr)
+        if len(results) < len(symbols):
+            print(f"[warning] [event_catalyst] Yahoo quotes incomplete: {len(results)}/{len(symbols)} tickers available", file=sys.stderr)
     except ImportError:
-        print("[event_catalyst] yfinance not installed", file=sys.stderr)
+        print("[warning] [event_catalyst] yfinance not installed", file=sys.stderr)
     except Exception as e:
-        print(f"[event_catalyst] batch download failed: {e}", file=sys.stderr)
-    finally:
-        _clear_proxy()
+        print(f"[warning] [event_catalyst] Yahoo quotes unavailable ({type(e).__name__}); keeping previous catalyst data", file=sys.stderr)
     return results
 
 
@@ -214,16 +217,20 @@ def _fetch_us_news(symbols: list[str], limit: int = 5) -> dict[str, list[dict]]:
     Handles yfinance 1.2.0+ rate limiting by stopping early on rate limit errors.
     """
     results: dict[str, list[dict]] = {}
-    _restore_proxy()
+    if in_cooldown():
+        return results
     try:
         import yfinance as yf
+        session = create_session()
         rate_limited = False
         for sym in symbols:
             if rate_limited:
                 results[sym] = []
                 continue
             try:
-                ticker = yf.Ticker(sym)
+                if session.unavailable or in_cooldown():
+                    break
+                ticker = yf.Ticker(sym, session=session)
                 news = ticker.news or []
                 items = [_parse_news_item(n) for n in news[:limit] if isinstance(n, dict)]
                 results[sym] = items
@@ -236,7 +243,8 @@ def _fetch_us_news(symbols: list[str], limit: int = 5) -> dict[str, list[dict]]:
     except ImportError:
         pass
     finally:
-        _clear_proxy()
+        if "session" in locals():
+            session.close()
     return results
 
 
@@ -361,7 +369,9 @@ def _check_us(config: dict) -> dict:
     min_change = float(config.get("min_change_pct", 2.0))
 
     quotes = _fetch_us_quotes(us_symbols)
-    news = _fetch_us_news(us_symbols, limit=5)
+    if not quotes:
+        return {"error": "Yahoo quotes unavailable", "data_status": "unavailable"}
+    news = _fetch_us_news(list(quotes), limit=5) if config.get("include_news", True) else {}
 
     movers: list[dict] = []
     for sym in us_symbols:
@@ -475,7 +485,9 @@ def _catalyst_picks(config: dict) -> dict:
 
     # Step 1: Check US movers
     quotes = _fetch_us_quotes(us_symbols)
-    news = _fetch_us_news(us_symbols, limit=5)
+    if not quotes:
+        return {"error": "Yahoo quotes unavailable", "data_status": "unavailable"}
+    news = _fetch_us_news(list(quotes), limit=5) if config.get("include_news", True) else {}
 
     triggered_us: list[dict] = []
     for sym in us_symbols:

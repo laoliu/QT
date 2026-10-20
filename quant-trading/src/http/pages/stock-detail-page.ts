@@ -16,7 +16,7 @@ export function getStockDetailPageHtml(baseUrl: string, apiToken?: string): stri
 :root{--bg:#1a1a2e;--card:#16213e;--border:#0f3460;--text:#e0e0e0;--text-dim:#8a8a9a;
 --green:#00c853;--red:#ff1744;--yellow:#ffd600;--blue:#448aff;--orange:#ff9100;}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:14px;padding:12px}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:14px;padding:12px;overflow-wrap:anywhere}
 a{color:var(--blue);text-decoration:none}
 .back{display:inline-block;margin-bottom:8px;font-size:13px}
 .header{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
@@ -28,6 +28,7 @@ a{color:var(--blue);text-decoration:none}
 .up-bg{background:rgba(255,23,68,.15);color:var(--red)}
 .down-bg{background:rgba(0,200,83,.15);color:var(--green)}
 .grid{display:grid;grid-template-columns:1fr 280px;gap:10px}
+.grid>*,.section-grid>*,.info-grid>*{min-width:0}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
 .card h3{font-size:14px;margin-bottom:8px;color:var(--text-dim)}
@@ -79,6 +80,7 @@ td:first-child,th:first-child{text-align:left}
 .news-item:last-child{border:none}
 .news-item .news-title{font-size:13px;font-weight:500;margin-bottom:3px;display:flex;align-items:center;gap:6px}
 .news-item .news-title a{color:var(--text)}
+.news-item .news-title a{min-width:0}
 .news-item .news-title a:hover{color:var(--blue)}
 .news-item .news-meta{font-size:11px;color:var(--text-dim)}
 .news-item .news-summary{font-size:12px;color:var(--text-dim);margin-top:3px;line-height:1.5}
@@ -144,13 +146,17 @@ var maToggles={ma5:true,ma10:true,ma20:true,ma60:false,ma120:false,ma250:false};
 var _loadSeq=0; // race-condition guard: only latest request renders
 var _drawToken=0; // cancel stale chart-draw polls
 var _abortCtrl=null; // AbortController for in-flight fetch
+var _quoteAbortCtrl=null;
+var _quoteSeq=0;
+var detailData=null;
 
-function api(path,signal){
+function api(path,signal,body){
   var h={};
   if(_T)h['Authorization']='Bearer '+_T;
   var opts={credentials:'include',headers:h,cache:'no-store'};
+  if(body){opts.method='POST';h['Content-Type']='application/json';opts.body=JSON.stringify(body)}
   if(signal)opts.signal=signal;
-  return fetch(BASE+path,opts).then(function(r){return r.json()});
+  return fetch(BASE+path,opts).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||'HTTP '+r.status);return d})});
 }
 
 function esc(s){var d=document.createElement('div');d.textContent=String(s||'');return d.innerHTML}
@@ -182,6 +188,9 @@ function loadDetail(){
   currentSymbol=sym;
   // Cancel previous in-flight request + chart polling
   if(_abortCtrl)try{_abortCtrl.abort()}catch(e){}
+  if(_quoteAbortCtrl)try{_quoteAbortCtrl.abort()}catch(e){}
+  ++_quoteSeq;
+  detailData=null;
   _abortCtrl=new AbortController();
   var signal=_abortCtrl.signal;
   ++_drawToken;
@@ -191,12 +200,41 @@ function loadDetail(){
   var daysMap={'1d':300,'1w':200,'1M':120,'1Q':80,'6M':60,'1Y':40};
   var days=daysMap[currentInterval]||300;
   var seq=++_loadSeq;
-  api('/quant/admin/api/stock-detail?symbol='+encodeURIComponent(sym)+'&kline_interval='+currentInterval+'&kline_days='+days,signal).then(function(d){
+  api('/quant/admin/api/stock-detail?section=core&symbol='+encodeURIComponent(sym)+'&kline_interval='+currentInterval+'&kline_days='+days,signal).then(function(d){
     if(seq!==_loadSeq)return;
     if(d.error){document.getElementById('main-content').innerHTML='<div id="error-msg">❌ '+esc(d.error)+'</div>';return}
     klineData=d.klines||[];
     allKlineData=klineData;
+    detailData=d;
     renderDetail(d);
+    api('/quant/admin/api/stock-detail?section=history&symbol='+encodeURIComponent(sym)+'&kline_interval='+currentInterval+'&kline_days='+days,signal).then(function(history){
+      if(seq!==_loadSeq||history.error)return;
+      var bars=history.klines||[];
+      if(!bars.length)return;
+      if(JSON.stringify(bars)===JSON.stringify(klineData)&&history.klineIncomplete===d.klineIncomplete)return;
+      Object.assign(d,history);
+      klineData=bars;allKlineData=bars;
+      ++_drawToken;
+      renderDetail(d);
+    }).catch(function(){});
+    ['profile','news'].forEach(function(section){
+      api('/quant/admin/api/stock-detail?section='+section+'&symbol='+encodeURIComponent(sym)+'&stock_name='+encodeURIComponent(d.name||''),signal).then(function(extra){
+        if(seq!==_loadSeq)return;
+        Object.assign(d,extra);
+        d[section+'Loaded']=true;
+        renderDetail(d,true);
+        if(section==='news'){
+          var titles=(d.news||[]).concat(d.research||[]).map(function(n){return n.title}).filter(Boolean);
+          if(titles.length)api('/quant/admin/api/tech-moat',signal,{symbol:sym,company_name:d.name||'',news_titles:titles}).then(function(moat){
+            if(seq!==_loadSeq)return;
+            d.techMoat=moat;renderDetail(d,true);
+          }).catch(function(){});
+        }
+      }).catch(function(e){
+        if(e.name==='AbortError'||seq!==_loadSeq)return;
+        d[section+'Loaded']=true;d[section+'Error']=e.message;renderDetail(d,true);
+      });
+    });
   }).catch(function(e){
     if(e.name==='AbortError')return; // intentionally cancelled
     if(seq!==_loadSeq)return;
@@ -218,11 +256,30 @@ function toggleMA(key){
 }
 
 function refreshQuote(){
-  if(!currentSymbol)return;
-  loadDetail();
+  if(!currentSymbol||!detailData)return;
+  if(_quoteAbortCtrl)try{_quoteAbortCtrl.abort()}catch(e){}
+  _quoteAbortCtrl=new AbortController();
+  var seq=++_quoteSeq;
+  var loadSeq=_loadSeq;
+  var status=document.getElementById('quote-status');
+  if(status)status.textContent='刷新中…';
+  api('/quant/admin/api/stock-detail?section=quote&symbol='+encodeURIComponent(currentSymbol),_quoteAbortCtrl.signal).then(function(extra){
+    if(seq!==_quoteSeq||loadSeq!==_loadSeq)return;
+    if(extra.error||!extra.quote)throw new Error(extra.error||'暂无最新报价');
+    detailData.quote=Object.assign({},detailData.quote,extra.quote);
+    detailData.depthStale=!extra.depth&&!!detailData.depth;
+    detailData.depth=extra.depth||detailData.depth||{};
+    detailData.quoteSource=extra.quoteSource;
+    if(extra.name&&extra.name!==extra.symbol)detailData.name=extra.name;
+    renderDetail(detailData,'quote');
+  }).catch(function(e){
+    if(e.name==='AbortError'||seq!==_quoteSeq||loadSeq!==_loadSeq)return;
+    var status=document.getElementById('quote-status');
+    if(status)status.textContent='刷新失败：'+e.message;
+  });
 }
 
-function renderDetail(d){
+function renderDetail(d,supplementsOnly){
   var q=d.quote||{};
   var isUp=q.change>=0;
   var cls=isUp?'up':'down';
@@ -232,11 +289,12 @@ function renderDetail(d){
 
   var html='';
   // Header
-  html+='<div class="header">';
+  html+='<div class="header" id="stock-header">';
   html+='<h1>'+esc(name)+'</h1>';
   html+='<span class="code">'+esc(d.symbol)+'</span>';
   html+='<span class="price '+cls+'">'+fmtNum(q.price)+'</span>';
   html+='<span class="change '+bgCls+'">'+sign+fmtNum(q.change)+' ('+sign+fmtNum(q.changePct)+'%)</span>';
+  html+='<span id="quote-status" role="status" style="font-size:12px;color:var(--text-dim)">'+(d.depthStale?'盘口暂未更新':'')+'</span>';
   html+='</div>';
 
   html+='<div class="grid">';
@@ -247,8 +305,10 @@ function renderDetail(d){
   var intervalLabels={'1d':'日线','1w':'周线','1M':'月线','1Q':'季线','6M':'半年线','1Y':'年线'};
   var intervalLabel=intervalLabels[currentInterval]||'日线';
   html+='<div class="card"><h3>📈 K 线图 ('+intervalLabel+')';
-  if(d.klineSource==='bridge') html+=' <span style="font-size:11px;padding:2px 6px;background:rgba(88,166,255,.15);color:var(--accent);border-radius:4px;margin-left:6px">⚡ 迅投</span>';
+  if(d.klineSource==='local') html+=' <span style="font-size:11px;color:var(--text-dim);margin-left:6px">本地历史</span>';
   html+='</h3><canvas id="kline-canvas" width="800" height="300"></canvas>';
+  if(!klineData.length)html+='<p style="color:var(--text-dim)">暂无 K 线数据</p>';
+  else if(d.klineIncomplete)html+='<p style="color:var(--text-dim)">历史数据暂未完整更新</p>';
   html+='<div class="ma-legend">';
   var maConfigs=[
     {key:'ma5',label:'MA5',color:'#ffd600'},
@@ -299,7 +359,7 @@ function renderDetail(d){
   html+='<div>';
 
   // Quote details
-  html+='<div class="card"><h3>💹 行情数据</h3><div class="quote-grid">';
+  html+='<div class="card" id="quote-panel"><h3>💹 行情数据</h3><div class="quote-grid">';
   html+='<dt>今开</dt><dd class="'+(q.open>=q.prevClose?'up':'down')+'">'+fmtNum(q.open)+'</dd>';
   html+='<dt>昨收</dt><dd>'+fmtNum(q.prevClose)+'</dd>';
   html+='<dt>最高</dt><dd class="up">'+fmtNum(q.high)+'</dd>';
@@ -326,7 +386,7 @@ function renderDetail(d){
   while(bids.length<5) bids.push({price:0,volume:0});
   var maxVol=1;
   asks.concat(bids).forEach(function(x){if(x.volume>maxVol)maxVol=x.volume});
-  html+='<div class="card"><h3>📖 盘口 (买卖五档)</h3>';
+  html+='<div class="card" id="depth-panel"><h3>📖 盘口 (买卖五档)</h3>';
   // Asks (reversed so ask5 on top, ask1 at bottom)
   var asksRev=asks.slice().reverse();
   asksRev.forEach(function(a,i){
@@ -357,6 +417,11 @@ function renderDetail(d){
   html+='</div>'; // grid
 
   // ── Full-width sections below the grid ──
+  var extraStart=html.length;
+  if(!d.profileLoaded)html+='<p style="padding:12px;color:var(--text-dim)">公司资料加载中…</p>';
+  if(!d.newsLoaded)html+='<p style="padding:12px;color:var(--text-dim)">新闻加载中…</p>';
+  if(d.profileError)html+='<p style="padding:12px;color:var(--text-dim)">公司资料暂不可用：'+esc(d.profileError)+'</p>';
+  if(d.newsError)html+='<p style="padding:12px;color:var(--text-dim)">新闻暂不可用：'+esc(d.newsError)+'</p>';
 
   // Company info + business
   var ci=d.companyInfo||{};
@@ -518,7 +583,23 @@ function renderDetail(d){
     html+='</div>';
   }
 
-  document.getElementById('main-content').innerHTML=html;
+  var extraHtml=html.slice(extraStart);
+  if(supplementsOnly==='quote'){
+    var updated=document.createElement('div');
+    updated.innerHTML=html.slice(0,extraStart);
+    ['stock-header','quote-panel','depth-panel'].forEach(function(id){
+      var previous=document.getElementById(id);
+      var next=updated.querySelector('#'+id);
+      if(previous&&next)previous.replaceWith(next);
+    });
+    return;
+  }
+  if(supplementsOnly){
+    var extra=document.getElementById('extra-content');
+    if(extra)extra.innerHTML=extraHtml;
+    return;
+  }
+  document.getElementById('main-content').innerHTML=html.slice(0,extraStart)+'<div id="extra-content">'+extraHtml+'</div>';
 
   // Draw charts after DOM update — poll until canvas has valid layout dimensions
   var _myToken=_drawToken; // snapshot: if token changes, a newer load started

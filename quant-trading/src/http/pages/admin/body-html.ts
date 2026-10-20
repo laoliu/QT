@@ -5,6 +5,7 @@ export function getAdminBodyHtml(b: string): string {
 <header>
   <h1>🔧 量化交易管理面板</h1>
   <div class="header-right">
+    <a href="${b}/quant/admin/research">🧪 A 股研究 / Paper</a>
     <a href="${b}/quant/admin/favorites">⭐ 股票收藏</a>
     <a href="${b}/quant/admin/lianban">🔥 连板分析</a>
     <a href="${b}/quant/dashboard/ui">📊 交易仪表盘</a>
@@ -29,7 +30,7 @@ export function getAdminBodyHtml(b: string): string {
 <div class="tab-content active" id="tab-overview">
   <div class="kpi-row" id="kpi-row"></div>
   <div class="cards">
-    <div class="card"><h3>📡 实时事件流</h3><div class="log-box" id="event-log">加载中…</div></div>
+    <div class="card event-stream-card"><h3>📡 实时事件流 <span id="event-stream-status" class="event-stream-status">最近事件</span></h3><div class="event-stream-toolbar"><span id="event-stream-meta">加载中…</span><button class="btn btn-sm" onclick="loadOverview()">🔄 刷新</button></div><div class="event-list" id="event-log">加载中…</div></div>
     <div class="card"><h3>⚠️ 最近告警</h3><div id="recent-alerts">加载中…</div></div>
   </div>
 </div>
@@ -278,10 +279,11 @@ export function getAdminBodyHtml(b: string): string {
       <div id="chat-messages" style="flex:1;overflow:auto;padding:12px;line-height:1.65"></div>
       <div id="chat-tool-status" style="font-size:11px;color:var(--text-dim);min-height:18px"></div>
       <div style="display:flex;gap:8px;align-items:flex-end">
-        <select id="chat-skill" title="Skill 选择" style="max-width:200px;padding:8px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:6px"><option value="">自动选择 Skill</option></select>
+        <select id="chat-skill" aria-label="Skill 选择" title="Skill 选择" onchange="chatDescribeSkill()" style="max-width:260px;padding:8px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:6px"><option value="">自动选择 Skill</option></select>
         <textarea id="chat-input" placeholder="输入问题，或以 @skill-name 指定 Skill（Enter 发送，Shift+Enter 换行）" rows="2" style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font:inherit;resize:vertical"></textarea>
         <button class="btn btn-primary" id="chat-send" onclick="chatSend()">发送</button>
       </div>
+      <div id="chat-skill-description" role="status" style="font-size:12px;color:var(--text-dim);padding-top:5px">自动结合当前问题和最近对话选择主 Skill，跨领域问题可搭配辅助 Skill。</div>
       <div style="font-size:10px;color:var(--text-dim);margin-top:4px">项目 Skill 为分析指引；可调用只读行情与分析工具，不执行交易或配置写操作。</div>
     </section>
   </div>

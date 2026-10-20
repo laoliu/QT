@@ -218,6 +218,7 @@ def _screen_stocks(context) -> list:
     """
     try:
         import xtdata  # miniQMT 
+        xtdata.enable_hello = False
 
         all_codes = xtdata.get_stock_list_in_sector(SCREEN_UNIVERSE)
         if not all_codes:

@@ -112,6 +112,8 @@ export function getDashboardHtml(baseUrl: string): string {
     }
     td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
     tr:hover td { background: rgba(88,166,255,0.04); }
+    .stock-link { color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .stock-link:hover, .stock-link:focus-visible { text-decoration: underline; }
     .badge {
       display: inline-block; padding: 2px 8px;
       border-radius: 12px; font-size: 11px; font-weight: 500;
@@ -402,10 +404,32 @@ export function getDashboardHtml(baseUrl: string): string {
         } catch(e) { console.warn('stock-names error', e); }
       }
     }
-    function nameLabel(symbol) {
+    function nameLabel(symbol, market) {
       if (!symbol) return '';
       const n = _nameCache[symbol];
-      return n ? esc(symbol) + ' <span style="color:var(--text-dim)">' + esc(n) + '</span>' : esc(symbol);
+      return stockLink(symbol,undefined,market) + (n ? ' <span style="color:var(--text-dim)">' + esc(n) + '</span>' : '');
+    }
+    function stockDetailUrl(symbol, market) {
+      if (market && market !== 'cn_stock') return '';
+      const code = String(symbol ?? '').trim()
+        .replace(/^(?:SH|SZ|BJ)([0-9]{6})$/i, '$1')
+        .replace(/^([0-9]{6})[.](?:SH|SZ|BJ)$/i, '$1');
+      if (!/^[0-9]{6}$/.test(code)) return '';
+      return BASE + '/quant/admin/stock?symbol=' + encodeURIComponent(code);
+    }
+    function stockLink(symbol, label, market) {
+      const text = esc(label ?? symbol);
+      const url = stockDetailUrl(symbol, market);
+      return url ? '<a class="stock-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+text+'</a>' : text;
+    }
+    function stockText(text, symbol, market) {
+      text = String(text ?? '');
+      // Legacy portfolio alerts have a leading code but no symbol metadata.
+      const leading = text.match(/^([0-9]{6})(?=$|[^0-9A-Za-z_.])/);
+      const code = symbol || (leading ? leading[1] : '');
+      const index = code ? text.indexOf(code) : -1;
+      if (index < 0 || !stockDetailUrl(code, market)) return esc(text);
+      return esc(text.slice(0, index)) + stockLink(code, undefined, market) + esc(text.slice(index + code.length));
     }
 
     // ── SSE Manager — real-time event subscription ──────────
@@ -541,7 +565,7 @@ export function getDashboardHtml(baseUrl: string): string {
       if (!positions.length) { document.getElementById('positionsTable').innerHTML='<div class="empty">暂无持仓</div>'; return; }
       let h='<table><tr><th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th></tr>';
       for(const p of positions){const hasPrice=p.currentPrice!=null&&p.avgCost!=null;const u=hasPrice?(p.currentPrice-p.avgCost)*(p.quantity??0):null;
-        h+='<tr><td>'+esc(p.symbol)+'</td><td>'+esc(p.name||'')+'</td><td>'+(p.quantity??0)+'</td><td>¥'+fmt(p.avgCost)+'</td><td>'+(p.currentPrice!=null?'¥'+fmt(p.currentPrice):'¥--')+'</td><td class="'+(u!=null?pctClass(u):'')+'">'+( u!=null?'¥'+fmt(u):'¥--')+'</td></tr>';}
+        h+='<tr><td>'+stockLink(p.symbol,undefined,p.market)+'</td><td>'+(p.name?stockLink(p.symbol,p.name,p.market):'')+'</td><td>'+(p.quantity??0)+'</td><td>¥'+fmt(p.avgCost)+'</td><td>'+(p.currentPrice!=null?'¥'+fmt(p.currentPrice):'¥--')+'</td><td class="'+(u!=null?pctClass(u):'')+'">'+( u!=null?'¥'+fmt(u):'¥--')+'</td></tr>';}
       document.getElementById('positionsTable').innerHTML=h+'</table>';
     }
 
@@ -554,7 +578,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const side=o.side==='buy'?'<span class="badge badge-buy">买入</span>':'<span class="badge badge-sell">卖出</span>';
         const st=o.status==='filled'?'<span class="badge badge-filled">已成</span>':'<span class="badge badge-pending">'+esc(o.status??'待处理')+'</span>';
         const t=o.createdAt?new Date(o.createdAt).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Shanghai'}):(o.time??'');
-        h+='<tr><td>'+esc(t)+'</td><td>'+esc(o.symbol)+'</td><td>'+side+'</td><td>'+(o.quantity??'')+'</td><td>¥'+fmt(o.price??o.avgFillPrice??o.filledPrice)+'</td><td>'+st+'</td></tr>';}
+        h+='<tr><td>'+esc(t)+'</td><td>'+stockLink(o.symbol,undefined,o.market)+'</td><td>'+side+'</td><td>'+(o.quantity??'')+'</td><td>¥'+fmt(o.price??o.avgFillPrice??o.filledPrice)+'</td><td>'+st+'</td></tr>';}
       document.getElementById('ordersTable').innerHTML=h+'</table>';
     }
 
@@ -568,7 +592,7 @@ export function getDashboardHtml(baseUrl: string): string {
       for(const s of slice){
         const dir=s.direction==='buy'?'<span class="badge badge-buy">买</span>':'<span class="badge badge-sell">卖</span>';
         const dt=s.date??(s.timestamp?new Date(s.timestamp).toLocaleDateString():'');
-        h+='<tr><td>'+esc(dt)+'</td><td>'+esc(s.strategyId)+'</td><td>'+nameLabel(s.symbol)+'</td><td>'+dir+'</td><td>¥'+fmt(s.price)+'</td></tr>';}
+        h+='<tr><td>'+esc(dt)+'</td><td>'+esc(s.strategyId)+'</td><td>'+nameLabel(s.symbol,s.market)+'</td><td>'+dir+'</td><td>¥'+fmt(s.price)+'</td></tr>';}
       document.getElementById('signalsTable').innerHTML=h+'</table>';
     }
 
@@ -778,7 +802,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const cls = 'badge-'+s.status;
         const lb2 = {fresh:'正常',warning:'延迟',critical:'中断'}[s.status]??s.status;
         const age = s.ageMs > 0 ? (s.ageMs/1000).toFixed(0)+'s' : 'N/A';
-        h += '<tr><td>'+nameLabel(s.symbol)+'</td><td><span class="badge '+cls+'">'+lb2+'</span></td><td>'+age+'</td></tr>';
+        h += '<tr><td>'+nameLabel(s.symbol,s.market)+'</td><td><span class="badge '+cls+'">'+lb2+'</span></td><td>'+age+'</td></tr>';
       }
       document.getElementById('stalenessTable').innerHTML=h+'</table>';
     }
@@ -818,7 +842,7 @@ export function getDashboardHtml(baseUrl: string): string {
           '</div>'
         ) : '';
         h += '<div class="alert-item sev-'+a.severity+'">' +
-          '<div class="alert-content"><span class="alert-msg">'+a.message+'</span>'+actions+'</div>' +
+          '<div class="alert-content"><span class="alert-msg">'+stockText(a.message,sym,a.metadata?.market)+'</span>'+actions+'</div>' +
           '<span class="alert-time">'+t+'</span></div>';
       }
       document.getElementById('alertsList').innerHTML = h;
@@ -831,7 +855,8 @@ export function getDashboardHtml(baseUrl: string): string {
 
     // ── Alert Action Handlers ───────────────────────────────
     function viewStock(symbol) {
-      window.open(BASE + '/quant/admin/stock?symbol=' + encodeURIComponent(symbol), '_blank');
+      const url = stockDetailUrl(symbol);
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
     }
 
     function openQuickOrder(symbol, side, price, changePct) {
@@ -912,7 +937,7 @@ export function getDashboardHtml(baseUrl: string): string {
       let h='<table><tr><th>标的</th><th>条件</th><th>状态</th></tr>';
       for (const a of slice) {
         const st = a.triggered && !a.repeating ? '<span class="badge badge-filled">已触发</span>' : '<span class="badge badge-pending">监控中</span>';
-        h += '<tr><td>'+nameLabel(a.symbol)+'</td><td>'+(a.description??a.type+' '+a.threshold)+'</td><td>'+st+'</td></tr>';
+        h += '<tr><td>'+nameLabel(a.symbol,a.market)+'</td><td>'+stockText(a.description??a.type+' '+a.threshold,a.symbol,a.market)+'</td><td>'+st+'</td></tr>';
       }
       h += '</table>';
       if (active.length > 0) h = '<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">活跃: '+active.length+' / '+alerts.length+'</div>' + h;
@@ -944,7 +969,7 @@ export function getDashboardHtml(baseUrl: string): string {
         const ret = b.returnPct != null ? (b.returnPct*100).toFixed(1)+'%' : '--';
         const cls = pctClass(b.returnPct??0);
         const dt = b.createdAt ? new Date(b.createdAt).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'}) : '--';
-        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.join(','):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\\'backtest\\',\\''+esc(b.id)+'\\')">CSV</button></td></tr>';
+        h += '<tr><td>'+(b.strategyId??'')+'</td><td>'+(b.symbols?b.symbols.map(s=>stockLink(s)).join(', '):'')+'</td><td class="'+cls+'">'+ret+'</td><td>'+dt+'</td><td><button class="btn" style="font-size:10px;padding:1px 6px;" onclick="exportCSV(\\'backtest\\',\\''+esc(b.id)+'\\')">CSV</button></td></tr>';
       }
       document.getElementById('backtestHistoryPanel').innerHTML = h + '</table>';
     }

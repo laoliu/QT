@@ -115,6 +115,7 @@ def _fetch_klines_context(codes, period, count):
     # Refresh local cache before reading so we get latest bars
     try:
         import xtquant.xtdata as _xtdata
+        _xtdata.enable_hello = False
         for _code in codes:
             try:
                 _xtdata.download_history_data(_code, period, "", "")
@@ -1041,6 +1042,7 @@ def _sync_poll_loop(context):
                 # Refresh local cache so get_market_data returns latest bars
                 try:
                     import xtquant.xtdata as _xtdata
+                    _xtdata.enable_hello = False
                     for _code in codes:
                         try:
                             _xtdata.download_history_data(_code, period, "", "")

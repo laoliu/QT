@@ -11,10 +11,13 @@ export function getPlannerBodyHtml(b: string): string {
 <header>
   <h1>📈 投资规划系统</h1>
   <div class="header-right">
-    <select id="global-mode-select" class="mode-select">
+    <a href="${b}/quant/admin/research">🧪 A 股研究 / Paper</a>
+    <label for="global-mode-select" style="color:var(--text-dim)">账户视图</label>
+    <select id="global-mode-select" class="mode-select" title="仅切换账户视图，不改变交易引擎或启用实盘交易">
       <option value="paper">🟢 模拟盘</option>
       <option value="live">🔴 实盘</option>
     </select>
+    <span id="global-engine-mode" role="status" style="color:var(--text-dim)">交易引擎：查询中…</span>
     <a href="${b}/quant/dashboard/ui">📊 交易仪表盘</a>
     <span style="color:var(--text-dim)" id="clock"></span>
   </div>

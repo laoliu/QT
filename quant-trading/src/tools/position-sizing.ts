@@ -20,7 +20,7 @@ import type { QuantTradingConfig, PositionSizingConfig } from "../types.js";
 export function createPositionSizingTool(
   _api: QuantTradingRuntime,
   config: QuantTradingConfig,
-  getEquity: () => Promise<number>,
+  getEquity: (strict?: boolean) => Promise<number>,
 ) {
   return {
     name: "position_sizing",
@@ -103,10 +103,12 @@ export function createPositionSizingTool(
 
         let equity: number;
         try {
-          equity = await getEquity();
+          equity = await getEquity(args.require_equity === true);
         } catch {
+          if (args.require_equity === true) return "账户权益不可用，无法给出真实仓位数量；请先确认账户资产。";
           equity = 100_000; // fallback
         }
+        if (args.require_equity === true && (!Number.isFinite(equity) || equity <= 0)) return "账户权益无效，无法计算仓位。";
 
         const sizingCfg = config.tradingAccount?.positionSizing;
         const method = (args.method as string) ?? sizingCfg?.method ?? "fixed_amount";

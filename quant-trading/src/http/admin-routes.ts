@@ -6,7 +6,7 @@
  * the frontend — those routes are NOT duplicated here.
  */
 import type { QuantTradingRuntime } from "../runtime.js";
-import { runPythonScript } from "../bridge/python-bridge.js";
+import { runPythonScript, type PythonBridgeResult } from "../bridge/python-bridge.js";
 import type { OrderRequest } from "../broker/adapter.js";
 import {
   createDataProvider,
@@ -129,6 +129,10 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
   } = deps;
   const { signalHitRateTracker, autoTradeScheduler } = deps;
   const marketDataProvider = createDataProvider(config);
+  const stockDetailCache = new Map<string, {
+    expires: number;
+    request: Promise<PythonBridgeResult>;
+  }>();
 
   // ── Portal (Home) Page ─────────────────────────────────────────
   api.registerHttpRoute({
@@ -197,18 +201,50 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
       const market = url.searchParams.get("market") || "cn_stock";
       const klineDays = Number(url.searchParams.get("kline_days") || 120);
       const klineInterval = url.searchParams.get("kline_interval") || "1d";
+      const section = url.searchParams.get("section") || "all";
+      if (!["all", "core", "quote", "history", "profile", "news"].includes(section)) {
+        json(res, { error: "无效的详情分区" }, 400);
+        return;
+      }
       try {
-        const result = await runPythonScript(
+        const fetchSection = () => runPythonScript(
           "scripts/stock_detail.py",
           {
-            action: "detail",
+            action: ["history", "profile", "news"].includes(section) ? section : "detail",
             symbol,
             market,
             kline_days: klineDays,
             kline_interval: klineInterval,
+            section,
+            stock_name: url.searchParams.get("stock_name") || "",
           },
           config,
+          { timeoutMs: section === "core" ? 16_000 : section === "all" ? 60_000 : 22_000, maxRetries: 0 },
         );
+        const ttl = section === "profile" ? 30 * 60_000 : section === "news" ? 5 * 60_000
+          : section === "history" ? 60_000 : 0;
+        const cacheKey = JSON.stringify([section, market, symbol,
+          ...(section === "history" ? [klineInterval, klineDays] : [])]);
+        let cached = ttl ? stockDetailCache.get(cacheKey) : undefined;
+        if (cached && cached.expires <= Date.now()) cached = undefined;
+        if (ttl && !cached) {
+          const entry = { expires: Infinity, request: fetchSection() };
+          stockDetailCache.set(cacheKey, entry);
+          if (stockDetailCache.size > 128) stockDetailCache.delete(stockDetailCache.keys().next().value!);
+          entry.request = entry.request.then((value) => {
+            if (value.ok && value.data && !(value.data as Record<string, unknown>).error) {
+              entry.expires = Date.now() + ttl;
+            } else if (stockDetailCache.get(cacheKey) === entry) {
+              stockDetailCache.delete(cacheKey);
+            }
+            return value;
+          }, (error) => {
+            if (stockDetailCache.get(cacheKey) === entry) stockDetailCache.delete(cacheKey);
+            throw error;
+          });
+          cached = entry;
+        }
+        const result = await (cached ? cached.request : fetchSection());
         if (!result.ok) {
           json(res, { error: result.error ?? "Python 脚本执行失败" }, 500);
           return;
@@ -219,7 +255,7 @@ export function registerAdminRoutes(deps: AdminRouteDeps): void {
             : {};
 
         const { companyName, newsTitles } = collectTechMoatInputs(payload);
-        if (newsTitles.length > 0) {
+        if (section === "all" && newsTitles.length > 0) {
           try {
             const moatResult = await analyzeTechMoat(symbol, companyName, newsTitles, config);
             if (moatResult) payload.techMoat = moatResult;

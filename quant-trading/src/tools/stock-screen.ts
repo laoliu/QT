@@ -250,6 +250,7 @@ export function createStockScreenTool(
           // Auto-save to scan history (best-effort)
           if (
             scanHistoryStore &&
+            args.persist_results !== false &&
             action === "run_screener" &&
             data.results &&
             Array.isArray(data.results)

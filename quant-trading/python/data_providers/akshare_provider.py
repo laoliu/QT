@@ -16,7 +16,10 @@ import os
 import sys
 import threading
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+from data_providers.symbols import to_qmt_code
+from data_providers.qmt_http import resolve_bridge_url
 
 # ── Proxy bypass for Chinese financial data hosts ─────────────────────────────
 # On macOS the system proxy (e.g. ClashX on 127.0.0.1:7890) is picked up by
@@ -100,8 +103,8 @@ def _sina_quote(symbol: str, market: str = "cn_stock"):
     try:
         if market == "hk_stock":
             return None  # Sina HK format differs, skip
-        code = symbol.zfill(6)
-        prefix = "sh" if code.startswith(("6", "5", "9")) else "sz"
+        code, exchange = to_qmt_code(symbol.zfill(6), market).split(".")
+        prefix = exchange.lower()
         url = f"https://hq.sinajs.cn/list={prefix}{code}"
         r = requests.get(url, timeout=5, headers={
             "Referer": "https://finance.sina.com.cn",
@@ -119,6 +122,13 @@ def _sina_quote(symbol: str, market: str = "cn_stock"):
         price = float(fields[3])
         if price <= 0:
             return None
+        data_timestamp = None
+        if len(fields) > 31:
+            try:
+                data_timestamp = int(datetime.strptime(fields[30] + " " + fields[31], "%Y-%m-%d %H:%M:%S")
+                                     .replace(tzinfo=timezone(timedelta(hours=8))).timestamp() * 1000)
+            except ValueError:
+                pass
         return {
             "name": fields[0],
             "current": price,
@@ -130,6 +140,7 @@ def _sina_quote(symbol: str, market: str = "cn_stock"):
             "amount": float(fields[9] or 0),
             "chg": round(price - float(fields[2] or 0), 4),
             "percent": round((price - float(fields[2] or 0)) / float(fields[2] or 1) * 100, 4),
+            "dataTimestamp": data_timestamp,
         }
     except Exception as e:
         print(f"[akshare_provider] Sina quote fallback failed: {e}", file=sys.stderr)
@@ -156,12 +167,18 @@ def get_quote(symbol, market="cn_stock"):
     Uses local SQLite cache for stock name lookups.
     """
     try:
-        if market in ("cn_stock", "hk_stock"):
+        if market in ("cn_stock", "hk_stock", "index"):
             # Sina first (no auth needed, more stable), Xueqiu as fallback
             q = _sina_quote(symbol, market)
+            source = "sina"
             if not q or q.get("current") is None:
-                xq_sym = _to_xq_symbol(symbol, market)
+                if market == "index":
+                    code, exchange = to_qmt_code(symbol, market).split(".")
+                    xq_sym = exchange + code
+                else:
+                    xq_sym = _to_xq_symbol(symbol, market)
                 q = _xq_quote(xq_sym)
+                source = "xueqiu"
             if not q or q.get("current") is None:
                 return None
 
@@ -188,6 +205,9 @@ def get_quote(symbol, market="cn_stock"):
                 "amount": float(q.get("amount", 0) or 0),
                 "marketCap": float(q.get("market_capital", 0) or 0),
                 "timestamp": int(datetime.now().timestamp() * 1000),
+                "dataTimestamp": q.get("dataTimestamp") if source == "sina" else q.get("timestamp"),
+                "retrievedAt": int(datetime.now().timestamp() * 1000),
+                "source": source,
             }
 
         elif market == "futures":
@@ -254,14 +274,6 @@ def _cn_ak_symbol(code: str) -> str:
     if code.startswith(("6", "9")):
         return f"sh{code}"
     return f"sz{code}"
-
-
-# Well-known A-share index codes (Shanghai: sh prefix, Shenzhen: sz prefix)
-_INDEX_CODES = {
-    "000001", "000002", "000003", "000016", "000300", "000688", "000852",
-    "000903", "000905", "000906", "000985",
-    "399001", "399005", "399006", "399106", "399300", "399673",
-}
 
 
 def _index_prefix(code: str) -> str:
@@ -357,7 +369,7 @@ _EASTMONEY_CIRCUIT_THRESHOLD: int = 5  # open circuit after N consecutive failur
 # automatically merged into a single batch HTTP call to the bridge.
 
 _qmt_batch_lock = threading.Lock()
-_qmt_batch_queue: dict[str, dict] = {}  # {symbol: {start, end, market, event, result}}
+_qmt_batch_queue: dict[int, dict] = {}
 _qmt_batch_timer: threading.Timer | None = None
 _QMT_BATCH_WINDOW_S = 0.15  # 150ms window to collect concurrent requests
 
@@ -426,11 +438,11 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
 
     # Register this request in the batch queue
     event = threading.Event()
-    entry = {"start": start, "end": end, "market": market, "event": event, "result": []}
+    entry = {"symbol": symbol, "start": start, "end": end, "market": market, "event": event, "result": []}
     flush_now = False
 
     with _qmt_batch_lock:
-        _qmt_batch_queue[symbol] = entry
+        _qmt_batch_queue[id(event)] = entry
         queue_size = len(_qmt_batch_queue)
         # Schedule batch flush if not already scheduled
         global _qmt_batch_timer
@@ -458,7 +470,7 @@ def _fetch_qmt_klines(symbol: str, start: str, end: str, market: str = "cn_stock
 
 def _flush_qmt_batch(bridge_url: str):
     """Flush all queued QMT kline requests as a single batch HTTP call."""
-    global _qmt_bridge_failed
+    global _qmt_bridge_failed, _qmt_batch_timer
 
     with _qmt_batch_lock:
         if not _qmt_batch_queue:
@@ -466,34 +478,40 @@ def _flush_qmt_batch(bridge_url: str):
         # Snapshot and clear the queue
         batch = dict(_qmt_batch_queue)
         _qmt_batch_queue.clear()
+        _qmt_batch_timer = None
 
     # Build QMT code list and compute max count
     qmt_codes: list[str] = []
-    qmt_to_entry: dict[str, tuple[str, dict]] = {}  # qmt_code → (plain_symbol, entry)
+    qmt_to_entries: dict[str, list[dict]] = {}
     max_count = 0
 
-    for sym, entry in batch.items():
+    for entry in batch.values():
+        sym = entry["symbol"]
         qmt_code = _to_qmt_code(sym, entry["market"])
-        qmt_codes.append(qmt_code)
-        qmt_to_entry[qmt_code] = (sym, entry)
+        if qmt_code not in qmt_to_entries:
+            qmt_codes.append(qmt_code)
+        qmt_to_entries.setdefault(qmt_code, []).append(entry)
         try:
             s = datetime.strptime(entry["start"], "%Y-%m-%d")
-            e = datetime.strptime(entry["end"], "%Y-%m-%d")
-            max_count = max(max_count, (e - s).days + 10)
+            max_count = max(max_count, (datetime.now() - s).days + 10)
         except ValueError:
             max_count = max(max_count, 250)
 
-    print(f"[QMT自动合批] 合并 {len(qmt_codes)} 只股票为1次请求 (count={max_count})", file=sys.stderr)
+    print(f"[QMT自动合批] {len(qmt_codes)} 个标的按市场合批 (count={max_count})", file=sys.stderr)
 
-    # Send batch request (split into sub-batches of 100 if needed)
+    # Some receivers return plain codes, so separate instrument namespaces.
     BATCH_SIZE = 100
-    for i in range(0, len(qmt_codes), BATCH_SIZE):
-        sub_batch = qmt_codes[i : i + BATCH_SIZE]
+    markets = {entries[0]["market"] for entries in qmt_to_entries.values()}
+    sub_batches = []
+    for market in sorted(markets):
+        codes = [code for code in qmt_codes if qmt_to_entries[code][0]["market"] == market]
+        sub_batches.extend(codes[i:i + BATCH_SIZE] for i in range(0, len(codes), BATCH_SIZE))
+    for sub_batch in sub_batches:
         try:
             resp = requests.post(
                 f"{bridge_url}/klines",
-                json={"codes": sub_batch, "period": "1d", "count": max_count},
-                timeout=max(30, len(sub_batch) // 3),
+                json={"codes": sub_batch, "period": "1d", "count": max_count, "timeout": 8},
+                timeout=(1, max(10, len(sub_batch) // 3)),
             )
             data = resp.json()
             if not data.get("ok") and data.get("status") != "ok":
@@ -505,22 +523,11 @@ def _flush_qmt_batch(bridge_url: str):
             if isinstance(raw_data, dict) and "bars" in raw_data:
                 raw_data = raw_data["bars"]
             for key, raw_bars in raw_data.items():
-                if key in qmt_to_entry:
-                    plain, entry = qmt_to_entry[key]
-                else:
-                    # Try plain code lookup
-                    plain_key = key.split(".")[0]
-                    found = False
-                    for qc, (ps, ent) in qmt_to_entry.items():
-                        if ps == plain_key:
-                            plain, entry = ps, ent
-                            found = True
-                            break
-                    if not found:
-                        continue
-
-                bars = _parse_qmt_bars(raw_bars, entry["start"], entry["end"])
-                entry["result"] = bars
+                matches = [code for code in sub_batch
+                           if key == code or key == code.split(".")[0]]
+                for code in matches:
+                    for entry in qmt_to_entries[code]:
+                        entry["result"] = _parse_qmt_bars(raw_bars, entry["start"], entry["end"])
 
             print(f"[QMT自动合批] 获取 {len(raw_data)}/{len(sub_batch)} 只数据", file=sys.stderr)
 
@@ -543,20 +550,12 @@ def _get_qmt_bridge_url() -> str:
     url = os.environ.get("WINDOWS_XTDATA_URL", "").rstrip("/")
     if not url:
         url = _read_qmt_bridge_url()
-    return url
+    return resolve_bridge_url(url)
 
 
 def _to_qmt_code(symbol: str, market: str = "cn_stock") -> str:
     """Convert plain 6-digit code to QMT format (600519 → 600519.SH)."""
-    if market in ("cn_stock", "index"):
-        if symbol.startswith(("6", "5", "9")):
-            return f"{symbol}.SH"
-        return f"{symbol}.SZ"
-    if market == "convertible_bond":
-        if symbol.startswith("11"):
-            return f"{symbol}.SH"
-        return f"{symbol}.SZ"
-    return symbol
+    return to_qmt_code(symbol, market)
 
 
 def _parse_qmt_bars(raw_bars: list, start: str, end: str) -> list[dict]:
@@ -848,7 +847,7 @@ def _fetch_tdx_klines(symbol: str, start: str, end: str, market: str = "cn_stock
         return []
 
     # Determine TDX market code: 0=SZ, 1=SH
-    if symbol.startswith(("6", "5", "9")):
+    if _to_qmt_code(symbol, market).endswith(".SH"):
         tdx_market = 1  # SH
     else:
         tdx_market = 0  # SZ
@@ -880,7 +879,8 @@ def _fetch_tdx_klines(symbol: str, start: str, end: str, market: str = "cn_stock
         offset = 0
         while offset < days_needed:
             batch_size = min(800, days_needed - offset)
-            rows = api.get_security_bars(9, tdx_market, symbol, offset, batch_size)
+            fetch_bars = api.get_index_bars if market == "index" else api.get_security_bars
+            rows = fetch_bars(9, tdx_market, symbol, offset, batch_size)
             if not rows:
                 break
             all_rows.extend(rows)
@@ -933,7 +933,7 @@ def _fetch_parquet_klines(symbol: str, start: str, end: str, market: str = "cn_s
         return []
 
 
-def get_klines(symbol, interval, start, end, market="cn_stock"):
+def get_klines(symbol, interval, start, end, market="cn_stock", local_only=False):
     """Fetch historical kline data with local disk + network fallback.
 
     Priority chain for cn_stock:
@@ -960,6 +960,13 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
     period_map = {"1d": "daily", "1w": "weekly", "1M": "monthly"}
     period = period_map.get(interval, "daily")
 
+    if interval in ("1w", "1M") and market in ("cn_stock", "index"):
+        from data_providers.local_parquet_provider import _resample_weekly, _resample_monthly
+        daily = get_klines(symbol, "1d", start, end, market, local_only)
+        daily = [{**b, "date": datetime.fromtimestamp(b["timestamp"] / 1000).strftime("%Y-%m-%d")}
+                 for b in daily]
+        return _resample_weekly(daily) if interval == "1w" else _resample_monthly(daily)
+
     collected_bars: list[dict] = []
     gaps = [(start, end)]
 
@@ -967,28 +974,11 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
     if market in ("cn_stock", "index") and period == "daily":
         pq_bars = _fetch_parquet_klines(symbol, start, end, market)
         if pq_bars:
-            pq_ts = {b["timestamp"] for b in pq_bars}
-            new_gaps = []
-            for gap_start, gap_end in gaps:
-                gs_ts = int(datetime.strptime(gap_start, "%Y-%m-%d").timestamp() * 1000)
-                ge_ts = int(datetime.strptime(gap_end, "%Y-%m-%d").timestamp() * 1000)
-                gap_pq = [b for b in pq_bars if gs_ts <= b["timestamp"] <= ge_ts]
-                if gap_pq:
-                    collected_bars.extend(gap_pq)
-                    print(f"[Parquet✓] {symbol} {gap_start}~{gap_end} 获取 {len(gap_pq)} bars", file=sys.stderr)
-                    pq_sorted = sorted(b["timestamp"] for b in gap_pq)
-                    if pq_sorted[0] <= gs_ts and pq_sorted[-1] >= ge_ts:
-                        continue  # gap fully covered
-                new_gaps.append((gap_start, gap_end))
-            gaps = new_gaps
-            if not gaps:
-                collected_bars.sort(key=lambda b: b["timestamp"])
-                seen = set()
-                result = [b for b in collected_bars if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
-                print(f"[Parquet] {symbol} 全部命中: {len(result)} bars", file=sys.stderr)
-                return result
+            collected_bars.extend(pq_bars)
+            print(f"[Parquet] {symbol}: {len(pq_bars)} bars", file=sys.stderr)
 
     # ── Priority 2: SQLite cache ──────────────────────────────────
+    cache = None
     try:
         from cache.stock_cache import get_cache
         cache = get_cache()
@@ -996,31 +986,13 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
             symbol, market, period, start, end
         )
 
-        if cached_bars:
-            # Use cached bars to fill remaining gaps
-            cached_ts = {b["timestamp"] for b in cached_bars}
-            new_gaps = []
-            for gap_start, gap_end in gaps:
-                gs_ts = int(datetime.strptime(gap_start, "%Y-%m-%d").timestamp() * 1000)
-                ge_ts = int(datetime.strptime(gap_end, "%Y-%m-%d").timestamp() * 1000)
-                gap_cached = [b for b in cached_bars if gs_ts <= b["timestamp"] <= ge_ts]
-                if gap_cached:
-                    collected_bars.extend(gap_cached)
-                    print(f"[SQLite✓] {symbol} {gap_start}~{gap_end} 补充 {len(gap_cached)} bars", file=sys.stderr)
-                    if cached_start <= gap_start and cached_end >= gap_end:
-                        continue  # gap fully covered by cache
-                new_gaps.append((gap_start, gap_end))
-            gaps = new_gaps
-
-        if not gaps:
-            collected_bars.sort(key=lambda b: b["timestamp"])
-            seen = set()
-            result = [b for b in collected_bars if b["timestamp"] not in seen and not seen.add(b["timestamp"])]
-            print(f"[Parquet+SQLite] {symbol} 本地全覆盖: {len(result)} bars", file=sys.stderr)
-            return result
-
-        # Refine gaps using cache's own gap detection
-        gaps = cache.get_klines_missing_range(symbol, start, end, market, period)
+        collected_bars.extend(cached_bars)
+        available_dates = {
+            datetime.fromtimestamp(b["timestamp"] / 1000).strftime("%Y-%m-%d")
+            for b in collected_bars
+        }
+        gaps = cache.get_klines_missing_range(
+            symbol, start, end, market, period, available_dates=available_dates)
         # Filter out gaps that are entirely non-trading days (weekends/recent holidays)
         # to avoid unnecessary remote API calls
         filtered_gaps = []
@@ -1039,7 +1011,7 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                         continue
                 # Also skip gaps that end in the future (today is not a trading day)
                 now = datetime.now()
-                if d0.date() >= now.date():
+                if d0.date() > now.date():
                     continue
                 filtered_gaps.append((gs, ge))
             except Exception:
@@ -1061,12 +1033,31 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
     except Exception as e:
         print(f"[缓存] K线缓存读取失败: {e}", file=sys.stderr)
 
+    if local_only:
+        by_timestamp = {b["timestamp"]: b for b in reversed(collected_bars)}
+        return [by_timestamp[ts] for ts in sorted(by_timestamp)]
+
     try:
         all_new_bars = []
+        # One request covers all history gaps for this instrument. A short old
+        # gap still needs enough recent bars to reach its historical start.
+        if gaps and market in ("cn_stock", "index"):
+            qmt_bars = _fetch_qmt_klines(symbol, gaps[0][0], gaps[-1][1], market)
+            if qmt_bars:
+                all_new_bars.extend(qmt_bars)
+                if cache is not None:
+                    cache.save_klines(symbol, qmt_bars, market, period)
+                available_dates = {
+                    datetime.fromtimestamp(b["timestamp"] / 1000).strftime("%Y-%m-%d")
+                    for b in collected_bars + qmt_bars
+                }
+                if cache is not None:
+                    gaps = cache.get_klines_missing_range(
+                        symbol, start, end, market, period, available_dates=available_dates)
         for gap_start, gap_end in gaps:
             if market == "cn_stock" or market == "index":
                 # For known index codes, try dedicated index API first
-                if symbol in _INDEX_CODES or market == "index":
+                if market == "index":
                     try:
                         idx_bars = _fetch_index_klines(ak, symbol, gap_start, gap_end)
                         if idx_bars:
@@ -1075,16 +1066,6 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                             continue
                     except Exception as e_idx:
                         print(f"[指数接口] {symbol} 获取失败: {e_idx}", file=sys.stderr)
-
-                # Priority 1: QMT bridge (if WINDOWS_XTDATA_URL configured)
-                try:
-                    qmt_bars = _fetch_qmt_klines(symbol, gap_start, gap_end, market)
-                    if qmt_bars:
-                        print(f"[QMT] {symbol} 获取 {len(qmt_bars)} 条数据", file=sys.stderr)
-                        all_new_bars.extend(qmt_bars)
-                        continue
-                except Exception as e_qmt:
-                    print(f"[QMT] {symbol} 获取失败: {e_qmt}", file=sys.stderr)
 
                 # Priority 2: TDX (通达信 pytdx public servers)
                 try:
@@ -1095,6 +1076,9 @@ def get_klines(symbol, interval, start, end, market="cn_stock"):
                         continue
                 except Exception as e_tdx:
                     print(f"[通达信] {symbol} 获取失败: {e_tdx}", file=sys.stderr)
+
+                if market == "index":
+                    continue  # Stock endpoints are a different instrument namespace.
 
                 # Priority 3: eastmoney via stock_zh_a_hist (with retry)
                 df = None

@@ -60,7 +60,8 @@ export function registerAiChatRoutes(args: {
     let closed = false;
     res.on("close", () => { if (!res.writableEnded) closed = true; });
     const emit = (event: Record<string, unknown>) => { if (!closed) res.write(`data: ${JSON.stringify(event)}\n\n`); };
-    await chat.send(conversationId, message, skill, emit);
-    if (!closed) res.end();
+    try { await chat.send(conversationId, message, skill, emit); }
+    catch (err) { emit({ type: "error", message: err instanceof Error ? err.message : String(err) }); }
+    finally { if (!closed) res.end(); }
   });
 }

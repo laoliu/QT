@@ -42,6 +42,8 @@ export function createFactorAnalysisTool(_api: QuantTradingRuntime, config: Quan
           enum: ["rank", "zscore"],
           description: "归一化方法（可选）",
         },
+        fundamentals: { type: "object", description: "按代码提供真实财务字段，如 {600519:{pe_ttm:20,roe:25}}；缺失值不能补零" },
+        returns: { type: "object", description: "按代码提供同频真实收益率序列，如 {600519:[0.01,-0.02,...]}，动量/波动率至少20个观测" },
       },
       required: ["action"],
     },
@@ -64,6 +66,8 @@ export function createFactorAnalysisTool(_api: QuantTradingRuntime, config: Quan
           symbols: symbols ?? [],
           trade_date: tradeDate,
           normalize,
+          fundamentals: args.fundamentals,
+          returns: args.returns,
         },
         config,
       );

@@ -4,7 +4,8 @@
 import type { QuantTradingRuntime } from "../runtime.js";
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { createDataProvider, detectMarketFromSymbol } from "../data/market-data-provider.js";
-import type { QuantTradingConfig, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
+import { normalizeCnInstrument, parseQuoteDataTimestamp } from "../utils/cn-instruments.js";
+import type { MarketType, QuantTradingConfig, TickAggregationInterval, TickData, TickFeatures } from "../types.js";
 import { todayCST } from "../utils/cst-time.js";
 
 // ── Technical indicator types ────────────────────────────────────
@@ -59,7 +60,7 @@ export function createMarketDataTool(
     name: "market_data",
     description:
       "获取股票/期货/基金的实时行情、历史K线和基本面数据。" +
-      "支持A股、美股、港股、期货、基金。\n" +
+      "支持A股、指数、美股、港股、期货、基金。指数使用 market=index；上证指数=000001.SH，深证成指=399001.SZ，创业板指=399006.SZ。000001/cn_stock 为平安银行。\n" +
       "action=quote 实时报价,\n" +
       "action=klines 历史K线（可附带技术指标: MA/EMA/RSI/ATR/波动率/52周高低点）,\n" +
       "action=search 搜索标的,\n" +
@@ -77,7 +78,7 @@ export function createMarketDataTool(
         },
         symbol: {
           type: "string",
-          description: "标的代码，如 600519 (ę́), AAPL, BTC-USDT",
+          description: "标的代码，如 600519、AAPL；指数用 000001.SH、399001.SZ、399006.SZ，并指定 market=index。兼容 sh000001/sz399001 前缀和主要指数中文名。",
         },
         keyword: {
           type: "string",
@@ -110,8 +111,8 @@ export function createMarketDataTool(
         },
         market: {
           type: "string",
-          enum: ["cn_stock", "us_stock", "hk_stock", "futures", "fund", "crypto"],
-          description: "市场类型，默认使用配置的 defaultMarket",
+          enum: ["cn_stock", "index", "us_stock", "hk_stock", "futures", "fund", "crypto"],
+          description: "市场类型；index=指数，cn_stock=股票。裸代码 000001 默认为平安银行，查询上证指数须用 market=index 或 000001.SH。",
         },
         tickMode: {
           type: "string",
@@ -131,16 +132,22 @@ export function createMarketDataTool(
     },
     async execute(args: Record<string, unknown>) {
       const action = args.action as string;
-      const symbol = args.symbol as string;
+      const requestedSymbol = args.symbol as string;
+      const instrument = requestedSymbol ? normalizeCnInstrument(requestedSymbol, args.market as MarketType | undefined) : undefined;
+      const symbol = instrument?.symbol ?? requestedSymbol;
       // Auto-detect market from symbol when not explicitly given
       const market =
-        (args.market as string) ?? (symbol ? detectMarketFromSymbol(symbol) : config.defaultMarket);
+        instrument?.market ?? (args.market as MarketType) ?? (symbol ? detectMarketFromSymbol(symbol) : config.defaultMarket);
 
       switch (action) {
         case "quote": {
           if (!symbol) return { error: "请提供标的代码 (symbol)" };
           const quote = await provider.getQuote(symbol, market as never);
           if (!quote) return { error: `无法获取 ${symbol} 的行情数据` };
+          const dataTimestamp = parseQuoteDataTimestamp(quote.dataTimestamp);
+          const cstTime = (ms: number) => new Date(ms + 8 * 3600_000).toISOString().replace("Z", "+08:00");
+          const dataTime = dataTimestamp === null ? null : cstTime(dataTimestamp);
+          const freshness = !dataTime ? "unknown" : dataTime.slice(0, 10) < todayCST() ? "previous_session" : dataTime.slice(0, 10) === todayCST() ? "current_day" : "future_timestamp";
           return {
             symbol: quote.symbol,
             price: quote.price.toFixed(2),
@@ -152,6 +159,15 @@ export function createMarketDataTool(
             volume: quote.volume,
             amount: quote.amount,
             marketCap: (quote as Record<string, unknown>).marketCap ?? undefined,
+            source: quote.source ?? provider.name,
+            retrievedAt: cstTime(quote.retrievedAt ?? Date.now()),
+            dataTime,
+            dataDate: dataTime?.slice(0, 10) ?? null,
+            freshness,
+            timeNote: freshness === "unknown"
+              ? "数据源未提供行情时间；retrievedAt 仅是查询时间，不能据此认定为今天盘中数据。"
+              : freshness === "previous_session" ? "最近可用的历史快照，不是今天盘中行情。"
+              : "以 dataTime 为行情时间；同日快照不保证实时，开盘前不能当作盘中涨跌。",
           };
         }
 

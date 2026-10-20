@@ -24,7 +24,12 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-DEFAULT_DATA_DIR = "G:/qtdata"
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from aipha.config import get_cache_dir
+from aipha.utils.paths import resolve_path
+
 THROTTLE_WAIT = 5.0       # seconds to back off on rate-limit errors
 CALL_INTERVAL = 0.35       # seconds between normal API calls
 MAX_RETRIES = 20
@@ -505,12 +510,18 @@ def _sync_stock_basic(api, cache_dir: Path, force=False, max_retries=3) -> dict:
 # ── High-level actions ────────────────────────────────────────────
 
 
+def _cache_dir(cfg: dict) -> Path:
+    """Use the shared cache unless an explicit data root was requested."""
+    if cfg.get("data_dir"):
+        return resolve_path(cfg["data_dir"]) / "cache" / "equity_tushare"
+    return get_cache_dir() / "equity_tushare"
+
+
 def do_check(cfg: dict) -> dict:
     """Dry-run: report which months are stale or missing."""
-    data_dir = cfg.get("data_dir", "") or os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
-    cache_dir = Path(data_dir) / "cache" / "equity_tushare"
+    cache_dir = _cache_dir(cfg)
 
-    paths = {"data_dir": str(Path(data_dir).resolve()), "cache_dir": str(cache_dir.resolve())}
+    paths = {"data_dir": str(cache_dir.parent.parent.resolve()), "cache_dir": str(cache_dir.resolve())}
     if not cache_dir.is_dir():
         return {"ok": False, **paths, "error": f"Cache dir not found: {cache_dir}"}
 
@@ -577,8 +588,7 @@ def do_check(cfg: dict) -> dict:
 
 def do_sync(cfg: dict) -> dict:
     """Incremental sync: download missing/stale data."""
-    data_dir = cfg.get("data_dir", "") or os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
-    cache_dir = Path(data_dir) / "cache" / "equity_tushare"
+    cache_dir = _cache_dir(cfg)
     force = cfg.get("force", False)
     start_from = cfg.get("start_from", "")  # optional YYYYMM override
 
@@ -667,8 +677,7 @@ def do_health(cfg: dict) -> dict:
     else:
         from local_parquet_provider import check_data_dir
 
-    data_dir = cfg.get("data_dir", "") or os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
-    return check_data_dir(data_dir)
+    return check_data_dir(cache_dir=_cache_dir(cfg))
 
 
 # ── CLI entry point ───────────────────────────────────────────────

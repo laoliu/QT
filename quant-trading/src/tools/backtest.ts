@@ -128,7 +128,7 @@ export function createBacktestTool(
 
           // Auto-save to backtest history store
           let savedId: string | undefined;
-          if (backtestStore) {
+          if (backtestStore && args.persist_results !== false) {
             try {
               savedId = await backtestStore.save(result, {
                 engine: (args.engine as string) ?? config.backtestEngine ?? "builtin",

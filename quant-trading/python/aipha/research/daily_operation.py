@@ -130,10 +130,10 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
     root = deployment["output_root"]
     if preflight_date is not None:
         root = root / "preflight"
-    with operation_lock(root):
+    from .operation_progress import OperationProgress
+    with operation_lock(root), OperationProgress(root, str(day)) as tracker:
         def progress(phase):
-            _json(root / "progress.json", {"phase": phase, "date": str(day), "pid": os.getpid(),
-                                          "observed_at": datetime.now(timezone.utc).isoformat()})
+            tracker.update(phase)
 
         def skipped(status, **fields):
             result = {"status": status, "date": str(day), "operational": False,
@@ -169,15 +169,18 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
         directory = root / "sessions" / str(day)
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / "snapshot.parquet"
+        progress("preparing_tushare_snapshot")
         if path.exists():
+            progress("verifying_snapshot")
             metadata = verify_attested_parquet(path, require_artifact_hash=True, require_source_signature=True)
             panel = pd.read_parquet(path)
             panel.attrs["snapshot_metadata"] = metadata
         else:
-            progress("preparing_tushare_snapshot")
             snapshot = prepare_snapshot(deployment, policy, day, provider)
             snapshot.write(path)
             panel, metadata = snapshot.panel, snapshot.metadata
+            progress("verifying_snapshot")
+            verify_attested_parquet(path, require_artifact_hash=True, require_source_signature=True)
         if (pd.Timestamp(metadata["end_date"]).date() != day
                 or pd.Timestamp(panel.trade_date.max()).date() != day):
             raise ValueError("operating snapshot does not reach the requested close")
@@ -190,10 +193,12 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
             raise ValueError("research config differs from the pinned model's configuration")
         if any(pd.Timestamp(fold["train_end"]).date() >= day for fold in selector._wf_results):
             raise ValueError("operating model training reaches the signal date")
+        progress("selecting_features")
         compute = panel.copy(deep=False)
         compute.attrs = {}
         current = compute.loc[pd.to_datetime(compute.trade_date).dt.date.eq(day)].copy(deep=False)
         current = filter_historical_universe(current, min_listing_days=policy.min_listing_days)
+        progress("predicting")
         scores = selector.predict(current).to_numpy()
         if len(scores) < policy.top_k or not np.isfinite(scores).all() or np.unique(scores).size < 2:
             raise ValueError("missing or degenerate operating cross-section")
@@ -208,6 +213,7 @@ def operate_day(deployment, *, execute=False, now=None, preflight_date=None, pro
                 raise ValueError("operating predictions changed after preparation")
         else:
             predictions.to_parquet(prediction_path, index=False)
+        progress("building_targets")
         targets = build_target_positions(current, top_k=policy.top_k, max_position_weight=policy.max_position_weight,
             max_industry_weight=policy.max_industry_weight, max_style_exposure=policy.max_style_exposure,
             style_reference=current, run_id=run_id, model_id=model_id, rebalance_dates=monthly_rebalance_dates(metadata))

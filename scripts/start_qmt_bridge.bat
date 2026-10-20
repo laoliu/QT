@@ -166,7 +166,7 @@ goto :eof
 
 :check_xtdata
 echo [INFO] xtdata attempt %1/5...
-"%BRIDGE_PYTHON%" -c "from xtquant import xtdata; xtdata.connect(); codes=xtdata.get_stock_list_in_sector('沪深A股'); print(f'[OK] xtdata connected, {len(codes)} stocks available'); assert len(codes)>0"
+"%BRIDGE_PYTHON%" -c "from xtquant import xtdata; xtdata.enable_hello = False; xtdata.connect(); codes=xtdata.get_stock_list_in_sector('沪深A股'); print(f'[OK] xtdata connected, {len(codes)} stocks available'); assert len(codes)>0"
 if errorlevel 1 exit /b 1
 set "XTDATA_OK=1"
 exit /b 0

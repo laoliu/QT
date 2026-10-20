@@ -6,6 +6,7 @@
 
 export type MarketType =
   | "cn_stock"
+  | "index"
   | "us_stock"
   | "hk_stock"
   | "futures"
@@ -116,6 +117,10 @@ export type QuoteSnapshot = {
   timestamp: number;
   bid1?: number;
   ask1?: number;
+  /** Exchange/provider data time, distinct from request time; null when unavailable. */
+  dataTimestamp?: number | null;
+  retrievedAt?: number;
+  source?: string;
   /** Open interest (期货/期权持仓量) */
   openInterest?: number;
   /** Settlement price (期货结算价) */

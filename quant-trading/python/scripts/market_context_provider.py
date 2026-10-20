@@ -17,7 +17,9 @@ import json
 import os
 import sys
 import traceback
+from datetime import datetime, timedelta, timezone
 from typing import Any
+from data_providers.yahoo_transport import YAHOO_PROXY  # Capture before domestic imports clear proxies.
 
 # Proxy bypass for Chinese data APIs
 for _k in (
@@ -104,6 +106,8 @@ def _get_macro_regime() -> dict[str, str]:
     try:
         from engines.macro_economic import _analyze_macro_regime
         data = _analyze_macro_regime("cn")
+        if not data or "error" in data:
+            return {}
         regime = data.get("regime", "unknown")
 
         # Map to LiveEngine regime labels
@@ -127,49 +131,44 @@ def _get_macro_regime() -> dict[str, str]:
         return {"macro_regime": mapped, "volatility_regime": volatility}
     except Exception:
         traceback.print_exc(file=sys.stderr)
-        return {"macro_regime": "SIDEWAYS", "volatility_regime": "NORMAL"}
-
-
-def _get_catalysts() -> dict[str, dict[str, Any]]:
-    """Scan for event catalysts (US movers → A-share mapping, earnings)."""
-    try:
-        from engines.event_catalyst_engine import _scan
-        data = _scan({"threshold": 3.0})
-        if not data or "error" in data:
-            return {}
-
-        result: dict[str, dict[str, Any]] = {}
-        candidates = data.get("candidates", [])
-        for c in candidates:
-            a_codes = c.get("a_codes", [])
-            event_type = "us_mover"
-            desc = c.get("us_symbol", "") + " " + c.get("reason", "")
-            impact = "high" if abs(c.get("change_pct", 0)) > 5 else "medium"
-            for code in a_codes:
-                result[code] = {
-                    "event_type": event_type,
-                    "days_until": 0,
-                    "impact": impact,
-                    "description": desc.strip(),
-                }
-        return result
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
         return {}
 
 
-def _get_st_statuses() -> dict[str, dict[str, Any]]:
+def _get_catalysts() -> dict[str, dict[str, Any]] | None:
+    """Scan for event catalysts (US movers → A-share mapping, earnings)."""
+    try:
+        from engines.event_catalyst_engine import _scan
+        data = _scan({"min_change_pct": 3.0, "include_news": False})
+        if not data or "error" in data:
+            return None
+
+        result: dict[str, dict[str, Any]] = {}
+        for pick in data.get("picks", []):
+            catalysts = pick.get("catalysts", [])
+            result[pick["code"]] = {
+                "event_type": "us_mover",
+                "days_until": 0,
+                "impact": "high" if any(abs(c.get("usChangePct", 0)) > 5 for c in catalysts) else "medium",
+                "description": "; ".join(pick.get("signals", [])),
+            }
+        return result
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        return None
+
+
+def _get_st_statuses() -> dict[str, dict[str, Any]] | None:
     """Scan all ST restructuring stocks and their lifecycle stages."""
     try:
-        from engines.st_restructuring import STRestructuringTracker
-        tracker = STRestructuringTracker()
-        data = tracker.scan_all(days=90)
+        from engines.st_restructuring import scan_all_restructuring
+        data = scan_all_restructuring(days=90)
         if not data:
             return {}
 
         result: dict[str, dict[str, Any]] = {}
-        for code, info in data.items():
-            stage = info.get("stage", "unknown")
+        for code, record in data.items():
+            info = record.to_dict()
+            stage = info.get("current_stage", "UNKNOWN")
             # Risk classification
             high_risk_stages = {"MAIN-1", "MAIN-2", "MAIN-3", "MAIN-4"}
             extreme_stages = {"MAIN-5", "MAIN-6", "MAIN-7"}
@@ -184,25 +183,35 @@ def _get_st_statuses() -> dict[str, dict[str, Any]]:
 
             result[code] = {
                 "stage": stage,
-                "next_milestone": info.get("next_milestone", ""),
+                "next_milestone": "",
                 "risk_level": risk,
             }
         return result
     except Exception:
         traceback.print_exc(file=sys.stderr)
-        return {}
+        return None
 
 
-def _get_auction_signals() -> dict[str, dict[str, Any]]:
+def _get_auction_signals(params: dict | None = None) -> dict[str, dict[str, Any]] | None:
     """Get current auction signals (only meaningful during auction windows)."""
     try:
-        from engines.auction_sniper import analyze_auction, AuctionSnapshot
-        # During non-auction hours this will return empty
-        # The engine already handles time-window checks internally
-        return {}
+        params = params or {}
+        symbols = params.get("symbols", [])
+        snapshots = params.get("snapshots")
+        if not symbols and not snapshots:
+            return {}
+        if not snapshots:
+            from aipha.data.calendar import CNStockCalendar
+            now = datetime.now(timezone(timedelta(hours=8)))
+            hm = now.hour * 100 + now.minute
+            if not CNStockCalendar().is_trading_day(now.date()) or not (915 <= hm <= 930):
+                return {}
+        from engines.auction_sniper import scan_auction_sniper
+        signals = scan_auction_sniper(symbols=symbols or None, snapshots_data=snapshots)
+        return {signal["symbol"]: signal for signal in signals}
     except Exception:
         traceback.print_exc(file=sys.stderr)
-        return {}
+        return None
 
 
 # ── Action handlers ───────────────────────────────────────────────
@@ -216,21 +225,32 @@ def handle_core_snapshot(_params: dict) -> dict[str, Any]:
     }
 
 
+def handle_macro_snapshot(_params: dict) -> dict[str, Any]:
+    return _get_macro_regime()
+
+
+def handle_catalyst_snapshot(_params: dict) -> dict[str, Any]:
+    return {"catalysts": _get_catalysts()}
+
+
+def handle_st_snapshot(_params: dict) -> dict[str, Any]:
+    return {"st_statuses": _get_st_statuses()}
+
+
 def handle_slow_snapshot(_params: dict) -> dict[str, Any]:
     """Low-frequency snapshot: macro + catalyst + ST."""
     regime = _get_macro_regime()
     return {
-        "macro_regime": regime.get("macro_regime", "SIDEWAYS"),
-        "volatility_regime": regime.get("volatility_regime", "NORMAL"),
+        **regime,
         "catalysts": _get_catalysts(),
         "st_statuses": _get_st_statuses(),
     }
 
 
-def handle_auction_snapshot(_params: dict) -> dict[str, Any]:
+def handle_auction_snapshot(params: dict) -> dict[str, Any]:
     """Auction-window signals."""
     return {
-        "auction_signals": _get_auction_signals(),
+        "auction_signals": _get_auction_signals(params),
     }
 
 
@@ -259,8 +279,8 @@ def handle_symbol_context(params: dict) -> dict[str, Any]:
         "lianban": lianban_pool.get(symbol),
         "macro_regime": regime.get("macro_regime", "SIDEWAYS"),
         "volatility_regime": regime.get("volatility_regime", "NORMAL"),
-        "catalyst": catalysts.get(symbol),
-        "st_status": st_statuses.get(symbol),
+        "catalyst": (catalysts or {}).get(symbol),
+        "st_status": (st_statuses or {}).get(symbol),
     }
 
 
@@ -269,6 +289,9 @@ def handle_symbol_context(params: dict) -> dict[str, Any]:
 ACTIONS = {
     "core_snapshot": handle_core_snapshot,
     "slow_snapshot": handle_slow_snapshot,
+    "macro_snapshot": handle_macro_snapshot,
+    "catalyst_snapshot": handle_catalyst_snapshot,
+    "st_snapshot": handle_st_snapshot,
     "auction_snapshot": handle_auction_snapshot,
     "full_snapshot": handle_full_snapshot,
     "symbol_context": handle_symbol_context,
@@ -295,7 +318,7 @@ def main():
 
     try:
         result = handler(params)
-        json.dump({"ok": True, "data": result}, sys.stdout, ensure_ascii=False)
+        json.dump(result, sys.stdout, ensure_ascii=False)
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         json.dump({"ok": False, "error": str(exc)}, sys.stdout, ensure_ascii=False)

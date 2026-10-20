@@ -1,5 +1,6 @@
 import { getAdminBodyHtml } from "./body-html.js";
 import { getAdminMainScript } from "./main-script.js";
+import { getChatMarkdownScript } from "./chat-markdown.js";
 /**
  * Admin Management Page — assembles CSS, HTML body, and JS into a full HTML page.
  */
@@ -21,6 +22,7 @@ export function getAdminPageHtml(
 </head>
 <body>
 ${getAdminBodyHtml(b)}
+<script>${getChatMarkdownScript()}</script>
 <script>
 window.onerror=function(msg,src,line){console.error('[admin] JS error:',msg,'at line',line,src)};
 var B = ${JSON.stringify(b)};

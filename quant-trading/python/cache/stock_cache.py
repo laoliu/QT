@@ -24,9 +24,16 @@ import sqlite3
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from functools import lru_cache
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+
+@lru_cache(maxsize=1)
+def _cn_calendar():
+    from aipha.data.calendar import CNStockCalendar
+    return CNStockCalendar()
 
 
 # ── Cache location ──────────────────────────────────────────────
@@ -39,12 +46,14 @@ def _default_cache_dir() -> Path:
 
 # ── Trading hours detection (China A-share) ─────────────────────
 
+def _now_utc_naive() -> datetime:
+    """Return UTC without tzinfo to preserve the SQLite timestamp format."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _now_cst() -> datetime:
-    """Return current time in CST (UTC+8)."""
-    import time as _time
-    # Use UTC + 8h offset for CST
-    utc_now = datetime.utcnow()
-    return utc_now + timedelta(hours=8)
+    """Return current time in CST (UTC+8), without tzinfo."""
+    return datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
 
 
 def _is_weekday(dt: datetime) -> bool:
@@ -71,7 +80,10 @@ def _is_stale(updated_at_str: str, ttl_seconds: int) -> bool:
     """Check if a cached entry has exceeded its TTL."""
     try:
         updated_at = datetime.fromisoformat(updated_at_str)
-        age = (datetime.utcnow() - updated_at).total_seconds()
+        if updated_at.tzinfo is None:
+            # Legacy SQLite timestamps represent UTC despite lacking an offset.
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - updated_at).total_seconds()
         return age > ttl_seconds
     except (ValueError, TypeError):
         return True
@@ -200,6 +212,32 @@ class StockCache:
         self._conn.execute("PRAGMA cache_size=-8000")  # 8MB cache
         self._conn.executescript(_SCHEMA_SQL)
         self._conn.commit()
+        self._quarantine_ambiguous_klines()
+
+    def _quarantine_ambiguous_klines(self):
+        """Preserve old rows that may have been fetched from the wrong namespace."""
+        from data_providers.symbols import INDEX_CODES
+
+        conn = self._conn
+        marker = "stock_index_namespace_v1"
+        placeholders = ",".join("?" for _ in INDEX_CODES)
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute("SELECT 1 FROM cache_meta WHERE key = ?", (marker,)).fetchone():
+                return
+            conn.execute("""CREATE TABLE IF NOT EXISTS kline_data_quarantine AS
+                SELECT *, '' AS reason, '' AS quarantined_at FROM kline_data WHERE 0""")
+            now = _now_utc_naive().isoformat()
+            args = ("ambiguous_stock_index_namespace", now, *sorted(INDEX_CODES))
+            cursor = conn.execute(f"""INSERT INTO kline_data_quarantine
+                SELECT *, ?, ? FROM kline_data
+                WHERE market = 'cn_stock' AND symbol IN ({placeholders})""", args)
+            conn.execute(f"""DELETE FROM kline_data
+                WHERE market = 'cn_stock' AND symbol IN ({placeholders})""", sorted(INDEX_CODES))
+            conn.execute("INSERT INTO cache_meta (key, value, updated_at) VALUES (?, ?, ?)",
+                         (marker, str(cursor.rowcount), now))
+        if cursor.rowcount:
+            print(f"[cache] Quarantined {cursor.rowcount} ambiguous stock/index bars", file=sys.stderr)
 
     def _ensure_conn(self) -> sqlite3.Connection:
         with self._lock:
@@ -262,7 +300,7 @@ class StockCache:
         """Save stock list to cache."""
         conn = self._ensure_conn()
         fetch_date = fetch_date or _today_date_str()
-        now = datetime.utcnow().isoformat()
+        now = _now_utc_naive().isoformat()
 
         # Batch insert with upsert
         records = []
@@ -300,7 +338,7 @@ class StockCache:
         conn.commit()
         print(f"[缓存] 已缓存 {len(records)} 只股票列表数据 ({fetch_date})", file=sys.stderr)
 
-    # ── Fundamentals (Xueqiu) ────────────────────────────────────
+    # ── Fundamentals (SQLite + local TuShare read-through) ───────
 
     def get_fundamentals(
         self,
@@ -343,6 +381,18 @@ class StockCache:
 
             missing.extend(c for c in batch if c not in found_codes)
 
+        # Current dashboard snapshots may reuse local data. Historical research
+        # must not receive today's mutable financial cache as PIT evidence.
+        if missing and fetch_date == _today_date_str():
+            try:
+                from cache.local_fundamentals import load_current
+                local = load_current(missing, fetch_date)
+                if local:
+                    self.save_fundamentals(local, fetch_date)
+                    cached.update(local)
+                    missing = [code for code in missing if code not in local]
+            except Exception as exc:
+                print(f"[cache] Local fundamental lookup failed: {exc}", file=sys.stderr)
         return cached, missing
 
     def save_fundamentals(
@@ -356,7 +406,7 @@ class StockCache:
         """
         conn = self._ensure_conn()
         fetch_date = fetch_date or _today_date_str()
-        now = datetime.utcnow().isoformat()
+        now = _now_utc_naive().isoformat()
 
         records = []
         for code, d in data.items():
@@ -456,7 +506,7 @@ class StockCache:
     ):
         """Save K-line bars to cache."""
         conn = self._ensure_conn()
-        now = datetime.utcnow().isoformat()
+        now = _now_utc_naive().isoformat()
 
         records = []
         for bar in bars:
@@ -496,6 +546,7 @@ class StockCache:
         end_date: str,
         market: str = "cn_stock",
         period: str = "daily",
+        available_dates: Optional[set[str]] = None,
     ) -> list[tuple[str, str]]:
         """Find date ranges not covered in cache (including middle gaps).
 
@@ -514,23 +565,47 @@ class StockCache:
             (symbol, market, period, start_date, end_date),
         ).fetchall()
 
-        if not rows:
-            return [(start_date, end_date)]
-
         cached_dates = {r[0] for r in rows}
-        cached_start = rows[0][0]
-        cached_end = rows[-1][0]
+        cached_dates.update(available_dates or ())
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_dt = min(datetime.strptime(end_date, "%Y-%m-%d").date(), _now_cst().date())
+        if start_dt > end_dt:
+            return []
+
+        if period == "daily" and market in ("cn_stock", "index", "fund", "convertible_bond"):
+            calendar = _cn_calendar()
+            gaps = []
+            gap_start = gap_end = None
+            current = start_dt
+            while current <= end_dt:
+                day = current.isoformat()
+                if calendar.is_trading_day(current):
+                    if day not in cached_dates:
+                        gap_start = gap_start or day
+                        gap_end = day
+                    elif gap_start:
+                        gaps.append((gap_start, gap_end))
+                        gap_start = gap_end = None
+                current += timedelta(days=1)
+            if gap_start:
+                gaps.append((gap_start, gap_end))
+            return gaps
+
+        if not cached_dates:
+            return [(start_date, end_dt.isoformat())]
+        cached_start = min(cached_dates)
+        cached_end = max(cached_dates)
 
         gaps: list[tuple[str, str]] = []
 
         # Gap before cached data
         if start_date < cached_start:
-            gaps.append((start_date, cached_start))
+            gaps.append((start_date, (datetime.fromisoformat(cached_start) - timedelta(days=1)).date().isoformat()))
 
         # Detect interior gaps: consecutive cached dates >5 calendar days apart
         # (normal weekends = 2-3 days gap; holidays up to ~5 days; anything
         #  larger likely means missing data that should be re-fetched)
-        sorted_dates = sorted(cached_dates)
+        sorted_dates = sorted(cached_dates) if period == "daily" else []
         for i in range(1, len(sorted_dates)):
             prev_dt = datetime.strptime(sorted_dates[i - 1], "%Y-%m-%d")
             curr_dt = datetime.strptime(sorted_dates[i], "%Y-%m-%d")
@@ -543,8 +618,8 @@ class StockCache:
                     gaps.append((gap_s, gap_e))
 
         # Gap after cached data
-        if end_date > cached_end:
-            gaps.append((cached_end, end_date))
+        if end_dt.isoformat() > cached_end:
+            gaps.append(((datetime.fromisoformat(cached_end) + timedelta(days=1)).date().isoformat(), end_dt.isoformat()))
 
         # Merge overlapping/adjacent gaps
         if len(gaps) > 1:
@@ -581,7 +656,7 @@ class StockCache:
     def save_code_name_map(self, mapping: dict[str, str]):
         """Save code→name mapping to cache."""
         conn = self._ensure_conn()
-        now = datetime.utcnow().isoformat()
+        now = _now_utc_naive().isoformat()
 
         records = [(code, name, now) for code, name in mapping.items()]
         conn.executemany(
@@ -616,14 +691,14 @@ class StockCache:
     def set_meta(self, key: str, value: str) -> None:
         """Set a value in the cache_meta table."""
         conn = self._ensure_conn()
-        now = datetime.utcnow().isoformat()
+        now = _now_utc_naive().isoformat()
         conn.execute(
             "INSERT OR REPLACE INTO cache_meta (key, value, updated_at) VALUES (?, ?, ?)",
             (key, value, now),
         )
         conn.commit()
 
-    def auto_populate(self) -> dict[str, int]:
+    def auto_populate(self, allow_remote: bool = False) -> dict[str, int]:
         """Auto-populate stock_list, code_name_map, and fundamentals from existing kline data if empty."""
         conn = self._ensure_conn()
         populated: dict[str, int] = {}
@@ -647,9 +722,16 @@ class StockCache:
         cn_count = conn.execute("SELECT COUNT(*) FROM stock_code_name").fetchone()[0]
         if cn_count == 0:
             try:
-                import akshare as ak
-                df = ak.stock_info_a_code_name()
-                mapping = {str(r["code"]).zfill(6): str(r["name"]) for _, r in df.iterrows()}
+                from cache.local_fundamentals import cache_dir, _read
+                path = cache_dir() / "stock_basic.parquet"
+                df = _read(path) if path.exists() else None
+                mapping = ({str(r["ts_code"])[:6]: str(r["name"]) for _, r in df.iterrows()
+                            if isinstance(r.get("name"), str) and r["name"]}
+                           if df is not None and {"ts_code", "name"}.issubset(df.columns) else {})
+                if not mapping and allow_remote:
+                    import akshare as ak
+                    df = ak.stock_info_a_code_name()
+                    mapping = {str(r["code"]).zfill(6): str(r["name"]) for _, r in df.iterrows()}
                 if mapping:
                     self.save_code_name_map(mapping)
                     populated["code_name_map"] = len(mapping)
@@ -668,20 +750,19 @@ class StockCache:
             except Exception as e:
                 print(f"[缓存] AKShare代码名称映射获取失败: {e}", file=sys.stderr)
 
-        # Populate fundamentals via Xueqiu if empty
-        fund_count = conn.execute("SELECT COUNT(*) FROM stock_fundamentals").fetchone()[0]
-        if fund_count == 0:
-            try:
+        # Populate current snapshots from disk, even when yesterday's rows exist.
+        # Reading statistics must not trigger hundreds of network requests.
+        try:
+            codes = [r[0] for r in conn.execute("""SELECT DISTINCT code FROM stock_list
+                UNION SELECT DISTINCT symbol FROM kline_data WHERE market = 'cn_stock'""")]
+            loaded, missing = self.get_fundamentals(codes)
+            if loaded:
+                populated["fundamentals"] = len(loaded)
+            if missing and allow_remote:
                 from cache.prefetch import prefetch_fundamentals
-                stock_list = self.get_stock_list() or {}
-                if stock_list:
-                    prefetch_fundamentals(stock_list, top_n=len(stock_list))
-                    new_count = conn.execute("SELECT COUNT(DISTINCT code) FROM stock_fundamentals").fetchone()[0]
-                    if new_count:
-                        populated["fundamentals"] = new_count
-                        print(f"[缓存] 从雪球自动填充基本面数据: {new_count} ֻ", file=sys.stderr)
-            except Exception as e:
-                print(f"[缓存] 基本面数据获取失败: {e}", file=sys.stderr)
+                prefetch_fundamentals({code: {} for code in missing}, top_n=len(missing))
+        except Exception as e:
+            print(f"[缓存] 基本面数据获取失败: {e}", file=sys.stderr)
 
         return populated
 
@@ -695,6 +776,17 @@ class StockCache:
         kline_records = conn.execute("SELECT COUNT(*) FROM kline_data").fetchone()[0]
         kline_symbols = conn.execute("SELECT COUNT(DISTINCT symbol) FROM kline_data").fetchone()[0]
         code_name_count = conn.execute("SELECT COUNT(*) FROM stock_code_name").fetchone()[0]
+        from cache.local_fundamentals import coverage
+        local_fundamentals = coverage()
+        snapshot_dates = conn.execute("SELECT MAX(fetch_date) FROM stock_fundamentals").fetchone()[0]
+        valuation_dates = []
+        for (raw,) in conn.execute("SELECT data_json FROM stock_fundamentals WHERE fetch_date = ?", (snapshot_dates,)):
+            try:
+                date = json.loads(raw).get("valuation_date")
+                if date:
+                    valuation_dates.append(date)
+            except (ValueError, TypeError, AttributeError):
+                pass
 
         # DB file size
         db_size_bytes = os.path.getsize(self._db_path) if os.path.exists(self._db_path) else 0
@@ -714,7 +806,11 @@ class StockCache:
             },
             "fundamentals": {
                 "unique_stocks": fundamentals_count,
+                "snapshot_date": snapshot_dates,
+                "oldest_valuation_date": min(valuation_dates, default=None),
+                "latest_valuation_date": max(valuation_dates, default=None),
             },
+            "local_fundamentals": local_fundamentals,
             "klines": {
                 "total_bars": kline_records,
                 "unique_symbols": kline_symbols,
@@ -845,7 +941,7 @@ class StockCache:
     def cleanup_old(self, days: int = 30):
         """Remove cache entries older than N days."""
         conn = self._ensure_conn()
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (_now_utc_naive() - timedelta(days=days)).isoformat()
 
         for table in ["stock_list", "stock_fundamentals"]:
             conn.execute(f"DELETE FROM {table} WHERE updated_at < ?", (cutoff,))

@@ -58,6 +58,7 @@ TRADING_ACCOUNT_TYPE = os.environ.get("TRADING_ACCOUNT_TYPE", "STOCK")
 # xtquant 可选导入
 try:
     from xtquant import xtdata  # type: ignore[import-untyped]
+    xtdata.enable_hello = False
     HAS_XTDATA = True
 except ImportError:
     xtdata = None  # type: ignore[assignment]

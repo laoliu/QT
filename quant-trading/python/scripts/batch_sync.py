@@ -30,7 +30,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add parent dir to path
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -110,17 +110,26 @@ def check_bridge() -> dict:
         return {"online": False, "url": WINDOWS_XTDATA_URL, "error": str(e)}
 
 
-def get_stale_symbols(cache, stock_list: dict, kline_days: int = 120) -> tuple[list[str], int, int, int]:
-    """Determine which symbols need refresh.
+def latest_completed_trading_date(now: datetime | None = None) -> str:
+    """Daily bars are due only after an A-share session has closed (CST)."""
+    from aipha.data.calendar import CNStockCalendar
 
-    Returns: (codes_need_fetch_qmt, fresh_count, stale_count, no_cache_count)
-    """
+    cst = timezone(timedelta(hours=8))
+    now = now or datetime.now(cst)
+    if now.tzinfo is not None:
+        now = now.astimezone(cst)
+    calendar = CNStockCalendar()
+    day = now.date()
+    if not calendar.is_trading_day(day) or now.hour < 15:
+        day = calendar.get_prev_trading_day(day)
+    return day.isoformat()
+
+
+def get_sync_plan(cache, stock_list: dict, kline_days: int = 120,
+                  target_date: str | None = None) -> tuple[list[str], dict]:
+    """Classify cache coverage using the same rules before and after a sync."""
     conn = cache._ensure_conn()
-    stale_cutoff = datetime.now() - timedelta(days=2)
-    stale_cutoff_date = stale_cutoff.strftime("%Y-%m-%d")
-
-    fresh_symbols: set[str] = set()
-    symbol_bar_counts: dict[str, int] = {}
+    target_date = target_date or latest_completed_trading_date()
 
     rows = conn.execute("""
         SELECT symbol, MAX(trade_date) as latest_date, COUNT(*) as bar_count
@@ -129,30 +138,31 @@ def get_stale_symbols(cache, stock_list: dict, kline_days: int = 120) -> tuple[l
         GROUP BY symbol
     """).fetchall()
 
-    for symbol, latest_date, bar_count in rows:
-        symbol_bar_counts[symbol] = bar_count
-        if latest_date >= stale_cutoff_date and bar_count >= kline_days * 0.6:
-            fresh_symbols.add(symbol)
-
+    coverage = {symbol: (latest_date, bar_count) for symbol, latest_date, bar_count in rows}
+    summary = {"total": 0, "fresh": 0, "stale": 0, "no_cache": 0,
+               "insufficient_history": 0, "target_date": target_date}
     codes_need_fetch = []
-    codes_fresh = 0
-    codes_stale = 0
-    codes_no_cache = 0
 
     for sid in stock_list:
         qmt = _to_qmt_code(sid)
         if not qmt:
             continue
-        if sid in fresh_symbols:
-            codes_fresh += 1
-        elif sid in symbol_bar_counts:
-            codes_stale += 1
-            codes_need_fetch.append(qmt)
+        summary["total"] += 1
+        latest_date, bar_count = coverage.get(sid, (None, 0))
+        if latest_date is None:
+            state = "no_cache"
+        elif latest_date < target_date:
+            state = "stale"
+        elif bar_count < kline_days * 0.6:
+            state = "insufficient_history"
         else:
-            codes_no_cache += 1
+            state = "fresh"
+        summary[state] += 1
+        if state != "fresh":
             codes_need_fetch.append(qmt)
 
-    return codes_need_fetch, codes_fresh, codes_stale, codes_no_cache
+    summary["need_fetch"] = len(codes_need_fetch)
+    return codes_need_fetch, summary
 
 
 def fetch_via_bridge(codes: list[str], kline_days: int) -> tuple[dict, int]:
@@ -315,14 +325,16 @@ def do_sync(config: dict) -> dict:
         return {"status": "error", "message": "无股票列表，请先执行选股或手动指定代码"}
 
     # Determine what needs refresh
-    codes_need_fetch, fresh, stale, no_cache = get_stale_symbols(cache, stock_list, kline_days)
+    codes_need_fetch, before = get_sync_plan(cache, stock_list, kline_days)
 
     if not codes_need_fetch:
         return {
             "status": "ok", "source": "none",
             "message": "所有K线数据已是最新",
-            "total": len(stock_list), "fresh": fresh,
+            **before,
+            "bridge": check_bridge(),
             "fetched": 0, "failed": 0, "skipped": 0,
+            "updated": 0, "still_pending": 0,
         }
 
     # Apply limit
@@ -347,7 +359,9 @@ def do_sync(config: dict) -> dict:
 
     if actual_source == "bridge":
         data, fail = fetch_via_bridge(codes_need_fetch, kline_days)
-        failed_count = fail
+        requested = {_qmt_to_plain(code) for code in codes_need_fetch}
+        data = {sid: bars for sid, bars in data.items() if sid in requested and bars}
+        failed_count = max(fail, len(requested - data.keys()))
         # Save to cache
         for sid, bars in data.items():
             if bars:
@@ -363,16 +377,18 @@ def do_sync(config: dict) -> dict:
         fetched = len(data)
         # akshare provider auto-saves to cache inside get_klines()
 
+    remaining, after = get_sync_plan(cache, stock_list, kline_days, before["target_date"])
+    still_pending = len(set(codes_need_fetch).intersection(remaining))
     return {
-        "status": "ok",
+        "status": "partial" if still_pending or failed_count or skipped_count else "ok",
         "source": actual_source,
         "bridge": bridge_info,
-        "total": len(stock_list),
-        "fresh": fresh,
-        "stale": stale,
-        "no_cache": no_cache,
-        "need_fetch": len(codes_need_fetch),
+        **after,
+        "before": before,
+        "attempted": len(codes_need_fetch),
         "fetched": fetched,
+        "updated": len(codes_need_fetch) - still_pending,
+        "still_pending": still_pending,
         "failed": failed_count,
         "skipped": skipped_count,
         "extras": _populate_missing_cache(cache),
@@ -404,19 +420,15 @@ def do_check(config: dict) -> dict:
 
     if not stock_list:
         bridge_info = check_bridge()
-        return {"status": "ok", "total": 0, "fresh": 0, "stale": 0, "no_cache": 0, "need_fetch": 0, "bridge": bridge_info}
+        return {"status": "ok", **get_sync_plan(cache, {}, kline_days)[1], "bridge": bridge_info}
 
-    codes, fresh, stale, no_cache = get_stale_symbols(cache, stock_list, kline_days)
+    _, summary = get_sync_plan(cache, stock_list, kline_days)
 
     bridge_info = check_bridge()
 
     return {
         "status": "ok",
-        "total": len(stock_list),
-        "fresh": fresh,
-        "stale": stale,
-        "no_cache": no_cache,
-        "need_fetch": len(codes),
+        **summary,
         "bridge": bridge_info,
     }
 

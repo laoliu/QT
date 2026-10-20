@@ -224,7 +224,12 @@ export function createStrategyExplorerTool(
         }
 
         // Run batch backtest
-        const summary = await runBatchBacktest(batchItems, config, { maxConcurrency: 4 });
+        const summary = await runBatchBacktest(batchItems, config, { maxConcurrency: 4 }).finally(async () => {
+          if (!saveBest) {
+            const { unregisterComposedStrategy } = await import("../engine/strategy-registry.js");
+            for (const tc of tempConfigs) unregisterComposedStrategy(tc.id);
+          }
+        });
 
         // Clean up temporary registrations (except top results)
         const { unregisterComposedStrategy } = await import("../engine/strategy-registry.js");
@@ -280,8 +285,9 @@ export function createStrategyExplorerTool(
           failed: summary.failCount,
           topResults,
           bestStrategy: topResults[0]?.name ?? null,
+          saved: saveBest,
           hint: topResults[0]
-            ? `最佳组合: ${topResults[0].name}。使用 backtest 工具回测: strategyId="${topResults[0].compositionId}"`
+            ? saveBest ? `最佳组合: ${topResults[0].name}。使用 backtest 工具回测: strategyId="${topResults[0].compositionId}"` : "本次仅探索分析；临时组合已释放，未保存为可调用策略。"
             : "未找到有效组合",
         };
       }

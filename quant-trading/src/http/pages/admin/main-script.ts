@@ -71,6 +71,70 @@ function kpiHtml(val,label){return '<div class="kpi"><div class="kpi-val">'+val+
 function sevBadge(s){return '<span class="badge badge-'+(s==='critical'?'red':s==='warning'?'yellow':'blue')+'">'+esc(s)+'</span>'}
 function fmtTime(ts){return ts?new Date(ts).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'-'}
 
+/* ── Structured event stream ── */
+var _eventLabels={engine:'引擎',tick:'行情',signal:'信号',order:'订单',position:'持仓',pnl:'盈亏',equity:'权益',alert:'告警',data_sync:'数据同步',sector_flow_anomaly:'板块异动',risk_overlay:'风控'};
+var _eventIcons={engine:'⚙️',tick:'📈',signal:'🎯',order:'🧾',position:'📌',pnl:'💰',equity:'📊',alert:'⚠️',data_sync:'💾',sector_flow_anomaly:'🏷️',risk_overlay:'🛡️'};
+function eventLabel(category){return _eventLabels[category]||category||'事件'}
+function eventIcon(category){return _eventIcons[category]||'•'}
+function eventRoot(e){
+  var d=e&&e.data;
+  if(!d||typeof d!=='object')return {};
+  if(e.category==='tick'&&d.tick&&typeof d.tick==='object')return d.tick;
+  return d;
+}
+function eventValue(v){
+  if(v==null)return '-';
+  if(typeof v==='number')return Number.isFinite(v)?Number(v).toLocaleString('zh-CN',{maximumFractionDigits:4}):String(v);
+  if(typeof v==='boolean')return v?'是':'否';
+  if(typeof v==='object')return String(v.code||v.stock_code||v.symbol||v.name||'-');
+  return String(v);
+}
+function eventSymbol(root,data){
+  var symbol=root&&root.symbol;
+  if(symbol&&typeof symbol==='object')return symbol.code||symbol.stock_code||symbol.symbol||symbol.name||'-';
+  return symbol||root&&root.stock_code||data&&data.symbol||data&&data.stock_code||'-';
+}
+function eventSummary(e){
+  var d=e&&e.data, root=eventRoot(e);
+  if(typeof d==='string')return esc(d);
+  if(!d||typeof d!=='object')return esc(eventValue(d));
+  if(e.category==='engine'){
+    var prev=d.prev||d.previous||'-', next=d.next||d.status||'-';
+    return '<strong>状态变更</strong> '+esc(prev)+' → '+esc(next);
+  }
+  if(e.category==='tick'){
+    var kind=d.type||'tick', symbol=eventSymbol(root,d), name=root.name||(root.symbol&&root.symbol.name);
+    return '<strong>'+esc(kind)+'</strong> · '+esc(symbol)+(name?' '+esc(name):'');
+  }
+  if(e.category==='alert')return '<strong>'+esc(d.message||d.reason||'风险事件')+'</strong>';
+  if(e.category==='data_sync')return '<strong>'+esc(d.status||'同步更新')+'</strong>'+(d.message?' · '+esc(d.message):'');
+  if(e.category==='order')return '<strong>'+esc(d.status||d.action||'订单事件')+'</strong>'+(d.symbol?' · '+esc(d.symbol):'');
+  if(e.category==='signal')return '<strong>'+esc(d.action||d.direction||d.signal||'交易信号')+'</strong>'+(d.symbol?' · '+esc(d.symbol):'');
+  return '<strong>'+esc(d.message||d.status||d.action||eventLabel(e.category))+'</strong>';
+}
+function eventFields(e){
+  var d=e&&e.data, root=eventRoot(e), fields=[];
+  function add(label,value){if(value!=null&&value!=='')fields.push('<span class="event-field">'+esc(label)+' <b>'+esc(eventValue(value))+'</b></span>')}
+  add('标的',eventSymbol(root,d));
+  add('价格',root.last_price!=null?root.last_price:(root.price!=null?root.price:d&&d.price));
+  add('方向',d&& (d.direction||d.action));
+  add('状态',d&&d.status);
+  add('数量',root.volume!=null?root.volume:(d&&d.quantity));
+  add('来源',d&&d.source);
+  if(e&&e.category==='engine')add('时间戳',d&&d.timestamp);
+  if(e&&e.category==='data_sync'){add('成功',d&&d.refreshed!=null?d.refreshed:d&&d.updated);add('失败',d&&d.failed);add('总数',d&&d.total)}
+  return fields.slice(0,6).join('');
+}
+function renderEvent(e){
+  var category=e&&e.category||'info', ts=e&&e.timestamp?new Date(e.timestamp).toLocaleTimeString('zh-CN',{hour12:false,timeZone:'Asia/Shanghai'}):'-';
+  var raw='';try{raw=JSON.stringify(e&&e.data==null?null:e.data,null,2)}catch(_err){raw=String(e&&e.data)}
+  return '<article class="event-item event-'+esc(category)+'">'+
+    '<div class="event-item-head"><span class="event-time">'+esc(ts)+'</span><span class="event-badge event-badge-'+esc(category)+'">'+eventIcon(category)+' '+esc(eventLabel(category))+'</span><span class="event-id">#'+esc(e&&e.id||'-')+'</span></div>'+
+    '<div class="event-summary">'+eventSummary(e)+'</div>'+
+    (eventFields(e)?'<div class="event-fields">'+eventFields(e)+'</div>':'')+
+    '<details class="event-details"><summary>查看原始数据</summary><pre>'+esc(raw)+'</pre></details></article>';
+}
+
 /* ══════ Stock Name Cache ══════ */
 var _nameCache={};
 function resolveNames(symbols){var miss=symbols.filter(function(s){return s&&!_nameCache[s]});if(!miss.length)return Promise.resolve();return api('/quant/api/stock-names?symbols='+miss.join(',')).then(function(r){var d=r&&r.data||{};for(var k in d)if(d.hasOwnProperty(k))_nameCache[k]=d[k]}).catch(function(){})}
@@ -103,13 +167,18 @@ function loadOverview(){
     var box=document.getElementById('event-log');
     if(!box)return;
     var events=(ev&&ev.events)||[];
-    box.innerHTML=events.slice(0,50).map(function(e){
-      return '<div class="log-'+esc(e.category||'info')+'">['+new Date(e.timestamp).toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai'})+'] <b>'+esc(e.category)+'</b> '+esc(typeof e.data==='string'?e.data:JSON.stringify(e.data))+'</div>';
-    }).join('')||'<div style="color:var(--text-dim)">暂无事件</div>';
+    var shown=events.slice(0,50);
+    box.innerHTML=shown.map(renderEvent).join('')||'<div class="event-empty">暂无事件</div>';
+    var meta=document.getElementById('event-stream-meta');
+    if(meta)meta.textContent='最近 '+shown.length+' 条 · 每 15 秒自动刷新';
+    var status=document.getElementById('event-stream-status');
+    if(status)status.textContent=(ev&&ev.sseClients!=null?ev.sseClients+' 个订阅':'最近事件');
   }).catch(function(e){
     console.error('[overview] events load failed:', e);
     var el=document.getElementById('event-log');
-    if(el)el.innerHTML='<div style="color:var(--text-dim)">⚠️ 事件加载失败，将自动重试</div>';
+    if(el)el.innerHTML='<div class="event-empty">⚠️ 事件加载失败，将自动重试</div>';
+    var meta=document.getElementById('event-stream-meta');
+    if(meta)meta.textContent='加载失败';
   });
   api('/quant/admin/api/alerts').then(function(al){
     var ra=document.getElementById('recent-alerts');
@@ -165,9 +234,12 @@ function loadData(){
       'K线总量':(kl.total_bars||0).toLocaleString(),
       '品种数':kl.unique_symbols||0,
       '股票列表':((pc.stock_list||{}).unique_stocks||0)+' 只',
-      '基本面':((pc.fundamentals||{}).unique_stocks||0)+' 只',
+      '基本面快照':pc.fundamentals?pc.fundamentals.unique_stocks+' 只':'统计不可用',
+      '快照生成日期':esc((pc.fundamentals||{}).snapshot_date||'暂无'),
+      '估值数据日期':esc((pc.fundamentals||{}).oldest_valuation_date||'暂无')+' ~ '+esc((pc.fundamentals||{}).latest_valuation_date||'暂无'),
       '代码名称映射':((pc.code_name_map||{}).entries||0)+' 条'
     })+btnGrp([['','refreshWarehouseStats()','🔄 刷新统计']]));
+    c.innerHTML+=card('📚 本地基本面数据 (TuShare)',localFundamentalCoverageHtml(pc.local_fundamentals));
     c.innerHTML+=card('🌉 QMT 桥接配置',infoList({'RECEIVER端口':d.receiverPort,'主机':d.receiverHost,'自动启动':d.receiverEnabled?'✅ 是':'❌ 否'}));
     var symbolList=d.pythonSymbols||[];
     var tbody=document.querySelector('#cache-table tbody');
@@ -183,11 +255,31 @@ function loadData(){
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span> '+esc(b.url||''):'<span class="badge badge-red">离线</span> (将使用 AKShare)');
   }).catch(function(){});
 }
+function localFundamentalCoverageHtml(data){
+  if(!data)return '<div style="color:var(--text-dim)">本地基本面统计不可用</div>';
+  if(!data.available)return '<div style="color:var(--text-dim)">'+esc(data.error||'未找到本地缓存目录')+'</div>';
+  var labels={fina_indicator:'财务指标',income:'利润表',balancesheet:'资产负债表',cashflow:'现金流量表'};
+  var rows={'财务覆盖股票':data.financial_unique_stocks+' 只'};
+  Object.keys(labels).forEach(function(key){
+    var item=(data.datasets||{})[key];
+    rows[labels[key]]=item?item.unique_stocks+' 只 / '+item.files+' 个文件':'统计不可用';
+  });
+  rows['估值文件']=data.valuation_files+' 个';
+  rows['缓存目录']=esc(data.cache_dir);
+  return infoList(rows)+'<div style="font-size:11px;color:var(--text-dim);margin-top:8px">股票数按代码去重；文件覆盖不代表数据最新。SQLite 保存当前使用的快照，数据日期单独列示。</div>';
+}
 function refreshWarehouseStats(){toast('🔄 刷新…');loadData()}
 function openStockDetail(sym){
   var s=sym||(document.getElementById('stock-detail-sym').value||'').trim();
   if(!s){toast('⚠️ 请输入股票代码');return}
   window.open(B+'/quant/admin/stock?symbol='+encodeURIComponent(s),'_blank');
+}
+function syncSummaryHtml(r){
+  var html='<div>📊 总品种: <b>'+r.total+'</b>  ✅ 已最新: <b>'+r.fresh+'</b>  ⏳ 过期: <b>'+r.stale+'</b>  🆕 无缓存: <b>'+r.no_cache+'</b>';
+  if(r.insufficient_history)html+='  历史不足: <b>'+r.insufficient_history+'</b>';
+  html+='</div><div>需同步: <b>'+r.need_fetch+'</b> 只</div>';
+  if(r.target_date)html+='<div>日线应更新至: '+esc(r.target_date)+'</div>';
+  return html;
 }
 function checkSync(){
   toast('🔍 检查数据更新…');
@@ -196,9 +288,7 @@ function checkSync(){
     if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'检查失败')+'</span>';return}
     var b=r.bridge||{};
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span> '+esc(b.url||''):'<span class="badge badge-red">离线</span>');
-    var html='<div>📊 总品种: <b>'+r.total+'</b>  ✅ 已最新: <b>'+r.fresh+'</b>  ⏳ 过期: <b>'+r.stale+'</b>  🆕 无缓存: <b>'+r.no_cache+'</b></div>';
-    html+='<div>需同步: <b>'+r.need_fetch+'</b> 只</div>';
-    el.innerHTML=html;
+    el.innerHTML=syncSummaryHtml(r);
     if(r.need_fetch===0)toast('✅ 所有数据已是最新');
   });
 }
@@ -212,11 +302,13 @@ function doSync(){
     if(r.status==='error'){el.innerHTML='<span style="color:var(--red)">❌ '+esc(r.message||'同步失败')+'</span>';toast('❌ 同步失败');return}
     var b=r.bridge||{};
     document.getElementById('sync-bridge-status').innerHTML='迅投桥接: '+(b.online?'<span class="badge badge-green">在线</span>':'<span class="badge badge-red">离线</span>');
-    var html='<div>✅ 同步完成 (通道: <b>'+esc(r.source)+'</b>)</div>';
-    html+='<div>成功: <b>'+r.fetched+'</b>  失败: <b>'+r.failed+'</b>  跳过: <b>'+r.skipped+'</b>  已最新: <b>'+r.fresh+'</b></div>';
+    var incomplete=r.status==='partial';
+    var html='<div>'+(incomplete?'⚠️ 同步结束，仍有数据待补齐':'✅ 同步完成')+' (通道: <b>'+esc(r.source)+'</b>)</div>';
+    html+='<div>已写入: <b>'+r.fetched+'</b>  更新达标: <b>'+r.updated+'</b>  失败: <b>'+r.failed+'</b>  跳过: <b>'+r.skipped+'</b></div>';
+    html+=syncSummaryHtml(r);
     if(r.message)html+='<div>'+esc(r.message)+'</div>';
     el.innerHTML=html;
-    toast('✅ 同步完成: '+r.fetched+' 只已更新');
+    toast((incomplete?'⚠️ 同步结束':'✅ 同步完成')+': '+r.updated+' 只更新达标，剩余 '+r.need_fetch+' 只');
     loadData();
   }).catch(function(err){
     el.innerHTML='<span style="color:var(--red)">❌ 请求超时或失败: '+esc(String(err.message||err))+'</span>';
@@ -738,6 +830,40 @@ function uploadSectorCSV(){
 /* ══════ UNIFIED AI CHAT ══════ */
 var _chatConversationId=null;
 var _chatBusy=false;
+var _chatSkills={};
+function chatSkillNames(ids){return (ids||[]).map(function(id){return _chatSkills[id]?_chatSkills[id].displayName||_chatSkills[id].name:id})}
+function chatSetSkillLabel(label,ids,names){
+  label.dataset.skillIds=JSON.stringify(ids||[]);
+  var titles=names||chatSkillNames(ids);
+  label.textContent='AI 助手'+(titles.length?' · 主 Skill：'+titles[0]+(titles.length>1?' · 辅助：'+titles.slice(1).join('、'):''):' · 通用模式');
+}
+function chatDescribeSkill(){
+  var sel=document.getElementById('chat-skill'),hint=document.getElementById('chat-skill-description');if(!sel||!hint)return;
+  var skill=_chatSkills[sel.value];
+  hint.textContent=skill?skill.description+((skill.available===false)?'（所需能力暂未接入）':''):'已加载 '+Object.keys(_chatSkills).length+' 个 Skill；自动结合问题和最近对话选择，跨领域问题可搭配辅助 Skill。';
+  sel.title=skill?skill.description:'自动选择主 Skill 和所需辅助 Skill';
+}
+function chatSetMessageBody(message,content,status){
+  message.content=content;message.status=status||'complete';
+  message.row.classList.toggle('chat-message-error',status==='error');
+  if(message.role==='assistant'&&status!=='error'&&window.qtChatMarkdown){
+    message.body.classList.add('chat-markdown');
+    message.body.innerHTML=window.qtChatMarkdown.render(content);
+  }else{
+    message.body.classList.remove('chat-markdown');
+    message.body.textContent=content;
+  }
+}
+function chatAppendMessage(box,role,content,skills,status){
+  var row=document.createElement('div');row.className='chat-message '+(role==='user'?'chat-message-user':'chat-message-assistant');
+  var label=document.createElement('div');label.className='chat-message-role';
+  if(role==='user')label.textContent='你';else chatSetSkillLabel(label,skills);
+  var body=document.createElement('div');body.className='chat-message-body';
+  row.appendChild(label);row.appendChild(body);box.appendChild(row);
+  var message={row:row,label:label,body:body,role:role,content:'',status:status||'complete'};
+  chatSetMessageBody(message,content,status);
+  return message;
+}
 function chatRenderConversations(rows){
   var box=document.getElementById('chat-conversations');if(!box)return;
   window._chatRows=rows||[];
@@ -755,11 +881,20 @@ function chatLoadConversations(){
   return api('/quant/admin/api/chat/conversations').then(function(d){chatRenderConversations(d.conversations);return d.conversations||[]});
 }
 function chatLoadSkills(){
-  api('/quant/admin/api/chat/skills').then(function(d){
+  return api('/quant/admin/api/chat/skills').then(function(d){
     var sel=document.getElementById('chat-skill');if(!sel)return;
-    sel.innerHTML='<option value="">自动选择 Skill</option>'+(d.skills||[]).map(function(s){return '<option value="'+esc(s.id)+'">'+esc(s.name)+' · @'+esc(s.id)+'</option>'}).join('');
+    var previous=sel.value,groups={};_chatSkills={};sel.innerHTML='';
+    var auto=document.createElement('option');auto.value='';auto.textContent='自动选择 Skill';sel.appendChild(auto);
+    (d.skills||[]).forEach(function(s){
+      _chatSkills[s.id]=s;var category=s.category||'通用',group=groups[category];
+      if(!group){group=document.createElement('optgroup');group.label=category;groups[category]=group;sel.appendChild(group)}
+      var option=document.createElement('option');option.value=s.id;option.textContent=(s.displayName||s.name)+' · @'+s.id;option.title=s.description;option.disabled=s.available===false;group.appendChild(option);
+    });
+    if(_chatSkills[previous]&&_chatSkills[previous].available!==false)sel.value=previous;
+    chatDescribeSkill();
+    document.querySelectorAll('[data-skill-ids]').forEach(function(label){chatSetSkillLabel(label,JSON.parse(label.dataset.skillIds||'[]'))});
     if(!d.configured){document.getElementById('chat-status').textContent='未配置大模型：请在 llm 配置中设置 API Key';document.getElementById('chat-status').style.color='var(--yellow)'}
-  }).catch(function(){});
+  }).catch(function(){var hint=document.getElementById('chat-skill-description');if(hint)hint.textContent='Skill 列表加载失败，请刷新后重试'});
 }
 function chatNewConversation(){
   api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){return chatLoadConversations().then(function(){chatShowConversation(d.conversation,[])})});
@@ -768,10 +903,7 @@ function chatShowConversation(c,messages){
   _chatConversationId=c.id;document.getElementById('chat-title').textContent=c.title;
   var box=document.getElementById('chat-messages');box.innerHTML='';
   (messages||[]).forEach(function(m){
-    var row=document.createElement('div');row.style.marginBottom='14px';
-    var role=document.createElement('div');role.style.cssText='font-size:11px;color:'+(m.role==='user'?'var(--accent)':'var(--green)')+';font-weight:600';role.textContent=m.role==='user'?'你':'AI 助手'+((m.skills||[]).length?' · Skill: '+m.skills.join(', '):'');
-    var body=document.createElement('div');body.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';body.textContent=m.content+(m.status==='error'?'（本次回答失败）':'');
-    row.appendChild(role);row.appendChild(body);box.appendChild(row);
+    chatAppendMessage(box,m.role,m.content+(m.status==='error'?'（本次回答失败）':''),m.skills,m.status);
   });
   if(!messages||!messages.length)box.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:35px">发送问题开始对话。可选自动 Skill，或使用 @skill-name 指定。</div>';
   box.scrollTop=box.scrollHeight;chatRenderConversations(window._chatRows||[]);
@@ -802,26 +934,26 @@ function chatLoad(){
 function chatSend(){
   if(_chatBusy)return;
   var input=document.getElementById('chat-input'),question=input.value.trim();if(!question)return;
-  var selected=document.getElementById('chat-skill').value,mention=/^@([a-z0-9-]+)\\s*/i.exec(question),skill=selected||(mention&&mention[1])||null;
+  var skill=document.getElementById('chat-skill').value||null;
   if(mention&&!selected)question=question.slice(mention[0].length).trim();
   if(!question){toast('请输入问题');return}
   var ensure=_chatConversationId?Promise.resolve():api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){_chatConversationId=d.conversation.id;document.getElementById('chat-title').textContent=d.conversation.title;return chatLoadConversations()});
   _chatBusy=true;document.getElementById('chat-send').disabled=true;document.getElementById('chat-status').textContent='思考中…';input.value='';
   var box=document.getElementById('chat-messages');if(box.querySelector('div[style*="text-align:center"]'))box.innerHTML='';
-  var user=document.createElement('div');user.style.cssText='white-space:pre-wrap;margin:8px 0 14px;color:var(--accent)';user.textContent='你'+String.fromCharCode(10)+question;box.appendChild(user);
-  var answer=document.createElement('div');answer.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:14px';answer.textContent='AI 助手'+String.fromCharCode(10);box.appendChild(answer);box.scrollTop=box.scrollHeight;
+  chatAppendMessage(box,'user',question,[]);
+  var answer=chatAppendMessage(box,'assistant','',[],'running');box.scrollTop=box.scrollHeight;
   var headers={'Content-Type':'application/json'};if(_T)headers.Authorization='Bearer '+_T;
   ensure.then(function(){sessionStorage.setItem('qt-chat-id',_chatConversationId);return fetch(B+'/quant/admin/api/chat/send',{method:'POST',headers:headers,body:JSON.stringify({conversationId:_chatConversationId,message:question,skill:skill})})})
   .then(function(response){if(!response.ok)throw new Error('HTTP '+response.status);var reader=response.body.getReader(),decoder=new TextDecoder(),buffer='';
     function read(){return reader.read().then(function(r){if(r.done)return;buffer+=decoder.decode(r.value,{stream:true});var nl=String.fromCharCode(10),chunks=buffer.split(nl+nl);buffer=chunks.pop();chunks.forEach(function(frame){var line=frame.split(nl).find(function(x){return x.indexOf('data: ')===0});if(!line)return;var ev;try{ev=JSON.parse(line.slice(6))}catch(e){return}
-      if(ev.type==='skill'){var names=(ev.skills||[]);answer.firstChild.textContent='AI 助手'+(names.length?' · Skill: '+names.join(', '):' · 通用模式')+String.fromCharCode(10)}
+      if(ev.type==='skill'){chatSetSkillLabel(answer.label,ev.skills||[],ev.skillNames)}
       else if(ev.type==='tool_start')document.getElementById('chat-tool-status').textContent='正在查询：'+ev.name;
       else if(ev.type==='tool_result')document.getElementById('chat-tool-status').textContent='已完成：'+ev.name;
-      else if(ev.type==='delta'){answer.textContent+=ev.text;box.scrollTop=box.scrollHeight}
-      else if(ev.type==='error'){answer.textContent+=String.fromCharCode(10)+'❌ '+ev.message;document.getElementById('chat-status').textContent='回答失败'}
-      else if(ev.type==='done'){document.getElementById('chat-status').textContent='完成';document.getElementById('chat-tool-status').textContent=''}
+      else if(ev.type==='delta'){chatSetMessageBody(answer,answer.content+ev.text,'running');box.scrollTop=box.scrollHeight}
+      else if(ev.type==='error'){chatSetMessageBody(answer,answer.content+String.fromCharCode(10)+'❌ '+ev.message,'error');document.getElementById('chat-status').textContent='回答失败'}
+      else if(ev.type==='done'){chatSetMessageBody(answer,answer.content,'complete');document.getElementById('chat-status').textContent='完成';document.getElementById('chat-tool-status').textContent=''}
     });return read()})}return read();
-  }).catch(function(err){answer.textContent+=String.fromCharCode(10)+'❌ '+err.message;document.getElementById('chat-status').textContent='连接失败'}).finally(function(){
+  }).catch(function(err){chatSetMessageBody(answer,answer.content+String.fromCharCode(10)+'❌ '+err.message,'error');document.getElementById('chat-status').textContent='连接失败'}).finally(function(){
     _chatBusy=false;document.getElementById('chat-send').disabled=false;box.scrollTop=box.scrollHeight;
     chatLoadConversations().then(function(rows){window._chatRows=rows});
   });

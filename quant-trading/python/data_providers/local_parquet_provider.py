@@ -28,6 +28,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 
 DEFAULT_DATA_DIR = "G:/qtdata"
 
@@ -581,15 +584,20 @@ def check_availability(symbol, data_dir="", market="cn_stock"):
     }
 
 
-def check_data_dir(data_dir=""):
+def check_data_dir(data_dir="", *, cache_dir=None):
     """Health check — verify data directory and report stats."""
-    if not data_dir:
-        data_dir = os.environ.get("QTDATA_DIR", DEFAULT_DATA_DIR)
+    from aipha.config import get_cache_dir
+    from aipha.utils.paths import resolve_path
 
-    cache_dir = Path(data_dir) / "cache" / "equity_tushare"
+    if cache_dir is not None:
+        cache_dir = resolve_path(cache_dir)
+    elif data_dir:
+        cache_dir = resolve_path(data_dir) / "cache" / "equity_tushare"
+    else:
+        cache_dir = get_cache_dir() / "equity_tushare"
 
     result = {
-        "data_dir": str(data_dir),
+        "data_dir": str(cache_dir.parent.parent),
         "cache_dir": str(cache_dir),
         "exists": cache_dir.exists(),
         "daily_files": 0,

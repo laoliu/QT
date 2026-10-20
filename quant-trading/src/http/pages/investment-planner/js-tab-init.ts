@@ -104,12 +104,20 @@ function loadComposedStrategies(){
 
 /* ══════ VIEW MODE SELECTOR (combo box) ══════ */
 var _cachedBrokerMode=null;
+var _globalModeRequest=0;
 function refreshGlobalMode(){
-  api('/quant/admin/api/engine-status').then(function(d){
-    var isLive=d.brokerType&&d.brokerType!=='paper';
-    _cachedBrokerMode=isLive?d.brokerType:'paper';
-    updateRebalanceModeHint(isLive,d.brokerType);
-  }).catch(function(){});
+  var request=++_globalModeRequest;
+  updateRebalanceModeHint(_cachedBrokerMode&&_cachedBrokerMode!=='paper',_cachedBrokerMode);
+  return api('/quant/admin/api/engine-status').then(function(d){
+    if(request!==_globalModeRequest)return;
+    var brokerType=d&&!d.error&&d.brokerType||null;
+    _cachedBrokerMode=brokerType;
+    updateRebalanceModeHint(brokerType&&brokerType!=='paper',brokerType);
+  }).catch(function(){
+    if(request!==_globalModeRequest)return;
+    _cachedBrokerMode=null;
+    updateRebalanceModeHint(false,null);
+  });
 }
 
 /* ── mode combo handler ── */
@@ -134,17 +142,33 @@ function refreshGlobalMode(){
 })();
 
 function updateRebalanceModeHint(isLive,brokerType){
+  var viewMode=window._currentViewMode||'paper';
+  var viewLabel=viewMode==='live'?'实盘视图':'模拟盘视图';
+  var mismatch=brokerType&&((viewMode==='live')!==!!isLive);
+  var engineLabel=brokerType?(isLive?'实盘 ('+brokerType+')':'模拟盘 (paper)'):'状态未确认';
+  var color=(!brokerType||mismatch)?'var(--yellow)':isLive?'var(--red)':'var(--green)';
+  var badge=document.getElementById('global-engine-mode');
+  if(badge){
+    badge.textContent='交易引擎：'+engineLabel;
+    badge.style.color=color;
+    badge.title='账户视图不改变交易引擎；实际委托由交易引擎处理';
+  }
   var el=document.getElementById('rebalance-mode-hint');
   if(!el)return;
   el.style.display='block';
-  if(isLive){
+  el.style.color=color;
+  if(!brokerType){
+    el.style.background='rgba(210,153,34,.12)';
+    el.innerHTML='⚠️ 当前为 <strong>'+viewLabel+'</strong>；交易引擎状态未确认，请刷新检查。账户视图切换不会改变交易引擎。';
+  }else if(mismatch){
+    el.style.background='rgba(210,153,34,.12)';
+    el.innerHTML='⚠️ 当前为 <strong>'+viewLabel+'</strong>，交易引擎为 <strong>'+esc(engineLabel)+'</strong>，两者不一致。视图切换不会改变交易引擎，实际委托由交易引擎处理。';
+  }else if(isLive){
     el.style.background='rgba(248,81,73,.12)';
-    el.style.color='var(--red)';
-    el.innerHTML='⚠️ 当前引擎为 <strong>实盘模式 ('+esc(brokerType||'live')+')</strong>，调仓操作将作用于实盘账户';
+    el.innerHTML='⚠️ 当前为 <strong>实盘视图</strong>，交易引擎为 <strong>'+esc(engineLabel)+'</strong>，执行调仓将提交真实委托';
   }else{
     el.style.background='rgba(13,148,136,.12)';
-    el.style.color='var(--green)';
-    el.innerHTML='🟢 当前引擎为 <strong>模拟盘模式</strong>，调仓仅在模拟账户中记录';
+    el.innerHTML='🟢 当前为 <strong>模拟盘视图</strong>，交易引擎为 <strong>模拟盘 (paper)</strong>，调仓仅在模拟账户中记录';
   }
 }
 

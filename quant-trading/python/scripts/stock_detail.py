@@ -14,7 +14,7 @@ import os
 import socket
 import sys
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from datetime import datetime, timedelta
 
 # Global socket timeout — limits akshare's internal HTTP calls to 15 seconds each
@@ -38,8 +38,9 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _PYTHON_ROOT = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _PYTHON_ROOT)
 
-# Bridge URL for xtdata K-line data (Windows QMT data bridge)
-_BRIDGE_URL = os.environ.get("WINDOWS_XTDATA_URL", "http://127.0.0.1:18888")
+def _bridge_url() -> str:
+    from data_providers.akshare_provider import _get_qmt_bridge_url
+    return _get_qmt_bridge_url()
 
 
 def _safe_float(v, default=0.0):
@@ -81,7 +82,7 @@ def _tencent_market_prefix(symbol: str) -> str:
     return "sz"
 
 
-def _fetch_tencent_quote(symbol: str) -> dict | None:
+def _fetch_tencent_quote(symbol: str, market: str = "cn_stock") -> dict | None:
     """Fetch real-time quote + 5-level depth + fundamentals from Tencent Finance API.
 
     Returns parsed dict or None on failure.
@@ -95,6 +96,8 @@ def _fetch_tencent_quote(symbol: str) -> dict | None:
       [47]:涨停价 [48]:跌停价 [49]:量比
     """
     prefix = _tencent_market_prefix(symbol)
+    if market == "index":
+        prefix = "sz" if symbol.startswith("399") else "sh"
     url = f"http://qt.gtimg.cn/q={prefix}{symbol}"
     req = urllib.request.Request(url, headers={
         "User-Agent": "Mozilla/5.0",
@@ -157,7 +160,7 @@ def _fetch_tencent_quote(symbol: str) -> dict | None:
         return None
 
 
-def _fetch_sina_quote(symbol: str) -> dict | None:
+def _fetch_sina_quote(symbol: str, market: str = "cn_stock") -> dict | None:
     """Fetch real-time quote + 5-level depth from Sina Finance API.
 
     Returns parsed dict or None on failure.
@@ -168,6 +171,8 @@ def _fetch_sina_quote(symbol: str) -> dict | None:
       30:日期, 31:时间
     """
     prefix = _sina_market_prefix(symbol)
+    if market == "index":
+        prefix = "sz" if symbol.startswith("399") else "sh"
     url = f"https://hq.sinajs.cn/list={prefix}{symbol}"
     req = urllib.request.Request(url, headers={
         "Referer": "https://finance.sina.com.cn",
@@ -230,12 +235,15 @@ def _fetch_sina_quote(symbol: str) -> dict | None:
 def _check_bridge() -> bool:
     """Return True if the Windows xtdata bridge is reachable."""
     try:
-        req = urllib.request.Request(f"{_BRIDGE_URL}/health")
+        url = _bridge_url()
+        if not url:
+            return False
+        req = urllib.request.Request(f"{url}/health")
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read())
             # Accept both response formats: {"status":"ok"} and {"ok":true}
             status_ok = data.get("status") in ("ok", "degraded") or data.get("ok") is True
-            return status_ok and data.get("xtdata", False)
+            return status_ok and data.get("bridge_connected", data.get("xtdata", False))
     except Exception:
         return False
 
@@ -267,8 +275,11 @@ def _fetch_klines_bridge(symbol: str, period: str = "1d", count: int = 120) -> l
     ).encode("utf-8")
 
     try:
+        url = _bridge_url()
+        if not url:
+            return None
         req = urllib.request.Request(
-            f"{_BRIDGE_URL}/klines",
+            f"{url}/klines",
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -313,23 +324,21 @@ def _fetch_klines_bridge(symbol: str, period: str = "1d", count: int = 120) -> l
         return None
 
 
-def _fetch_quote_bridge(symbol: str) -> dict | None:
+def _fetch_quote_bridge(symbol: str, market: str = "cn_stock") -> dict | None:
     """Fetch real-time quote from the Windows xtdata bridge /quote endpoint.
 
     Returns quote dict with price/depth or None if unavailable.
     """
-    first = symbol[0] if symbol else ""
-    if first in ("6", "5"):
-        qmt_code = f"{symbol}.SH"
-    elif first in ("0", "3"):
-        qmt_code = f"{symbol}.SZ"
-    else:
-        return None
+    from data_providers.symbols import to_qmt_code
+    qmt_code = to_qmt_code(symbol, market)
 
     body = json.dumps({"codes": [qmt_code]}, ensure_ascii=False).encode("utf-8")
     try:
+        url = _bridge_url()
+        if not url:
+            return None
         req = urllib.request.Request(
-            f"{_BRIDGE_URL}/quote",
+            f"{url}/quote",
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -346,6 +355,7 @@ def _fetch_quote_bridge(symbol: str) -> dict | None:
             q = quote_data.get(qmt_code) or quote_data.get(symbol)
             if not q:
                 return None
+            raw_stock_tick = market == "cn_stock" and "lastPrice" in q and "price" not in q
             # Normalize field names: AlphQ uses lastPrice/lastClose, legacy uses price/prevClose
             if "lastPrice" in q and "price" not in q:
                 q["price"] = q["lastPrice"]
@@ -360,6 +370,12 @@ def _fetch_quote_bridge(symbol: str) -> dict | None:
                 bids = q.get("bidPrice", [])
                 bid_vols = q.get("bidVol", [])
                 q["bids"] = [{"price": p, "volume": int(v)} for p, v in zip(bids, bid_vols) if p > 0]
+            if raw_stock_tick:
+                # xtdata stock tick volumes are lots; the detail page uses shares.
+                q["volume"] = _safe_int(q.get("volume")) * 100
+                for side in ("bids", "asks"):
+                    q[side] = [{**level, "volume": _safe_int(level.get("volume")) * 100}
+                               for level in q.get(side, [])]
             if not q.get("price"):
                 return None
             return q
@@ -403,7 +419,37 @@ def _aggregate_klines(bars: list[dict], interval: str) -> list[dict]:
     return result
 
 
-def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 120, kline_interval: str = "1d") -> dict:
+def get_stock_history(symbol: str, market: str = "cn_stock", kline_days: int = 120,
+                      kline_interval: str = "1d", local_only: bool = False) -> dict:
+    """Read the chart snapshot separately from optional remote gap recovery."""
+    import re
+    from data_providers.akshare_provider import get_klines
+
+    symbol = re.sub(r"^(?:SH|SZ)(\d{6})$", r"\1", symbol.strip(), flags=re.IGNORECASE)
+    fetch_interval = "1M" if kline_interval in ("1Q", "6M", "1Y") else kline_interval
+    multiplier = {"1w": 10, "1M": 35, "1Q": 100, "6M": 200, "1Y": 400}.get(
+        kline_interval, 2.5 if kline_days < 300 else 1.5)
+    start_date = (datetime.now() - timedelta(days=int(kline_days * multiplier))).strftime("%Y%m%d")
+    end_date = datetime.now().strftime("%Y%m%d")
+    if market in ("cn_stock", "index"):
+        from scripts.batch_sync import latest_completed_trading_date
+        end_date = latest_completed_trading_date().replace("-", "")
+    bars = get_klines(symbol, fetch_interval, start_date, end_date, market, local_only)
+    incomplete = not bars
+    if bars and market in ("cn_stock", "index"):
+        incomplete = datetime.fromtimestamp(bars[-1]["timestamp"] / 1000).strftime("%Y%m%d") < end_date
+    if kline_interval in ("1Q", "6M", "1Y") and bars:
+        bars = _aggregate_klines(bars, kline_interval)
+    bars = bars[-kline_days:] if bars else []
+    result = {"symbol": symbol, "market": market, "klines": bars,
+              "klineInterval": kline_interval, "klineSource": "local" if local_only else "mixed",
+              "klineIncomplete": incomplete}
+    if len(bars) >= 20:
+        result["technicals"] = compute_technicals([b["close"] for b in bars])
+    return result
+
+
+def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 120, kline_interval: str = "1d", section: str = "all") -> dict:
     """Fetch comprehensive stock detail."""
     import akshare as ak
 
@@ -415,80 +461,35 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
 
     result: dict = {"symbol": symbol, "market": market}
 
-    # ── 0. Prepare K-line parameters (needed for parallel fetch) ──
-    aggregate_interval = None
-    fetch_interval = kline_interval
-    if kline_interval in ("1Q", "6M", "1Y"):
-        aggregate_interval = kline_interval
-        fetch_interval = "1M"
-
-    fetch_count = kline_days
-    if fetch_interval == "1d" and kline_days < 300:
-        fetch_count = int(kline_days * 2.5)
-    elif fetch_interval == "1w":
-        fetch_count = kline_days * 3
-    elif fetch_interval == "1M":
-        fetch_count = kline_days * 2
-    if aggregate_interval == "1Q":
-        fetch_count = kline_days * 6
-    elif aggregate_interval == "6M":
-        fetch_count = kline_days * 12
-    elif aggregate_interval == "1Y":
-        fetch_count = kline_days * 20
-
     # ── 1. Parallel fetch: quotes (Bridge/Sina/Tencent) + K-lines ─
     # All sources are independent — run them concurrently to cut latency
     # from ~20s serial to ~8s parallel.
     def _task_bridge_quote():
-        if market != "cn_stock":
+        if market not in ("cn_stock", "index"):
             return None
-        return _fetch_quote_bridge(symbol)
+        return _fetch_quote_bridge(symbol, market)
 
     def _task_sina_quote():
-        return _fetch_sina_quote(symbol)
+        return _fetch_sina_quote(symbol, market)
 
     def _task_tencent_quote():
-        return _fetch_tencent_quote(symbol)
+        return _fetch_tencent_quote(symbol, market)
 
     def _task_klines():
-        """Fetch K-lines: bridge → akshare_provider (Parquet → SQLite → network).
-        Returns (bars, source).
-        """
-        _bars = None
-        _source = "akshare"
-        if market == "cn_stock" and fetch_interval in ("1d", "1w", "1M"):
-            bridge_bars = _fetch_klines_bridge(symbol, fetch_interval, fetch_count)
-            if bridge_bars:
-                return (bridge_bars, "bridge")
+        if section == "quote":
+            return {}
         try:
-            from data_providers.akshare_provider import get_klines as _get_klines
-            end_date = datetime.now().strftime("%Y%m%d")
-            day_multiplier = 1.5
-            if fetch_interval == "1d" and kline_days < 300:
-                day_multiplier = 2.5
-            elif fetch_interval == "1w":
-                day_multiplier = 10
-            elif fetch_interval == "1M":
-                day_multiplier = 35
-            if aggregate_interval == "1Q":
-                day_multiplier = 100
-            elif aggregate_interval == "6M":
-                day_multiplier = 200
-            elif aggregate_interval == "1Y":
-                day_multiplier = 400
-            start_dt = datetime.now() - timedelta(days=int(kline_days * day_multiplier))
-            start_date = start_dt.strftime("%Y%m%d")
-            _bars = _get_klines(symbol, fetch_interval, start_date, end_date, market)
-        except Exception:
-            _bars = None
-        return (_bars, _source)
+            return get_stock_history(symbol, market, kline_days, kline_interval, section == "core")
+        except Exception as exc:
+            return {"klines": [], "klineIncomplete": True, "klinesError": str(exc)}
 
-    _QUOTE_KLINE_TIMEOUT = 18  # seconds — total budget for all quote + kline tasks
+    fast_section = section in ("core", "quote")
+    _QUOTE_KLINE_TIMEOUT = 12 if fast_section else 18
 
     bridge_quote = None
     sina = None
     tencent = None
-    kline_result = (None, "akshare")
+    kline_result = {}
 
     pool_qk = ThreadPoolExecutor(max_workers=4)
     fut_bridge = pool_qk.submit(_task_bridge_quote)
@@ -512,8 +513,29 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
             elif fut is fut_klines:
                 if val is not None:
                     kline_result = val
+            valid_bridge = bridge_quote and bridge_quote.get("price", 0) > 0
+            valid_fallback = fut_bridge.done() and any(q and q.get("price", 0) > 0 for q in (sina, tencent))
+            if fast_section and (valid_bridge or valid_fallback) and fut_klines.done():
+                # Optional public sources must not hold up a ready QMT snapshot.
+                kline_result = fut_klines.result()
+                # Even a valid QMT book lacks valuation metrics and may expose
+                # fewer price levels. Give the enrichers a bounded grace period.
+                wait([fut_sina, fut_tencent], timeout=0.2)
+                for source, future in (("sina", fut_sina), ("tencent", fut_tencent)):
+                    if future.done():
+                        try:
+                            if source == "sina":
+                                sina = future.result()
+                            else:
+                                tencent = future.result()
+                        except Exception:
+                            pass
+                break
     except TimeoutError:
-        pass  # proceed with whatever we got
+        if fut_klines.done():
+            kline_result = fut_klines.result()
+        elif section != "quote":
+            kline_result = {"klines": [], "klineIncomplete": True}
     finally:
         pool_qk.shutdown(wait=False, cancel_futures=True)
 
@@ -539,6 +561,7 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         asks = bridge_quote.get("asks", [])
         if bids or asks:
             result["depth"] = {"bids": bids, "asks": asks}
+            result["depthSource"] = "bridge"
         result["quoteSource"] = "bridge"
 
     # Get stock name from Sina/Tencent regardless of quote source
@@ -611,7 +634,7 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         result["quoteSource"] = result["quoteSource"] + "+tencent"
 
     # Last resort: try eastmoney via akshare (only when all three failed)
-    if "quote" not in result:
+    if "quote" not in result and not fast_section and market == "cn_stock":
         try:
             df_spot = ak.stock_zh_a_spot_em()
             if df_spot is not None and not df_spot.empty:
@@ -643,14 +666,33 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         except Exception as e:
             result["quoteError"] = str(e)
 
+    # Prefer a complete public book when it agrees with the current QMT price.
+    # Replace the whole snapshot rather than mixing levels from two sources.
+    if result.get("depthSource") == "bridge":
+        depth = result["depth"]
+        for source, candidate in (("tencent", tencent), ("sina", sina)):
+            if not candidate or abs(candidate.get("price", 0) - result["quote"]["price"]) > 0.001:
+                continue
+            if abs(candidate.get("prevClose", 0) - result["quote"]["prevClose"]) > 0.001:
+                continue
+            bids = [b for b in candidate.get("bids", []) if b["price"] > 0]
+            asks = [a for a in candidate.get("asks", []) if a["price"] > 0]
+            if len(bids) + len(asks) > len(depth["bids"]) + len(depth["asks"]):
+                depth = {"bids": bids, "asks": asks}
+                result["depth"] = depth
+                result["depthSource"] = source
+
     # ── 2. Bid/Ask depth (if not already populated) ───────────────
     if "depth" not in result:
-        if tencent:
-            bids = [b for b in tencent["bids"] if b["price"] > 0]
-            asks = [a for a in tencent["asks"] if a["price"] > 0]
+        for candidate in (tencent, sina):
+            if not candidate:
+                continue
+            bids = [b for b in candidate.get("bids", []) if b["price"] > 0]
+            asks = [a for a in candidate.get("asks", []) if a["price"] > 0]
             if bids or asks:
                 result["depth"] = {"bids": bids, "asks": asks}
-        if "depth" not in result:
+                break
+        if "depth" not in result and not fast_section and market == "cn_stock":
             try:
                 df_bid = ak.stock_bid_ask_em(symbol=symbol)
                 if df_bid is not None and not df_bid.empty:
@@ -670,14 +712,14 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
                 result["depthError"] = str(e)
 
     # ── 3. Stock name (if not already from Sina/Tencent) ──────────
-    if "name" not in result or not result["name"]:
+    if ("name" not in result or not result["name"]) and market != "index":
         try:
             from cache.stock_cache import get_cache
             cache = get_cache()
             name = cache.get_stock_name(symbol)
             if name:
                 result["name"] = name
-            else:
+            elif not fast_section:
                 name_df = ak.stock_info_a_code_name()
                 match = name_df[name_df["code"] == symbol]
                 if not match.empty:
@@ -686,25 +728,11 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         except Exception:
             result["name"] = symbol
 
-    # ── 4. Assemble K-lines from parallel result ──────────────────
-    bars, kline_source = kline_result
+    if section == "quote":
+        return result
 
-    try:
-        if aggregate_interval and bars:
-            bars = _aggregate_klines(bars, aggregate_interval)
-
-        result["klines"] = bars[-kline_days:] if bars else []
-        result["klineInterval"] = kline_interval
-        result["klineSource"] = kline_source
-    except Exception as e:
-        result["klinesError"] = str(e)
-        result["klines"] = []
-
-    # ── 5. Simple technicals from klines ───────────────────────────
+    result.update(kline_result)
     klines = result.get("klines", [])
-    if len(klines) >= 20:
-        closes = [b["close"] for b in klines]
-        result["technicals"] = compute_technicals(closes)
 
     # ── 5b. Compute 52-week high/low from klines if still missing ──
     # Each bar (daily/weekly/monthly) already contains high/low for that period,
@@ -723,10 +751,33 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
                 if lows and q.get("low52w") is None:
                     q["low52w"] = min(lows)
 
+    if "quote" not in result and klines:
+        last = klines[-1]
+        prev = klines[-2] if len(klines) >= 2 else last
+        change = last["close"] - prev["close"]
+        result["quote"] = {
+            "price": last["close"], "change": round(change, 2),
+            "changePct": round(change / prev["close"] * 100, 2) if prev["close"] else 0,
+            "open": last["open"], "high": last["high"], "low": last["low"],
+            "prevClose": prev["close"], "volume": last.get("volume", 0),
+            "amount": last.get("amount", 0), "timestamp": last.get("timestamp", 0),
+        }
+        result["quoteSource"] = "cache"
+    if section == "all" and market != "index":
+        result.update(get_stock_supplement(symbol, market, stock_name=result.get("name", "")))
+    return result
+
+
+def get_stock_supplement(symbol: str, market: str = "cn_stock", section: str = "all", stock_name: str = "") -> dict:
+    """Fetch optional sections independently of the quote and chart request."""
+    import akshare as ak
+    result = {"symbol": symbol, "market": market}
+    if market == "index":
+        return result
+
     # ── 6. Parallel fetch: company info, financials, shareholders, news ──
     # All sections below are independent — run them concurrently to avoid
     # sequential 10-20s waits per akshare call.
-    stock_name = result.get("name", "")
 
     def _fetch_company_info():
         """6a. Company profile."""
@@ -1035,6 +1086,10 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         "ths": _news_ths,
         "sina": _news_sina,
     }
+    if section == "profile":
+        news_tasks = {}
+    elif section == "news":
+        info_tasks = {}
 
     news_list: list[dict] = []
     research_list: list[dict] = []
@@ -1077,26 +1132,6 @@ def get_stock_detail(symbol: str, market: str = "cn_stock", kline_days: int = 12
         result["news"] = unique_news
     if research_list:
         result["research"] = research_list
-
-    # ── 7. Fallback: if no real-time quote, use last kline ─────────
-    if "quote" not in result and klines:
-        last = klines[-1]
-        prev = klines[-2] if len(klines) >= 2 else last
-        change = last["close"] - prev["close"]
-        change_pct = (change / prev["close"] * 100) if prev["close"] else 0
-        result["quote"] = {
-            "price": last["close"],
-            "change": round(change, 2),
-            "changePct": round(change_pct, 2),
-            "open": last["open"],
-            "high": last["high"],
-            "low": last["low"],
-            "prevClose": prev["close"],
-            "volume": last.get("volume", 0),
-            "amount": last.get("amount", 0),
-            "timestamp": last.get("timestamp", 0),
-        }
-        result["quoteSource"] = "cache"
 
     return result
 
@@ -1249,7 +1284,16 @@ if __name__ == "__main__":
                 market=config.get("market", "cn_stock"),
                 kline_days=config.get("kline_days", 120),
                 kline_interval=config.get("kline_interval", "1d"),
+                section=config.get("section", "all"),
             )
+        elif action == "history":
+            result = get_stock_history(
+                config.get("symbol", ""), config.get("market", "cn_stock"),
+                config.get("kline_days", 120), config.get("kline_interval", "1d"))
+        elif action in ("profile", "news"):
+            result = get_stock_supplement(
+                symbol=config.get("symbol", ""), market=config.get("market", "cn_stock"),
+                section=action, stock_name=config.get("stock_name", ""))
         else:
             result = {"error": f"未知操作: {action}"}
     except Exception as e:

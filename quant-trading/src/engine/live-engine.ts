@@ -448,10 +448,10 @@ export class LiveEngine implements AppService {
   }
 
   private emitWatchedSymbols(strategies?: ActiveLiveStrategy[]): void {
-    if (!this.watchedSymbolsCb) return;
     const active = strategies ?? this.registry.list(true);
     const symbols = [...new Set(active.flatMap((strategy) => strategy.symbols))];
-    this.watchedSymbolsCb(symbols);
+    this.marketCtx.setWatchedSymbols(symbols);
+    this.watchedSymbolsCb?.(symbols);
   }
 
   /**

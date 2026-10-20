@@ -157,6 +157,12 @@ footer{text-align:center;padding:24px;font-size:12px;color:var(--text-dim);borde
 <!-- Navigation cards -->
 <div class="section-title">📌 功能入口</div>
 <div class="nav-cards">
+  <a href="${b}/quant/admin/research" class="nav-card card-admin" style="color:inherit;text-decoration:none">
+    <div class="icon">🧪</div>
+    <h3>A 股研究 / Paper 运营</h3>
+    <p>部署模型、每日阶段与调度、OOS 研究结果、独立 Paper 账本和真实交易日验收</p>
+    <div class="tags"><span class="tag">研究报告</span><span class="tag">运行进度</span><span class="tag">Paper 回执</span></div>
+  </a>
   <a href="${b}/quant/dashboard/ui" class="nav-card card-dashboard" style="color:inherit;text-decoration:none">
     <div class="icon">📊</div>
     <h3>交易仪表盘</h3>

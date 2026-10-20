@@ -19,6 +19,13 @@ export type PythonBridgeResult<T = unknown> = {
 
 let _bridgeLogger: { info: (msg: string) => void; warn: (msg: string) => void } | undefined;
 
+function forwardPythonLog(modulePath: string, line: string): void {
+  if (!_bridgeLogger) return;
+  const message = `[python:${modulePath}] ${line}`;
+  if (/^\[warning\]/i.test(line)) _bridgeLogger.warn(message);
+  else _bridgeLogger.info(message);
+}
+
 /** Set a logger so that Python stderr output is forwarded to LogStore in real time. */
 export function setPythonBridgeLogger(logger: { info: (msg: string) => void; warn: (msg: string) => void }): void {
   _bridgeLogger = logger;
@@ -67,6 +74,9 @@ class ConcurrencyLimiter {
 }
 
 const limiter = new ConcurrencyLimiter(8);
+// Small cache administration jobs must remain responsive during long research runs.
+// One dedicated slot also serializes refresh/statistics against the same SQLite DB.
+const cacheStatsLimiter = new ConcurrencyLimiter(1);
 
 /**
  * Run a Python script and return its JSON stdout output.
@@ -100,11 +110,14 @@ async function runPythonScriptOnce<T = unknown>(
   config: QuantTradingConfig,
   timeoutMs?: number,
 ): Promise<PythonBridgeResult<T>> {
-  await limiter.acquire();
+  const cacheStatsJob = scriptRelPath.replace(/\\/g, "/") === "cache/stock_cache.py"
+    && ["stats", "refresh", "symbols_detail"].includes(String(args.action));
+  const selectedLimiter = cacheStatsJob ? cacheStatsLimiter : limiter;
+  await selectedLimiter.acquire();
   try {
     return await _spawnPython<T>(scriptRelPath, args, config, timeoutMs);
   } finally {
-    limiter.release();
+    selectedLimiter.release();
   }
 }
 
@@ -184,7 +197,7 @@ async function _spawnPython<T = unknown>(
         stderrRemainder = lines.pop() ?? "";
         for (const line of lines) {
           const trimmed = line.trim();
-          if (trimmed) _bridgeLogger.info(`[python:${modulePath}] ${trimmed}`);
+          if (trimmed) forwardPythonLog(modulePath, trimmed);
         }
       }
     });
@@ -195,7 +208,7 @@ async function _spawnPython<T = unknown>(
       clearTimeout(timer);
       // Flush remaining stderr
       if (_bridgeLogger && stderrRemainder.trim()) {
-        _bridgeLogger.info(`[python:${modulePath}] ${stderrRemainder.trim()}`);
+        forwardPythonLog(modulePath, stderrRemainder.trim());
       }
       if (code !== 0) {
         resolve({ ok: false, error: stderr || `Python exited with code ${code}` });

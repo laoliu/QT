@@ -142,6 +142,9 @@ export class MarketContextService {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private auctionTimer: ReturnType<typeof setInterval> | null = null;
   private loading = false;
+  private slowLoading = new Set<string>();
+  private auctionLoading = false;
+  private watchedSymbols: string[] = [];
 
   // TTL constants (ms)
   private static readonly SENTIMENT_TTL = 5 * 60_000; // 5 min
@@ -153,6 +156,10 @@ export class MarketContextService {
 
   constructor(cfg: QuantTradingConfig) {
     this.cfg = cfg;
+  }
+
+  setWatchedSymbols(symbols: string[]): void {
+    this.watchedSymbols = [...new Set(symbols)];
   }
 
   // ── Public API ─────────────────────────────────────────────────
@@ -217,6 +224,7 @@ export class MarketContextService {
    * Call once after plugin activation.
    */
   start(): void {
+    if (this.refreshTimer) return;
     // Immediate first load
     void this.refreshAll();
 
@@ -224,6 +232,7 @@ export class MarketContextService {
     this.refreshTimer = setInterval(() => {
       if (!this.isTradingWindow()) return;
       void this.refreshCore();
+      void this.refreshSlow();
     }, 5 * 60_000);
 
     // Auction refresh: every 10s during auction windows
@@ -247,7 +256,7 @@ export class MarketContextService {
 
   /** Force a full refresh of all data. Returns when complete. */
   async refreshAll(): Promise<void> {
-    await Promise.all([this.refreshCore(), this.refreshSlow(), this.refreshAuction()]);
+    await Promise.all([this.refreshCore(), this.refreshSlow(true), this.refreshAuction()]);
   }
 
   // ── Internal refresh methods ───────────────────────────────────
@@ -264,7 +273,7 @@ export class MarketContextService {
         "scripts/market_context_provider.py",
         { action: "core_snapshot" },
         this.cfg,
-        { timeoutMs: 30_000 },
+        { timeoutMs: 30_000, maxRetries: 0 },
       );
 
       if (result.ok && result.data) {
@@ -308,7 +317,17 @@ export class MarketContextService {
   }
 
   /** Refresh low-frequency data: macro regime, catalyst, ST. */
-  private async refreshSlow(): Promise<void> {
+  private async refreshSlow(force = false): Promise<void> {
+    await Promise.all([
+      force || isStale(this.macroCache) ? this.refreshSlowPart("macro_snapshot", 30_000) : Promise.resolve(),
+      force || isStale(this.catalystCache) ? this.refreshSlowPart("catalyst_snapshot", 25_000) : Promise.resolve(),
+      force || isStale(this.stCache) ? this.refreshSlowPart("st_snapshot", 30_000) : Promise.resolve(),
+    ]);
+  }
+
+  private async refreshSlowPart(action: string, timeoutMs: number): Promise<void> {
+    if (this.slowLoading.has(action)) return;
+    this.slowLoading.add(action);
     try {
       const result = await runPythonScript<{
         macro_regime?: string;
@@ -317,9 +336,9 @@ export class MarketContextService {
         st_statuses?: Record<string, RawSTStatus>;
       }>(
         "scripts/market_context_provider.py",
-        { action: "slow_snapshot" },
+        { action },
         this.cfg,
-        { timeoutMs: 60_000 },
+        { timeoutMs, maxRetries: 0 },
       );
 
       if (result.ok && result.data) {
@@ -364,19 +383,23 @@ export class MarketContextService {
       }
     } catch {
       // Non-critical
+    } finally {
+      this.slowLoading.delete(action);
     }
   }
 
   /** Refresh auction signals during auction windows. */
   private async refreshAuction(): Promise<void> {
+    if (this.auctionLoading) return;
+    this.auctionLoading = true;
     try {
       const result = await runPythonScript<{
         auction_signals?: Record<string, RawAuction>;
       }>(
         "scripts/market_context_provider.py",
-        { action: "auction_snapshot" },
+        { action: "auction_snapshot", symbols: this.watchedSymbols },
         this.cfg,
-        { timeoutMs: 10_000 },
+        { timeoutMs: 8_000, maxRetries: 0 },
       );
 
       if (result.ok && result.data?.auction_signals) {
@@ -395,6 +418,8 @@ export class MarketContextService {
       }
     } catch {
       // Non-critical
+    } finally {
+      this.auctionLoading = false;
     }
   }
 

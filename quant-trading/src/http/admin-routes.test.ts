@@ -91,6 +91,72 @@ describe("admin-routes chip-accumulation top3", () => {
     });
   });
 
+  it.each(["core", "quote", "history", "profile", "news"])("fetches stock detail section %s independently", async (section) => {
+    mockRunPythonScript.mockClear();
+    mockRunPythonScript.mockResolvedValue({ ok: true, data: { symbol: "000001", quote: { price: 12 } } });
+    const route = registeredRoutes.find((item) => item.path === "/quant/admin/api/stock-detail");
+    const req = mockJsonReq("GET", "/quant/admin/api/stock-detail?symbol=000001&section=" + section);
+    const res = mockRes();
+    await route!.handler(req, res as never);
+    expect(res._status).toBe(200);
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(1);
+    expect(mockRunPythonScript).toHaveBeenCalledWith(
+      "scripts/stock_detail.py",
+      expect.objectContaining({ action: ["core", "quote"].includes(section) ? "detail" : section, section, market: "cn_stock" }),
+      expect.anything(),
+      expect.objectContaining({ maxRetries: 0, timeoutMs: section === "core" ? 16_000 : 22_000 }),
+    );
+  });
+
+  it.each(["profile", "news", "history"])("shares concurrent %s requests and caches until expiry", async (section) => {
+    mockRunPythonScript.mockClear();
+    const route = registeredRoutes.find((item) => item.path === "/quant/admin/api/stock-detail")!;
+    const request = (market = "cn_stock", symbol = "000001") => route.handler(
+      mockJsonReq("GET", `/quant/admin/api/stock-detail?symbol=${symbol}&section=${section}&market=${market}`), mockRes() as never);
+    let finish!: (result: { ok: boolean; data: object }) => void;
+    mockRunPythonScript.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const first = request();
+    const second = request();
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(1);
+    finish({ ok: true, data: { companyInfo: { name: "Example" }, news: [{ title: "News" }], klines: [{ close: 12 }] } });
+    await Promise.all([first, second]);
+    await request();
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(1);
+    mockRunPythonScript.mockResolvedValue({ ok: true, data: {} });
+    await request("index");
+    await request("cn_stock", "600519");
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(3);
+    const ttl = section === "profile" ? 30 * 60_000 : section === "news" ? 5 * 60_000 : 60_000;
+    const now = Date.now();
+    const time = vi.spyOn(Date, "now").mockReturnValue(now + ttl + 1);
+    try {
+      await request();
+      expect(mockRunPythonScript).toHaveBeenCalledTimes(4);
+    } finally {
+      time.mockRestore();
+    }
+  });
+
+  it("does not cache failed supplements or live quotes", async () => {
+    mockRunPythonScript.mockClear();
+    const route = registeredRoutes.find((item) => item.path === "/quant/admin/api/stock-detail")!;
+    for (const section of ["news", "quote", "quote"]) {
+      await route.handler(mockJsonReq("GET", `/quant/admin/api/stock-detail?symbol=000001&section=${section}`), mockRes() as never);
+    }
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(3);
+    await route.handler(mockJsonReq("GET", "/quant/admin/api/stock-detail?symbol=000001&section=news"), mockRes() as never);
+    expect(mockRunPythonScript).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects unknown detail sections before starting Python", async () => {
+    mockRunPythonScript.mockClear();
+    const route = registeredRoutes.find((item) => item.path === "/quant/admin/api/stock-detail");
+    const res = mockRes();
+    await route!.handler(mockJsonReq("GET", "/quant/admin/api/stock-detail?symbol=000001&section=invalid"), res as never);
+    expect(res._status).toBe(400);
+    expect(mockRunPythonScript).not.toHaveBeenCalled();
+  });
+
   it("forwards top3 request parameters into buildAccumulationTop3", async () => {
     mockBuildAccumulationTop3.mockResolvedValue({
       action: "top3",

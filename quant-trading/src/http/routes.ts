@@ -29,6 +29,7 @@ import { todayCST } from "../utils/cst-time.js";
 import { fetchStockNames } from "./routes/daily-pick.js";
 import { listUnifiedStrategies } from "../engine/strategy-registry.js";
 import { registerMLResearchRoutes } from "./ml-research-api.js";
+import { registerResearchOperationsRoutes } from "./research-operations-api.js";
 import { enforceQmtBridgeRequest } from "../config-validator.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -585,6 +586,7 @@ export function registerQuantRoutes(deps: RouteDeps): void {
 
   // ── Canonical A-share ML research API ─────────────────────────
   registerMLResearchRoutes(api, config, secure);
+  registerResearchOperationsRoutes(api, config, secure, securePublic);
 
   // ── Trade Plans API ──────────────────────────────────────────
   registerTradePlanRoutes(deps);

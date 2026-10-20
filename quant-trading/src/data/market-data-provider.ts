@@ -1,5 +1,6 @@
 import { runPythonScript } from "../bridge/python-bridge.js";
 import { LocalParquetProvider } from "./local-parquet-provider.js";
+import { normalizeCnInstrument, parseQuoteDataTimestamp, searchCnIndices } from "../utils/cn-instruments.js";
 /**
  * Data provider abstraction — fetches market data from various sources.
  *
@@ -392,11 +393,13 @@ export function isKnownIndexCode(symbol: string): boolean {
   return _SH_INDEX_CODES.has(code) || _SZ_INDEX_CODES.has(code);
 }
 
-function toQmtSymbol(symbol: string): string {
+function toQmtSymbol(symbol: string, market?: MarketType): string {
+  const normalized = normalizeCnInstrument(symbol, market);
+  symbol = normalized.symbol;
   if (symbol.includes(".")) return symbol;
   const code = symbol.replace(/[^0-9A-Za-z]/g, "");
   if (/^\d{6}$/.test(code)) {
-    if (_SH_INDEX_CODES.has(code)) return `${code}.SH`;
+    if (normalized.market === "index") return `${code}.${code.startsWith("399") ? "SZ" : "SH"}`;
     const n = parseInt(code, 10);
     if (code.startsWith("8") || code.startsWith("43")) return `${code}.BJ`;
     if (n >= 500_000) return `${code}.SH`;
@@ -470,9 +473,8 @@ class QMTBridgeProvider implements MarketDataProvider {
         if (quoteData.quotes && typeof quoteData.quotes === "object") {
           quoteData = quoteData.quotes as Record<string, unknown>;
         }
-        const entries = Object.entries(quoteData);
-        if (entries.length === 0) return null;
-        const [, q] = entries[0] as [string, Record<string, unknown>];
+        const q = quoteData[codes[0]] as Record<string, unknown> | undefined;
+        if (!q) return null;
         return {
           // Normalize: AlphQ uses lastPrice/lastClose, legacy uses price/prevClose
           price: q.lastPrice ?? q.price,
@@ -483,6 +485,7 @@ class QMTBridgeProvider implements MarketDataProvider {
           volume: q.volume,
           amount: q.amount,
           name: q.name,
+          dataTimestamp: parseQuoteDataTimestamp(q.dataTimestamp ?? q.time ?? q.timestamp),
           bid1: (q.bidPrice as number[])?.[0] ?? (q.bids as Array<{ price: number }>)?.[0]?.price,
           ask1: (q.askPrice as number[])?.[0] ?? (q.asks as Array<{ price: number }>)?.[0]?.price,
         } as T;
@@ -520,7 +523,7 @@ class QMTBridgeProvider implements MarketDataProvider {
   }
 
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
-    const params = { stock_code: toQmtSymbol(symbol) };
+    const params = { stock_code: toQmtSymbol(symbol, market) };
     // Retry once on transient failure (network blip, brief bridge restart)
     let raw = await this.remoteCall<Record<string, unknown>>(
       "get_quote",
@@ -550,6 +553,9 @@ class QMTBridgeProvider implements MarketDataProvider {
       volume: (raw.volume as number) ?? 0,
       amount: (raw.amount as number) ?? 0,
       timestamp: Date.now(),
+      dataTimestamp: parseQuoteDataTimestamp(raw.dataTimestamp ?? raw.time ?? raw.timestamp),
+      retrievedAt: Date.now(),
+      source: "qmt",
       bid1: (raw.bid1 as number) ?? undefined,
       ask1: (raw.ask1 as number) ?? undefined,
     };
@@ -582,7 +588,7 @@ class QMTBridgeProvider implements MarketDataProvider {
 
     const raw = await this.remoteCall<Record<string, Array<Record<string, unknown>>>>(
       "get_klines",
-      { stock_code: toQmtSymbol(symbol), codes: [toQmtSymbol(symbol)], period, count },
+      { stock_code: toQmtSymbol(symbol, _market), codes: [toQmtSymbol(symbol, _market)], period, count },
       QMT_KLINE_TIMEOUT_MS,
     );
     if (!raw) return [];
@@ -631,6 +637,8 @@ function stripCnSuffix(symbol: string): string {
 /** Auto-detect market type from symbol format.
  *  Logs a warning to console when a symbol doesn't match any known pattern. */
 export function detectMarketFromSymbol(symbol: string): MarketType {
+  const normalized = normalizeCnInstrument(symbol);
+  if (normalized.market) return normalized.market;
   const sym = symbol.trim().toUpperCase();
   if (sym.endsWith(".HK")) return "hk_stock";
   // .SS = SSE (Yahoo), .SH = SSE (QMT/Wind/东财), .SZ = SZSE
@@ -748,7 +756,7 @@ class SmartProvider implements MarketDataProvider {
     const m = market ?? detectMarketFromSymbol(symbol);
 
     // Priority 1: QMT bridge for CN real-time quotes (direct xtdata, fastest for real-time)
-    if (this.qmt && (m === "cn_stock" || m === "futures" || m === "fund")) {
+    if (this.qmt && (m === "cn_stock" || m === "index" || m === "futures" || m === "fund")) {
       const qmtQuote = await this.qmt.getQuote(symbol, m);
       if (qmtQuote) return qmtQuote;
     }
@@ -786,13 +794,13 @@ class SmartProvider implements MarketDataProvider {
     const m = market ?? detectMarketFromSymbol(symbol);
 
     // Priority 1: local parquet for CN markets (fastest — disk read, no API)
-    if (this.localParquet && (m === "cn_stock" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
+    if (this.localParquet && (m === "cn_stock" || m === "index" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
       const localBars = await this.localParquet.getKlines(symbol, interval, start, end, m);
       if (localBars.length > 0) return localBars;
     }
 
     // Priority 2: QMT bridge (xtdata, local network)
-    if (this.qmt && (m === "cn_stock" || m === "futures" || m === "fund")) {
+    if (this.qmt && (m === "cn_stock" || m === "index" || m === "futures" || m === "fund")) {
       const qmtBars = await this.qmt.getKlines(symbol, interval, start, end, m);
       if (qmtBars.length > 0) return qmtBars;
     }
@@ -901,6 +909,7 @@ class CachedProvider implements MarketDataProvider {
   }
 
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
+    ({ symbol, market } = normalizeCnInstrument(symbol, market));
     const key = `${symbol}:${market ?? ""}`;
     const cached = this.quoteCache.get(key);
     if (cached !== undefined) return cached;
@@ -920,6 +929,7 @@ class CachedProvider implements MarketDataProvider {
     end: string,
     market?: MarketType,
   ): Promise<KlineBar[]> {
+    ({ symbol, market } = normalizeCnInstrument(symbol, market));
     const key = `${symbol}:${interval}:${start}:${end}:${market ?? ""}`;
     const cached = this.klineCache.get(key);
     if (cached !== undefined) return cached;
@@ -933,6 +943,8 @@ class CachedProvider implements MarketDataProvider {
   }
 
   async searchSymbols(keyword: string, market?: MarketType): Promise<SymbolInfo[]> {
+    const indices = searchCnIndices(keyword, market);
+    if (indices.length || market === "index") return indices;
     return this.inner.searchSymbols(keyword, market);
   }
 
@@ -1111,7 +1123,7 @@ class QMTFallbackProvider implements MarketDataProvider {
   async getQuote(symbol: string, market?: MarketType): Promise<QuoteSnapshot | null> {
     const m = market ?? detectMarketFromSymbol(symbol);
     // Only route CN stocks through QMT
-    if (m === "cn_stock" || m === "futures" || m === "fund") {
+    if (m === "cn_stock" || m === "index" || m === "futures" || m === "fund") {
       const quote = await this.qmt.getQuote(symbol, m);
       if (quote) return quote;
     }
@@ -1128,13 +1140,13 @@ class QMTFallbackProvider implements MarketDataProvider {
     const m = market ?? detectMarketFromSymbol(symbol);
 
     // Priority 1: local parquet (disk read, fastest)
-    if (this.localParquet && (m === "cn_stock" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
+    if (this.localParquet && (m === "cn_stock" || m === "index" || m === "fund") && ["1d", "1w", "1M"].includes(interval)) {
       const localBars = await this.localParquet.getKlines(symbol, interval, start, end, m);
       if (localBars.length > 0) return localBars;
     }
 
     // Priority 2: QMT bridge
-    if (m === "cn_stock" || m === "futures" || m === "fund") {
+    if (m === "cn_stock" || m === "index" || m === "futures" || m === "fund") {
       const bars = await this.qmt.getKlines(symbol, interval, start, end, m);
       if (bars.length > 0) return bars;
     }

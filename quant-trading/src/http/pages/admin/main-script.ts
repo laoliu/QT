@@ -935,7 +935,6 @@ function chatSend(){
   if(_chatBusy)return;
   var input=document.getElementById('chat-input'),question=input.value.trim();if(!question)return;
   var skill=document.getElementById('chat-skill').value||null;
-  if(mention&&!selected)question=question.slice(mention[0].length).trim();
   if(!question){toast('请输入问题');return}
   var ensure=_chatConversationId?Promise.resolve():api('/quant/admin/api/chat/conversations',{method:'POST',body:'{}'}).then(function(d){_chatConversationId=d.conversation.id;document.getElementById('chat-title').textContent=d.conversation.title;return chatLoadConversations()});
   _chatBusy=true;document.getElementById('chat-send').disabled=true;document.getElementById('chat-status').textContent='思考中…';input.value='';

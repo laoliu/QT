@@ -16,9 +16,11 @@ $paperExit = 1
 try {
     Get-Command $Python -CommandType Application -ErrorAction Stop | Out-Null
     # PS 5.1 treats a native stderr line as NativeCommandError under Stop.
-    # Capture stderr while retaining the actual process exit code.
+    # Convert ErrorRecords to their original message, without PS stack noise,
+    # while retaining the actual process exit code.
     $ErrorActionPreference = 'Continue'
-    & $Python @paperArguments *> $paperLog
+    & $Python @paperArguments 2>&1 | ForEach-Object { $_.ToString() } |
+        Out-File -LiteralPath $paperLog -Encoding utf8
     $paperExit = $LASTEXITCODE
 } catch {
     $_.Exception.GetType().FullName | Out-File -LiteralPath $paperLog -Append -Encoding utf8

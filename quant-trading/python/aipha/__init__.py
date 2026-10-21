@@ -11,6 +11,15 @@ A股量化交易系统，支持：
 __version__ = "0.1.0"
 __author__ = "Aipha-Q Team"
 
+# All Aipha processes use the same external-link transport policy. Local
+# broker/bridge addresses are excluded by network_failover itself.
+try:
+    from .network_failover import install_requests_failover as _install_requests_failover
+    _install_requests_failover()
+except Exception:
+    # Network policy must never prevent offline imports or local QMT startup.
+    pass
+
 __all__ = [
     "__version__",
     "__author__",

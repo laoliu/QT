@@ -19,5 +19,8 @@ def test_supervisor_records_real_exit_even_with_stderr(tmp_path, exit_code):
                    capture_output=True, timeout=30)
     result = json.loads((logs / "latest_process_result.json").read_text(encoding="utf-8-sig"))
     assert result["exit_code"] == exit_code
-    assert "diagnostic" in Path(result["log_path"]).read_text(encoding="utf-8-sig")
+    log = Path(result["log_path"]).read_text(encoding="utf-8-sig")
+    assert "diagnostic" in log
+    assert "NativeCommandError" not in log
+    assert "CategoryInfo" not in log
     assert not result["broker_contacted"]

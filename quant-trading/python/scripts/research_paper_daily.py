@@ -36,6 +36,11 @@ def main():
     deployment = load_deployment(args.deployment)
     from dotenv import load_dotenv
     load_dotenv(deployment["env_file"], override=False)
+    from aipha.research.daily_network import configure_proxy_fallback
+    configure_proxy_fallback(on_fallback=lambda endpoint, error_type: print(json.dumps({
+        "event": "tushare_proxy_fallback", "endpoint": endpoint,
+        "error_type": error_type, "transport": "direct",
+    }), file=sys.stderr, flush=True))
     secret_values = [os.environ.get(key) for key in ("TUSHARE_TOKEN", "AIPHA_PIT_SNAPSHOT_KEY") if os.environ.get(key)]
     def clean(value):
         for secret in secret_values:

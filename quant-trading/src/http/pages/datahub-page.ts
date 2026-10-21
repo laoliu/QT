@@ -395,7 +395,9 @@ function renderBlockTrades(data) {
   trades.forEach(t => {
     const prem = t.premium_pct != null ? (t.premium_pct > 0 ? '+' : '') + Number(t.premium_pct).toFixed(2) + '%' : '-';
     const premCls = t.premium_pct > 0 ? 'color:var(--red)' : t.premium_pct < 0 ? 'color:var(--green)' : '';
-    html += '<tr><td>' + esc(t.date) + '</td><td>' + esc(t.symbol || t.code) + '</td><td>' + esc(t.name) + '</td><td>' + numFmt(t.price) + '</td><td>' + numFmt(t.volume) + '</td><td>' + numFmt(t.amount) + '</td><td style="' + premCls + '">' + prem + '</td></tr>';
+    const sym = t.symbol || t.code || '';
+    const symLink = sym ? '<a href="' + BASE + '/quant/admin/stock?symbol=' + encodeURIComponent(sym) + '" target="_blank" rel="noopener">' + esc(sym) + '</a>' : '-';
+    html += '<tr><td>' + esc(t.date) + '</td><td>' + symLink + '</td><td>' + esc(t.name) + '</td><td>' + numFmt(t.price) + '</td><td>' + numFmt(t.volume) + '</td><td>' + numFmt(t.amount) + '</td><td style="' + premCls + '">' + prem + '</td></tr>';
   });
   html += '</tbody></table></div>';
   return html;

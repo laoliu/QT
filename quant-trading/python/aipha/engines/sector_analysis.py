@@ -238,8 +238,10 @@ def _sector_ranking(limit: int, errors: list[str]) -> dict:
                 sectors.append({
                     "name": info["name"],
                     "code": info["code"],
-                    "change_pct": info["avg_pct"] or 0,
-                    "changePct": info["avg_pct"] or 0,
+                    "change_pct": info["avg_pct"],
+                    "changePct": info["avg_pct"],
+                    "amount": info["amount"],
+                    "volume": info["volume"],
                     "leader": info["leader_name"],
                     "leader_change": info["leader_change"] or 0,
                     "stockCount": info["count"],
